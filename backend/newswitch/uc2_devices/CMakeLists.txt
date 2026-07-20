@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(UC2DevicesCore LANGUAGES CXX)
 
+
+
 # When built stand-alone, pick sensible defaults. When added via the top-level
 # project (add_subdirectory) these are already set by the parent.
 if(NOT CMAKE_CXX_STANDARD)

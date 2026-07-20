@@ -8,8 +8,13 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Build the reusable C++ core, but not the standalone terminal app: for the
 # Python wheel we only need the library to link into the extension module.
 set(UC2DEVICES_BUILD_APP OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/newswitch/uc2_devices)
 
+# disable subdirectory building for now -> use later when everything is working, but maybe its also not required
+#add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/newswitch/uc2_devices)
+
+# Not building pybind extensions for now -> Build standalone first and than cleanly add the pybind extensions to the build system
+
+#[[
 # pybind11 is provided by the build environment (see pyproject.toml build deps).
 set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 CONFIG REQUIRED)
@@ -37,3 +42,4 @@ set_target_properties(_hikcam PROPERTIES
 # Install the extension next to the pure-Python package (see wheel.packages).
 install(TARGETS _hikcam DESTINATION newswitchSources/uc2_devices)
 
+]]

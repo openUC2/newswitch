@@ -1,4 +1,4 @@
-#include "MvsError.h"
+#include "HikError.h"
 
 #include <cstdio>
 
