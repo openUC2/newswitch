@@ -1,7 +1,8 @@
 [project]
 name = "newswitch"
-version = "0.10.0"
+version = "1.0.2"
 readme = "README.md"
+readme-content-type = "text/markdown"
 homepage = "https://arkitekt.live"
 description = "A better openuc2 backend"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
