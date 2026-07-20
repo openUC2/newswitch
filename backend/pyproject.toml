@@ -35,8 +35,8 @@ types = [
     "annotated-types>=0.5.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
     "pytest>=8.3.5",
