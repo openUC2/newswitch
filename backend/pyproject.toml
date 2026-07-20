@@ -2,6 +2,7 @@
 name = "newswitch"
 version = "0.10.0"
 readme = "README.md"
+homepage = "https://arkitekt.live"
 description = "A better openuc2 backend"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
 requires-python = ">=3.11, <4.0"
@@ -17,18 +18,14 @@ dependencies = [
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
     "pystackreg>=0.2.8",
-    "rekuest-next==1.6.4",
+    "rekuest-next>=2.1.1",
     "scipy>=1.17.0",
     "tifffile>=2026.1.28",
     "useq-schema>=0.8.1",
     "uvicorn>=0.40.0",
-    "zarr>=3,<4",
     "zarrs>=0.2.2",
     "zstandard>=0.25.0",
 ]
-
-[project.urls]
-Homepage = "https://arkitekt.live"
 
 [project.optional-dependencies]
 types = [
@@ -40,11 +37,9 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
     "pytest>=8.3.5",
-    "python-semantic-release>=9.21.0",
     "testcontainers==3.7.0",
     "autoflake>=1.7.7,<2",
     "aiohttp>=3.8.3,<4",
-    "black>=23.1.0,<24",
     "pytest-aiohttp>=1.0.4,<2",
     "ruff>0.11",
     "qtpy>=2.4.3",
@@ -94,6 +89,7 @@ markers = [
     "expand: marks tests that concern to serializing outputs from answers of an actor",
     "actor: marks tests that concern actors",
 ]
+
 testpaths = ["tests"]
 
 [[tool.pydoc-markdown.loaders]]
@@ -104,8 +100,6 @@ search_path = ["arkitekt"]
 type = "docusaurus"
 docs_base_path = "website/docs"
 
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-upload_to_pypi = true
-branch = "main"
-build_command = "uv build"
+# Releases are driven from the monorepo root (release.config.cjs + JS semantic-release),
+# which bumps this file's version alongside frontend/package.json. GitHub Releases only.
+
