@@ -4,6 +4,8 @@ from newswitch.app import create_app, ImswitchConfig
 import uvicorn
 
 if __name__ == "__main__":
-    app = create_app(ImswitchConfig())
+    cfg = ImswitchConfig()
+    cfg.use_virtual_microscope = False
+    app = create_app(cfg)
 
     uvicorn.run(app, host="0.0.0.0", port=8099)

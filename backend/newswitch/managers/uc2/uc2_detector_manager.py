@@ -35,7 +35,7 @@ import koil
 import numpy as np
 
 from newswitch.protocols.detector import CameraState, Detector
-from newswitch.uc2_devices import CameraInfo, HikCamera, Uc2Camera, Uc2DevSettings
+from newswitch.uc2_devices import CameraInfo, Uc2Camera, Uc2DevSettings
 
 if TYPE_CHECKING:  # only needed for type hints, not at runtime
     from newswitch.broadcasters.frame import FrameBroadcaster
@@ -53,7 +53,7 @@ class Uc2DetectorManager:
         broadcaster: "FrameBroadcaster",
         *,
         settings_path: str | Path = "uc2DevSettings.json",
-        drivers: Sequence[type[Uc2Camera]] = (HikCamera,),
+        drivers: Sequence[type[Uc2Camera]] = (Uc2Camera,),
         # accepted for drop-in parity with VirtualDetectorManager (unused here):
         stage_state: Any = None,
         illumination_state: Any = None,
@@ -77,7 +77,7 @@ class Uc2DetectorManager:
         wins; otherwise the next free slot in serial-sorted order is used, so a
         restart keeps cameras on stable slots.
         """
-        discovered: list[tuple[type[Uc2Camera], CameraInfo]] = []
+        discovered: list[tuple[type[Uc2Camera], Uc2Camera]] = []
         for driver in self._drivers:
             for info in driver.enumerate():
                 discovered.append((driver, info))

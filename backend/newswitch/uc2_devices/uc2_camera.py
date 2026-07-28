@@ -106,7 +106,6 @@ def _coerce_blocked_strategy(value: Any) -> Any:
     return value
 
 
-
 class Interface(str, Enum):
     """Physical camera interface (informational)."""
 
@@ -141,7 +140,7 @@ class FrameFormat:
     height: int
     channels: int = 1
     dtype: str = "uint16"  # uint8 / uint16 / uint32 / float32 / float64 / ...
-    bit_depth: int = 16    # significant bits: 8, 10, 12, 14, 16, 32, 64, ...
+    bit_depth: int = 16  # significant bits: 8, 10, 12, 14, 16, 32, 64, ...
 
     def numpy_shape(self, frames: int = 1) -> tuple[int, ...]:
         """Return the numpy shape for one frame or a stack of ``frames``."""
@@ -153,12 +152,7 @@ class FrameFormat:
         return base if frames == 1 else (frames, *base)
 
     def bytes_per_frame(self) -> int:
-        return (
-            int(np.dtype(self.dtype).itemsize)
-            * self.width
-            * self.height
-            * max(self.channels, 1)
-        )
+        return int(np.dtype(self.dtype).itemsize) * self.width * self.height * max(self.channels, 1)
 
 
 @dataclass
@@ -179,9 +173,7 @@ class Uc2Camera(ABC):
     here.
     """
 
-    def __init__(
-        self, info: CameraInfo, settings: "Uc2CameraSettings | None" = None
-    ) -> None:
+    def __init__(self, info: CameraInfo, settings: "Uc2CameraSettings | None" = None) -> None:
         self._info = info
         self._settings = settings
         self._roi: Optional[Roi] = None
@@ -194,7 +186,7 @@ class Uc2Camera(ABC):
     # ------------------------------------------------------------------ #
     @classmethod
     @abstractmethod
-    def enumerate(cls) -> list[CameraInfo]:
+    def enumerate(cls) -> list[Uc2Camera]:
         """Return all cameras of this type currently attached to the system."""
 
     # ------------------------------------------------------------------ #
@@ -240,8 +232,6 @@ class Uc2Camera(ABC):
     def get_roi(self) -> Optional[Roi]:
         return self._roi
 
-    
-    
     # ------------------------------------------------------------------ #
     # frames
     # ------------------------------------------------------------------ #
@@ -326,9 +316,7 @@ class Uc2Camera(ABC):
             save_file_chunk_size=save_file_chunk_size,
             rearrange_channels=rearrange_channels,
             image_norm=_coerce_image_norm(image_norm),
-            strategy_if_frame_is_blocked=_coerce_blocked_strategy(
-                strategy_if_frame_is_blocked
-            ),
+            strategy_if_frame_is_blocked=_coerce_blocked_strategy(strategy_if_frame_is_blocked),
         )
         return self._ring_buffer
 

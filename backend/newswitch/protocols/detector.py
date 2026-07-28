@@ -11,6 +11,7 @@ from rekuest_next.agents.context import context
 from rekuest_next import model, state
 from enum import Enum
 from newswitch.protocols.base import Manager
+from newswitch.utils.units import PhysicalValue
 
 if TYPE_CHECKING:
     from newswitch.broadcasters import FrameBroadcaster
@@ -48,6 +49,10 @@ class Detector:
     min_gain: float = 0.0
     is_acquiring: bool = False
     data_type: str = "uint8"
+
+    ## TODO: Consider using PhysicalValue for exposure_time and gain to encapsulate units and constraints.
+    # exposure_time: PhysicalValue = field(default_factory=lambda: PhysicalValue(value=0.1, unit="s"))
+    # gain: PhysicalValue = field(default_factory=lambda: PhysicalValue(value=1.0, unit=""))
 
 
 @state(required_locks=["camera_parameters"])
