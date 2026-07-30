@@ -11,6 +11,11 @@
 !**/.vscode/settings.json
 !**/.vscode/extensions.json
 
+
+# ---------- claude stuff and temp docs ----------
+CLAUDE.md
+git_type enum.md
+
 # ---------- Env ----------
 # frontend/.env and frontend/.env.docker are committed defaults (no secrets).
 # Personal overrides go in *.local files, which are ignored:
