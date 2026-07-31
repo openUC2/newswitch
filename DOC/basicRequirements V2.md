@@ -11,7 +11,8 @@ V2 -> Use case analysis with Armin and Dirk
 ## Use cases /Issues
 
 - Anschalten -> Keine Betriebszustandsanzeige -> Woher weiß ich, dass es an ist? In welchem Zusatnd bin ich ? Wie wird es angezeig? -> in SW und an Gerät
-- Wie werden verfügbare Geräte vom Frontend gefunden?
+- Wie werden verfügbare Geräte vom Frontend gefunden? -> Das Gerät taucht im WLan auf
+- 
 
 -> Homing 
   -> derzeit nicht standard?
@@ -20,10 +21,14 @@ V2 -> Use case analysis with Armin and Dirk
   -> Wie stelle ich sicher, dass das gerät immer weiß wo es ist? 
   -> Gerät soll definierte Positionen wieder finden
 
+Verbinugnen mit dem Geöt
 -> WLan verbindung mit Gerät
     -> Das Remotegerät kann nicht mehr über Wifi ins Internet
     -> Manche Kunden wollen Kein WLAN -> Verbindugn über USB
     -> Web security: Jeder der die IP hat kann aufs Gerät zugreifen, es soll ersichtlich sein, wer auf dem Gerät eingeloggt ist
+    -> Verschlüsselung der Daten (SHA256 oder ähnliches?)
+-> Kabelgebundene Verbindung
+  - USB3 und Ethernet
 
 -> Nutzerrechte
   - Erlaubte Nutzer sind auf Gerät hinterlegt?
@@ -35,14 +40,59 @@ V2 -> Use case analysis with Armin and Dirk
     - Haupnutzer fliegt raus (ungewollt) und will sich wieder einloggen
     - Hauptnutzer möchte steuerung aktiv an nebennutzer übergeben
     - Der Hauptnutzer loggt sich mit verschiedenen Remotegeräten ein
+    - Was passiert, wenn es ein nutzer eingeloggt ist, aber ein anderer Nutzer einen Hardwarekontroller steuern?
+        - Hier Idee: In SWGUI -> Aktiv Controllersteuerung aktivieren, Bei Messreihen, immer deaktivert 
+    - Wie können Messreihenreihen abgebrochen werden?  -> nur Hauptuser? 
+    - Wie können Messreihen während des Betriebes verändert werden? -> Nur Haupuser
+  - Welche einstellungen dürfen durch welchen nutzer geändert werden? -> Sollen Kritsiche einstellungn wirklich in einer Textdatei liegen?
+
+-> Schnittstellen für Externe
+  - Wie werden SW Schnittstellen dargestellt? (API) -> Mit Triggeroptionen
+  - Wie kann das Mikroskop in Robotikenvironments eingebunden werden? -> was sind aktuelle standards?
+
 
 -> GUI Fehlermeldungen
   - Müssen KLAR ersichtlich sein!
 
 -> Derzeit stabilster Modus: Lan + Chrome Browser
 
+-> Config structure:
+  - Wo werden Configs gespeichert
+  - Wo werden welche Informationen gespeichert -> Dokumentation
+  - Wo werden Mikrsokopiemetadaten gespeichert (Preset z.B. -> linked zu Mikrsokopsetting) ? (json, csv, ...) -> in Imswitch wrid das im Browser gespeichert, -> sollte das
+  - Trennung zwischen User und system properties in config strukture
+
+-> Nutzerfreundliche GUI
+  - Zur zeit sehe ich alle Funktionen auf einmal 
+  - Benötigte Features:
+    - Liveview Vollbild
+    - Digitaler Zoom des Livebildes
+    - Es sollen nur "Apps" verfügbar sein, die das Mikroskop auch unterstütz
+    - Überlblicksbild -> extra Kamera oder stitch (QuickOverview)??
 
 
+
+-> Datenspeicherung / verarbeitung
+  - Wo werden die Daten gespeichert
+  - Speicherpfade außerhalb des RPI festlegen
+  - Wie sollen automatische Daten gespeichert werden? -> Sicher erst mal auf RPI
+    -> Max. Datenmenge im bereich 1TB
+  - Download (Format? OME TIFF oder OME ZARR)
+  - Stitching
+    - Stitching auf RPI?
+    - soll es überhaupt möglich
+    - overview stitching
+
+-> APPs
+  - Wie sollen Apps (Programmabläufe) definiert werden?
+    - script
+    - GUI
+    - Fest vordefiniert
+
+-> Inittests
+  - Welche Initialen Testroutinen sollen umgesetzt werden? 
+    - intiale Achskalibrierung
+    - Bildgrößen kalibrierung
 
 
 
