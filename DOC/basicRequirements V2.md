@@ -88,12 +88,16 @@ Verbinugnen mit dem Geöt
     - script
     - GUI
     - Fest vordefiniert
+API -> SLAS ist Roboter standard -> Wiekönnen wir uns damit verbinden?
 
 -> Inittests
   - Welche Initialen Testroutinen sollen umgesetzt werden? 
     - intiale Achskalibrierung
     - Bildgrößen kalibrierung
 
+  Achsenanzahl -> min 5
+bouncing of buttons needs to be avoided
+Was ist wenn wir während einer Procedure einen Versatz bekommen -> dann muss die Stage zurück kehren
 
 
 
