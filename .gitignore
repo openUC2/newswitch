@@ -19,6 +19,8 @@
 .env.*.local
 token.temp
 
+.~*
+
 # ---------- Python / backend ----------
 __pycache__/
 *.py[cod]
