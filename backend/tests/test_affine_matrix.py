@@ -9,7 +9,7 @@ import copy
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.logic.affine_matrix import calculate_3d_affine, check_calibration
 from newswitch.managers.virtual import VirtualDetectorManager
-from newswitch.managers.virtual.virtual_detector import DetectorConfig
+from newswitch.managers.virtual.virtual_setup import SceneConfig, VirtualSetup
 from newswitch.protocols import CameraState, IlluminationState, StageState
 from newswitch.protocols.illumination import Illumination
 from newswitch.protocols.objective import ObjectiveState
@@ -60,13 +60,16 @@ def affine_stage_detector() -> Generator[DetectorWithState, None, None]:
 
         # Create detector with astigmatism sample type for consistent visible frames
         broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
+            config=SceneConfig(sample_type="astigmatism"),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
             broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="astigmatism"),
+            frame_source=setup,
         )
         # Activate and configure detector
         detector.activate_detector(1)
@@ -113,7 +116,7 @@ def test_affine_matrix_calculation(affine_stage_detector: DetectorWithState) -> 
     affine_matrix = calculate_3d_affine(images, states)
 
     calibration = check_calibration(
-        affine_matrix, objective=detector.objective_state, detector=active_detector
+        affine_matrix, objective=detector.frame_source.objective_state, detector=active_detector
     )
 
     assert calibration.is_valid, f"Affine matrix validation failed: {calibration.warnings}"

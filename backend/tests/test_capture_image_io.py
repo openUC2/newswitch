@@ -17,7 +17,7 @@ from rekuest_next.state.lock import acquired_locks
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.managers.virtual import VirtualDetectorManager
 from newswitch.managers.io import LocalFileConfig, LocalFileIOManager
-from newswitch.managers.virtual.virtual_detector import DetectorConfig
+from newswitch.managers.virtual.virtual_setup import SceneConfig, VirtualSetup
 from newswitch.protocols import CameraState, IlluminationState, StageState
 from newswitch.protocols.illumination import Illumination
 from newswitch.protocols.io import FileFormat, IOState
@@ -90,13 +90,16 @@ def illuminated_detector_with_io(
 
         # Create detector with astigmatism sample type for consistent visible frames
         broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
+            config=SceneConfig(sample_type="astigmatism"),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
             broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="astigmatism"),
+            frame_source=setup,
         )
         # Activate and configure detector
         detector.activate_detector(1)
@@ -144,12 +147,15 @@ def default_illumination_detector_with_io(
         io_state = IOState()
 
         broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
             broadcaster=broadcaster,
+            frame_source=setup,
         )
         # Activate detector
         detector.activate_detector(1)

@@ -78,6 +78,34 @@ class CameraState:
         raise ValueError(f"No detector found for slot {slot}")
 
 
+@runtime_checkable
+class FrameSource(Protocol):
+    """Protocol for whatever a detector manager pulls its pixels from.
+
+    This is the seam between detector bookkeeping (slots, exposure, gain,
+    activation) and image formation. Virtually it is the simulated optical
+    scene; on real hardware it is a camera driver handle. Keeping it a protocol
+    is what allows a detector manager to stay free of any simulation structure.
+
+    Note this is *not* an agent context: it is never injected by the runtime and
+    holds no locks. It is handed to a detector manager at construction time.
+    """
+
+    def render(self, width: int, height: int, exposure_time: float, gain: float) -> np.ndarray:
+        """Produce a single frame at the requested sensor size and settings.
+
+        Args:
+            width: Sensor width in pixels.
+            height: Sensor height in pixels.
+            exposure_time: Exposure time in seconds.
+            gain: Detector gain.
+
+        Returns:
+            The frame as a 2D array of shape (height, width).
+        """
+        ...
+
+
 @context(locks=["camera_parameters"])
 @runtime_checkable
 class DetectorManager(Manager, Protocol):

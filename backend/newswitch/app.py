@@ -61,6 +61,7 @@ from newswitch.managers.virtual import (
     VirtualDetectorManager,
     VirtualObjectiveManager,
     VirtualFilterBankManager,
+    VirtualSetup,
 )
 from newswitch.managers.io import LocalFileIOManager, LocalFileConfig
 
@@ -184,13 +185,22 @@ async def provide_managers(
     led = VirtualLEDManager(illumination_state=illumination_state)
     objective = VirtualObjectiveManager(objective_state=objective_state)
     filter_bank = VirtualFilterBankManager(filter_bank_state=filter_bank_state)
+
+    # The simulated optical scene. It depends on the states only, never on the
+    # managers, and reads them at render time - so it is built here, before the
+    # detector that asks it for pixels. It is deliberately NOT returned below:
+    # the startup hook only accepts @state / @context values.
+    virtual_setup = VirtualSetup(
+        stage_state=stage_state,
+        objective_state=objective_state,
+        illumination_state=illumination_state,
+        filter_bank_state=filter_bank_state,
+    )
+
     detector = VirtualDetectorManager(
         camera_state=camera_state,
-        stage_state=stage_state,
-        illumination_state=illumination_state,
         broadcaster=frame_broadcaster,
-        objective_state=objective_state,
-        filter_bank_state=filter_bank_state,
+        frame_source=virtual_setup,
     )
     io_manager = LocalFileIOManager(
         state=io_state,

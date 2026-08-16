@@ -11,6 +11,9 @@
 !**/.vscode/settings.json
 !**/.vscode/extensions.json
 
+# ignore local templates etc.
+.~*
+
 # ---------- Env ----------
 # frontend/.env and frontend/.env.docker are committed defaults (no secrets).
 # Personal overrides go in *.local files, which are ignored:

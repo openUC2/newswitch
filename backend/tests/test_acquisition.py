@@ -27,6 +27,7 @@ from newswitch.managers.io import LocalFileConfig, LocalFileIOManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.managers.python_hook_manager import PythonHookManager
 from newswitch.managers.virtual.virtual_detector import DetectorConfig
+from newswitch.managers.virtual.virtual_setup import SceneConfig, VirtualSetup
 from newswitch.protocols import (
     CameraState,
     CalibrationState,
@@ -111,13 +112,17 @@ def acquisition_setup(
         broadcaster = FrameBroadcaster()
 
         # Create managers
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
+            config=SceneConfig(sample_type="cells"),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
             broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="cells", width=256, height=256),
+            frame_source=setup,
+            config=DetectorConfig(width=256, height=256),
         )
         detector.deactivate_detector(2)
         detector.deactivate_detector(3)

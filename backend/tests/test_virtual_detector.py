@@ -12,8 +12,9 @@ import pytest
 from rekuest_next.state.lock import acquired_locks
 
 from newswitch.broadcasters import FrameBroadcaster
-from newswitch.managers.virtual import VirtualDetectorManager
+from newswitch.managers.virtual import VirtualDetectorManager, VirtualSetup
 from newswitch.managers.virtual.virtual_detector import DetectorConfig
+from newswitch.managers.virtual.virtual_setup import SceneConfig
 from newswitch.protocols import CameraState, IlluminationState, StageState
 from newswitch.protocols.illumination import Illumination
 from newswitch.protocols.objective import ObjectiveState
@@ -67,13 +68,17 @@ def virtual_detector_manager(
     """
     camera_state, stage_state, objective_state, illumination_state = detector_states
     broadcaster = FrameBroadcaster()
-    manager = VirtualDetectorManager(
-        camera_state=camera_state,
+    setup = VirtualSetup(
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
+        config=SceneConfig(sample_type="cells"),
+    )
+    manager = VirtualDetectorManager(
+        camera_state=camera_state,
         broadcaster=broadcaster,
-        config=DetectorConfig(sample_type="cells", width=256, height=256),
+        frame_source=setup,
+        config=DetectorConfig(width=256, height=256),
     )
     # Activate a detector for testing
     manager.activate_detector(1)
@@ -98,13 +103,17 @@ def astigmatism_detector_manager(
     """
     camera_state, stage_state, objective_state, illumination_state = detector_states
     broadcaster = FrameBroadcaster()
-    manager = VirtualDetectorManager(
-        camera_state=camera_state,
+    setup = VirtualSetup(
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
+        config=SceneConfig(sample_type="astigmatism"),
+    )
+    manager = VirtualDetectorManager(
+        camera_state=camera_state,
         broadcaster=broadcaster,
-        config=DetectorConfig(sample_type="astigmatism", width=256, height=256),
+        frame_source=setup,
+        config=DetectorConfig(width=256, height=256),
     )
     # Activate a detector for testing
     manager.activate_detector(1)
@@ -134,13 +143,17 @@ class TestDetectorProtocolCompliance:
         """
         camera_state, stage_state, objective_state, illumination_state = detector_states
         broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
+            config=SceneConfig(sample_type="cells"),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
             broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="cells", width=256, height=256),
+            frame_source=setup,
+            config=DetectorConfig(width=256, height=256),
         )
 
         # The current virtual detector implementation starts with all detectors active.
@@ -260,7 +273,7 @@ class TestFrameGeneration:
     ) -> None:
         """Test that frame content changes when stage position changes."""
         detector = virtual_detector_manager
-        stage_state = detector.stage_state
+        stage_state = detector.frame_source.stage_state
 
         frame1 = detector.capture_image(slot=1)
 
@@ -288,7 +301,7 @@ class TestFrameGeneration:
     ) -> None:
         """Test that astigmatism frame changes with z position."""
         detector = astigmatism_detector_manager
-        stage_state = detector.stage_state
+        stage_state = detector.frame_source.stage_state
 
         stage_state.z = 0.0
         frame_z0 = detector.capture_image(slot=1)
@@ -324,19 +337,21 @@ class TestIlluminationEffect:
         broadcaster = FrameBroadcaster()
 
         # Use astigmatism mode which generates consistent frames
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
-            config=DetectorConfig(
+            config=SceneConfig(
                 sample_type="astigmatism",
-                width=128,
-                height=128,
                 poisson_noise=False,
                 read_noise=0.0,
             ),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
+            broadcaster=broadcaster,
+            frame_source=setup,
+            config=DetectorConfig(width=128, height=128),
         )
         detector.activate_detector(1)
 
@@ -371,19 +386,21 @@ class TestCameraSettings:
         broadcaster = FrameBroadcaster()
 
         # Use astigmatism mode which generates consistent frames
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
-            config=DetectorConfig(
+            config=SceneConfig(
                 sample_type="astigmatism",
-                width=128,
-                height=128,
                 poisson_noise=False,
                 read_noise=0.0,
             ),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
+            broadcaster=broadcaster,
+            frame_source=setup,
+            config=DetectorConfig(width=128, height=128),
         )
         detector.activate_detector(1)
 
@@ -408,19 +425,21 @@ class TestCameraSettings:
         broadcaster = FrameBroadcaster()
 
         # Use astigmatism mode which generates consistent frames
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
+        setup = VirtualSetup(
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
-            config=DetectorConfig(
+            config=SceneConfig(
                 sample_type="astigmatism",
-                width=128,
-                height=128,
                 poisson_noise=False,
                 read_noise=0.0,
             ),
+        )
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
+            broadcaster=broadcaster,
+            frame_source=setup,
+            config=DetectorConfig(width=128, height=128),
         )
         detector.activate_detector(1)
 

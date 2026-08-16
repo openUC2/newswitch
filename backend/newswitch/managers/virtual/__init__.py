@@ -9,6 +9,7 @@ microscope control system.
 from .virtual_stage import VirtualStageManager, StageConfig
 from .virtual_led import VirtualLEDManager, LEDConfig
 from .virtual_detector import VirtualDetectorManager, DetectorConfig
+from .virtual_setup import VirtualSetup, SceneConfig
 from .virtual_objective import (
     VirtualObjectiveManager,
     ObjectiveConfig,
@@ -26,6 +27,9 @@ __all__ = [
     # Detector
     "VirtualDetectorManager",
     "DetectorConfig",
+    # Setup (simulated optical scene)
+    "VirtualSetup",
+    "SceneConfig",
     # Objective
     "VirtualObjectiveManager",
     "ObjectiveConfig",
