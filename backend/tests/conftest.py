@@ -12,6 +12,7 @@ from rekuest_next.contrib.fastapi import AsyncAgentTestClient
 from rekuest_next.contrib.fastapi.testing import BufferedEvent
 
 from newswitch.app import ImswitchConfig, create_app
+from newswitch.auth import AllowAllAuthenticator
 
 # rekuest_next==2.1.1's AsyncAgentTestClient.collect_until_done()/BufferedEvent.is_done()
 # still check for a "DONE" event type, but the agent's wire protocol emits "COMPLETED"
@@ -30,7 +31,9 @@ def virtual_microscope_app() -> FastAPI:
     Returns:
         FastAPI: The configured FastAPI application instance.
     """
-    app = create_app(ImswitchConfig())
+    # Authentication is bypassed rather than satisfied: AsyncAgentTestClient hardcodes
+    # its websocket init payload, so there is no seam to hand it a token through.
+    app = create_app(ImswitchConfig(), authenticator=AllowAllAuthenticator())
     return app
 
 

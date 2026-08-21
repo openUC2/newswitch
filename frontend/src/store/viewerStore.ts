@@ -1,5 +1,6 @@
 import type { Frame } from "@/components/stage/hooks/zarr/types";
 import { CachedFetchStore } from "@/components/stage/hooks/zarr/zarr_stores/fetchStore";
+import { withToken } from "@/lib/auth/authFetch";
 import { TestNoiseZarrStore } from "@/components/stage/hooks/zarr/zarr_stores/noiseStore";
 import type { ZarrStore } from "@/components/stage/hooks/zarr/zarr_stores/type";
 import { createStore } from "zustand/vanilla";
@@ -27,7 +28,10 @@ export const localBuilder = (frame: Frame) => {
 };
 
 export const fetchBuilder = (frame: Frame) => {
-  const url = `${BACKEND_API}/cache/${frame.id}`;
+  // zarrita resolves each chunk against this base and copies the base's query string
+  // onto it, so a token here reaches every chunk request. Its own `overrides` option
+  // would not work: CachedFetchStore overrides `get` and cannot see them.
+  const url = withToken(`${BACKEND_API}/cache/${frame.id}`);
   return new CachedFetchStore(url);
 };
 

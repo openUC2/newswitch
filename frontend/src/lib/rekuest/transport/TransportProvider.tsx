@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo } from "react";
 import type { AppKey, AppsDefinition } from "@/lib/rekuest/types";
+import { authFetch } from "@/lib/auth/authFetch";
+import { getToken } from "@/lib/auth/token";
 import {
   TransportSubscriptionManager,
   type TransportManagerEndpoints,
@@ -212,11 +214,16 @@ export function TransportProvider({
       new TransportSubscriptionManager({
         getEndpoints: (appKey) =>
           getEndpoints(appKey) as TransportManagerEndpoints,
-        getSubscriptionInit: (appKey) =>
-          createSubscriptionInitWithIntervals(
+        getSubscriptionInit: (appKey) => ({
+          ...createSubscriptionInitWithIntervals(
             getApp(appKey),
             config.appStateUpdateIntervals?.[appKey],
           ),
+          // The websocket's stand-in for an Authorization header, which browsers
+          // will not let us set on a WebSocket. Read here rather than captured
+          // above, because this runs on every (re)connect.
+          token: getToken(),
+        }),
         reconnect,
         pingInterval,
         keepAliveOnNoListeners: true,
@@ -253,7 +260,7 @@ export function TransportProvider({
         step: options?.step,
       };
 
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(assignInput),
@@ -278,7 +285,7 @@ export function TransportProvider({
     ): Promise<Task<TArgs, TReturn>> => {
       const { apiEndpoint } = getEndpoints(appKey);
       const url = `${apiEndpoint.replace(/\/$/, "")}/tasks/${taskId}`;
-      const response = await fetch(url);
+      const response = await authFetch(url);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -295,7 +302,7 @@ export function TransportProvider({
     (endpoint: string) => async (appKey: AppKey, taskId: string) => {
       const { apiEndpoint } = getEndpoints(appKey);
       const url = `${apiEndpoint.replace(/\/$/, "")}/${endpoint}`;
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task: taskId }),
@@ -320,7 +327,7 @@ export function TransportProvider({
       const url = new URL(`${apiEndpoint.replace(/\/$/, "")}/states`);
       url.searchParams.set("state_keys", stateName);
 
-      const response = await fetch(url.toString());
+      const response = await authFetch(url.toString());
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -353,7 +360,7 @@ export function TransportProvider({
         url.searchParams.set("state_keys", stateKeys.join(","));
       }
 
-      const response = await fetch(url.toString());
+      const response = await authFetch(url.toString());
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -391,7 +398,7 @@ export function TransportProvider({
         url.searchParams.append("state_keys", stateKey);
       }
 
-      const response = await fetch(url.toString());
+      const response = await authFetch(url.toString());
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -432,7 +439,7 @@ export function TransportProvider({
         url.searchParams.append("state_keys", stateKey);
       }
 
-      const response = await fetch(url.toString());
+      const response = await authFetch(url.toString());
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -450,7 +457,7 @@ export function TransportProvider({
     async (appKey: AppKey): Promise<Record<string, { task_id: string }>> => {
       const { apiEndpoint } = getEndpoints(appKey);
       const url = `${apiEndpoint.replace(/\/$/, "")}/locks`;
-      const response = await fetch(url);
+      const response = await authFetch(url);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -488,7 +495,7 @@ export function TransportProvider({
     async (appKey: AppKey): Promise<SessionBoundaries> => {
       const { apiEndpoint } = getEndpoints(appKey);
       const url = `${apiEndpoint.replace(/\/$/, "")}/active_session_boundaries`;
-      const response = await fetch(url);
+      const response = await authFetch(url);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -508,7 +515,7 @@ export function TransportProvider({
     async (appKey: AppKey, sessionId: string): Promise<SessionBoundaries> => {
       const { apiEndpoint } = getEndpoints(appKey);
       const url = `${apiEndpoint.replace(/\/$/, "")}/session_boundaries/${sessionId}`;
-      const response = await fetch(url);
+      const response = await authFetch(url);
 
       if (!response.ok) {
         const errorText = await response.text();

@@ -1,0 +1,17 @@
+# Credentials for the newswitch login. Copy this file to `auth.yaml` (which is
+# gitignored) and change the password:
+#
+#   cp auth.example.yaml auth.yaml
+#
+# Point somewhere else with NEWSWITCH_AUTH_FILE=/etc/newswitch/auth.yaml. When that
+# variable is set the file must exist - the backend refuses to start otherwise, rather
+# than quietly accepting the default login below.
+#
+# With no auth.yaml and no NEWSWITCH_AUTH_FILE the backend falls back to admin/admin
+# and logs a warning, so a fresh clone runs without setup. Do not expose that.
+#
+# There is one account. Editing this file invalidates every issued token, which is how
+# you log everyone out.
+
+username: admin
+password: admin

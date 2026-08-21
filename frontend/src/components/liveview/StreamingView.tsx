@@ -1,3 +1,5 @@
+import { authFrame, WS_UNAUTHORIZED_CLOSE_CODE } from "@/lib/auth/authFetch";
+import { clearToken } from "@/lib/auth/token";
 import JMuxer from "jmuxer";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -158,6 +160,8 @@ export const StreamingView: React.FC<LiveViewProps> = ({
 
       socket.onopen = () => {
         if (isCleaningUpRef.current) return;
+        // In-band auth: a WebSocket cannot carry an Authorization header.
+        socket.send(JSON.stringify(authFrame()));
         console.log("Video stream connected");
         setConnectionState("connected");
         reconnectAttemptsRef.current = 0;
@@ -193,6 +197,12 @@ export const StreamingView: React.FC<LiveViewProps> = ({
 
         console.log("Video stream disconnected:", event.code, event.reason);
         setConnectionState("disconnected");
+
+        // Not transient - reconnecting with the same rejected token would loop.
+        if (event.code === WS_UNAUTHORIZED_CLOSE_CODE) {
+          clearToken();
+          return;
+        }
 
         // Handle reconnection
         if (

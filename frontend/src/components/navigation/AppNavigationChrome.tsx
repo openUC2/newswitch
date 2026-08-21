@@ -8,7 +8,14 @@ import {
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, History, Loader2, PlaySquare, Radio } from "lucide-react";
+import {
+  Activity,
+  History,
+  Loader2,
+  LogOut,
+  PlaySquare,
+  Radio,
+} from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { buttonVariants, Button } from "@/components/ui/button";
@@ -18,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAuth } from "@/lib/auth/context";
 import { useAppStateContext } from "@/lib/rekuest/app-state/app-state-context";
 import {
   selectLatestPatches,
@@ -610,10 +618,35 @@ function TimelineFloater() {
   );
 }
 
+/** Ends the session. Floated rather than added to RouteNavigationBar, which this
+ * chrome does not mount (see the TODO above it). */
+function LogoutButton() {
+  const { logout } = useAuth();
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Log out"
+          onClick={logout}
+          className="fixed right-3 top-3 z-50 h-8 w-8 bg-background/70 backdrop-blur hover:bg-background"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="left">Log out</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AppNavigationChrome({ children }: { children: ReactNode }) {
   return (
     <>
       <TimelineFloater />
+      <LogoutButton />
       {children}
     </>
   );

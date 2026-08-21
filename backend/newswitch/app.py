@@ -5,9 +5,10 @@ This module provides a FastAPI server with arkitekt_next integration
 for controlling a virtual microscope through registered functions.
 """
 
+import os
 from typing import Optional, Tuple
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from newswitch.hooks.software_autofocus import software_autofocus_hook
@@ -69,6 +70,14 @@ from newswitch.broadcasters import FrameBroadcaster
 
 # Import routes
 from newswitch.protocols.serial_manager import SerialState
+from newswitch.auth import (
+    AuthMiddleware,
+    Authenticator,
+    CredentialAuthenticator,
+    load_credentials,
+    make_expand_user_from_request,
+    router as auth_router,
+)
 from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
@@ -661,16 +670,19 @@ default_app_registry.register_blok(
 )
 
 
-# We can define a function to extract user info from the request for authentication/authorization purposes
-# In this example, we just return a dummy user ID, but in a real application you would extract this from the request headers or cookies
-# We could also have this per browser session To reliably associate requests from the same client, we would need to implement some form of session management, such as using cookies or tokens. This is a simplified example for demonstration purposes.
-def get_user_from_request(request: Request) -> int:
-    """Placeholder function to extract user info from request."""
-    return 1
+def create_app(
+    config: ImswitchConfig,
+    authenticator: Authenticator | None = None,
+) -> FastAPI:
+    """Create and configure the FastAPI application.
 
-
-def create_app(config: ImswitchConfig) -> FastAPI:
-    """Create and configure the FastAPI application."""
+    Args:
+        config: The app context handed to every registered function.
+        authenticator: Overrides the credentials file. Tests pass
+            `AllowAllAuthenticator()`; production leaves this unset. Injected as an
+            argument rather than read from the environment so that authentication
+            cannot be switched off by a stray variable on a deployed machine.
+    """
 
     app = FastAPI(
         title="Virtual Microscope API",
@@ -678,12 +690,24 @@ def create_app(config: ImswitchConfig) -> FastAPI:
         version="2.0.0",
     )
 
+    authenticator = authenticator or CredentialAuthenticator(load_credentials())
+    app.state.authenticator = authenticator
+
+    # Middleware order is load-bearing. `add_middleware` PREPENDS, so the LAST call
+    # here ends up OUTERMOST: auth is added first and CORS wraps it. Reversed, a 401
+    # would leave without CORS headers and the browser at :5173 would report an opaque
+    # CORS failure instead of the 401 that tells the app to send the user to /login.
+    app.add_middleware(AuthMiddleware, authenticator=authenticator)
+
     # Add CORS middleware
     # bceause CORS sucks
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        # Auth travels in an Authorization header or a query parameter, never a
+        # cookie, so credentialed CORS is not needed - and without it the wildcard
+        # origin above can be sent literally instead of being echoed back.
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -698,10 +722,13 @@ def create_app(config: ImswitchConfig) -> FastAPI:
     configure_fastapi(
         app=app,
         app_registry=default_app_registry,
-        get_user_from_request=get_user_from_request,
+        expand_user_from_request=make_expand_user_from_request(authenticator),
         app_context=config,
         db_file=config.db_path,
     )
+
+    # Mount the public auth + health routes
+    app.include_router(auth_router)
 
     # Mount WebSocket routes for live video streaming
     app.include_router(liveview_router, prefix="/stream")
@@ -721,10 +748,18 @@ def create_app(config: ImswitchConfig) -> FastAPI:
 
 
 def main() -> None:
-    """Main entry point to run the FastAPI server."""
+    """Main entry point to run the FastAPI server.
+
+    Host and port come from BACKEND_HOST / BACKEND_PORT (the repo's root .env, which
+    `just` and docker compose export), so they stay defined in exactly one place.
+    """
     config = ImswitchConfig()
     app = create_app(config)
-    uvicorn.run(app, host="0.0.0.0", port=8099)
+    uvicorn.run(
+        app,
+        host=os.environ.get("BACKEND_HOST", "0.0.0.0"),
+        port=int(os.environ.get("BACKEND_PORT", "8099")),
+    )
 
 
 if __name__ == "__main__":

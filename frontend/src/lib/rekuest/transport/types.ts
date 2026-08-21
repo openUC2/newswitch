@@ -392,6 +392,8 @@ export type FromAgentMessage =
 
 export interface WebSocketSubscriptionInit {
   type?: string | null;
+  /** Credential for the handshake; the websocket's stand-in for an auth header. */
+  token?: string | null;
   action_keys?: string[] | null;
   state_keys?: string[] | null;
   lock_keys?: string[] | null;

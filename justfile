@@ -1,6 +1,15 @@
 set shell := ["bash", "-uc"]
 
-BACKEND_HEALTH := "http://localhost:8099/schemas/states"
+# Ports live in the root .env (committed defaults). dotenv-load exports them into every
+# recipe, and env(...) makes them usable in the just expressions below. A variable already
+# exported in the shell wins over the file, so `BACKEND_PORT=9000 just dev` works.
+set dotenv-load := true
+
+BACKEND_HOST := env("BACKEND_HOST", "0.0.0.0")
+BACKEND_PORT := env("BACKEND_PORT", "8099")
+FRONTEND_PORT := env("FRONTEND_PORT", "5173")
+
+BACKEND_HEALTH := "http://localhost:" + BACKEND_PORT + "/health"
 
 # List available recipes
 default:
@@ -17,12 +26,12 @@ install:
 
 # ---------- dev ----------
 
-# Backend only -> http://localhost:8099 (hot-reloads on edit)
+# Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
 dev-backend:
-    cd backend && uv run uvicorn main:app --host 0.0.0.0 --port 8099 --reload
+    cd backend && uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload
 
-# Frontend only -> http://localhost:5173 (needs the backend up for fresh codegen)
-# Binding + allowedHosts live in vite.config.ts, so no --host flag needed here.
+# Frontend only -> http://localhost:$FRONTEND_PORT (needs the backend up for fresh codegen)
+# Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
 dev-frontend:
     cd frontend && yarn dev
 
@@ -43,11 +52,12 @@ dev:
     #!/usr/bin/env bash
     set -uo pipefail
     trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run uvicorn main:app --host 0.0.0.0 --port 8099 --reload) &
+    (cd backend && exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload) &
     if ! just wait-backend; then
       echo "!! backend unreachable - vite will fall back to the COMMITTED generated hooks" >&2
       echo "!! (see frontend/plugins/generate-app.ts: fetch failures are warnings, not errors)" >&2
     fi
+    echo "frontend -> http://localhost:{{FRONTEND_PORT}}"
     (cd frontend && exec yarn dev) &
     wait
 

@@ -1,3 +1,5 @@
+import { authFrame, WS_UNAUTHORIZED_CLOSE_CODE } from "@/lib/auth/authFetch";
+import { clearToken } from "@/lib/auth/token";
 import { H264_STREAM_PATH } from "@/constants";
 import type { Detector } from "@/apps/default/hooks/actions";
 import { useFrame } from "@react-three/fiber";
@@ -74,7 +76,12 @@ export const useH264LiveTexture = ({
       socket.binaryType = "arraybuffer";
       socketRef.current = socket;
 
-      socket.onopen = () => setConnectionState("connected");
+      socket.onopen = () => {
+        // These sockets authenticate in band: browsers cannot set headers on a
+        // WebSocket, and a query-string token would land in every access log.
+        socket.send(JSON.stringify(authFrame()));
+        setConnectionState("connected");
+      };
       socket.onmessage = (event: MessageEvent) => {
         const chunk = new Uint8Array(event.data as ArrayBuffer);
         statsRef.current = {
@@ -85,7 +92,10 @@ export const useH264LiveTexture = ({
         jmuxerRef.current?.feed({ video: chunk });
       };
       socket.onerror = () => setConnectionState("error");
-      socket.onclose = () => setConnectionState("disconnected");
+      socket.onclose = (event) => {
+        if (event.code === WS_UNAUTHORIZED_CLOSE_CODE) clearToken();
+        setConnectionState("disconnected");
+      };
     } catch (error) {
       console.error("[Stage] Failed to initialize live stream", error);
     }

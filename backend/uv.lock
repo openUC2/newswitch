@@ -1263,6 +1263,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyserial-asyncio" },
     { name = "pystackreg" },
+    { name = "pyyaml" },
     { name = "rekuest-next" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -1312,7 +1313,8 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.4" },
     { name = "pyserial-asyncio", specifier = ">=0.6" },
     { name = "pystackreg", specifier = ">=0.2.8" },
-    { name = "rekuest-next", specifier = ">=2.1.1" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "rekuest-next", specifier = ">=2.2.1" },
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "tifffile", specifier = ">=2026.1.28" },
     { name = "useq-schema", specifier = ">=0.8.1" },
@@ -2272,7 +2274,7 @@ wheels = [
 
 [[package]]
 name = "rekuest-next"
-version = "2.1.1"
+version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -2285,9 +2287,9 @@ dependencies = [
     { name = "rath" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/15/ec78e46c039f3eadb6cfb912c9e555c8aca4bb4bb256d0c33a1e73b10490/rekuest_next-2.1.1.tar.gz", hash = "sha256:ddf4eed24c5ac9d7d5001c4afa6ed6da1bc26602448decf04581307246edf235", size = 236047, upload-time = "2026-07-13T13:03:40.056Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/08/cd02a79cb61718c2a735600dc241c8dfb5a1c7a9e03fd52cd54718b5c040/rekuest_next-2.2.1.tar.gz", hash = "sha256:bea307077d1847917140fca7fb687c3c9047eae75b257c0f8319596cdc4c3777", size = 259051, upload-time = "2026-08-21T14:20:54.717Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/e3/3c91bfd91698b3003c7a7b629d0cc29f5f2c303afc2641c006a7b3d47ebf/rekuest_next-2.1.1-py3-none-any.whl", hash = "sha256:2b3c0dbd179dc01067d83ea8d410716eba59cd88c2c373448cdd1bfc0df96a5f", size = 293510, upload-time = "2026-07-13T13:03:38.686Z" },
+    { url = "https://files.pythonhosted.org/packages/54/18/270920ceae0ef454ada18d637da6d6bc9714fd67f3c6259d4f27014b96dd/rekuest_next-2.2.1-py3-none-any.whl", hash = "sha256:696d734bb652f575dbf705b97df328a16494e87177365116b3c76125011fda0e", size = 320845, upload-time = "2026-08-21T14:20:53.53Z" },
 ]
 
 [[package]]

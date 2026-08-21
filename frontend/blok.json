@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-13T17:11:29.290Z",
+  "generatedAt": "2026-08-21T14:46:18.247Z",
   "app": {
     "description": "",
     "name": "newswitch",
@@ -75,9 +75,9 @@
       },
       "name": "default",
       "schemas": {
-        "locks": "http://localhost:8099/schemas/locks",
-        "states": "http://localhost:8099/schemas/states",
-        "tasks": "http://localhost:8099/schemas/implementations"
+        "locks": "http://localhost:8069/schemas/locks",
+        "states": "http://localhost:8069/schemas/states",
+        "tasks": "http://localhost:8069/schemas/implementations"
       },
       "states": {
         "CalibrationState": {
@@ -8638,6 +8638,7 @@
       "tasks": {
         "acquire_multidimensional_acquisition": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": [
@@ -9603,14 +9604,11 @@
             "collections": [],
             "description": "Simulate the acquisition of a multidimensional dataset based on the provided configuration.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "acquire_multidimensional_acquisition",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Acquire Multidimensional Acquisition",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -11729,11 +11727,9 @@
               }
             ],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "acquire_multidimensional_acquisition",
@@ -11745,7 +11741,6 @@
             "io",
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -11755,6 +11750,7 @@
         },
         "activate_detector": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -11778,30 +11774,24 @@
             "collections": [],
             "description": "Activate a detector by its slot number.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "activate_detector",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Activate Detector",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "activate_detector",
           "locks": [
             "camera_parameters"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -11811,18 +11801,16 @@
         },
         "calibrate_light_path": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Simulate the acquisition of a multidimensional dataset based on the provided configuration.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "calibrate_light_path",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Calibrate Light Path",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -11976,11 +11964,9 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "calibrate_light_path",
@@ -11988,7 +11974,6 @@
             "camera_parameters",
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [
             "CameraState"
           ],
@@ -12000,18 +11985,16 @@
         },
         "capture_image": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Capture an image from the detector and save it to disk.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "capture_image",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Capture Image",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -14130,11 +14113,9 @@
               }
             ],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "capture_image",
@@ -14143,7 +14124,6 @@
             "expanse_state",
             "io"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -14153,34 +14133,29 @@
         },
         "clear_expanse": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Clear the expanse state, removing all current images.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "clear_expanse",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Clear Expanse",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "clear_expanse",
           "locks": [
             "expanse_state"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -14190,6 +14165,7 @@
         },
         "deactivate_detector": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -14213,14 +14189,11 @@
             "collections": [],
             "description": "Deactivate a detector by its slot number.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "deactivate_detector",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Deactivate Detector",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -14244,18 +14217,15 @@
               }
             ],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "deactivate_detector",
           "locks": [
             "camera_parameters"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -14265,27 +14235,23 @@
         },
         "dump_states_to_stdin": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Dump the current states of all managers for debugging purposes.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "dump_states_to_stdin",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Dump States To Stdin",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "dump_states_to_stdin",
@@ -14297,14 +14263,13 @@
             "objective",
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [
+            "ExpanseState",
             "StageState",
-            "FilterBankState",
-            "ObjectiveState",
             "CameraState",
             "IlluminationState",
-            "ExpanseState"
+            "FilterBankState",
+            "ObjectiveState"
           ],
           "needsToken": true,
           "optimistics": [],
@@ -14314,6 +14279,7 @@
         },
         "failing_camera": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -14337,14 +14303,11 @@
             "collections": [],
             "description": "A function that always fails to test lock release.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "failing_camera",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Failing Camera",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -14368,18 +14331,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "failing_camera",
           "locks": [
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [
             "CameraState"
           ],
@@ -14391,6 +14351,7 @@
         },
         "kill_benedict": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -14432,30 +14393,24 @@
             "collections": [],
             "description": "Move the stage to a specified position with a long execution time to test optimistic updates.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "kill_benedict",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Kill Benedict",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "kill_benedict",
           "locks": [
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -14465,32 +14420,27 @@
         },
         "long_stuff_running": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "A long-running function to test optimistic updates and progress.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "long_stuff_running",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Long Stuff Running",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "long_stuff_running",
           "locks": [],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -14500,34 +14450,29 @@
         },
         "move_home": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Move stage to home position.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "move_home",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Move Home",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "move_home",
           "locks": [
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [
             "StageState"
           ],
@@ -14539,6 +14484,7 @@
         },
         "move_stage": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -14652,30 +14598,24 @@
             "collections": [],
             "description": "Move the stage to a new position.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "move_stage",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Move Stage",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "move_stage",
           "locks": [
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [
@@ -14691,6 +14631,7 @@
         },
         "move_to_stage_position": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -14750,30 +14691,24 @@
             "collections": [],
             "description": "Move the stage to a specified position.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "move_to_stage_position",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Move To Stage Position",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "move_to_stage_position",
           "locks": [
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [
             "StageState"
           ],
@@ -14785,32 +14720,27 @@
         },
         "never_ending_function": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "A function that never ends to test how the system handles long-running functions.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "never_ending_function",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Never Ending Function",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "never_ending_function",
           "locks": [],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -14820,6 +14750,7 @@
         },
         "scan_region": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -14976,14 +14907,11 @@
             "collections": [],
             "description": "Simulate the acquisition of a multidimensional dataset based on the provided configuration.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "scan_region",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Scan Region",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -16881,11 +16809,9 @@
               }
             ],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "scan_region",
@@ -16895,7 +16821,6 @@
             "io",
             "stage_position"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -16905,6 +16830,7 @@
         },
         "set_illumination_intensity": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -16946,14 +16872,11 @@
             "collections": [],
             "description": "Set illumination intensity for a specific channel.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "set_illumination_intensity",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Set Illumination Intensity",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -16977,18 +16900,15 @@
               }
             ],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "set_illumination_intensity",
           "locks": [
             "illumination"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],
@@ -16998,18 +16918,16 @@
         },
         "start_live_view": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Start broadcasting frames to the video WebSocket endpoint.\n\nCall this to begin streaming frames captured by the detector\nto connected video clients.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "start_live_view",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Start Live View",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -17033,18 +16951,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "start_live_view",
           "locks": [
             "camera_parameters"
           ],
-          "logo": null,
           "manipulates": [
             "CameraState"
           ],
@@ -17056,18 +16971,16 @@
         },
         "stop_live_view": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Stop broadcasting frames to the video WebSocket endpoint.\n\nCall this to stop streaming frames captured by the detector\nto connected video clients.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "stop_live_view",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Stop Live View",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -17091,18 +17004,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "stop_live_view",
           "locks": [
             "camera_parameters"
           ],
-          "logo": null,
           "manipulates": [
             "CameraState"
           ],
@@ -17114,6 +17024,7 @@
         },
         "switch_filter": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -17137,14 +17048,11 @@
             "collections": [],
             "description": "Switch to a specific filter slot.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "switch_filter",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Switch Filter",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -17277,18 +17185,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "switch_filter",
           "locks": [
             "filter_bank"
           ],
-          "logo": null,
           "manipulates": [
             "FilterBankState"
           ],
@@ -17300,6 +17205,7 @@
         },
         "switch_objective": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -17323,30 +17229,24 @@
             "collections": [],
             "description": "Switch to a specific objective slot.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "switch_objective",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Switch Objective",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "switch_objective",
           "locks": [
             "objective"
           ],
-          "logo": null,
           "manipulates": [
             "ObjectiveState"
           ],
@@ -17358,18 +17258,16 @@
         },
         "toggle_filter": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Toggle to the next filter in the wheel.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "toggle_filter",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Toggle Filter",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -17502,18 +17400,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "toggle_filter",
           "locks": [
             "filter_bank"
           ],
-          "logo": null,
           "manipulates": [
             "FilterBankState"
           ],
@@ -17525,34 +17420,29 @@
         },
         "toggle_objective": {
           "definition": {
+            "allowProbe": null,
             "args": [],
             "collections": [],
             "description": "Toggle to the next objective in the turret.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "toggle_objective",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Toggle Objective",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "toggle_objective",
           "locks": [
             "objective"
           ],
-          "logo": null,
           "manipulates": [
             "ObjectiveState"
           ],
@@ -17564,6 +17454,7 @@
         },
         "turn_off_illumination_channel": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -17587,14 +17478,11 @@
             "collections": [],
             "description": "Turn off a specific illumination channel.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "turn_off_illumination_channel",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Turn Off Illumination Channel",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -17618,18 +17506,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "turn_off_illumination_channel",
           "locks": [
             "illumination"
           ],
-          "logo": null,
           "manipulates": [
             "IlluminationState"
           ],
@@ -17641,6 +17526,7 @@
         },
         "turn_on_illumination": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -17682,14 +17568,11 @@
             "collections": [],
             "description": "Turn on a specific illumination channel.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "turn_on_illumination",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Turn On Illumination",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -17713,18 +17596,15 @@
               }
             ],
             "stateful": true,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "turn_on_illumination",
           "locks": [
             "illumination"
           ],
-          "logo": null,
           "manipulates": [
             "IlluminationState"
           ],
@@ -17736,6 +17616,7 @@
         },
         "update_detector": {
           "definition": {
+            "allowProbe": null,
             "args": [
               {
                 "children": null,
@@ -17795,14 +17676,11 @@
             "collections": [],
             "description": "Update detector settings.",
             "idempotent": null,
-            "interfaces": [],
             "isDev": false,
             "isTestFor": [],
             "key": "update_detector",
             "kind": "FUNCTION",
-            "logo": null,
             "name": "Update Detector",
-            "package": null,
             "portGroups": [],
             "pure": null,
             "returns": [
@@ -18134,18 +18012,15 @@
               }
             ],
             "stateful": false,
-            "tests": null,
             "version": "1"
           },
           "dependencies": [],
-          "dynamic": false,
           "effect": null,
           "instanceId": null,
           "interface": "update_detector",
           "locks": [
             "camera_parameters"
           ],
-          "logo": null,
           "manipulates": [],
           "needsToken": true,
           "optimistics": [],

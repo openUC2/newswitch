@@ -6,20 +6,27 @@ services:
       context: ./backend
     image: newswitch-backend:dev
     ports:
-      # Published so the BROWSER can reach it at localhost:8099
-      - "8099:8099"
+      # Published so the BROWSER can reach it at localhost:$BACKEND_PORT.
+      # Both sides are the same variable on purpose: frontend/.env.docker points the
+      # build-time codegen at backend:$BACKEND_PORT over the compose network, so a split
+      # host/container port would break codegen while the browser URL still worked.
+      - "${BACKEND_PORT:-8099}:${BACKEND_PORT:-8099}"
     volumes:
       - ./backend:/app
       # Keeps the image's venv from being shadowed by the bind mount above
       - backend-venv:/app/.venv
     environment:
       PYTHONUNBUFFERED: "1"
+      # Compose's .env is interpolation-only - it does NOT reach the container, so the
+      # port uvicorn actually binds has to be handed over explicitly.
+      BACKEND_HOST: "0.0.0.0"
+      BACKEND_PORT: "${BACKEND_PORT:-8099}"
     healthcheck:
+      # The probe reads BACKEND_PORT from the container's own environment (set above)
+      # rather than baking a number in, so it follows the service it is probing.
       test:
-        - CMD
-        - python
-        - -c
-        - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8099/schemas/states', timeout=3).status == 200 else 1)
+        - CMD-SHELL
+        - python -c "import os,urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:'+os.environ['BACKEND_PORT']+'/health', timeout=3).status == 200 else 1)"
       interval: 5s
       timeout: 5s
       retries: 30
@@ -30,11 +37,16 @@ services:
       context: ./frontend
     image: newswitch-frontend:dev
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:${FRONTEND_PORT:-5173}"
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
-    command: ["yarn", "dev", "--mode", "docker", "--host", "0.0.0.0", "--port", "5173"]
+    environment:
+      # frontend/.env.docker expands ${BACKEND_PORT:-8099} against these.
+      BACKEND_PORT: "${BACKEND_PORT:-8099}"
+      FRONTEND_PORT: "${FRONTEND_PORT:-5173}"
+    command:
+      ["yarn", "dev", "--mode", "docker", "--host", "0.0.0.0", "--port", "${FRONTEND_PORT:-5173}"]
     depends_on:
       backend:
         # The codegen fetches the schemas before vite boots, so wait for them

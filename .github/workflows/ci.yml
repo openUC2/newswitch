@@ -132,14 +132,23 @@ jobs:
       - run: yarn install --frozen-lockfile
         working-directory: frontend
 
+      # Actions does not read .env, so export it explicitly: the port below AND the
+      # schema URLs in frontend/.env (which expand ${BACKEND_PORT:-8099}) both follow it.
+      - name: Load the ports from .env
+        run: |
+          set -a; . ./.env; set +a
+          echo "BACKEND_PORT=$BACKEND_PORT" >> "$GITHUB_ENV"
+          echo "FRONTEND_PORT=$FRONTEND_PORT" >> "$GITHUB_ENV"
+
       - name: Boot the backend
-        run: uv run uvicorn main:app --host 127.0.0.1 --port 8099 &
+        # 127.0.0.1, not $BACKEND_HOST: nothing outside the runner should reach this.
+        run: uv run uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" &
         working-directory: backend
 
       - name: Wait for the schema endpoints
         run: |
           for _ in $(seq 1 60); do
-            curl -sf http://localhost:8099/schemas/states >/dev/null 2>&1 && exit 0
+            curl -sf "http://localhost:$BACKEND_PORT/schemas/states" >/dev/null 2>&1 && exit 0
             sleep 1
           done
           echo "backend never came up" >&2

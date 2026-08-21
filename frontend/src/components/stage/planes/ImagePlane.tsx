@@ -4,6 +4,7 @@ import { TextureLoader, DoubleSide, Mesh, Matrix4 } from "three";
 import type { ExpanseState } from "@/apps/default/hooks/states/ExpanseState";
 import { useTransport } from "@/lib/rekuest/transport/transport-context";
 import { useSelectionStore } from "@/store/imageStore";
+import { withToken } from "@/lib/auth/authFetch";
 // import { useTransport } from '../transport/TransportProvider';
 // import type { ExpanseState } from '../store/types';
 
@@ -19,7 +20,9 @@ export const ImagePlane = ({
   const setSelectedImageId = useSelectionStore((s) => s.setSelectedImageId);
 
   const baseUrl = apiEndpoint.replace(/\/$/, "");
-  const url = `${baseUrl}/files/${encodeURIComponent(image.id)}`;
+  // three.js loads textures by assigning to an Image's src, which cannot carry an
+  // Authorization header, so the token goes in the query string.
+  const url = withToken(`${baseUrl}/files/${encodeURIComponent(image.id)}`);
 
   // Load the texture from the generated URL
   // Note: Ensure this component is wrapped in a <Suspense> boundary in your parent component

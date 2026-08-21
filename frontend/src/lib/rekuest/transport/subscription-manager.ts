@@ -1,3 +1,5 @@
+import { WS_UNAUTHORIZED_CLOSE_CODE } from "@/lib/auth/authFetch";
+import { clearToken } from "@/lib/auth/token";
 import type { AppKey } from "@/lib/rekuest/types";
 import type {
   FromAgentMessage,
@@ -349,13 +351,26 @@ export class TransportSubscriptionManager {
       this.notifyConnectionListeners(appKey);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       this.stopPing(appKey);
       state.connectionState = {
         ...state.connectionState,
         isConnected: false,
       };
       this.notifyConnectionListeners(appKey);
+
+      // A rejected token is not a transient failure. Without this branch it would
+      // fall into the backoff below and retry for ~30s before giving up, leaving the
+      // user on a silently dead screen instead of back at the login page.
+      if (event.code === WS_UNAUTHORIZED_CLOSE_CODE) {
+        console.warn(
+          `[TransportSubscriptionManager] ${appKey} rejected: not authorized`,
+        );
+        state.shouldReconnect = false;
+        clearToken();
+        return;
+      }
+
       if (state.shouldReconnect) {
         this.scheduleReconnect(appKey);
       }
