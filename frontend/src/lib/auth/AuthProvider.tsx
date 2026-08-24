@@ -46,7 +46,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(issued);
   }, []);
 
-  const logout = useCallback(() => clearToken(), []);
+  const logout = useCallback(() => {
+    const activeToken = getToken();
+    // Best-effort: the client logs out regardless of whether the backend can be
+    // reached, so a dropped connection never traps the user behind a stuck session.
+    void fetch(`${BACKEND_API}/auth/logout`, {
+      method: "POST",
+      headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : {},
+    }).catch(() => {});
+    clearToken();
+  }, []);
 
   const value = useMemo(
     () => ({ token, isAuthenticated: token !== null, login, logout }),

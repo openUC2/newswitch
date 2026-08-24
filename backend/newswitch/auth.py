@@ -1,18 +1,18 @@
-"""Single-user authentication for the newswitch backend.
+"""Authentication for the newswitch backend.
 
-The instrument is a lab appliance with one operator, so there is no user database and
-no session store. Credentials live in a small YAML file next to the backend:
+Two authenticators exist side by side, both behind the same `Authenticator` protocol:
 
-```yaml
-username: admin
-password: something-secret
-```
+- `CredentialAuthenticator` checks the single account in `auth.yaml` and issues one
+  deterministic token (`sha256("username:password")`) - no database, no session
+  store, still used directly by tests that want a fixed, predictable token.
+- `UserStoreAuthenticator` (the default `create_app` wires up) checks a real user
+  table in `newswitch.users.UserStore` - several accounts, each with a role - and
+  issues a random, revocable session token per login. On first run, with no accounts
+  yet, it seeds one admin account from `auth.yaml` (or the `admin`/`admin` default),
+  so a fresh clone still runs without setup.
 
-A client exchanges those credentials once at `POST /auth/login` (HTTP Basic) for a
-token, then presents the token on every later call. The token is
-`sha256("username:password")` - deterministic, so it needs no server-side state and
-survives a restart, and one-way, so it can appear in a URL without revealing the
-password. Editing the YAML file invalidates every issued token.
+A client exchanges credentials once at `POST /auth/login` (HTTP Basic) for a token,
+then presents the token on every later call, and can give it back at `POST /auth/logout`.
 
 Three transports need three ways to carry that token, because a browser can only set
 headers on some of them:
@@ -38,10 +38,12 @@ from urllib.parse import parse_qs
 import yaml
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 from rekuest_next.contrib.fastapi.auth import AuthenticationError, UserSource
 from rekuest_next.contrib.fastapi.models import WebSocketSubscriptionInit
+
+from newswitch.users import Role, UserStore
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +149,14 @@ class Authenticator(Protocol):
         """
         ...
 
+    def username_for_token(self, token: str | None) -> str | None:
+        """Return the username `token` belongs to, or `None` if it grants nothing."""
+        ...
+
+    def logout(self, token: str | None) -> None:
+        """Invalidate `token`, if this authenticator can revoke individual ones."""
+        ...
+
 
 class CredentialAuthenticator:
     """Checks credentials against a single `Credentials` pair."""
@@ -173,6 +183,13 @@ class CredentialAuthenticator:
             raise AuthenticationError("Invalid username or password")
         return self._token
 
+    def username_for_token(self, token: str | None) -> str | None:
+        """Return the one account's username, if `token` is its token."""
+        return self.credentials.username if self.check_token(token) else None
+
+    def logout(self, token: str | None) -> None:
+        """No-op: the one deterministic token stays valid until the password changes."""
+
 
 class AllowAllAuthenticator:
     """Accepts everything. For tests, which drive the app in-process."""
@@ -184,6 +201,67 @@ class AllowAllAuthenticator:
     def login(self, authorization_header: str | None) -> str:
         """Issue a fixed placeholder token."""
         return "test-token"
+
+    def username_for_token(self, token: str | None) -> str | None:
+        """Attribute every request to the same placeholder user."""
+        return "user"
+
+    def logout(self, token: str | None) -> None:
+        """No-op: tests do not model logout."""
+
+
+class UserStoreAuthenticator:
+    """Checks credentials and tokens against a `UserStore` of several accounts.
+
+    Unlike `CredentialAuthenticator`'s single deterministic token, `login` mints a
+    random session row per login, so `logout` can revoke exactly one session without
+    logging out every other account - or every other tab of the same account.
+    """
+
+    def __init__(self, store: UserStore) -> None:
+        """Authenticate against `store`."""
+        self.store = store
+
+    def check_token(self, token: str | None) -> bool:
+        """Return whether `token` is a live, unexpired session."""
+        return self.store.resolve_session(token) is not None
+
+    def login(self, authorization_header: str | None) -> str:
+        """Validate an `Authorization: Basic ...` header and issue a session token."""
+        username, password = _parse_basic_header(authorization_header)
+        user = self.store.verify_password(username, password)
+        if user is None:
+            raise AuthenticationError("Invalid username or password")
+        return self.store.create_session(user.username)
+
+    def username_for_token(self, token: str | None) -> str | None:
+        """Return the username the session `token` belongs to."""
+        user = self.store.resolve_session(token)
+        return user.username if user else None
+
+    def logout(self, token: str | None) -> None:
+        """Revoke a single session."""
+        self.store.revoke_session(token)
+
+
+def default_authenticator() -> UserStoreAuthenticator:
+    """Build the production authenticator: a `UserStore`, seeded on first run.
+
+    An empty store means a fresh deployment, so it is seeded with one admin account
+    from the legacy `auth.yaml` (or the `admin`/`admin` default) - the same zero-setup
+    behaviour `CredentialAuthenticator` used to provide on its own.
+    """
+    store = UserStore()
+    if store.is_empty():
+        credentials = load_credentials()
+        store.create_user(credentials.username, credentials.password, Role.ADMIN)
+        logger.warning(
+            "No accounts in %s - seeded '%s' as an admin from the legacy credentials "
+            "file. Change its password once logged in.",
+            store.path,
+            credentials.username,
+        )
+    return UserStoreAuthenticator(store)
 
 
 def _parse_basic_header(header: str | None) -> tuple[str, str]:
@@ -237,10 +315,10 @@ def make_expand_user_from_request(
             token = bearer_token(source.headers.get("authorization")) or (
                 source.query_params.get("token")
             )
-        if not authenticator.check_token(token):
+        username = authenticator.username_for_token(token)
+        if username is None:
             raise AuthenticationError("Invalid or missing token")
-        credentials = getattr(authenticator, "credentials", None)
-        return credentials.username if credentials is not None else "user"
+        return username
 
     return expand_user_from_request
 
@@ -324,6 +402,19 @@ async def login(request: Request) -> JSONResponse:
         # Deliberately no `WWW-Authenticate` header - see `_parse_basic_header`.
         return JSONResponse({"detail": "Invalid credentials"}, status_code=401)
     return JSONResponse({"token": token, "token_type": "bearer"})
+
+
+@router.post("/auth/logout", status_code=204)
+async def logout(request: Request) -> Response:
+    """Revoke the caller's session, if the authenticator tracks individual ones.
+
+    Not in `PUBLIC_PATHS`: revoking a session requires presenting it, the same as any
+    other authenticated call.
+    """
+    authenticator: Authenticator = request.app.state.authenticator
+    token = bearer_token(request.headers.get("authorization"))
+    authenticator.logout(token)
+    return Response(status_code=204)
 
 
 @router.get("/health")

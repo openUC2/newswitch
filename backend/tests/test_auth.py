@@ -22,8 +22,11 @@ from newswitch.auth import (
     AuthenticationError,
     CredentialAuthenticator,
     Credentials,
+    UserStoreAuthenticator,
+    default_authenticator,
     load_credentials,
 )
+from newswitch.users import Role, UserStore
 
 USERNAME = "operator"
 PASSWORD = "hunter2"
@@ -162,6 +165,39 @@ def test_malformed_basic_header_is_rejected(client: TestClient) -> None:
     """Undecodable credentials are rejected, not crashed on."""
     response = client.post("/auth/login", headers={"Authorization": "Basic !!!not-b64"})
     assert response.status_code == 401
+
+
+# ------------------------------------------------------------------------- logout
+
+
+def test_logout_with_a_deterministic_token_is_a_no_op(client: TestClient) -> None:
+    """`CredentialAuthenticator` has nothing to revoke: the token still works."""
+    response = client.post("/auth/logout", headers={"Authorization": f"Bearer {CREDENTIALS.token}"})
+    assert response.status_code == 204
+    assert client.get("/health").status_code == 200  # sanity: app still up
+    still_works = client.get("/states", headers={"Authorization": f"Bearer {CREDENTIALS.token}"})
+    assert still_works.status_code != 401
+
+
+def test_logout_revokes_a_user_store_session(tmp_path: Path) -> None:
+    """With the real user store, logout invalidates exactly the session used."""
+    store = UserStore(tmp_path / "auth.db")
+    store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
+    app = create_app(ImswitchConfig(), authenticator=UserStoreAuthenticator(store))
+    with TestClient(app) as user_client:
+        login_response = user_client.post("/auth/login", headers=basic_header())
+        token = login_response.json()["token"]
+
+        before = user_client.get("/states", headers={"Authorization": f"Bearer {token}"})
+        assert before.status_code != 401
+
+        logout_response = user_client.post(
+            "/auth/logout", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert logout_response.status_code == 204
+
+        after = user_client.get("/states", headers={"Authorization": f"Bearer {token}"})
+        assert after.status_code == 401
 
 
 # ----------------------------------------------------------------- http gating
@@ -307,3 +343,37 @@ def test_authenticator_login_raises_on_bad_credentials() -> None:
     authenticator = CredentialAuthenticator(CREDENTIALS)
     with pytest.raises(AuthenticationError):
         authenticator.login("Basic " + "bm9wZTpub3Bl")  # nope:nope
+
+
+# ------------------------------------------------------------------- bootstrapping
+
+
+def test_default_authenticator_seeds_an_admin_from_the_legacy_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fresh deployment still runs without setup: the first login becomes an admin."""
+    auth_file = tmp_path / "auth.yaml"
+    auth_file.write_text(yaml.safe_dump({"username": "root", "password": "secret"}))
+    monkeypatch.setenv(AUTH_FILE_ENV_VAR, str(auth_file))
+    monkeypatch.setenv("NEWSWITCH_AUTH_DB", str(tmp_path / "auth.db"))
+
+    authenticator = default_authenticator()
+
+    seeded = authenticator.store.get_user("root")
+    assert seeded is not None
+    assert seeded.role == Role.ADMIN
+    assert authenticator.store.verify_password("root", "secret") is not None
+
+
+def test_default_authenticator_does_not_reseed_an_existing_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once accounts exist, the legacy YAML is no longer consulted."""
+    monkeypatch.setenv("NEWSWITCH_AUTH_DB", str(tmp_path / "auth.db"))
+    UserStore(tmp_path / "auth.db").create_user("alice", "hunter2", Role.VIEWER)
+    monkeypatch.setenv(AUTH_FILE_ENV_VAR, str(tmp_path / "nonexistent.yaml"))
+
+    authenticator = default_authenticator()
+
+    assert authenticator.store.get_user("admin") is None
+    assert authenticator.store.get_user("alice") is not None

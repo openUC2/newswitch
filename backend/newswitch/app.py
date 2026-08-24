@@ -73,8 +73,7 @@ from newswitch.protocols.serial_manager import SerialState
 from newswitch.auth import (
     AuthMiddleware,
     Authenticator,
-    CredentialAuthenticator,
-    load_credentials,
+    default_authenticator,
     make_expand_user_from_request,
     router as auth_router,
 )
@@ -690,7 +689,7 @@ def create_app(
         version="2.0.0",
     )
 
-    authenticator = authenticator or CredentialAuthenticator(load_credentials())
+    authenticator = authenticator or default_authenticator()
     app.state.authenticator = authenticator
 
     # Middleware order is load-bearing. `add_middleware` PREPENDS, so the LAST call
