@@ -1,0 +1,108 @@
+version: 1
+setup: openUC2-bench-01
+devices:
+- type: camera
+  name: MV-CA023-10UM
+  manufacturer: HIK ROBOTICS
+  camera_id: hik-mv-ca023-001
+  pixelcount:
+    x: 1920
+    y: 1200
+  pixelpitch_um:
+    x: 10.0
+    y: 10.0
+  pixelsize_um:
+    x: 10.0
+    y: 10.0
+  channels: 1
+  exposure_time_ms:
+    value: 25.0
+    min: 0.024
+    max: 10000.0
+    increment: 0.001
+  framerate_per_sec:
+    value: 163.0
+    min: 0.5
+    max: 163.0
+  gain_db:
+    value: 0.0
+    min: 0.0
+    max: 23.98
+    increment: 0.01
+  binning: 1
+  trigger:
+    type: hardware
+    edge: rising
+  tags:
+  - monochrome
+  - global-shutter
+  - gige
+- type: camera
+  name: U3-3800CP-C-HQ
+  manufacturer: IDS Imaging
+  camera_id: ids-u3-3800-002
+  pixelcount:
+    x: 3088
+    y: 2076
+  pixelpitch_um:
+    x: 2.4
+    y: 2.4
+  pixelsize_um:
+    x: 2.2
+    y: 2.2
+  channels: 3
+  exposure_time_ms:
+    value: 20.0
+  framerate_per_sec:
+    value: 30.0
+  binning: 1
+  tags:
+  - color
+  - rolling-shutter
+  - usb3
+- name: XY-Linear-100
+  manufacturer: openUC2
+  device_id: stage-xy-001
+  tags: []
+  type: stage
+  axes:
+  - label: x
+    travel_um: 100000.0
+    steps_per_um: 8.0
+    inverted: false
+  - label: y
+    travel_um: 100000.0
+    steps_per_um: 8.0
+    inverted: false
+  - label: z
+    travel_um: 10000.0
+    steps_per_um: 25.0
+    inverted: true
+  max_speed_um_per_sec: 5000.0
+  homing_required: true
+- name: LD-488-100
+  manufacturer: openUC2
+  device_id: laser-488-001
+  tags: []
+  type: laser
+  wavelength_nm: 488.0
+  max_power_mw: 100.0
+  modulation: digital
+  shutter: false
+- name: FW-6
+  manufacturer: openUC2
+  device_id: fw-001
+  tags: []
+  type: filterwheel
+  slots:
+  - position: 0
+    label: empty
+  - position: 1
+    label: GFP-525/50
+    center_nm: 525.0
+    bandwidth_nm: 50.0
+  - position: 2
+    label: mCherry-600/50
+    center_nm: 600.0
+    bandwidth_nm: 50.0
+  switch_time_ms: 120.0

@@ -1,0 +1,22 @@
+# Deliberately broken - demonstrates the error output of validate_registry()
+version: 1
+setup: broken-demo
+
+devices:
+  - type: camera
+    name: BadCam
+    pixelcount:
+      x: -5              # must be > 0
+    pixelpitch_um:
+      x: 3.45
+    binning: 3           # not in [1, 2, 4]
+    colour: red          # unknown key
+
+  - type: stage
+    name: NoAxes
+    axes: []             # min_length=1
+
+  - type: spectrometer   # unknown device type
+    name: Ghost
+
+  - name: NoType         # missing discriminator

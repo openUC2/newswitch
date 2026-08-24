@@ -1,0 +1,766 @@
+{
+  "$defs": {
+    "Bounded": {
+      "anyOf": [
+        {
+          "description": "Shorthand for {value: <number>}",
+          "type": "number"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A numeric parameter together with the device limits that apply to it.\n\nAll four members are optional, which covers every practical case:\n\n* ``{value: 10}``                       -- setting, limits unknown\n* ``{min: 0.024, max: 10000}``          -- capability only, no default set\n* ``{value: 10, min: 0.024, max: 1e4}`` -- both\n* ``null`` / omitted                    -- parameter not applicable",
+          "properties": {
+            "value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Current or default value",
+              "title": "Value"
+            },
+            "min": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Smallest settable value",
+              "title": "Min"
+            },
+            "max": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Largest settable value",
+              "title": "Max"
+            },
+            "increment": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Step size; settable values are min + n*increment",
+              "title": "Increment"
+            },
+            "unit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Override for the unit implied by the field name",
+              "title": "Unit"
+            }
+          },
+          "title": "Bounded",
+          "type": "object"
+        }
+      ],
+      "description": "A numeric parameter together with the device limits that apply to it."
+    },
+    "CameraSchema": {
+      "additionalProperties": false,
+      "description": "Full camera description.",
+      "properties": {
+        "$schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional pointer to the schema file, for editor autocomplete",
+          "title": "$Schema"
+        },
+        "type": {
+          "const": "camera",
+          "default": "camera",
+          "description": "Discriminator used in multi-device files",
+          "title": "Type",
+          "type": "string"
+        },
+        "name": {
+          "description": "Model designation, e.g. MV-CA023-10UM",
+          "title": "Name",
+          "type": "string"
+        },
+        "manufacturer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vendor name",
+          "title": "Manufacturer"
+        },
+        "camera_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Unique identifier of the physical unit",
+          "title": "Camera Id"
+        },
+        "pixelcount": {
+          "$ref": "#/$defs/Vector2Int",
+          "description": "Sensor resolution in pixels"
+        },
+        "pixelpitch_um": {
+          "$ref": "#/$defs/Vector2Float",
+          "description": "Center-to-center pixel distance; y defaults to x"
+        },
+        "pixelsize_um": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Vector2Float"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Photosensitive area per pixel; defaults to pixelpitch_um"
+        },
+        "channels": {
+          "default": 1,
+          "description": "Color/spectral channels",
+          "minimum": 1,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "exposure_time_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bounded"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Integration time in ms, with device limits"
+        },
+        "framerate_per_sec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bounded"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Frame rate in Hz, with device limits"
+        },
+        "gain_db": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bounded"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Analog gain in dB, with device limits"
+        },
+        "binning": {
+          "default": 1,
+          "enum": [
+            1,
+            2,
+            4
+          ],
+          "title": "Binning",
+          "type": "integer"
+        },
+        "roi": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Region of interest as (x, y, width, height)",
+          "title": "Roi"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trigger"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "pixelcount",
+        "pixelpitch_um"
+      ],
+      "title": "CameraSchema",
+      "type": "object"
+    },
+    "FilterSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "description": "Slot index on the wheel",
+          "minimum": 0,
+          "title": "Position",
+          "type": "integer"
+        },
+        "label": {
+          "description": "Filter designation, e.g. GFP-525/50",
+          "title": "Label",
+          "type": "string"
+        },
+        "center_nm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Center Nm"
+        },
+        "bandwidth_nm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bandwidth Nm"
+        }
+      },
+      "required": [
+        "position",
+        "label"
+      ],
+      "title": "FilterSlot",
+      "type": "object"
+    },
+    "FilterWheelDevice": {
+      "additionalProperties": false,
+      "description": "Motorized filter wheel.",
+      "properties": {
+        "name": {
+          "description": "Model designation",
+          "title": "Name",
+          "type": "string"
+        },
+        "manufacturer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vendor name",
+          "title": "Manufacturer"
+        },
+        "device_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Identifier of the individual physical unit",
+          "title": "Device Id"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "filterwheel",
+          "title": "Type",
+          "type": "string"
+        },
+        "slots": {
+          "items": {
+            "$ref": "#/$defs/FilterSlot"
+          },
+          "minItems": 1,
+          "title": "Slots",
+          "type": "array"
+        },
+        "switch_time_ms": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Switch Time Ms"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "slots"
+      ],
+      "title": "FilterWheelDevice",
+      "type": "object"
+    },
+    "LaserDevice": {
+      "additionalProperties": false,
+      "description": "Single-wavelength illumination source.",
+      "properties": {
+        "name": {
+          "description": "Model designation",
+          "title": "Name",
+          "type": "string"
+        },
+        "manufacturer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vendor name",
+          "title": "Manufacturer"
+        },
+        "device_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Identifier of the individual physical unit",
+          "title": "Device Id"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "laser",
+          "title": "Type",
+          "type": "string"
+        },
+        "wavelength_nm": {
+          "exclusiveMinimum": 0,
+          "maximum": 20000,
+          "title": "Wavelength Nm",
+          "type": "number"
+        },
+        "max_power_mw": {
+          "exclusiveMinimum": 0,
+          "title": "Max Power Mw",
+          "type": "number"
+        },
+        "modulation": {
+          "default": "none",
+          "enum": [
+            "none",
+            "analog",
+            "digital"
+          ],
+          "title": "Modulation",
+          "type": "string"
+        },
+        "shutter": {
+          "default": false,
+          "description": "Has a mechanical shutter",
+          "title": "Shutter",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "wavelength_nm",
+        "max_power_mw"
+      ],
+      "title": "LaserDevice",
+      "type": "object"
+    },
+    "StageAxis": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "enum": [
+            "x",
+            "y",
+            "z",
+            "a",
+            "b",
+            "c"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "travel_um": {
+          "description": "Usable travel range in micrometers",
+          "exclusiveMinimum": 0,
+          "title": "Travel Um",
+          "type": "number"
+        },
+        "steps_per_um": {
+          "description": "Motor steps per micrometer",
+          "exclusiveMinimum": 0,
+          "title": "Steps Per Um",
+          "type": "number"
+        },
+        "inverted": {
+          "default": false,
+          "description": "Flip the positive direction",
+          "title": "Inverted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label",
+        "travel_um",
+        "steps_per_um"
+      ],
+      "title": "StageAxis",
+      "type": "object"
+    },
+    "StageDevice": {
+      "additionalProperties": false,
+      "description": "Motorized positioning stage.",
+      "properties": {
+        "name": {
+          "description": "Model designation",
+          "title": "Name",
+          "type": "string"
+        },
+        "manufacturer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vendor name",
+          "title": "Manufacturer"
+        },
+        "device_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Identifier of the individual physical unit",
+          "title": "Device Id"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "stage",
+          "title": "Type",
+          "type": "string"
+        },
+        "axes": {
+          "items": {
+            "$ref": "#/$defs/StageAxis"
+          },
+          "minItems": 1,
+          "title": "Axes",
+          "type": "array"
+        },
+        "max_speed_um_per_sec": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Speed Um Per Sec"
+        },
+        "homing_required": {
+          "default": true,
+          "title": "Homing Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "axes"
+      ],
+      "title": "StageDevice",
+      "type": "object"
+    },
+    "Trigger": {
+      "additionalProperties": false,
+      "description": "Trigger configuration. Omit the whole object for free-running mode.",
+      "properties": {
+        "type": {
+          "enum": [
+            "software",
+            "hardware"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "edge": {
+          "anyOf": [
+            {
+              "enum": [
+                "rising",
+                "falling"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edge"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "high",
+                "low"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Trigger",
+      "type": "object"
+    },
+    "Vector2Float": {
+      "additionalProperties": false,
+      "description": "Float pair where y is optional and falls back to x (square geometry).",
+      "properties": {
+        "x": {
+          "description": "Value along x in micrometers",
+          "exclusiveMinimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Value along y; defaults to x when omitted",
+          "title": "Y"
+        }
+      },
+      "required": [
+        "x"
+      ],
+      "title": "Vector2Float",
+      "type": "object"
+    },
+    "Vector2Int": {
+      "additionalProperties": false,
+      "description": "Integer pair, both components required (e.g. pixel counts).",
+      "properties": {
+        "x": {
+          "description": "Extent along x in pixels",
+          "exclusiveMinimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Extent along y in pixels",
+          "exclusiveMinimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Vector2Int",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level object of a Devices.yml file.",
+  "properties": {
+    "version": {
+      "default": 1,
+      "description": "Registry format version",
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "setup": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the setup",
+      "title": "Setup"
+    },
+    "devices": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "camera": "#/$defs/CameraSchema",
+            "filterwheel": "#/$defs/FilterWheelDevice",
+            "laser": "#/$defs/LaserDevice",
+            "stage": "#/$defs/StageDevice"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/CameraSchema"
+          },
+          {
+            "$ref": "#/$defs/StageDevice"
+          },
+          {
+            "$ref": "#/$defs/LaserDevice"
+          },
+          {
+            "$ref": "#/$defs/FilterWheelDevice"
+          }
+        ]
+      },
+      "title": "Devices",
+      "type": "array"
+    }
+  },
+  "title": "DeviceRegistry",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
