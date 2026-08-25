@@ -15,15 +15,42 @@ import {
   type ReactNode,
 } from "react";
 import { BACKEND_API } from "@/constants";
-import { AuthContext, InvalidCredentialsError } from "./context";
+import { AuthContext, InvalidCredentialsError, type Role } from "./context";
 import { clearToken, getToken, setToken, subscribe } from "./token";
+
+type Identity = { username: string; role: Role };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(() => getToken());
+  const [identity, setIdentity] = useState<Identity | null>(null);
 
   // Anything that clears the token - a 401 in authFetch, a 1008 websocket close,
   // another tab logging out - lands here and re-renders the guard.
   useEffect(() => subscribe(() => setTokenState(getToken())), []);
+
+  // The token says *that* someone is logged in; this fills in *who* and with what
+  // role, which RequireAdmin and the account menu need but the token alone can't say.
+  // Stale identity data left over after a logout is harmless: nothing reachable while
+  // logged out (RequireAuth intercepts first) ever reads it.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetch(`${BACKEND_API}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<Identity>) : null,
+      )
+      .then((data) => {
+        if (!cancelled) setIdentity(data);
+      })
+      .catch(() => {
+        if (!cancelled) setIdentity(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const login = useCallback(async (username: string, password: string) => {
     const response = await fetch(`${BACKEND_API}/auth/login`, {
@@ -58,8 +85,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ token, isAuthenticated: token !== null, login, logout }),
-    [token, login, logout],
+    () => ({
+      token,
+      isAuthenticated: token !== null,
+      username: identity?.username ?? null,
+      role: identity?.role ?? null,
+      login,
+      logout,
+    }),
+    [token, identity, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

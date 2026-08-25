@@ -18,6 +18,7 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -33,7 +34,26 @@ AUTH_DB_ENV_VAR = "NEWSWITCH_AUTH_DB"
 #: Default location, alongside `pyproject.toml` in the backend directory.
 DEFAULT_AUTH_DB = Path(__file__).resolve().parent.parent / "auth.db"
 
+#: How long an unused session stays valid - generous, since a lab operator can be
+#: away from the instrument for hours without wanting to log back in. Mostly a
+#: cleanup mechanism for sessions nobody is using anymore, not a working limit.
+SESSION_IDLE_DAYS_ENV_VAR = "NEWSWITCH_SESSION_IDLE_DAYS"
+DEFAULT_SESSION_IDLE_DAYS = 14
+
+#: Hard ceiling on a session's lifetime regardless of activity - what actually
+#: guarantees a token cannot live forever, even if it is used every day.
+SESSION_ABSOLUTE_DAYS_ENV_VAR = "NEWSWITCH_SESSION_ABSOLUTE_DAYS"
+DEFAULT_SESSION_ABSOLUTE_DAYS = 30
+
 _hasher = PasswordHasher()
+
+
+def _env_days(env_var: str, default_days: int) -> int:
+    """Read a day count from an environment variable, in seconds."""
+    raw = os.environ.get(env_var)
+    days = int(raw) if raw else default_days
+    return days * 24 * 60 * 60
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -48,6 +68,18 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL
+);
+
+-- Append-only: a login attempt or logout is a fact, never edited or owned by a
+-- user row, so it survives even a since-deleted account.
+CREATE TABLE IF NOT EXISTS login_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    event TEXT NOT NULL CHECK (
+        event IN ('login_success', 'login_failure', 'logout', 'session_expired')
+    ),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -85,6 +117,15 @@ class User:
     disabled: bool
 
 
+@dataclass(frozen=True)
+class LoginEvent:
+    """One row of the append-only login audit trail."""
+
+    username: str
+    event: str
+    created_at: str
+
+
 def _row_to_user(row: sqlite3.Row) -> User:
     return User(
         id=row["id"],
@@ -108,6 +149,10 @@ class UserStore:
         self.path = Path(path or os.environ.get(AUTH_DB_ENV_VAR) or DEFAULT_AUTH_DB)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        self.idle_seconds = _env_days(SESSION_IDLE_DAYS_ENV_VAR, DEFAULT_SESSION_IDLE_DAYS)
+        self.absolute_seconds = _env_days(
+            SESSION_ABSOLUTE_DAYS_ENV_VAR, DEFAULT_SESSION_ABSOLUTE_DAYS
+        )
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
 
@@ -206,6 +251,20 @@ class UserStore:
             if cursor.rowcount == 0:
                 raise UserNotFoundError(username)
 
+    def count_enabled_admins(self) -> int:
+        """How many non-disabled admin accounts exist.
+
+        Callers use this to refuse an edit that would leave zero admins able to log
+        in - the one lockout the CLI recovery tool cannot fix without wiping every
+        account (see `newswitch.cli`).
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS count FROM users WHERE role = ? AND disabled = 0",
+                (Role.ADMIN.value,),
+            ).fetchone()
+        return row["count"]
+
     def verify_password(self, username: str, password: str) -> User | None:
         """Return the account if `password` is correct and it is not disabled."""
         with self._connect() as connection:
@@ -229,28 +288,47 @@ class UserStore:
     def create_session(self, username: str) -> str:
         """Issue a new random session token for `username`."""
         token = secrets.token_urlsafe(32)
+        now = int(time.time())
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO sessions (token, user_id) SELECT ?, id FROM users WHERE username = ?",
-                (token, username),
+                "INSERT INTO sessions (token, user_id, created_at, last_used_at) "
+                "SELECT ?, id, ?, ? FROM users WHERE username = ?",
+                (token, now, now, username),
             )
         return token
 
     def resolve_session(self, token: str | None) -> User | None:
-        """Return the account a session token belongs to, or `None` if it is invalid."""
+        """Return the account a session token belongs to, or `None` if it is invalid.
+
+        A session that has outlived either TTL is deleted here rather than merely
+        rejected, so an idle or ancient token cannot be resurrected by touching it
+        again. A still-valid session has its `last_used_at` bumped, which is what
+        makes the idle timeout "idle" rather than a fixed clock from login.
+        """
         if not token:
             return None
+        now = int(time.time())
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT users.id, users.username, users.role, users.disabled
+                SELECT users.id, users.username, users.role, users.disabled,
+                       sessions.created_at, sessions.last_used_at
                 FROM sessions JOIN users ON users.id = sessions.user_id
                 WHERE sessions.token = ?
                 """,
                 (token,),
             ).fetchone()
-        if row is None or row["disabled"]:
-            return None
+            if row is None:
+                return None
+            expired = (
+                row["disabled"]
+                or now - row["created_at"] > self.absolute_seconds
+                or now - row["last_used_at"] > self.idle_seconds
+            )
+            if expired:
+                connection.execute("DELETE FROM sessions WHERE token = ?", (token,))
+                return None
+            connection.execute("UPDATE sessions SET last_used_at = ? WHERE token = ?", (now, token))
         return _row_to_user(row)
 
     def revoke_session(self, token: str | None) -> None:
@@ -259,3 +337,28 @@ class UserStore:
             return
         with self._connect() as connection:
             connection.execute("DELETE FROM sessions WHERE token = ?", (token,))
+
+    def record_login_event(self, username: str, event: str) -> None:
+        """Append one row to the login audit trail.
+
+        Takes a bare username rather than a `User`, so a failed login for an
+        unknown or misspelled username is still recorded - that is the case an
+        audit trail exists to catch.
+        """
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO login_events (username, event) VALUES (?, ?)",
+                (username, event),
+            )
+
+    def list_login_events(self, limit: int = 200) -> list[LoginEvent]:
+        """The most recent login events, newest first."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT username, event, created_at FROM login_events ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            LoginEvent(username=row["username"], event=row["event"], created_at=row["created_at"])
+            for row in rows
+        ]

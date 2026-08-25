@@ -6,7 +6,14 @@ import { AppNavigationChrome } from "./components/navigation/AppNavigationChrome
 import { createScopedProvider } from "./lib/rekuest";
 import { AuthProvider } from "./lib/auth/AuthProvider";
 import { RequireAuth } from "./lib/auth/RequireAuth";
-import { IndexPage, LoginPage, ReplayPage } from "./pages";
+import { RequireAdmin } from "./lib/auth/RequireAdmin";
+import {
+  AuditLogPage,
+  IndexPage,
+  LoginPage,
+  ReplayPage,
+  UsersPage,
+} from "./pages";
 import { appsDefinition } from "./apps";
 import { LocalStoreProvider } from "./store";
 
@@ -71,6 +78,13 @@ function App() {
               </ScopedRoute>
             }
           />
+
+          {/* Admin-only, and deliberately outside ScopedRoute: managing accounts
+              should not depend on the microscope backend connection at all. */}
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin/users" element={<UsersPage />} />
+            <Route path="/admin/audit" element={<AuditLogPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

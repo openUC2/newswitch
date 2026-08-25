@@ -80,6 +80,7 @@ from newswitch.auth import (
 from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
+from newswitch.routes.http.users import router as users_router
 
 # Import routines
 from newswitch.routines import scan_region
@@ -728,6 +729,9 @@ def create_app(
 
     # Mount the public auth + health routes
     app.include_router(auth_router)
+
+    # Mount account/role/audit management routes (admin-only except /auth/me)
+    app.include_router(users_router)
 
     # Mount WebSocket routes for live video streaming
     app.include_router(liveview_router, prefix="/stream")

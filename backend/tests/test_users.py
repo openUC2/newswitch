@@ -6,6 +6,7 @@ protocol, which is the seam `create_app` actually uses.
 """
 
 from pathlib import Path
+import time
 
 import pytest
 from argon2.exceptions import VerifyMismatchError
@@ -155,6 +156,46 @@ def test_disabling_a_user_revokes_sessions_and_blocks_login(store: UserStore) ->
 # -------------------------------------------------------------------------- sessions
 
 
+def test_old_session_schema_is_migrated_to_include_last_used_at(tmp_path: Path) -> None:
+    """Older auth databases need a one-time migration so logins keep working."""
+    db_path = tmp_path / "auth.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('admin', 'operator', 'viewer', 'analyst')),
+                disabled INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at INTEGER NOT NULL
+            );
+            """
+        )
+
+    store = UserStore(db_path)
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    token = store.create_session("alice")
+
+    with store._connect() as connection:
+        row = connection.execute(
+            "SELECT last_used_at FROM sessions WHERE token = ?",
+            (token,),
+        ).fetchone()
+
+    assert row is not None
+    assert row["last_used_at"] > 0
+
+
 def test_sessions_are_random_and_distinct(store: UserStore) -> None:
     """Two logins for the same account must not collide or reuse a token."""
     store.create_user("alice", "hunter2", Role.OPERATOR)
@@ -239,3 +280,121 @@ def _basic_header(username: str, password: str) -> str:
 
     encoded = base64.b64encode(f"{username}:{password}".encode()).decode()
     return f"Basic {encoded}"
+
+
+# ------------------------------------------------------------------- session TTLs
+
+
+def test_session_ttls_default_to_fourteen_and_thirty_days(store: UserStore) -> None:
+    """Generous idle timeout, hard cap on total lifetime - see the module docstring."""
+    assert store.idle_seconds == 14 * 24 * 60 * 60
+    assert store.absolute_seconds == 30 * 24 * 60 * 60
+
+
+def test_session_ttls_are_configurable_via_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An operator can tune both without touching code."""
+    monkeypatch.setenv("NEWSWITCH_SESSION_IDLE_DAYS", "1")
+    monkeypatch.setenv("NEWSWITCH_SESSION_ABSOLUTE_DAYS", "2")
+    store = UserStore(tmp_path / "auth.db")
+    assert store.idle_seconds == 1 * 24 * 60 * 60
+    assert store.absolute_seconds == 2 * 24 * 60 * 60
+
+
+def test_an_idle_session_expires(store: UserStore) -> None:
+    """A session nobody has used in longer than the idle window is dropped."""
+    store.idle_seconds = 1
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    token = store.create_session("alice")
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE sessions SET last_used_at = ? WHERE token = ?",
+            (int(time.time()) - 10, token),
+        )
+    assert store.resolve_session(token) is None
+
+
+def test_an_active_session_still_expires_at_the_absolute_limit(store: UserStore) -> None:
+    """Constant activity does not let a session outlive the absolute ceiling."""
+    store.absolute_seconds = 1
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    token = store.create_session("alice")
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE sessions SET created_at = ?, last_used_at = ? WHERE token = ?",
+            (int(time.time()) - 10, int(time.time()), token),
+        )
+    assert store.resolve_session(token) is None
+
+
+def test_resolving_a_session_touches_last_used_at(store: UserStore) -> None:
+    """Activity resets the idle clock - what makes idle timeout "idle" at all."""
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    token = store.create_session("alice")
+    stale = int(time.time()) - 5
+    with store._connect() as connection:
+        connection.execute("UPDATE sessions SET last_used_at = ? WHERE token = ?", (stale, token))
+    store.resolve_session(token)
+    with store._connect() as connection:
+        row = connection.execute(
+            "SELECT last_used_at FROM sessions WHERE token = ?", (token,)
+        ).fetchone()
+    assert row["last_used_at"] > stale
+
+
+# ---------------------------------------------------------------------- audit trail
+
+
+def test_authenticator_records_login_success(store: UserStore) -> None:
+    """A correct login is recorded."""
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    UserStoreAuthenticator(store).login(_basic_header("alice", "hunter2"))
+    events = store.list_login_events()
+    assert len(events) == 1
+    assert events[0].username == "alice"
+    assert events[0].event == "login_success"
+
+
+def test_authenticator_records_login_failure(store: UserStore) -> None:
+    """A wrong password is recorded too - what an audit trail is for."""
+    from rekuest_next.contrib.fastapi.auth import AuthenticationError
+
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    with pytest.raises(AuthenticationError):
+        UserStoreAuthenticator(store).login(_basic_header("alice", "wrong"))
+    events = store.list_login_events()
+    assert len(events) == 1
+    assert events[0].event == "login_failure"
+
+
+def test_authenticator_records_logout(store: UserStore) -> None:
+    """Logging out is recorded against the account that owned the session."""
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    authenticator = UserStoreAuthenticator(store)
+    token = authenticator.login(_basic_header("alice", "hunter2"))
+    authenticator.logout(token)
+    events = store.list_login_events()
+    assert [event.event for event in events] == ["logout", "login_success"]
+
+
+def test_list_login_events_is_newest_first(store: UserStore) -> None:
+    """The audit view reads top-to-bottom as a timeline, most recent on top."""
+    store.record_login_event("alice", "login_success")
+    store.record_login_event("alice", "logout")
+    events = store.list_login_events()
+    assert [event.event for event in events] == ["logout", "login_success"]
+
+
+# ------------------------------------------------------------------- admin headcount
+
+
+def test_count_enabled_admins(store: UserStore) -> None:
+    """The guard rail that prevents a config from locking every admin out."""
+    assert store.count_enabled_admins() == 0
+    store.create_user("alice", "pw", Role.ADMIN)
+    store.create_user("bob", "pw", Role.ADMIN)
+    store.create_user("carol", "pw", Role.VIEWER)
+    assert store.count_enabled_admins() == 2
+    store.set_disabled("bob", True)
+    assert store.count_enabled_admins() == 1

@@ -231,7 +231,9 @@ class UserStoreAuthenticator:
         username, password = _parse_basic_header(authorization_header)
         user = self.store.verify_password(username, password)
         if user is None:
+            self.store.record_login_event(username, "login_failure")
             raise AuthenticationError("Invalid username or password")
+        self.store.record_login_event(user.username, "login_success")
         return self.store.create_session(user.username)
 
     def username_for_token(self, token: str | None) -> str | None:
@@ -241,7 +243,10 @@ class UserStoreAuthenticator:
 
     def logout(self, token: str | None) -> None:
         """Revoke a single session."""
+        user = self.store.resolve_session(token)
         self.store.revoke_session(token)
+        if user is not None:
+            self.store.record_login_event(user.username, "logout")
 
 
 def default_authenticator() -> UserStoreAuthenticator:
