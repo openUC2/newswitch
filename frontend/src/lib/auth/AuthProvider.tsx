@@ -30,10 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // The token says *that* someone is logged in; this fills in *who* and with what
   // role, which RequireAdmin and the account menu need but the token alone can't say.
-  // Stale identity data left over after a logout is harmless: nothing reachable while
-  // logged out (RequireAuth intercepts first) ever reads it.
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setIdentity(null);
+      return;
+    }
     let cancelled = false;
     fetch(`${BACKEND_API}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
