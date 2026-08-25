@@ -11,6 +11,11 @@ import { useAuth } from "./context";
 export function RequireAdmin() {
   const { role } = useAuth();
 
+  // `role` is also null while /auth/me is still loading; wait rather than bounce.
+  if (role === null) {
+    return null;
+  }
+
   if (role !== "admin") {
     return <Navigate to="/" replace />;
   }
