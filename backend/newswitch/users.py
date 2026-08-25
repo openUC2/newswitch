@@ -55,6 +55,14 @@ def _env_days(env_var: str, default_days: int) -> int:
     return days * 24 * 60 * 60
 
 
+def _migrate_sessions_table(connection: sqlite3.Connection) -> None:
+    """Add `last_used_at` to a `sessions` table predating the idle timeout."""
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(sessions)")}
+    if "last_used_at" not in columns:
+        connection.execute("ALTER TABLE sessions ADD COLUMN last_used_at INTEGER")
+        connection.execute("UPDATE sessions SET last_used_at = created_at")
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +163,7 @@ class UserStore:
         )
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            _migrate_sessions_table(connection)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

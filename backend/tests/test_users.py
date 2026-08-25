@@ -5,6 +5,7 @@ it directly (accounts, roles, sessions) and then once more through the authentic
 protocol, which is the seam `create_app` actually uses.
 """
 
+import sqlite3
 from pathlib import Path
 import time
 
