@@ -299,13 +299,14 @@ class UserStore:
         token = secrets.token_urlsafe(32)
         now = int(time.time())
         with self._connect() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 "INSERT INTO sessions (token, user_id, created_at, last_used_at) "
                 "SELECT ?, id, ?, ? FROM users WHERE username = ?",
                 (token, now, now, username),
             )
+            if cursor.rowcount == 0:
+                raise UserNotFoundError(username)
         return token
-
     def resolve_session(self, token: str | None) -> User | None:
         """Return the account a session token belongs to, or `None` if it is invalid.
 
