@@ -98,6 +98,21 @@ test-all:
 
 check: fmt-check lint types test
 
+# ---------- accounts ----------
+
+# List every account and its role (run on the appliance itself)
+list-users:
+    cd backend && uv run python -m newswitch.cli list-users
+
+# Recovery: set a new password for an existing account, e.g. after it's forgotten
+reset-password username password:
+    cd backend && uv run python -m newswitch.cli reset-password {{username}} {{password}}
+
+# Recovery: create a fresh admin account, e.g. if every admin got locked out
+create-admin username password:
+    cd backend && uv run python -m newswitch.cli create-admin {{username}} {{password}}
+
+
 # Fail if the committed generated code no longer matches the running backend.
 # Requires the backend to be up (`just dev-backend`).
 drift-check:

@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn>=0.40.0",
     "zarrs>=0.2.2",
     "zstandard>=0.25.0",
+    "argon2-cffi>=25.1.0",
 ]
 
 [project.optional-dependencies]
