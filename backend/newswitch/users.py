@@ -307,6 +307,7 @@ class UserStore:
             if cursor.rowcount == 0:
                 raise UserNotFoundError(username)
         return token
+
     def resolve_session(self, token: str | None) -> User | None:
         """Return the account a session token belongs to, or `None` if it is invalid.
 
@@ -337,6 +338,12 @@ class UserStore:
             )
             if expired:
                 connection.execute("DELETE FROM sessions WHERE token = ?", (token,))
+                # Not `record_login_event`: it opens its own connection and would
+                # deadlock on the non-reentrant lock this connection already holds.
+                connection.execute(
+                    "INSERT INTO login_events (username, event) VALUES (?, ?)",
+                    (row["username"], "session_expired"),
+                )
                 return None
             connection.execute("UPDATE sessions SET last_used_at = ? WHERE token = ?", (now, token))
         return _row_to_user(row)

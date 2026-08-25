@@ -316,6 +316,22 @@ def test_an_idle_session_expires(store: UserStore) -> None:
     assert store.resolve_session(token) is None
 
 
+def test_an_expired_session_is_recorded_in_the_audit_trail(store: UserStore) -> None:
+    """TTL expiry is a login event too, not just a silent session deletion."""
+    store.idle_seconds = 1
+    store.create_user("alice", "hunter2", Role.OPERATOR)
+    token = store.create_session("alice")
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE sessions SET last_used_at = ? WHERE token = ?",
+            (int(time.time()) - 10, token),
+        )
+    store.resolve_session(token)
+    events = store.list_login_events()
+    assert [event.event for event in events] == ["session_expired"]
+    assert events[0].username == "alice"
+
+
 def test_an_active_session_still_expires_at_the_absolute_limit(store: UserStore) -> None:
     """Constant activity does not let a session outlive the absolute ceiling."""
     store.absolute_seconds = 1
