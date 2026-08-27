@@ -29,6 +29,59 @@ def test_get_paths_is_cached() -> None:
     assert get_paths() is get_paths()
 
 
+FOREIGN_ENV = "BACKEND_HOST=0.0.0.0\nBACKEND_PORT=8069\nFRONTEND_PORT=5473\n"
+
+
+def test_working_directory_does_not_matter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`Paths()` must not depend on where the process was started.
+
+    The repository root holds a shared `.env` with the stack's ports. A relative
+    ``env_file`` would be resolved against the working directory, so a debugger
+    launched from the repo root used to read that file and crash on its entries,
+    while `uv run` from `backend/` found no `.env` at all.
+
+    Args:
+        tmp_path: Pytest's built-in temporary path fixture.
+        monkeypatch: Pytest's environment patcher.
+    """
+    (tmp_path / ".env").write_text(FOREIGN_ENV, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert Paths().config_dir.name == "Configs"
+
+
+def test_foreign_env_file_entries_are_ignored(tmp_path: Path) -> None:
+    """Variables of the shared `.env` that are not settings must be ignored.
+
+    With `extra="forbid"` — the `BaseSettings` default — pydantic-settings hands every
+    entry of the dotenv file to the model unchanged, prefix or not, and the model then
+    rejects them as extra inputs.
+
+    Args:
+        tmp_path: Pytest's built-in temporary path fixture.
+    """
+    env_file = tmp_path / ".env"
+    env_file.write_text(FOREIGN_ENV, encoding="utf-8")
+
+    paths = Paths(_env_file=env_file)  # type: ignore[call-arg]
+
+    assert paths.config_dir.name == "Configs"
+
+
+def test_env_file_can_still_set_a_field(tmp_path: Path) -> None:
+    """Ignoring foreign keys must not stop a NEWSWITCH_* entry from being read.
+
+    Args:
+        tmp_path: Pytest's built-in temporary path fixture.
+    """
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"{FOREIGN_ENV}NEWSWITCH_CONFIG_DIR={tmp_path / 'own'}\n", encoding="utf-8")
+
+    paths = Paths(_env_file=env_file)  # type: ignore[call-arg]
+
+    assert paths.config_dir == tmp_path / "own"
+
+
 def test_environment_overrides(config_dir: Path) -> None:
     """Each directory can be redirected with its own NEWSWITCH_* variable.
 

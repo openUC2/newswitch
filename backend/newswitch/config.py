@@ -21,6 +21,11 @@ APP_NAME = "newswitch"
 # name is given without one.
 CONFIG_SUFFIXES = (".yaml", ".yml", ".json")
 
+# Repository root, derived from this module's location rather than from the working
+# directory, so the same .env is read no matter where the process was started.
+# Outside a checkout the files simply do not exist and are skipped.
+_REPO_ROOT = Path(__file__).parent.parent.parent
+
 
 def _systemd_dir(env_var: str) -> Path | None:
     # systemd may pass a colon-separated list; the first entry is ours.
@@ -71,11 +76,27 @@ class Paths(BaseSettings):
     Every field can be overridden with its own environment variable
     (``NEWSWITCH_CONFIG_DIR``, ``NEWSWITCH_SCHEMA_DIR``, ...). The four are
     independent, so redirecting `config_dir` alone does not move the others.
+
+    Note the ``extra="ignore"``: this class shares the repository's .env with the
+    rest of the stack, so an unknown NEWSWITCH_* variable is silently ignored
+    rather than reported. A typo like NEWSWITCH_CONFIGG_DIR therefore has no
+    effect instead of raising.
     """
 
-    # this is same like model_config = {"env_prefix": "NEWSWITCH_", "env_file": ".env"}, but with type checking and autocompletion
+    # this is same like model_config = {"env_prefix": "NEWSWITCH_", "env_file": ...}, but with type checking and autocompletion
     # extends BaseSettings to allow for environment variable overrides and .env file loading
-    model_config = SettingsConfigDict(env_prefix="NEWSWITCH_", env_file=".env")
+    #
+    # env_file as an absolute path: a relative ".env" is resolved against the
+    # *current working directory*, so a debugger started in the repo root would read
+    # a different file than `uv run` started in backend/.
+    # extra="ignore": that shared .env also carries BACKEND_PORT & co., and
+    # pydantic-settings passes every foreign entry straight through when
+    # extra="forbid" (its BaseSettings default), which rejects them as extra inputs.
+    model_config = SettingsConfigDict(
+        env_prefix="NEWSWITCH_",
+        env_file=(_REPO_ROOT / ".env", _REPO_ROOT / "backend" / ".env"),
+        extra="ignore",
+    )
 
     # config_dir: Path = _systemd_dir("CONFIGURATION_DIRECTORY") or user_config_path(APP_NAME)
     # data_dir: Path = _systemd_dir("STATE_DIRECTORY") or user_data_path(APP_NAME)
