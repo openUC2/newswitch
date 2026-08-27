@@ -48,7 +48,7 @@ class SchemaFormatError(ValueError):
     """Raised for unsupported file extensions."""
 
 
-def load_any(path: str | Path) -> Any:
+def load_any(path: str | Path) -> Any:  # noqa: ANN401
     """Parse .json, .yaml or .yml into plain Python objects.
 
     `yaml.safe_load` would in fact read both, since YAML 1.2 is a superset of
@@ -64,7 +64,7 @@ def load_any(path: str | Path) -> Any:
     raise SchemaFormatError(f"Unsupported file type: {path.suffix}")
 
 
-def dump_any(obj: Any, path: str | Path) -> Path:
+def dump_any(obj: Any, path: str | Path) -> Path:  # noqa: ANN401
     """Serialize to .json or .yaml, chosen by the file extension."""
     path = Path(path)
     if path.suffix.lower() in JSON_SUFFIXES:

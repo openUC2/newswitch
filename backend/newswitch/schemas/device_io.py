@@ -46,7 +46,7 @@ REGISTRY_KEYS: set[str] = set(DeviceRegistry.model_fields) | {
 }
 
 
-def validate_registry(data: Any) -> list[str]:
+def validate_registry(data: Any) -> list[str]:  # noqa: ANN401
     """Return all schema violations as readable strings (empty list = valid).
 
     Each device is checked against the schema of its own ``type`` only.

@@ -34,7 +34,9 @@ from __future__ import annotations
 import math
 from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 # import numpy as np  # noqa: ERA001  -- needed for quantum_efficiency, see below
 
@@ -77,7 +79,7 @@ class Bounded(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _accept_scalar(cls, data: Any) -> Any:
+    def _accept_scalar(cls, data: Any) -> Any:  # noqa: ANN401
         """Allow ``exposure_time_ms: 10.0`` as shorthand for ``{value: 10.0}``."""
         if isinstance(data, (int, float)) and not isinstance(data, bool):
             return {"value": float(data)}
@@ -104,7 +106,9 @@ class Bounded(BaseModel):
         return self
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema, handler):  # noqa: ANN001
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:  # noqa: ANN001
         """Emit ``anyOf: [number, object]`` so the shorthand validates too."""
         schema = handler(core_schema)
         schema = handler.resolve_ref_schema(schema)
@@ -460,7 +464,7 @@ class DeviceRegistry(BaseModel):
         raise KeyError(f"no device with id or name {key!r}")
 
     @staticmethod
-    def demote_unknown_types(data: Any) -> Any:
+    def demote_unknown_types(data: Any) -> Any:  # noqa: ANN401
         """Rewrite entries with an unrecognized ``type`` to ``type: unknown``.
 
         NOT applied automatically, and that is deliberate: it cannot tell an
