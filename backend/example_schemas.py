@@ -13,13 +13,11 @@ from __future__ import annotations
 
 from newswitch.config import get_paths
 from newswitch.schemas import (
-    CameraSchema,
+    CameraDevice,
     ConfigError,
     describe,
     dump_config,
-    export_camera_schema,
     export_devices_schema,
-    load_camera,
     load_config,
     load_device,
     read_document,
@@ -46,23 +44,27 @@ def show_folders() -> None:
 
 
 def load_same_camera_twice() -> None:
-    """2. The same camera from YAML and from JSON, plus the derived values."""
+    """2. The same camera from YAML and from JSON, plus the resolved values."""
     section("2. one camera, two formats")
-    from_yaml = load_camera("hik_mv_ca023_10um.yaml")
-    from_json = load_camera("hik_mv_ca023_10um.json")
+    # `expect="camera"` both refuses anything else at runtime and narrows the return
+    # type to CameraDevice, so the camera-only fields below need no isinstance check.
+    from_yaml = load_device("hik_mv_ca023_10um.yaml", expect="camera")
 
-    # Same model class, same fields, one code path -- the parser is picked by suffix.
-    # The two sample files are not byte-equivalent though: the JSON one adds a
-    # `$schema` pointer for editor autocomplete and writes gain as the bare-number
-    # shorthand instead of the full {value, min, max, increment} block.
-    yaml_fields, json_fields = from_yaml.model_dump(), from_json.model_dump()
-    differing = sorted(k for k in yaml_fields if yaml_fields[k] != json_fields[k])
-    print(f"fields that differ between the two files: {differing}")
-    print(f"gain_db  yaml: {from_yaml.gain_db}")
-    print(f"gain_db  json: {from_json.gain_db}   <- scalar shorthand, same model")
+    # The format is a property of the file, not of the model: write the very same
+    # camera out as JSON and read it back. One code path, parser picked by suffix.
+    as_json = dump_config(from_yaml, get_paths().data_dir / "hik_mv_ca023_10um.json")
+    from_json = load_device(as_json, expect="camera")
+    print(f"wrote {as_json}")
+    print(f"YAML and JSON give the same model: {from_yaml == from_json}")
+
+    print(f"gain_db:         {from_yaml.gain_db}")
     print(f"name:            {from_yaml.name} ({from_yaml.manufacturer})")
-    print(f"pixelpitch y:    {from_yaml.pixelpitch_um.y}  <- derived from x")
-    print(f"pixelsize:       {from_yaml.pixelsize_um}  <- defaults to the pitch")
+    # An omitted optional field is not filled in -- the fallback is a property, so
+    # the document survives a round-trip exactly as written.
+    print(f"pixelpitch y:    {from_yaml.pixelpitch_um.y}  <- omitted in the file")
+    print(f"  effective_y:   {from_yaml.pixelpitch_um.effective_y}  <- falls back to x")
+    print(f"pixelsize:       {from_yaml.pixelsize_um}  <- none stated")
+    print(f"  effective:     {from_yaml.effective_pixelsize_um}  <- falls back to the pitch")
     print(f"sensor_size_mm:  {from_yaml.sensor_size_mm}")
     print(f"fill_factor:     {from_yaml.fill_factor:.2f}")
 
@@ -79,16 +81,19 @@ def load_whole_setup() -> None:
 def one_call_for_both_layouts() -> None:
     """4./5. `load_device` reads single-device files and registries alike."""
     section("4. single-device file, name without extension")
-    # "hik_mv_ca023_10um" -> Configs/hik_mv_ca023_10um.yaml, and the file has no
-    # `type:` key at all -- a bare device document is read as a camera.
+    # "hik_mv_ca023_10um" -> Configs/hik_mv_ca023_10um.yaml. The file declares its
+    # own `type: camera`; a document that omits the key is read as an opaque
+    # UnknownDevice, so `expect=` would refuse it here.
     camera = load_device("hik_mv_ca023_10um", expect="camera")
     print(f"{type(camera).__name__}: {camera.name}")
 
     section("5. one device out of a registry")
-    laser = load_device("Devices.yml", "laser-488-001")
+    # Same narrowing as above: without `expect=` these would be the device union and
+    # `wavelength_nm` / `axes` would not be reachable.
+    laser = load_device("Devices.yml", "laser-488-001", expect="laser")
     print(f"{type(laser).__name__}: {laser.name} @ {laser.wavelength_nm:.0f} nm")
 
-    stage = load_device("Devices.yml", "stage-xy-001")
+    stage = load_device("Devices.yml", "stage-xy-001", expect="stage")
     print(f"{type(stage).__name__}: axes {'/'.join(a.label for a in stage.axes)}")
 
     # Asking for the wrong type, or for a device that is not there, is an error
@@ -103,9 +108,8 @@ def one_call_for_both_layouts() -> None:
 def limits_of_a_parameter() -> None:
     """6. `Bounded` carries the device's own limits, not just a value."""
     section("6. exposure limits (Bounded)")
-    # load_camera() is the camera-only entry point, so the result is a CameraSchema
-    # rather than the device union -- no narrowing needed.
-    exposure = load_camera("hik_mv_ca023_10um").exposure_time_ms
+    camera = load_device("hik_mv_ca023_10um", expect="camera")
+    exposure = camera.exposure_time_ms
     assert exposure is not None, "the sample file defines exposure limits"
     print(f"exposure:            {exposure}")
     print(f"clamp(1e6):          {exposure.clamp(1e6)}      <- clamped to max")
@@ -128,7 +132,7 @@ def store_and_reload() -> None:
 
     # `devices` is a discriminated union, so narrow before touching camera fields --
     # a type checker then knows exactly which attributes exist.
-    camera = next(dev for dev in registry.devices if isinstance(dev, CameraSchema))
+    camera = next(dev for dev in registry.devices if isinstance(dev, CameraDevice))
     assert camera.exposure_time_ms is not None, "the sample file defines exposure limits"
 
     # validate_assignment=True, so this is checked against the device's own limits.
@@ -142,7 +146,9 @@ def store_and_reload() -> None:
         print(f"wrote {target} -> reload matches: {same}")
 
     single = dump_config(camera, out_dir / "hik_mv_ca023_10um.modified.yaml")
-    print(f"wrote {single} -> exposure {load_camera(single).exposure_time_ms.value}")
+    reloaded_camera = load_device(single, expect="camera")
+    assert reloaded_camera.exposure_time_ms is not None
+    print(f"wrote {single} -> exposure {reloaded_camera.exposure_time_ms.value}")
 
     # Out-of-range assignments are refused. Note the caveat: Pydantic assigns first
     # and validates after, so the object keeps the rejected value and has to be
@@ -155,9 +161,9 @@ def store_and_reload() -> None:
 
 
 def refresh_exported_schemas() -> None:
-    """9. Regenerate the JSON Schemas other tools and editors consume."""
-    section("9. exported JSON Schemas")
-    print(f"wrote {export_camera_schema()}")
+    """9. Regenerate the JSON Schema other tools and editors consume."""
+    section("9. exported JSON Schema")
+    # No argument -> the managed schema directory, not the working directory.
     print(f"wrote {export_devices_schema()}")
 
 

@@ -11,12 +11,11 @@ import pytest
 from pydantic import ValidationError
 
 from newswitch.schemas import (
-    CameraSchema,
+    CameraDevice,
     DeviceRegistry,
     FilterWheelDevice,
     LaserDevice,
     StageDevice,
-    device_key,
 )
 
 
@@ -28,7 +27,7 @@ def test_registry_dispatches_by_type(registry_doc: dict[str, Any]) -> None:
     """
     registry = DeviceRegistry.model_validate(registry_doc)
     assert [type(dev) for dev in registry.devices] == [
-        CameraSchema,
+        CameraDevice,
         StageDevice,
         LaserDevice,
         FilterWheelDevice,
@@ -88,31 +87,36 @@ def test_get_by_id_and_by_name(registry_doc: dict[str, Any]) -> None:
     registry = DeviceRegistry.model_validate(registry_doc)
     assert registry.get("laser-001").name == "LD-488"
     assert registry.get("LD-488").name == "LD-488"
-    assert registry.get("testcam-001").name == "TestCam-2000"  # camera_id, not device_id
+    assert registry.get("testcam-001").name == "TestCam-2000"
 
     with pytest.raises(KeyError, match="nope"):
         registry.get("nope")
 
 
-def test_device_key_precedence() -> None:
-    """`device_key` bridges `device_id`, the camera's `camera_id`, and the name."""
+def test_key_precedence() -> None:
+    """`DeviceBase.key` is `device_id` when set and the name otherwise.
+
+    One identifier field for every device type: cameras used to carry their own
+    `camera_id`, which the merge into `DeviceBase` removed.
+    """
     stage = StageDevice(
         type="stage",
         name="XY",
         device_id="stage-007",
         axes=[{"label": "x", "travel_um": 1.0, "steps_per_um": 1.0}],  # type: ignore[list-item]
     )
-    camera = CameraSchema(
+    camera = CameraDevice(
+        type="camera",
         name="Cam",
-        camera_id="cam-007",
+        device_id="cam-007",
         pixelcount={"x": 1, "y": 1},  # type: ignore[arg-type]
         pixelpitch_um={"x": 1.0},  # type: ignore[arg-type]
     )
     anonymous = LaserDevice(type="laser", name="LD-405", wavelength_nm=405.0, max_power_mw=10.0)
 
-    assert device_key(stage) == "stage-007"
-    assert device_key(camera) == "cam-007"
-    assert device_key(anonymous) == "LD-405"
+    assert stage.key == "stage-007"
+    assert camera.key == "cam-007"
+    assert anonymous.key == "LD-405"
 
 
 def test_duplicate_identifiers_rejected(registry_doc: dict[str, Any]) -> None:

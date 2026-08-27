@@ -1,7 +1,10 @@
-# HIKROBOT MV-CA023-10UM - same content as the JSON variant
+# HIKROBOT MV-CA023-10UM - a single-device file.
+# `type` is required: no device model defaults it, so a document without it is
+# read as an opaque UnknownDevice rather than guessed at.
+type: camera
 name: MV-CA023-10UM
 manufacturer: HIK ROBOTICS
-camera_id: hik-mv-ca023-001
+device_id: hik-mv-ca023-001
 
 pixelcount:
   x: 1920

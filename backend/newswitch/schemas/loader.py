@@ -1,8 +1,8 @@
 """One entry point for every config layout.
 
-`camera_io` and `device_io` each expect one specific document shape. In practice a
-caller has a file and wants the devices in it, without caring whether that file
-describes a single device (``hik_mv_ca023_10um.yaml``) or a whole setup
+`device_io` expects one specific document shape: a registry with a ``devices`` key.
+In practice a caller has a file and wants the devices in it, without caring whether
+that file describes a single device (``hik_mv_ca023_10um.yaml``) or a whole setup
 (``Devices.yml``), and without caring whether it is JSON or YAML.
 
 `load_config()` normalizes all of those to the same result — a `DeviceRegistry`:
@@ -16,10 +16,13 @@ describes a single device (``hik_mv_ca023_10um.yaml``) or a whole setup
     anything else                     ConfigError
     ================================= ==================================================
 
-A single-device document without a ``type`` key is read as a camera, mirroring the
-default of `CameraSchema.type`; that is what lets ``hik_mv_ca023_10um.yaml`` load
-unchanged. Every other device type has to spell out its ``type:``. A document that
-carries both ``devices`` and ``name`` counts as a registry.
+Every device type spells out its own ``type:``, cameras included -- `CameraDevice.type`
+is a required discriminator with no default. A single-device document that omits the
+key is wrapped as `DEFAULT_DEVICE_TYPE`, i.e. an opaque `UnknownDevice`: its contents
+are preserved but nothing in it is validated. Note the asymmetry that follows from
+this -- a *misspelled* ``type: stagee`` is rejected by the discriminator, while an
+*omitted* ``type`` is silently accepted. A document that carries both ``devices`` and
+``name`` counts as a registry.
 
 Validation is unchanged and still runs in two layers: the per-type jsonschema pass
 from `device_io` for structure, then Pydantic for the cross-field rules. Errors of a
@@ -31,19 +34,27 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union, overload
 
 from pydantic import BaseModel, ValidationError
 
-from .camera_io import dump_camera
-from .camera_schema import CameraSchema
 from .device_io import dump_devices, validate_registry
-from .device_schema import DEVICE_MODELS, DeviceModel, DeviceRegistry, device_key
+from .device_schema import (
+    DEVICE_MODELS,
+    CameraDevice,
+    Device,
+    DeviceRegistry,
+    FilterWheelDevice,
+    LaserDevice,
+    StageDevice,
+    UnknownDevice,
+)
 from .document import read_document
 from .errors import ConfigError
 
-# A single-device file may omit `type`; CameraSchema defaults to "camera" too.
-DEFAULT_DEVICE_TYPE = "camera"
+# No device model defaults its `type`, so a single-device file that omits the key
+# cannot be dispatched. It becomes an opaque UnknownDevice rather than a guess.
+DEFAULT_DEVICE_TYPE = "unknown"
 
 _INDEX_PREFIX = re.compile(r"^devices\[0\]\.?")
 
@@ -122,20 +133,87 @@ def load_config(src: str | Path, *, strict_schema: bool = True) -> DeviceRegistr
         raise ConfigError(f"{name}: {exc}") from exc
 
 
+# `expect` already names the type the caller requires, so it may as well carry that
+# type statically instead of only raising at runtime. One overload per entry of
+# DEVICE_MODELS, then a fallback for everything else: a variable of type `str`, or an
+# unknown name such as `expect="spectrometer"`, matches none of the literals and keeps
+# the union as its return type.
+@overload
+def load_device(
+    src: str | Path,
+    key: Optional[str] = None,
+    *,
+    expect: Literal["camera"],
+    strict_schema: bool = True,
+) -> CameraDevice: ...
+
+
+@overload
+def load_device(
+    src: str | Path,
+    key: Optional[str] = None,
+    *,
+    expect: Literal["stage"],
+    strict_schema: bool = True,
+) -> StageDevice: ...
+
+
+@overload
+def load_device(
+    src: str | Path,
+    key: Optional[str] = None,
+    *,
+    expect: Literal["laser"],
+    strict_schema: bool = True,
+) -> LaserDevice: ...
+
+
+@overload
+def load_device(
+    src: str | Path,
+    key: Optional[str] = None,
+    *,
+    expect: Literal["filterwheel"],
+    strict_schema: bool = True,
+) -> FilterWheelDevice: ...
+
+
+@overload
+def load_device(
+    src: str | Path,
+    key: Optional[str] = None,
+    *,
+    expect: Literal["unknown"],
+    strict_schema: bool = True,
+) -> UnknownDevice: ...
+
+
+@overload
 def load_device(
     src: str | Path,
     key: Optional[str] = None,
     *,
     expect: Optional[str] = None,
     strict_schema: bool = True,
-) -> DeviceModel:
+) -> Device: ...
+
+
+def load_device(
+    src: str | Path,
+    key: Optional[str] = None,
+    *,
+    expect: Optional[str] = None,
+    strict_schema: bool = True,
+) -> Device:
     """Load exactly one device, from a single-device file or out of a registry.
 
     Args:
         src: Bare config name or an explicit path.
-        key: ``device_id``/``camera_id`` or name of the wanted device. May be omitted
+        key: ``device_id`` or name of the wanted device. May be omitted
             when the file holds exactly one device.
-        expect: Device type the caller requires, e.g. ``"camera"``.
+        expect: Device type the caller requires, e.g. ``"camera"``. Passed as a
+            literal it also narrows the return type, so the type-specific fields
+            are reachable without an `isinstance` check.
         strict_schema: Passed through to `load_config`.
 
     Returns:
@@ -147,7 +225,7 @@ def load_device(
     """
     registry = load_config(src, strict_schema=strict_schema)
     name = Path(src).name
-    available = [device_key(dev) for dev in registry.devices]
+    available = [dev.key for dev in registry.devices]
 
     if key is None:
         if len(registry.devices) != 1:
@@ -170,9 +248,7 @@ def load_device(
                 f"unknown device type {expect!r} (known: {', '.join(sorted(DEVICE_MODELS))})"
             )
         if device.type != expect:
-            raise ConfigError(
-                f"{name}: {device_key(device)!r} is a {device.type}, expected a {expect}"
-            )
+            raise ConfigError(f"{name}: {device.key!r} is a {device.type}, expected a {expect}")
 
     return device
 
@@ -193,8 +269,6 @@ def dump_config(obj: Union[DeviceRegistry, BaseModel], dest: str | Path) -> Path
     """
     if isinstance(obj, DeviceRegistry):
         return dump_devices(obj, dest)
-    if isinstance(obj, CameraSchema):
-        return dump_camera(obj, dest)
     if isinstance(obj, BaseModel) and getattr(obj, "type", None) in DEVICE_MODELS:
         # Non-camera devices have no single-device writer of their own; a one-entry
         # registry keeps the file loadable by load_config().

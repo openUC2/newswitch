@@ -9,8 +9,7 @@ Two kinds of drift are possible once schemas are exported to disk:
 
 Both checks read the development-only `Configs/` folder (see `Configs/__note__.md`),
 so every test here skips when that folder is gone. Regenerate with
-``uv run python example_schemas.py`` or `export_camera_schema()` /
-`export_devices_schema()`.
+``uv run python example_schemas.py`` or `export_devices_schema()`.
 """
 
 import json
@@ -19,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from newswitch.config import Paths
-from newswitch.schemas import CameraSchema, DeviceRegistry, load_config, load_device
+from newswitch.schemas import DeviceRegistry, load_config, load_device
 
 DRAFT = "https://json-schema.org/draft/2020-12/schema"
 
@@ -47,7 +46,7 @@ def _requires(path: Path) -> Path:
 
 @pytest.mark.parametrize(
     ("model", "file_name"),
-    [(CameraSchema, "camera.schema.json"), (DeviceRegistry, "devices.schema.json")],
+    [(DeviceRegistry, "devices.schema.json")],
 )
 def test_exported_schema_matches_the_model(model: type, file_name: str) -> None:
     """The checked-in JSON Schema is exactly what the model generates today.
@@ -75,17 +74,14 @@ def test_sample_registry_still_loads() -> None:
     assert registry.get("laser-488-001").name == "LD-488-100"
 
 
-@pytest.mark.parametrize("file_name", ["hik_mv_ca023_10um.yaml", "hik_mv_ca023_10um.json"])
-def test_sample_camera_still_loads(file_name: str) -> None:
-    """The single-device sample loads in both formats, with `type` omitted.
-
-    Args:
-        file_name: The sample file under test.
-    """
-    camera = load_device(_requires(CONFIG_DIR / file_name), expect="camera")
+def test_sample_camera_still_loads() -> None:
+    """The single-device sample loads as the camera it declares."""
+    camera = load_device(_requires(CONFIG_DIR / "hik_mv_ca023_10um.yaml"), expect="camera")
 
     assert camera.name == "MV-CA023-10UM"
-    assert camera.pixelpitch_um.y == 10.0  # derived from x
+    # `y` is omitted in the file and stays None; the fallback is a property.
+    assert camera.pixelpitch_um.y is None
+    assert camera.pixelpitch_um.effective_y == 10.0
     assert camera.sensor_size_mm == pytest.approx((19.2, 12.0))
 
 

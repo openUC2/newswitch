@@ -7,7 +7,7 @@ devices:
   - type: camera
     name: MV-CA023-10UM
     manufacturer: HIK ROBOTICS
-    camera_id: hik-mv-ca023-001
+    device_id: hik-mv-ca023-001
     pixelcount:
       x: 1920
       y: 1200
@@ -37,7 +37,7 @@ devices:
   - type: camera
     name: U3-3800CP-C-HQ
     manufacturer: IDS Imaging
-    camera_id: ids-u3-3800-002
+    device_id: ids-u3-3800-002
     pixelcount:
       x: 3088
       y: 2076

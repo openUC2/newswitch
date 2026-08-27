@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
     "Bounded": {
       "anyOf": [
@@ -8,7 +9,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "A numeric parameter together with the device limits that apply to it.\n\nAll four members are optional, which covers every practical case:\n\n* ``{value: 10}``                       -- setting, limits unknown\n* ``{min: 0.024, max: 10000}``          -- capability only, no default set\n* ``{value: 10, min: 0.024, max: 1e4}`` -- both\n* ``null`` / omitted                    -- parameter not applicable",
+          "description": "A numeric parameter together with the device limits that apply to it.\n\nAccepts a bare number as shorthand for ``{\"value\": <number>}``, so both of\nthese are valid and equivalent::\n\n    exposure_time_ms: 10.0\n    exposure_time_ms: {value: 10.0}\n\nAll members are optional, which covers every practical case:\n\n* ``{value: 10}``                       -- setting, limits unknown\n* ``{min: 0.024, max: 10000}``          -- capability only, no value chosen\n* ``{value: 10, min: 0.024, max: 1e4}`` -- both\n* ``null`` / omitted                    -- parameter not applicable",
           "properties": {
             "value": {
               "anyOf": [
@@ -81,32 +82,12 @@
           "type": "object"
         }
       ],
-      "description": "A numeric parameter together with the device limits that apply to it."
+      "description": "Numeric parameter with its device limits"
     },
-    "CameraSchema": {
+    "CameraDevice": {
       "additionalProperties": false,
-      "description": "Full camera description.",
+      "description": "Imaging sensor.",
       "properties": {
-        "$schema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional pointer to the schema file, for editor autocomplete",
-          "title": "$Schema"
-        },
-        "type": {
-          "const": "camera",
-          "default": "camera",
-          "description": "Discriminator used in multi-device files",
-          "title": "Type",
-          "type": "string"
-        },
         "name": {
           "description": "Model designation, e.g. MV-CA023-10UM",
           "title": "Name",
@@ -125,7 +106,7 @@
           "description": "Vendor name",
           "title": "Manufacturer"
         },
-        "camera_id": {
+        "device_id": {
           "anyOf": [
             {
               "type": "string"
@@ -135,8 +116,20 @@
             }
           ],
           "default": null,
-          "description": "Unique identifier of the physical unit",
-          "title": "Camera Id"
+          "description": "Identifier of the individual physical unit",
+          "title": "Device Id"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "camera",
+          "title": "Type",
+          "type": "string"
         },
         "pixelcount": {
           "$ref": "#/$defs/Vector2Int",
@@ -156,7 +149,7 @@
             }
           ],
           "default": null,
-          "description": "Photosensitive area per pixel; defaults to pixelpitch_um"
+          "description": "Photosensitive area per pixel; omit when the datasheet gives none, then a fill factor of 1.0 is assumed"
         },
         "channels": {
           "default": 1,
@@ -250,25 +243,20 @@
             }
           ],
           "default": null
-        },
-        "tags": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Tags",
-          "type": "array"
         }
       },
       "required": [
         "name",
+        "type",
         "pixelcount",
         "pixelpitch_um"
       ],
-      "title": "CameraSchema",
+      "title": "CameraDevice",
       "type": "object"
     },
     "FilterSlot": {
       "additionalProperties": false,
+      "description": "One slot of a filter wheel.",
       "properties": {
         "position": {
           "description": "Slot index on the wheel",
@@ -320,7 +308,7 @@
       "description": "Motorized filter wheel.",
       "properties": {
         "name": {
-          "description": "Model designation",
+          "description": "Model designation, e.g. MV-CA023-10UM",
           "title": "Name",
           "type": "string"
         },
@@ -397,7 +385,7 @@
       "description": "Single-wavelength illumination source.",
       "properties": {
         "name": {
-          "description": "Model designation",
+          "description": "Model designation, e.g. MV-CA023-10UM",
           "title": "Name",
           "type": "string"
         },
@@ -478,6 +466,7 @@
     },
     "StageAxis": {
       "additionalProperties": false,
+      "description": "One motorized axis of a stage.",
       "properties": {
         "label": {
           "enum": [
@@ -523,7 +512,7 @@
       "description": "Motorized positioning stage.",
       "properties": {
         "name": {
-          "description": "Model designation",
+          "description": "Model designation, e.g. MV-CA023-10UM",
           "title": "Name",
           "type": "string"
         },
@@ -651,9 +640,77 @@
       "title": "Trigger",
       "type": "object"
     },
+    "UnknownDevice": {
+      "additionalProperties": true,
+      "description": "Placeholder for a device this version of the schema does not model.\n\nUnlike every other type it uses ``extra=\"allow\"``, so whatever fields the\nentry carries are kept instead of rejected. They land in ``model_extra``\nand survive a load/dump round-trip, which means an older build can read,\nhold and rewrite a config containing devices it knows nothing about\nwithout destroying them.\n\nThe trade-off: nothing inside such an entry is validated. Treat it as\nopaque payload, not as configuration you can act on.\n\nNote this only catches entries that literally say ``type: unknown``. An\nentry with ``type: spectrometer`` is still rejected by the discriminator --\ndeliberately, because that error is what catches a typo like ``stagee``.\nSee DeviceRegistry for how to opt into remapping instead.",
+      "properties": {
+        "name": {
+          "description": "Model designation, e.g. MV-CA023-10UM",
+          "title": "Name",
+          "type": "string"
+        },
+        "manufacturer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vendor name",
+          "title": "Manufacturer"
+        },
+        "device_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Identifier of the individual physical unit",
+          "title": "Device Id"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "unknown",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the device actually is, if known, e.g. 'spectrometer'",
+          "title": "Kind"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "UnknownDevice",
+      "type": "object"
+    },
     "Vector2Float": {
       "additionalProperties": false,
-      "description": "Float pair where y is optional and falls back to x (square geometry).",
+      "description": "Float pair where y may be omitted, meaning \"same as x\" (square geometry).\n\n``y`` stays optional so the model says the same thing the document does:\n``None`` means \"not stated\", which survives a load/dump round-trip\nunchanged. Read `effective_y` instead of `y` wherever the resolved value is\nwanted -- it is non-optional, so arithmetic type-checks without casts.",
       "properties": {
         "x": {
           "description": "Value along x in micrometers",
@@ -672,7 +729,7 @@
             }
           ],
           "default": null,
-          "description": "Value along y; defaults to x when omitted",
+          "description": "Value along y in micrometers; omit for square geometry",
           "title": "Y"
         }
       },
@@ -710,6 +767,19 @@
   "additionalProperties": false,
   "description": "Top-level object of a Devices.yml file.",
   "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional pointer to the schema file, for editor autocomplete",
+      "title": "$Schema"
+    },
     "version": {
       "default": 1,
       "description": "Registry format version",
@@ -734,16 +804,17 @@
       "items": {
         "discriminator": {
           "mapping": {
-            "camera": "#/$defs/CameraSchema",
+            "camera": "#/$defs/CameraDevice",
             "filterwheel": "#/$defs/FilterWheelDevice",
             "laser": "#/$defs/LaserDevice",
-            "stage": "#/$defs/StageDevice"
+            "stage": "#/$defs/StageDevice",
+            "unknown": "#/$defs/UnknownDevice"
           },
           "propertyName": "type"
         },
         "oneOf": [
           {
-            "$ref": "#/$defs/CameraSchema"
+            "$ref": "#/$defs/CameraDevice"
           },
           {
             "$ref": "#/$defs/StageDevice"
@@ -753,6 +824,9 @@
           },
           {
             "$ref": "#/$defs/FilterWheelDevice"
+          },
+          {
+            "$ref": "#/$defs/UnknownDevice"
           }
         ]
       },
@@ -761,6 +835,5 @@
     }
   },
   "title": "DeviceRegistry",
-  "type": "object",
-  "$schema": "https://json-schema.org/draft/2020-12/schema"
+  "type": "object"
 }

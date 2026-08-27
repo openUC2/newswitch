@@ -76,10 +76,8 @@ def test_every_problem_is_reported_once_and_precisely(broken_doc: dict[str, Any]
     assert "devices[0].binning: 3 is not one of [1, 2, 4]" in errors
     assert "colour" in joined
     assert "devices[1].axes: [] should be non-empty" in errors
-    assert (
-        "devices[2]: unknown type 'spectrometer' (known: camera, filterwheel, laser, stage)"
-        in errors
-    )
+    assert "devices[2]: unknown type 'spectrometer'" in joined
+    assert "known: camera, filterwheel, laser, stage, unknown" in joined
     assert "devices[3]: missing 'type' discriminator" in errors
     assert "devices[4]: expected an object, got str" in errors
 

@@ -2,13 +2,14 @@
 
 Layout
 ------
-* `bounded`        -- `Bounded`: a numeric parameter carrying its own min/max/increment
-* `camera_schema`  -- `CameraSchema` and its sub-models
-* `device_schema`  -- the other device types, the discriminated union, `DeviceRegistry`
-* `document`       -- file parsing/writing and path resolution via `newswitch.config`
-* `camera_io`      -- camera-only loader, writer and schema exporter
-* `device_io`      -- registry loader, per-type validator, writer, schema exporter
-* `loader`         -- `load_config` / `load_device`: one entry point for every layout
+* `device_schema` -- `Bounded` and the other building blocks, every device model,
+  the discriminated `Device` union, `DEVICE_MODELS`, `DeviceRegistry`
+* `document`      -- config file parsing/writing and path resolution via
+  `newswitch.config`
+* `device_io`     -- registry loader, per-type validator, writer, schema exporter
+* `schema_io`     -- JSON Schema read/write in either format, Pydantic export, and a
+  validator whose ``$ref`` resolution understands YAML
+* `loader`        -- `load_config` / `load_device`: one entry point for every layout
 
 Typical use::
 
@@ -20,19 +21,11 @@ Typical use::
     dump_config(registry, "data/Devices.backup.yml")
 
 Bare names are resolved against the managed config directory (see
-`newswitch.config.Paths`), explicit paths are used as given. Every loader raises
-`ConfigError`; `CameraConfigError` and `DeviceConfigError` are subclasses of it.
+`newswitch.config.Paths`), explicit paths are used as given. `load_config`,
+`load_device` and `dump_config` raise `ConfigError`; the lower-level `load_devices`
+and `dump_devices` raise `DeviceConfigError`.
 """
 
-from .bounded import Bounded
-from .camera_io import (
-    CameraConfigError,
-    dump_camera,
-    export_json_schema as export_camera_schema,
-    load_camera,
-    schema_errors,
-)
-from .camera_schema import CameraSchema, Trigger, Vector2Float, Vector2Int
 from .device_io import (
     DeviceConfigError,
     describe,
@@ -43,45 +36,56 @@ from .device_io import (
 )
 from .device_schema import (
     DEVICE_MODELS,
+    Bounded,
+    CameraDevice,
     Device,
     DeviceBase,
-    DeviceModel,
     DeviceRegistry,
+    FilterSlot,
     FilterWheelDevice,
     LaserDevice,
     StageAxis,
     StageDevice,
-    device_key,
+    Trigger,
+    UnknownDevice,
+    Vector2Float,
+    Vector2Int,
 )
 from .document import read_document, write_document
 from .errors import ConfigError
 from .loader import dump_config, load_config, load_device
+from .schema_io import (
+    SchemaFormatError,
+    build_validator,
+    convert,
+    dump_any,
+    export_schema,
+    load_any,
+)
 
 __all__ = [
-    # models
+    # building blocks
     "Bounded",
-    "CameraSchema",
     "Trigger",
     "Vector2Int",
     "Vector2Float",
-    "DeviceBase",
     "StageAxis",
+    "FilterSlot",
+    # device models
+    "DeviceBase",
+    "CameraDevice",
     "StageDevice",
     "LaserDevice",
     "FilterWheelDevice",
+    "UnknownDevice",
     "Device",
-    "DeviceModel",
     "DeviceRegistry",
     "DEVICE_MODELS",
-    "device_key",
     # one entry point for any layout
     "load_config",
     "load_device",
     "dump_config",
-    # type-specific entry points
-    "load_camera",
-    "dump_camera",
-    "schema_errors",
+    # registry-specific entry points
     "load_devices",
     "dump_devices",
     "validate_registry",
@@ -89,10 +93,14 @@ __all__ = [
     # documents and schema export
     "read_document",
     "write_document",
-    "export_camera_schema",
     "export_devices_schema",
+    "export_schema",
+    "load_any",
+    "dump_any",
+    "convert",
+    "build_validator",
     # errors
     "ConfigError",
-    "CameraConfigError",
     "DeviceConfigError",
+    "SchemaFormatError",
 ]

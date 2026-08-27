@@ -9,11 +9,14 @@ error blocks ending in "is not valid under any of the given schemas".
 `validate_registry()` avoids that by reading the ``type`` field first and
 validating each entry against **only** the matching sub-schema. Errors come
 back as `devices[2].pixelcount.x: -5 is less than or equal to 0`.
+
+Parsing and path resolution live in `document.py`, so a bare name such as
+``"Devices"`` is looked up in the managed config directory while an explicit path
+is used as given. This module only ever sees plain dicts and lists.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -21,9 +24,10 @@ from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from ..config import get_paths
-from .device_schema import DEVICE_MODELS, DeviceRegistry, device_key
+from .device_schema import DEVICE_MODELS, DeviceRegistry
 from .document import read_document, write_document
 from .errors import ConfigError
+from .schema_io import export_schema
 
 
 class DeviceConfigError(ConfigError):
@@ -35,23 +39,11 @@ TYPE_VALIDATORS: dict[str, Draft202012Validator] = {
     name: Draft202012Validator(model.model_json_schema()) for name, model in DEVICE_MODELS.items()
 }
 
-
-def load_raw(path: str | Path) -> Any:  # noqa: ANN401 - a parsed document is Any
-    """Parse .json, .yaml or .yml into plain Python objects.
-
-    Args:
-        path: Bare config name or an explicit path.
-
-    Returns:
-        The parsed document.
-
-    Raises:
-        DeviceConfigError: File missing, unsupported suffix, or unparseable.
-    """
-    try:
-        return read_document(path)
-    except ConfigError as exc:
-        raise DeviceConfigError(str(exc)) from exc
+# Both spellings of every registry key: `schema_ref` is written out as `$schema`,
+# so a document this module produced has to pass its own unknown-key check.
+REGISTRY_KEYS: set[str] = set(DeviceRegistry.model_fields) | {
+    field.alias for field in DeviceRegistry.model_fields.values() if field.alias
+}
 
 
 def validate_registry(data: Any) -> list[str]:
@@ -69,11 +61,11 @@ def validate_registry(data: Any) -> list[str]:
         if "name" in data or "type" in data:
             hint = (
                 " -- this looks like a single-device file; wrap it as "
-                "'devices: [ ... ]' or load it with camera_io.load_camera()"
+                "'devices: [ ... ]', there is no bare device document format"
             )
         return [f"<root>: 'devices' is a required property{hint}"]
 
-    unknown = set(data) - set(DeviceRegistry.model_fields)
+    unknown = set(data) - REGISTRY_KEYS
     for key in sorted(unknown):
         errors.append(f"<root>: unknown key {key!r}")
 
@@ -94,7 +86,10 @@ def validate_registry(data: Any) -> list[str]:
             continue
         if type_ not in TYPE_VALIDATORS:
             known = ", ".join(sorted(TYPE_VALIDATORS))
-            errors.append(f"{where}: unknown type {type_!r} (known: {known})")
+            errors.append(
+                f"{where}: unknown type {type_!r} (known: {known}); if this is a "
+                f"device from a newer version, see DeviceRegistry.demote_unknown_types"
+            )
             continue
 
         for err in sorted(TYPE_VALIDATORS[type_].iter_errors(entry), key=str):
@@ -104,9 +99,36 @@ def validate_registry(data: Any) -> list[str]:
     return errors
 
 
-def load_devices(path: str | Path, *, strict_schema: bool = True) -> DeviceRegistry:
-    """Load a device file and return a validated registry."""
-    data = load_raw(path)
+def load_devices(
+    path: str | Path,
+    *,
+    strict_schema: bool = True,
+    allow_unknown_types: bool = False,
+) -> DeviceRegistry:
+    """Load a device file and return a validated registry.
+
+    Args:
+        path: Bare config name (``"Devices"``, ``"Devices.yml"``) resolved against the
+            managed config directory, or an explicit path to a .json/.yaml/.yml file.
+        strict_schema: Run the jsonschema pass first, so that *all* structural
+            problems are reported together instead of only the first Pydantic
+            failure.
+        allow_unknown_types: Accept entries whose ``type`` this version does not
+            know by demoting them to `UnknownDevice` instead of failing. Off by
+            default: the remapping cannot tell a genuinely newer device type from
+            a typo, so ``type: stagee`` would be quietly accepted as opaque
+            payload.
+
+    Raises:
+        DeviceConfigError: The file cannot be read, or the content fails validation.
+    """
+    try:
+        data = read_document(path)
+    except ConfigError as exc:
+        raise DeviceConfigError(str(exc)) from exc
+
+    if allow_unknown_types:
+        data = DeviceRegistry.demote_unknown_types(data)
 
     if strict_schema:
         errors = validate_registry(data)
@@ -125,7 +147,8 @@ def dump_devices(registry: DeviceRegistry, path: str | Path) -> Path:
 
     Args:
         registry: The validated registry to store.
-        path: Bare name (stored in the config dir) or an explicit path.
+        path: Bare name (written into the config dir) or an explicit path. The
+            suffix picks the format.
 
     Returns:
         The path written to.
@@ -141,21 +164,20 @@ def dump_devices(registry: DeviceRegistry, path: str | Path) -> Path:
 
 
 def export_json_schema(path: Optional[str | Path] = None) -> Path:
-    """Write the registry JSON Schema to disk (editors, docs, other languages).
+    """Write the registry schema to disk. The extension picks JSON or YAML.
 
     Args:
-        path: Target file. Defaults to ``devices.schema.json`` in the managed
-            schema directory (see `newswitch.config.Paths.schema_dir`).
+        path: Target file. Defaults to ``devices.schema.json`` in the managed schema
+            directory (see `newswitch.config.Paths.schema_dir`).
 
     Returns:
         The path written to.
     """
     target = get_paths().schema_file("devices.schema.json") if path is None else Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    schema = DeviceRegistry.model_json_schema()
-    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    target.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
-    return target
+    return export_schema(
+        DeviceRegistry, target, header="JSON Schema (Draft 2020-12) for a device registry."
+    )
 
 
 def describe(registry: DeviceRegistry) -> str:
@@ -172,7 +194,9 @@ def describe(registry: DeviceRegistry) -> str:
             detail = f"{dev.wavelength_nm:.0f} nm, {dev.max_power_mw:.0f} mW"
         elif dev.type == "filterwheel":
             detail = f"{len(dev.slots)} slots"
-        lines.append(f"  [{dev.type:<11}] {device_key(dev):<22} {detail}")
+        elif dev.type == "unknown":
+            detail = f"unmodelled{f' ({dev.kind})' if dev.kind else ''}"
+        lines.append(f"  [{dev.type:<11}] {dev.key:<22} {detail}")
     return "\n".join(lines)
 
 

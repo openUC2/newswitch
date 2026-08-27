@@ -11,11 +11,12 @@ from typing import Any
 import pytest
 
 from newswitch.schemas import (
-    CameraSchema,
+    CameraDevice,
     ConfigError,
     DeviceRegistry,
     LaserDevice,
     StageDevice,
+    UnknownDevice,
     dump_config,
     load_config,
     load_device,
@@ -42,9 +43,6 @@ def test_single_device_file_is_wrapped(
 ) -> None:
     """A single-device file yields a one-entry registry, not a special case.
 
-    The camera fixture has no `type` key at all — a bare device document is read as
-    a camera, mirroring the default of `CameraSchema.type`.
-
     Args:
         camera_doc: The valid camera document fixture.
         write_config: Helper writing a document into the temporary config dir.
@@ -52,13 +50,41 @@ def test_single_device_file_is_wrapped(
     registry = load_config(write_config(camera_doc, "cam.yaml"))
 
     assert len(registry.devices) == 1
-    assert isinstance(registry.devices[0], CameraSchema)
+    assert isinstance(registry.devices[0], CameraDevice)
     assert registry.version == 1
     assert registry.setup is None
 
 
-def test_single_non_camera_device_needs_its_type(write_config: ConfigWriter) -> None:
-    """Any device other than a camera has to spell out `type:`.
+def test_typeless_single_device_file_becomes_opaque(
+    camera_doc: dict[str, Any], write_config: ConfigWriter
+) -> None:
+    """Without a `type` key there is nothing to dispatch on, so nothing is validated.
+
+    No device model defaults its discriminator, so `DEFAULT_DEVICE_TYPE` applies and
+    the entry is kept as an opaque `UnknownDevice`: its fields survive the round-trip
+    but none of them are checked.
+
+    Args:
+        camera_doc: The valid camera document fixture.
+        write_config: Helper writing a document into the temporary config dir.
+    """
+    typeless = {k: v for k, v in camera_doc.items() if k != "type"}
+    registry = load_config(write_config(typeless, "cam.yaml"))
+
+    device = registry.devices[0]
+    assert isinstance(device, UnknownDevice)
+    assert device.payload["pixelcount"] == {"x": 1920, "y": 1200}
+
+
+def test_a_typo_in_type_is_caught_but_an_omission_is_not(
+    write_config: ConfigWriter,
+) -> None:
+    """The asymmetry that `DEFAULT_DEVICE_TYPE = "unknown"` buys, pinned deliberately.
+
+    A misspelled discriminator is rejected — that is what catches `stagee`. An
+    *omitted* one cannot be told apart from a device this version does not model, so
+    it is accepted as opaque payload instead. Validation is lost silently, which is
+    the price of being able to hold a config written by a newer build.
 
     Args:
         write_config: Helper writing a document into the temporary config dir.
@@ -72,10 +98,12 @@ def test_single_non_camera_device_needs_its_type(write_config: ConfigWriter) -> 
     registry = load_config(write_config(stage_doc, "stage.yaml"))
     assert isinstance(registry.devices[0], StageDevice)
 
-    # Without the discriminator the same document is read as a camera and fails.
+    with pytest.raises(ConfigError, match="unknown type 'stagee'"):
+        load_config(write_config({**stage_doc, "type": "stagee"}, "typo.yaml"))
+
     del stage_doc["type"]
-    with pytest.raises(ConfigError, match="pixelcount"):
-        load_config(write_config(stage_doc, "typeless.yaml"))
+    registry = load_config(write_config(stage_doc, "typeless.yaml"))
+    assert isinstance(registry.devices[0], UnknownDevice)
 
 
 def test_bare_device_list(registry_doc: dict[str, Any], write_config: ConfigWriter) -> None:
@@ -154,7 +182,13 @@ def test_single_device_errors_drop_the_index_prefix(write_config: ConfigWriter) 
         write_config: Helper writing a document into the temporary config dir.
     """
     path = write_config(
-        {"name": "BadCam", "pixelcount": {"x": -5}, "pixelpitch_um": {"x": 3.45}, "colour": "red"},
+        {
+            "type": "camera",
+            "name": "BadCam",
+            "pixelcount": {"x": -5},
+            "pixelpitch_um": {"x": 3.45},
+            "colour": "red",
+        },
         "badcam.yaml",
     )
     with pytest.raises(ConfigError) as excinfo:
@@ -203,7 +237,7 @@ def test_load_device_from_a_single_device_file(
     write_config(camera_doc, "testcam.yaml")
     camera = load_device("testcam")
 
-    assert isinstance(camera, CameraSchema)
+    assert isinstance(camera, CameraDevice)
     assert camera.sensor_size_mm == pytest.approx((19.2, 12.0))
 
 
@@ -334,4 +368,4 @@ def test_dump_config_wraps_a_non_camera_device(
 def test_dump_config_rejects_other_objects() -> None:
     """Handing `dump_config` something that is not a device fails clearly."""
     with pytest.raises(ConfigError, match="cannot store"):
-        dump_config(CameraSchema.model_json_schema(), "nope.yaml")  # type: ignore[arg-type]
+        dump_config(CameraDevice.model_json_schema(), "nope.yaml")  # type: ignore[arg-type]

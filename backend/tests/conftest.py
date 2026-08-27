@@ -112,15 +112,20 @@ def write_config(config_dir: Path) -> ConfigWriter:
 def camera_doc() -> dict[str, Any]:
     """A valid single-camera document, exercising both `Bounded` spellings.
 
+    Carries its own ``type``: no device model defaults the discriminator, so a
+    document without it loads as an opaque `UnknownDevice`. The few tests that
+    exercise that path drop the key themselves.
+
     Returns:
         The document as a plain dict.
     """
     return {
+        "type": "camera",
         "name": "TestCam-2000",
         "manufacturer": "openUC2",
-        "camera_id": "testcam-001",
+        "device_id": "testcam-001",
         "pixelcount": {"x": 1920, "y": 1200},
-        "pixelpitch_um": {"x": 10.0},  # y omitted -> derived
+        "pixelpitch_um": {"x": 10.0},  # y omitted -> see Vector2Float.effective_y
         "channels": 1,
         "exposure_time_ms": {"value": 10.0, "min": 0.024, "max": 10000.0, "increment": 0.001},
         "framerate_per_sec": 30.0,  # scalar shorthand

@@ -1,8 +1,8 @@
 """Reading and writing config documents, independent of any schema.
 
 This is the one place that knows about file formats and about `config.py`'s folder
-layout. Everything above it (`camera_io`, `device_io`, `loader`) works on plain
-Python objects and never touches a parser itself.
+layout. Everything above it (`device_io`, `loader`) works on plain Python objects and
+never touches a parser itself.
 
 YAML and JSON share the code path: both parsers produce plain dicts and lists, and
 validation happens on those. `yaml.safe_load` would in fact read .json too — YAML 1.2
@@ -12,8 +12,8 @@ parsed by a strict JSON parser.
 Paths are resolved through `newswitch.config.get_paths()`, so a bare name like
 ``"Devices.yml"`` finds the file in the managed config directory while an explicit
 path is used as given. This module sits below `errors.ConfigError` and imports
-nothing else from the package, which keeps `loader` importable from `camera_io` and
-`device_io` without a cycle.
+nothing else from the package, so `device_io` and `loader` can both build on it
+without a cycle.
 """
 
 from __future__ import annotations
