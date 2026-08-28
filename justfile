@@ -61,6 +61,18 @@ dev:
     (cd frontend && exec yarn dev) &
     wait
 
+# Isolated stack for Playwright. Vite's test mode skips backend schema codegen so an
+# E2E run cannot dirty the committed generated frontend files.
+dev-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'trap - EXIT; kill 0' EXIT INT TERM
+    rm -f frontend/test-results/e2e-auth.db
+    (cd backend && NEWSWITCH_AUTH_DB=../frontend/test-results/e2e-auth.db exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}}) &
+    just wait-backend
+    (cd frontend && exec yarn dev --mode test) &
+    wait
+
 # ---------- quality ----------
 
 lint:
