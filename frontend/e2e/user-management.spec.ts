@@ -98,12 +98,16 @@ test("the last admin cannot be demoted, disabled, or deleted", async ({
   await expect(roleSelect).toHaveText("admin");
   await roleSelect.click();
   await page.getByRole("option", { name: "operator" }).click();
-  await expect(page.getByText("Cannot remove the last admin")).toBeVisible();
+  await expect(
+    page.getByText("Cannot remove the last admin").last(),
+  ).toBeVisible();
   await expect(roleSelect).toHaveText("admin");
 
   await expect(enabledSwitch).toBeChecked();
   await enabledSwitch.click();
-  await expect(page.getByText("Cannot remove the last admin")).toBeVisible();
+  await expect(
+    page.getByText("Cannot remove the last admin").last(),
+  ).toBeVisible();
   await expect(enabledSwitch).toBeChecked();
 
   await expect(
