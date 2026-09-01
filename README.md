@@ -61,6 +61,38 @@ Because the generator falls back silently, committed hooks can quietly diverge f
 result differs from what's committed. If it fails, run `just dev-backend`, then `cd frontend && yarn build`,
 and commit the regenerated output.
 
+### End-to-end tests with Playwright
+
+The browser-based end-to-end tests cover authentication and user-management workflows. They run
+against an isolated local backend/frontend stack and a disposable authentication database; no
+manually started development server is required.
+
+Install the Chromium browser once after installing the project dependencies:
+
+```bash
+cd frontend
+yarn playwright install chromium
+```
+
+Run the tests from `frontend/`:
+
+```bash
+yarn e2e          # headless test run
+yarn e2e:ui       # interactive Playwright UI
+yarn e2e:headed   # run with a visible browser
+yarn e2e:debug    # step through tests with the Playwright Inspector
+yarn e2e:report   # open the HTML report from the latest run
+```
+
+Tests live in `frontend/e2e/`, with shared helpers in `frontend/e2e/fixtures/`. Failed tests retain
+screenshots, traces, and videos in `frontend/test-results/`; the HTML report is written to
+`frontend/playwright-report/`. The CI workflow runs the same suite for backend or frontend changes
+and uploads these diagnostics as an artifact when a run fails.
+
+The E2E suite currently uses one shared disposable authentication database, so Playwright is
+configured for a single worker and serial execution. See `frontend/playwright.config.ts` for the
+complete runtime configuration.
+
 ### Commits
 
 Commit messages must be [conventional](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `chore:`,
@@ -195,5 +227,4 @@ just release-dry
 
 A full local dry run also needs a `GITHUB_TOKEN` in the environment (the GitHub plugin verifies auth even
 in `--dry-run`). In CI, both the URL and the token come from the Actions checkout automatically.
-
 
