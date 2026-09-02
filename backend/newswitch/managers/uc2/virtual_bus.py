@@ -33,6 +33,8 @@ class VirtualUC2BusConfig:
     update_interval_s: float = 0.05  # position telemetry period during moves
     laser_channels: int = 3
     galvo_range: int = 4095  # 12-bit DAC
+    objective_slots: int = 2
+    fake_nodes: Optional[list[int]] = None  # None -> [11, 12, 13, 20, 21]
 
 
 class VirtualUC2Bus:
@@ -49,6 +51,7 @@ class VirtualUC2Bus:
         self._lasers: dict[int, int] = {}
         self._galvo_xy: tuple[int, int] = (0, 0)
         self._galvo_scanning = False
+        self._objective_slot = 1
         self._stop_flags: dict[str, asyncio.Event] = {axis: asyncio.Event() for axis in STAGE_AXES}
 
     # -- lifecycle -------------------------------------------------------------
@@ -108,6 +111,32 @@ class VirtualUC2Bus:
     async def aget_position(self, axis: str) -> float:
         """Return the simulated axis position."""
         return self._positions[axis]
+
+    # -- bus / fleet -------------------------------------------------------------
+
+    async def ascan_nodes(self, timeout: float = 3.0) -> list[int]:
+        """Return the configured fake node list and mirror it into state."""
+        nodes = (
+            self.config.fake_nodes if self.config.fake_nodes is not None else [11, 12, 13, 20, 21]
+        )
+        self.state.nodes_online = sorted(nodes)
+        return sorted(nodes)
+
+    # -- objective changer -------------------------------------------------------
+
+    async def aobjective_move(self, slot: int) -> None:
+        """Store the simulated objective slot after a short travel delay."""
+        await asyncio.sleep(self.config.update_interval_s)
+        self._objective_slot = slot
+
+    async def aobjective_home(self) -> None:
+        """Home the simulated objective changer to slot 1."""
+        await asyncio.sleep(self.config.update_interval_s)
+        self._objective_slot = 1
+
+    async def aobjective_status(self) -> dict[str, Any]:
+        """Return the simulated objective status."""
+        return {"slot": self._objective_slot, "homed": True}
 
     # -- illumination ---------------------------------------------------------------
 

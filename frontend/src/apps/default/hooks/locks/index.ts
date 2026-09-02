@@ -2,6 +2,7 @@ import type { LockDefinition } from '@/lib/rekuest/locks';
 import { CameraParametersDefinition } from './CameraParameters';
 import { ExpanseStateDefinition } from './ExpanseState';
 import { FilterBankDefinition } from './FilterBank';
+import { GalvoDefinition } from './Galvo';
 import { HookRegistryDefinition } from './HookRegistry';
 import { IlluminationDefinition } from './Illumination';
 import { IoDefinition } from './Io';
@@ -14,6 +15,7 @@ export {
 } from './CameraParameters';
 export { ExpanseStateDefinition, useExpanseStateLock } from './ExpanseState';
 export { FilterBankDefinition, useFilterBankLock } from './FilterBank';
+export { GalvoDefinition, useGalvoLock } from './Galvo';
 export { HookRegistryDefinition, useHookRegistryLock } from './HookRegistry';
 export { IlluminationDefinition, useIlluminationLock } from './Illumination';
 export { IoDefinition, useIoLock } from './Io';
@@ -24,6 +26,7 @@ export const globalLockDefinition = {
   CameraParameters: CameraParametersDefinition,
   ExpanseState: ExpanseStateDefinition,
   FilterBank: FilterBankDefinition,
+  Galvo: GalvoDefinition,
   HookRegistry: HookRegistryDefinition,
   Illumination: IlluminationDefinition,
   Io: IoDefinition,

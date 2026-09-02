@@ -40,8 +40,18 @@ from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.managers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.managers.uc2.dispatch import dispatch_uc2_events
+from newswitch.managers.uc2.objective_manager import UC2ObjectiveConfig, UC2ObjectiveManager
+from newswitch.managers.uc2.filter_bank_manager import (
+    UC2FilterBankConfig,
+    UC2FilterBankManager,
+)
+from newswitch.protocols.autofocus import AutofocusState
+from newswitch.protocols.filter_bank import Filter as OpticalFilter
 from newswitch.protocols.illumination import Illumination
+from newswitch.protocols.objective import ObjectiveLens
 from newswitch.protocols.uc2 import UC2BusManager, UC2State
+from newswitch.registers import uc2 as uc2_registers  # noqa: F401  (registration side effects)
+from newswitch.routines import autofocus as autofocus_routine  # noqa: F401  (registration)
 from newswitch.managers.expanse_manager import ExpanseManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.protocols import (
@@ -98,18 +108,18 @@ class ImswitchConfig(BaseModel):
 
     server: str = "localhost"
     port: int = 8001
-    use_virtual_microscope: bool = True
+    use_virtual_microscope: bool = False
     db_path: str = "agent_data.db"
     available_cubes: list[str] = ["cube1", "cube2", "cube3"]
     # UC2 hardware transport (used when use_virtual_microscope is False).
     # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
     # over serial JSON). Both are plug-in replacements behind UC2BusManager.
-    uc2_transport: str = "canopen"
+    uc2_transport: str = "rest"  # "canopen"
     uc2_can_interface: Optional[str] = None  # "socketcan" | "waveshare" | None (auto)
     uc2_can_channel: Optional[str] = "can0"
     uc2_can_port: Optional[str] = None  # Waveshare USB-CAN-A serial port
     uc2_serial_port: Optional[str] = None  # None = autodetect
-    uc2_baudrate: int = 115200
+    uc2_baudrate: int = 962100
     # Detailed per-component overrides, keyed like the corresponding config
     # dataclasses (UC2CanBusConfig / UC2RestBusConfig / UC2StageConfig /
     # UC2IlluminationConfig). Nested values win over the flat fields above.
@@ -118,6 +128,8 @@ class ImswitchConfig(BaseModel):
     uc2_rest: dict[str, Any] = {}
     uc2_stage: dict[str, Any] = {}
     uc2_illumination: dict[str, Any] = {}
+    uc2_objective: dict[str, Any] = {}
+    uc2_filter_bank: dict[str, Any] = {}
 
 
 # ====================
@@ -155,6 +167,7 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
     protocols.MetadataManager,
     protocols.AcquistionManager,
     protocols.CacheManager,
+    AutofocusState,
 ]:
     """
     Startup function that initializes all microscope managers and states.
@@ -227,8 +240,32 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
             illumination_state=illumination_state, bus=uc2_bus, config=illumination_config
         )
 
-    objective = VirtualObjectiveManager(objective_state=objective_state)
-    filter_bank = VirtualFilterBankManager(filter_bank_state=filter_bank_state)
+    # Objective + filter wheel: real bus-backed managers on hardware, virtual in sim.
+    if config.use_virtual_microscope:
+        objective: ObjectiveManager = VirtualObjectiveManager(objective_state=objective_state)
+        filter_bank: FilterBankManager = VirtualFilterBankManager(
+            filter_bank_state=filter_bank_state
+        )
+    else:
+        objective_kwargs = dict(config.uc2_objective)
+        if "lenses" in objective_kwargs:
+            objective_kwargs["lenses"] = [
+                ObjectiveLens(**lens) for lens in objective_kwargs["lenses"]
+            ]
+        objective = UC2ObjectiveManager(
+            objective_state=objective_state,
+            bus=uc2_bus,
+            config=UC2ObjectiveConfig(**objective_kwargs) if objective_kwargs else None,
+        )
+        filter_kwargs = dict(config.uc2_filter_bank)
+        if "filters" in filter_kwargs:
+            filter_kwargs["filters"] = [OpticalFilter(**item) for item in filter_kwargs["filters"]]
+        filter_bank = UC2FilterBankManager(
+            filter_bank_state=filter_bank_state,
+            bus=uc2_bus,
+            config=UC2FilterBankConfig(**filter_kwargs) if filter_kwargs else None,
+        )
+
     detector = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
@@ -289,6 +326,8 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
 
     cache_manager = LocalCacheManager()
 
+    autofocus_state = AutofocusState()
+
     acquistion_manager = AcquistionManager(
         expanse_manager=expanse_manager,
         detector_manager=detector,
@@ -324,6 +363,7 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
         metadata_manager,
         acquistion_manager,
         cache_manager,
+        autofocus_state,
     )
 
 
@@ -737,7 +777,7 @@ def create_app(config: ImswitchConfig) -> FastAPI:
     """Create and configure the FastAPI application."""
 
     app = FastAPI(
-        title="Virtual Microscope API",
+        title="Virtual Microscope API",  # TODO: should we load this from config?
         description="Integrated virtual microscope controller with protocol-based managers based on rekuest-next",
         version="2.0.0",
     )

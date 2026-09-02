@@ -161,6 +161,26 @@ class UC2BusManager(BackgroundManager, Protocol):
         """Read the current position of one axis."""
         ...
 
+    # -- bus / fleet -----------------------------------------------------------
+
+    async def ascan_nodes(self, timeout: float = 3.0) -> list[int]:
+        """Discover reachable bus nodes (CAN node ids / firmware CAN scan)."""
+        ...
+
+    # -- objective changer -----------------------------------------------------
+
+    async def aobjective_move(self, slot: int) -> None:
+        """Move the objective changer to a slot (1-based) and wait."""
+        ...
+
+    async def aobjective_home(self) -> None:
+        """Home the objective changer and wait."""
+        ...
+
+    async def aobjective_status(self) -> dict[str, Any]:
+        """Read the objective changer status (current slot, homed, ...)."""
+        ...
+
     # -- illumination (raw PWM counts) ----------------------------------------
 
     async def aset_laser(self, channel: int, value: int) -> None:

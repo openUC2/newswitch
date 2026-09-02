@@ -1,23 +1,20 @@
-"""Example software autofocus hook, sweeping z and stopping at the best focus metric."""
+"""Software autofocus hook: refocus using the shared autofocus sweep core."""
 
 from newswitch import protocols
+from newswitch.routines.autofocus import autofocus_sweep
 
-
-def fake_metric() -> float:
-    """Fake metric function for autofocus."""
-    import random
-
-    return random.random()
+DEFAULT_Z_RANGE = 20.0  # micrometers, centered on the current Z
+DEFAULT_STEPS = 11
 
 
 def software_autofocus_hook(hook: protocols.Hook, context: protocols.HookContext) -> None:
-    """Example hook implementation for software autofocus."""
-    # Simple autofocus routine: move z up and down by a small amount
-
-    for step in range(-5, 6):
-        context.stage_manager.move(z=step * 0.1, is_absolute=False)
-        metric_value = fake_metric()  # Replace with actual focus metric calculation
-        print(f"Autofocus step {step}: metric={metric_value:.4f}")
-        if metric_value > 0.8:  # Arbitrary threshold for "good focus"
-            print("Focus achieved!")
-            break
+    """Hook implementation: sweep Z around the current position, park at best focus."""
+    stage = context.stage_manager
+    z_center = stage.state.z
+    z_positions = [
+        z_center - DEFAULT_Z_RANGE / 2 + index * DEFAULT_Z_RANGE / (DEFAULT_STEPS - 1)
+        for index in range(DEFAULT_STEPS)
+    ]
+    best_z, metrics = autofocus_sweep(stage, context.detector_manager, z_positions)
+    stage.move(z=best_z, is_absolute=True)
+    print(f"Autofocus hook: best z={best_z:.2f} (metric {max(metrics):.1f})")

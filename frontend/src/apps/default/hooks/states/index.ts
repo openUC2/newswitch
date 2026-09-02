@@ -1,4 +1,5 @@
 import type { StateDefinition } from '@/lib/rekuest/state';
+import { AutofocusStateDefinition } from './AutofocusState';
 import { CalibrationStateDefinition } from './CalibrationState';
 import { CameraStateDefinition } from './CameraState';
 import { ExpanseStateDefinition } from './ExpanseState';
@@ -12,6 +13,12 @@ import { StageStateDefinition } from './StageState';
 import { UC2StateDefinition } from './UC2State';
 
 export { createIndexedUnion } from './utils';
+export {
+  AutofocusStateSchema,
+  AutofocusStateDefinition,
+  useAutofocusState,
+} from './AutofocusState';
+export type { AutofocusState } from './AutofocusState';
 export {
   CalibratedLightPathSchema,
   CalibrationStateSchema,
@@ -175,6 +182,7 @@ export { UC2StateSchema, UC2StateDefinition, useUC2State } from './UC2State';
 export type { UC2State } from './UC2State';
 
 export const globalStateDefinition = {
+  AutofocusState: AutofocusStateDefinition,
   CalibrationState: CalibrationStateDefinition,
   CameraState: CameraStateDefinition,
   ExpanseState: ExpanseStateDefinition,

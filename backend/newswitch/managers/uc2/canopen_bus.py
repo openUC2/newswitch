@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from rekuest_next import model
@@ -55,6 +55,12 @@ class UC2CanBusConfig:
     node_led: int = 20
     node_laser: int = 21
     node_galvo: int = 30
+    # Sub-axis index on the node (0-based) for boards driving several motors.
+    # With one motor board per axis (default node map) these stay 0.
+    sub_x: int = 0
+    sub_y: int = 0
+    sub_z: int = 0
+    sub_a: int = 0
     # Steps per micrometer (per degree for axis A). Must match the mechanics.
     steps_per_um_x: float = 1.0
     steps_per_um_y: float = 1.0
@@ -65,6 +71,14 @@ class UC2CanBusConfig:
     home_direction: int = -1
     home_timeout_ms: int = 20000
     move_timeout_s: float = 120.0
+    reconnect_backoff_initial_s: float = 1.0
+    reconnect_backoff_max_s: float = 30.0
+    # Objective changer, realized as a motor node driving between calibrated
+    # slot positions (steps). Index 0 = slot 1, index 1 = slot 2, ...
+    objective_node: int = 15
+    objective_sub: int = 0
+    objective_slot_positions_steps: list[int] = field(default_factory=lambda: [0, 20000])
+    objective_speed_steps: int = 20000
 
 
 class UC2CanBus:
@@ -79,6 +93,7 @@ class UC2CanBus:
         self._broker = UC2EventBroker()
         self._client: Optional["AsyncUC2Client"] = None
         self._connected = asyncio.Event()
+        self._objective_slot = 1
 
     # -- mapping helpers ---------------------------------------------------------
 
@@ -92,10 +107,20 @@ class UC2CanBus:
         }
         return nodes[axis.upper()]
 
-    def axis_for_node(self, node_id: int) -> Optional[str]:
-        """Return the stage axis served by a CAN node id, if any."""
+    def sub_for_axis(self, axis: str) -> int:
+        """Return the sub-axis index of a stage axis on its node."""
+        subs = {
+            "X": self.config.sub_x,
+            "Y": self.config.sub_y,
+            "Z": self.config.sub_z,
+            "A": self.config.sub_a,
+        }
+        return subs[axis.upper()]
+
+    def axis_for_node(self, node_id: int, sub: int = 0) -> Optional[str]:
+        """Return the stage axis served by a CAN (node id, sub-axis), if any."""
         for axis in ("X", "Y", "Z", "A"):
-            if self.node_for_axis(axis) == node_id:
+            if self.node_for_axis(axis) == node_id and self.sub_for_axis(axis) == sub:
                 return axis
         return None
 
@@ -120,7 +145,30 @@ class UC2CanBus:
     # -- lifecycle ------------------------------------------------------------------
 
     async def abackground(self) -> None:
-        """Connect to the CAN bus and pump hardware events until cancelled."""
+        """Keep the CAN link alive: connect, pump events, reconnect with backoff.
+
+        Transport errors never kill the agent — they surface as `BusError`
+        events + `UC2State.last_error`, and the link is retried with
+        exponential backoff (capped) until the task is cancelled.
+        """
+        backoff = self.config.reconnect_backoff_initial_s
+        while True:
+            try:
+                await self._connect_and_pump()
+                backoff = (
+                    self.config.reconnect_backoff_initial_s
+                )  # normal exit (never happens today, pump is endless)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.state.last_error = str(exc)
+                self._broker.publish(BusError(message=str(exc)))
+                logger.warning("UC2 CAN bus error: %s — reconnecting in %.0f s", exc, backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, self.config.reconnect_backoff_max_s)
+
+    async def _connect_and_pump(self) -> None:
+        """One connection lifetime: open the bus, translate events until failure."""
         try:
             from uc2canopen.aio import (
                 AsyncUC2Client,
@@ -152,19 +200,19 @@ class UC2CanBus:
         try:
             async for event in client.events():
                 if isinstance(event, MotorUpdateEvent):
-                    axis = self.axis_for_node(event.node_id)
+                    axis = self.axis_for_node(event.node_id, event.axis)
                     if axis is not None:
                         self._broker.publish(
                             PositionUpdate(axis=axis, position=self.to_units(axis, event.position))
                         )
                 elif isinstance(event, MotorDoneEvent):
-                    axis = self.axis_for_node(event.node_id)
+                    axis = self.axis_for_node(event.node_id, event.axis)
                     if axis is not None:
                         self._broker.publish(
                             MotionDone(axis=axis, position=self.to_units(axis, event.position))
                         )
                 elif isinstance(event, HomingChangedEvent):
-                    axis = self.axis_for_node(event.node_id)
+                    axis = self.axis_for_node(event.node_id, event.axis)
                     if axis is not None:
                         self._broker.publish(HomingChanged(axis=axis, status=event.status))
                 elif isinstance(event, HeartbeatEvent):
@@ -173,18 +221,22 @@ class UC2CanBus:
                             set(self.state.nodes_online) | {event.node_id}
                         )
                     self._broker.publish(NodeSeen(node_id=event.node_id, nmt_state=event.nmt_state))
-        except Exception as exc:
-            self.state.last_error = str(exc)
-            self._broker.publish(BusError(message=str(exc)))
-            raise
         finally:
             self.state.connected = False
             self._connected.clear()
+            self._client = None
             await client.aclose()
 
     async def _require_client(self, timeout: float = 30.0) -> "AsyncUC2Client":
         """Wait for the background connection and return the async client."""
-        await asyncio.wait_for(self._connected.wait(), timeout=timeout)
+        try:
+            await asyncio.wait_for(self._connected.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                "UC2 CAN bus is not connected — the background task is not "
+                "running, or the CAN adapter/hardware is unreachable "
+                f"(last error: {self.state.last_error or 'none'})."
+            ) from None
         assert self._client is not None
         return self._client
 
@@ -202,7 +254,7 @@ class UC2CanBus:
         client = await self._require_client()
         speed_steps = int(abs((speed or self.config.default_speed) * self.scale_for_axis(axis)))
         final_steps = await client.move_and_wait(
-            axis=0,
+            axis=self.sub_for_axis(axis),
             position=self.to_steps(axis, target),
             speed=max(speed_steps, 1),
             acceleration=int(acceleration or 0),
@@ -215,13 +267,13 @@ class UC2CanBus:
     async def astop_axis(self, axis: str) -> None:
         """Stop one axis via the motor command word."""
         client = await self._require_client()
-        await client.stop(axis=0, node_id=self.node_for_axis(axis))
+        await client.stop(axis=self.sub_for_axis(axis), node_id=self.node_for_axis(axis))
 
     async def ahome_axis(self, axis: str) -> None:
         """Home one axis and wait for the homing-done status."""
         client = await self._require_client()
         homed = await client.home_and_wait(
-            axis=0,
+            axis=self.sub_for_axis(axis),
             speed=self.config.home_speed_steps,
             direction=self.config.home_direction,
             timeout_ms=self.config.home_timeout_ms,
@@ -234,8 +286,60 @@ class UC2CanBus:
     async def aget_position(self, axis: str) -> float:
         """Read one axis position (TPDO cache preferred)."""
         client = await self._require_client()
-        steps = await client.get_position(axis=0, node_id=self.node_for_axis(axis))
+        steps = await client.get_position(
+            axis=self.sub_for_axis(axis), node_id=self.node_for_axis(axis)
+        )
         return self.to_units(axis, steps)
+
+    # -- bus / fleet --------------------------------------------------------------
+
+    async def ascan_nodes(self, timeout: float = 3.0) -> list[int]:
+        """Passively scan for online CAN nodes and mirror them into state."""
+        client = await self._require_client()
+        nodes = await client.scan_nodes(timeout=timeout)
+        self.state.nodes_online = sorted(set(self.state.nodes_online) | set(nodes))
+        return sorted(nodes)
+
+    # -- objective changer ---------------------------------------------------------
+
+    async def aobjective_move(self, slot: int) -> None:
+        """Drive the objective motor node to the calibrated slot position."""
+        positions = self.config.objective_slot_positions_steps
+        if not 1 <= slot <= len(positions):
+            raise ValueError(f"Objective slot {slot} out of range 1..{len(positions)}")
+        client = await self._require_client()
+        await client.move_and_wait(
+            axis=self.config.objective_sub,
+            position=positions[slot - 1],
+            speed=self.config.objective_speed_steps,
+            is_absolute=True,
+            node_id=self.config.objective_node,
+            timeout=self.config.move_timeout_s,
+        )
+        self._objective_slot = slot
+
+    async def aobjective_home(self) -> None:
+        """Home the objective motor node."""
+        client = await self._require_client()
+        homed = await client.home_and_wait(
+            axis=self.config.objective_sub,
+            speed=self.config.home_speed_steps,
+            direction=self.config.home_direction,
+            timeout_ms=self.config.home_timeout_ms,
+            node_id=self.config.objective_node,
+            timeout=self.config.home_timeout_ms / 1000.0 + 10.0,
+        )
+        if not homed:
+            raise RuntimeError("Homing the objective changer failed or timed out")
+        self._objective_slot = 1
+
+    async def aobjective_status(self) -> dict[str, Any]:
+        """Return the last commanded objective slot and node position."""
+        client = await self._require_client()
+        position = await client.get_position(
+            axis=self.config.objective_sub, node_id=self.config.objective_node
+        )
+        return {"slot": self._objective_slot, "position_steps": position}
 
     # -- illumination -----------------------------------------------------------------
 
