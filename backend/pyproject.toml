@@ -6,7 +6,7 @@ readme-content-type = "text/markdown"
 homepage = "https://arkitekt.live"
 description = "A better openuc2 backend"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
-requires-python = ">=3.11, <4.0"
+requires-python = ">=3.11, <3.13"
 license = "GPL-3.0-or-later"
 dependencies = [
     "aiosqlite>=0.22.1",
