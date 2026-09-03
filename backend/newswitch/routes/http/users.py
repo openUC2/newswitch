@@ -87,8 +87,7 @@ def get_user_store(request: Request) -> UserStore:
     """The `UserStore` behind the app's authenticator.
 
     User management only makes sense against the real account store - apps running
-    with `CredentialAuthenticator`/`AllowAllAuthenticator` (tests, the legacy single
-    account) have no accounts to manage.
+    with `AllowAllAuthenticator` (tests) have no accounts to manage.
     """
     authenticator = request.app.state.authenticator
     if not isinstance(authenticator, UserStoreAuthenticator):

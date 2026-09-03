@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from newswitch.app import ImswitchConfig, create_app
-from newswitch.auth import CredentialAuthenticator, Credentials, UserStoreAuthenticator
+from newswitch.auth import AllowAllAuthenticator, UserStoreAuthenticator
 from newswitch.users import Role, UserStore
 
 
@@ -286,15 +286,12 @@ def test_non_admin_cannot_read_the_audit_log(client: TestClient, store: UserStor
     assert client.get("/auth/audit", headers=alice_headers(store)).status_code == 403
 
 
-# --------------------------------------------------------------- legacy authenticator
+# --------------------------------------------------------------- non-user-store authenticator
 
 
-def test_user_management_is_unavailable_without_a_user_store(tmp_path: Path) -> None:
-    """`CredentialAuthenticator`'s single YAML account has no store to manage."""
-    credentials = Credentials(username="a", password="b")
-    legacy_app = create_app(ImswitchConfig(), authenticator=CredentialAuthenticator(credentials))
-    with TestClient(legacy_app) as legacy_client:
-        response = legacy_client.get(
-            "/auth/users", headers={"Authorization": f"Bearer {credentials.token}"}
-        )
+def test_user_management_is_unavailable_without_a_user_store() -> None:
+    """An authenticator with no accounts (e.g. tests' `AllowAllAuthenticator`) has no store to manage."""
+    app = create_app(ImswitchConfig(), authenticator=AllowAllAuthenticator())
+    with TestClient(app) as legacy_client:
+        response = legacy_client.get("/auth/users", headers={"Authorization": "Bearer test-token"})
     assert response.status_code == 404

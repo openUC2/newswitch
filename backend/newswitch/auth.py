@@ -1,15 +1,12 @@
 """Authentication for the newswitch backend.
 
-Two authenticators exist side by side, both behind the same `Authenticator` protocol:
-
-- `CredentialAuthenticator` checks the single account in `auth.yaml` and issues one
-  deterministic token (`sha256("username:password")`) - no database, no session
-  store, still used directly by tests that want a fixed, predictable token.
-- `UserStoreAuthenticator` (the default `create_app` wires up) checks a real user
-  table in `newswitch.users.UserStore` - several accounts, each with a role - and
-  issues a random, revocable session token per login. On first run, with no accounts
-  yet, it seeds one admin account from `auth.yaml` (or the `admin`/`admin` default),
-  so a fresh clone still runs without setup.
+`UserStoreAuthenticator` (the default `create_app` wires up) checks a real user table
+in `newswitch.users.UserStore` - several accounts, each with a role - and issues a
+random, revocable session token per login. On first run, with no accounts yet, it
+seeds one admin account from `auth.yaml` (or the `admin`/`admin` default), so a fresh
+clone still runs without setup. `AllowAllAuthenticator` is a second, no-op
+implementation used by tests that drive the app in-process without exercising the
+login gate at all.
 
 A client exchanges credentials once at `POST /auth/login` (HTTP Basic) for a token,
 then presents the token on every later call, and can give it back at `POST /auth/logout`.
@@ -27,10 +24,8 @@ headers on some of them:
 from __future__ import annotations
 
 import base64
-import hashlib
 import logging
 import os
-import secrets
 from pathlib import Path
 from typing import Any, Callable, Protocol
 from urllib.parse import parse_qs
@@ -88,12 +83,6 @@ class Credentials(BaseModel):
         if isinstance(value, (int, float, bool)):
             return str(value)
         return value
-
-    @property
-    def token(self) -> str:
-        """The opaque token issued for these credentials."""
-        digest = hashlib.sha256(f"{self.username}:{self.password}".encode()).hexdigest()
-        return digest
 
 
 def load_credentials(path: str | os.PathLike[str] | None = None) -> Credentials:
@@ -158,39 +147,6 @@ class Authenticator(Protocol):
         ...
 
 
-class CredentialAuthenticator:
-    """Checks credentials against a single `Credentials` pair."""
-
-    def __init__(self, credentials: Credentials) -> None:
-        """Accept exactly the given username/password pair."""
-        self.credentials = credentials
-        self._token = credentials.token
-
-    def check_token(self, token: str | None) -> bool:
-        """Return whether `token` matches the issued token."""
-        if not token:
-            return False
-        return secrets.compare_digest(token, self._token)
-
-    def login(self, authorization_header: str | None) -> str:
-        """Validate an `Authorization: Basic ...` header and issue the token."""
-        username, password = _parse_basic_header(authorization_header)
-        # Both halves are always compared, so a wrong username and a wrong password
-        # take the same path.
-        username_ok = secrets.compare_digest(username, self.credentials.username)
-        password_ok = secrets.compare_digest(password, self.credentials.password)
-        if not (username_ok & password_ok):
-            raise AuthenticationError("Invalid username or password")
-        return self._token
-
-    def username_for_token(self, token: str | None) -> str | None:
-        """Return the one account's username, if `token` is its token."""
-        return self.credentials.username if self.check_token(token) else None
-
-    def logout(self, token: str | None) -> None:
-        """No-op: the one deterministic token stays valid until the password changes."""
-
-
 class AllowAllAuthenticator:
     """Accepts everything. For tests, which drive the app in-process."""
 
@@ -213,9 +169,9 @@ class AllowAllAuthenticator:
 class UserStoreAuthenticator:
     """Checks credentials and tokens against a `UserStore` of several accounts.
 
-    Unlike `CredentialAuthenticator`'s single deterministic token, `login` mints a
-    random session row per login, so `logout` can revoke exactly one session without
-    logging out every other account - or every other tab of the same account.
+    `login` mints a random session row per login, so `logout` can revoke exactly one
+    session without logging out every other account - or every other tab of the same
+    account.
     """
 
     def __init__(self, store: UserStore) -> None:
@@ -254,7 +210,7 @@ def default_authenticator() -> UserStoreAuthenticator:
 
     An empty store means a fresh deployment, so it is seeded with one admin account
     from the legacy `auth.yaml` (or the `admin`/`admin` default) - the same zero-setup
-    behaviour `CredentialAuthenticator` used to provide on its own.
+    behaviour a single hardcoded account used to provide before this store existed.
     """
     store = UserStore()
     if store.is_empty():

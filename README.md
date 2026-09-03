@@ -52,6 +52,10 @@ just drift-check             # is the committed codegen still in sync with the b
 
 just build                   # frontend bundle + backend wheel/sdist
 just clean                   # nuke .venv, node_modules, dist
+
+just list-users               # list every account and its role (run on the appliance)
+just reset-password user pw   # recovery: set a new password for an existing account
+just create-admin user pw     # recovery: create a fresh admin account
 ```
 
 ### Codegen drift
@@ -115,28 +119,39 @@ serves nothing until startup completes, a healthy backend is also one whose sche
 
 ## Authentication
 
-The app sits behind a login. Credentials live in one small file:
+The app sits behind a login backed by a small multi-user account store — several accounts, each with
+one role (`admin`/`operator`/`viewer`/`analyst`). Accounts and sessions live in a SQLite file,
+`backend/auth.db`, gitignored and created automatically on first run. See
+[backend/docs/AUTH_DESIGN.md](backend/docs/AUTH_DESIGN.md) for the full design note (seeding, roles,
+sessions, audit trail).
+
+On a completely fresh clone, with no accounts yet, the backend seeds one `admin` account from the
+legacy single-account file if present:
 
 ```bash
-cp backend/auth.example.yaml backend/auth.yaml   # then edit the password
+cp backend/auth.example.yaml backend/auth.yaml   # optional, then edit the password
 ```
 
-```yaml
-username: admin
-password: change-me
+With no `auth.yaml` and no `NEWSWITCH_AUTH_FILE` it seeds `admin`/`admin` and logs a warning, so a fresh
+clone runs without setup — change that password once logged in. This seed only ever runs once, the
+first time the account store is empty; `auth.yaml` is irrelevant again afterwards.
+
+Once accounts exist, admins manage them from the UI (Account menu → Manage users) or the admin HTTP
+API (`/auth/users`). For dev/debug work or a locked-out appliance where the web UI is unreachable, use
+the recovery CLI (SSH or local shell only — it talks to the database directly, bypassing HTTP auth):
+
+```bash
+just list-users                       # every account and its role
+just reset-password alice new-pass    # forgotten password: set a new one, revokes its sessions
+just create-admin rescue rescue-pass  # every admin locked out: create a fresh one
 ```
-
-`backend/auth.yaml` is gitignored. Point elsewhere with `NEWSWITCH_AUTH_FILE=/etc/newswitch/auth.yaml` -
-and note that when that variable is set the file **must** exist: the backend refuses to start rather
-than fall back. With no file and no variable it falls back to `admin`/`admin` and logs a warning, so a
-fresh clone runs without setup. Don't expose that.
-
-There is one account. Editing the file invalidates every issued token, which is how you log everyone out.
 
 ### How it works
 
-`POST /auth/login` takes HTTP Basic and returns a token - `sha256("username:password")`, so there is no
-session store and a restart doesn't log anyone out. The frontend keeps it in `localStorage` until logout.
+`POST /auth/login` takes HTTP Basic, checks the password (argon2) against `backend/auth.db`, and returns
+a random, revocable session token — unlike the legacy single-account token, a restart does *not* log
+everyone out, but `POST /auth/logout` (or a password change) revokes just that one session. The
+frontend keeps the token in `localStorage` until logout.
 
 The token then has to reach the backend over transports that carry credentials differently, because a
 browser will only let you set headers on some of them:
@@ -146,9 +161,6 @@ browser will only let you set headers on some of them:
 | `fetch` calls | `Authorization: Bearer <token>` |
 | Websockets (`/ws`, `/stream/*`) | the first message after connect - a `WebSocket` cannot set headers |
 | Images and zarr chunks | `?token=` - three.js' `TextureLoader` and zarrita cannot set headers either |
-
-That last row is why the token is a one-way hash rather than the password: it ends up in URLs, and
-therefore in access logs.
 
 `/health`, `/auth/login` and `/schemas/*` stay public. `/schemas/*` has to be - the frontend's codegen
 reads it at build time, before anyone could have logged in - and it exposes only the shape of the API,

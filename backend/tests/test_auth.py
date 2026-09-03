@@ -20,7 +20,6 @@ from newswitch.app import ImswitchConfig, create_app
 from newswitch.auth import (
     AUTH_FILE_ENV_VAR,
     AuthenticationError,
-    CredentialAuthenticator,
     Credentials,
     UserStoreAuthenticator,
     default_authenticator,
@@ -30,15 +29,22 @@ from newswitch.users import Role, UserStore
 
 USERNAME = "operator"
 PASSWORD = "hunter2"
-CREDENTIALS = Credentials(username=USERNAME, password=PASSWORD)
 
 
 @pytest.fixture
-def authed_app() -> FastAPI:
-    """The app with real credentials, so the gate is actually exercised."""
+def store(tmp_path: Path) -> UserStore:
+    """A store with one account, ready to log in."""
+    store = UserStore(tmp_path / "auth.db")
+    store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
+    return store
+
+
+@pytest.fixture
+def authed_app(store: UserStore) -> FastAPI:
+    """The app with a real account store, so the gate is actually exercised."""
     return create_app(
         ImswitchConfig(),
-        authenticator=CredentialAuthenticator(CREDENTIALS),
+        authenticator=UserStoreAuthenticator(store),
     )
 
 
@@ -47,6 +53,13 @@ def client(authed_app: FastAPI) -> Iterator[TestClient]:
     """A client that never sends credentials unless a test asks it to."""
     with TestClient(authed_app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def token(client: TestClient) -> str:
+    """A live session token for the seeded account."""
+    response = client.post("/auth/login", headers=basic_header())
+    return response.json()["token"]
 
 
 def basic_header(username: str = USERNAME, password: str = PASSWORD) -> dict[str, str]:
@@ -123,13 +136,6 @@ def test_empty_password_refuses_to_start(tmp_path: Path) -> None:
         load_credentials(auth_file)
 
 
-def test_token_is_stable_and_hides_the_password() -> None:
-    """Deterministic so it needs no server state; one-way so it can sit in a URL."""
-    assert CREDENTIALS.token == Credentials(username=USERNAME, password=PASSWORD).token
-    assert PASSWORD not in CREDENTIALS.token
-    assert Credentials(username=USERNAME, password="other").token != CREDENTIALS.token
-
-
 # -------------------------------------------------------------------------- login
 
 
@@ -137,7 +143,7 @@ def test_login_returns_a_token(client: TestClient) -> None:
     """A correct login issues the token every later call uses."""
     response = client.post("/auth/login", headers=basic_header())
     assert response.status_code == 200
-    assert response.json()["token"] == CREDENTIALS.token
+    assert response.json()["token"]
 
 
 def test_login_rejects_a_wrong_password(client: TestClient) -> None:
@@ -170,17 +176,8 @@ def test_malformed_basic_header_is_rejected(client: TestClient) -> None:
 # ------------------------------------------------------------------------- logout
 
 
-def test_logout_with_a_deterministic_token_is_a_no_op(client: TestClient) -> None:
-    """`CredentialAuthenticator` has nothing to revoke: the token still works."""
-    response = client.post("/auth/logout", headers={"Authorization": f"Bearer {CREDENTIALS.token}"})
-    assert response.status_code == 204
-    assert client.get("/health").status_code == 200  # sanity: app still up
-    still_works = client.get("/states", headers={"Authorization": f"Bearer {CREDENTIALS.token}"})
-    assert still_works.status_code != 401
-
-
 def test_logout_revokes_a_user_store_session(tmp_path: Path) -> None:
-    """With the real user store, logout invalidates exactly the session used."""
+    """Logout invalidates exactly the session used, not every session for the account."""
     store = UserStore(tmp_path / "auth.db")
     store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
     app = create_app(ImswitchConfig(), authenticator=UserStoreAuthenticator(store))
@@ -208,15 +205,15 @@ def test_protected_route_requires_a_token(client: TestClient) -> None:
     assert client.get("/states").status_code == 401
 
 
-def test_protected_route_accepts_a_bearer_token(client: TestClient) -> None:
+def test_protected_route_accepts_a_bearer_token(client: TestClient, token: str) -> None:
     """The header path, used by every `fetch` call."""
-    response = client.get("/states", headers={"Authorization": f"Bearer {CREDENTIALS.token}"})
+    response = client.get("/states", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code != 401
 
 
-def test_protected_route_accepts_a_query_token(client: TestClient) -> None:
+def test_protected_route_accepts_a_query_token(client: TestClient, token: str) -> None:
     """For three.js' TextureLoader and zarrita, which cannot set headers."""
-    response = client.get(f"/states?token={CREDENTIALS.token}")
+    response = client.get(f"/states?token={token}")
     assert response.status_code != 401
 
 
@@ -303,10 +300,10 @@ def test_agent_websocket_rejects_a_missing_token(client: TestClient) -> None:
     assert excinfo.value.code == 1008
 
 
-def test_agent_websocket_accepts_an_in_band_token(client: TestClient) -> None:
+def test_agent_websocket_accepts_an_in_band_token(client: TestClient, token: str) -> None:
     """The token rides the init frame the client already sends."""
     with client.websocket_connect("/ws") as websocket:
-        websocket.send_json({"type": "INIT", "token": CREDENTIALS.token})
+        websocket.send_json({"type": "INIT", "token": token})
         assert websocket.receive_json()["type"] == "INIT"
 
 
@@ -331,16 +328,16 @@ def test_stream_websocket_rejects_a_wrong_token(client: TestClient) -> None:
 # ---------------------------------------------------------------- authenticator
 
 
-def test_authenticator_rejects_an_empty_token() -> None:
+def test_authenticator_rejects_an_empty_token(store: UserStore) -> None:
     """An absent credential is not a match."""
-    authenticator = CredentialAuthenticator(CREDENTIALS)
+    authenticator = UserStoreAuthenticator(store)
     assert not authenticator.check_token(None)
     assert not authenticator.check_token("")
 
 
-def test_authenticator_login_raises_on_bad_credentials() -> None:
+def test_authenticator_login_raises_on_bad_credentials(store: UserStore) -> None:
     """Rejection is signalled by the exception the routes translate to 401."""
-    authenticator = CredentialAuthenticator(CREDENTIALS)
+    authenticator = UserStoreAuthenticator(store)
     with pytest.raises(AuthenticationError):
         authenticator.login("Basic " + "bm9wZTpub3Bl")  # nope:nope
 
