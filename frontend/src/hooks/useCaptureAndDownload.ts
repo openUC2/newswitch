@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth/authFetch";
 import { useTransport } from "@/lib/rekuest/transport/transport-context";
 import { useCallback, useState } from "react";
 import { useCaptureImage } from "@/apps/default/hooks/actions";
@@ -51,7 +52,7 @@ export function useCaptureAndDownload(
         const baseUrl = apiEndpoint.replace(/\/$/, "");
         const url = `${baseUrl}/files/${encodeURIComponent(filePath)}`;
 
-        const response = await fetch(url);
+        const response = await authFetch(url);
 
         if (!response.ok) {
           throw new Error(`Failed to download file: ${response.statusText}`);

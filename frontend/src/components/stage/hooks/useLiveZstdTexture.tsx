@@ -1,3 +1,5 @@
+import { authFrame, WS_UNAUTHORIZED_CLOSE_CODE } from "@/lib/auth/authFetch";
+import { clearToken } from "@/lib/auth/token";
 import { ZSTD_STREAM_PATH } from "@/constants";
 import type { Detector } from "@/apps/default/hooks/actions";
 import { decompress } from "fzstd";
@@ -74,9 +76,16 @@ export const useZstdLiveTexture = ({
       }
     };
 
-    socket.onopen = () => setConnectionState("connected");
+    socket.onopen = () => {
+      // In-band auth: a WebSocket cannot carry an Authorization header.
+      socket.send(JSON.stringify(authFrame()));
+      setConnectionState("connected");
+    };
     socket.onerror = () => setConnectionState("error");
-    socket.onclose = () => setConnectionState("disconnected");
+    socket.onclose = (event) => {
+      if (event.code === WS_UNAUTHORIZED_CLOSE_CODE) clearToken();
+      setConnectionState("disconnected");
+    };
 
     return () => socket.close();
   }, [url, detector.slot, texture]);

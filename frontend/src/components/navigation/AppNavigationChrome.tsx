@@ -18,6 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AccountMenu } from "./AccountMenu";
 import { useAppStateContext } from "@/lib/rekuest/app-state/app-state-context";
 import {
   selectLatestPatches,
@@ -614,6 +615,7 @@ export function AppNavigationChrome({ children }: { children: ReactNode }) {
   return (
     <>
       <TimelineFloater />
+      <AccountMenu />
       {children}
     </>
   );

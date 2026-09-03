@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth/authFetch";
 import { useIOState } from "@/apps/default/hooks/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export function LatestImage() {
         const baseUrl = apiEndpoint.replace(/\/$/, "");
         const url = `${baseUrl}/files/${encodeURIComponent(filePath)}`;
 
-        const response = await fetch(url);
+        const response = await authFetch(url);
 
         if (!response.ok) {
           throw new Error(`Failed to fetch image: ${response.status}`);

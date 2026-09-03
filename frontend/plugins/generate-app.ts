@@ -245,6 +245,33 @@ const sortKeysDeep = (value: unknown): unknown => {
   return value;
 };
 
+// Rekuest derives these fields through Python sets, so their wire order changes with
+// Python's per-process hash seed. Their order has no meaning; normalize it before the
+// schema snapshot reaches blok.json so a fresh CI process cannot create false drift.
+const sortSetLikeSchemaArrays = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(sortSetLikeSchemaArrays);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+        const normalized = sortSetLikeSchemaArrays(child);
+        if (
+          (key === 'locks' || key === 'manipulates') &&
+          Array.isArray(normalized) &&
+          normalized.every((entry) => typeof entry === 'string')
+        ) {
+          return [key, [...normalized].sort(byCodepoint)];
+        }
+        return [key, normalized];
+      }),
+    );
+  }
+
+  return value;
+};
+
 // Every write goes through here. Rewriting a byte-identical file would churn its mtime,
 // which re-triggers Vite's watcher and makes `git status` dirty after a no-op codegen.
 const writeIfChanged = (filePath: string, content: string) => {
@@ -1614,22 +1641,24 @@ export type AppDefinition = AppsDefinition[AppKey];
 
     // Everything except generatedAt. Key order comes from the backend's JSON and is not
     // stable, so deep-sort it before comparing or writing.
-    const blokPayload = sortKeysDeep({
-      app: {
-        name: (packageData.name as string | undefined) ?? 'unknown',
-        version: (packageData.version as string | undefined) ?? '0.0.0',
-        description: (packageData.description as string | undefined) ?? '',
-        startPage:
-          (packageData.homepage as string | undefined) ?? '/index.html',
-        type: (packageData.type as string | undefined) ?? 'unknown',
-        scripts: {
-          dev: scripts.dev ?? '',
-          build: scripts.build ?? '',
-          preview: scripts.preview ?? '',
+    const blokPayload = sortKeysDeep(
+      sortSetLikeSchemaArrays({
+        app: {
+          name: (packageData.name as string | undefined) ?? 'unknown',
+          version: (packageData.version as string | undefined) ?? '0.0.0',
+          description: (packageData.description as string | undefined) ?? '',
+          startPage:
+            (packageData.homepage as string | undefined) ?? '/index.html',
+          type: (packageData.type as string | undefined) ?? 'unknown',
+          scripts: {
+            dev: scripts.dev ?? '',
+            build: scripts.build ?? '',
+            preview: scripts.preview ?? '',
+          },
         },
-      },
-      apps: blokApps,
-    }) as Record<string, unknown>;
+        apps: blokApps,
+      }),
+    ) as Record<string, unknown>;
 
     // Only stamp a new generatedAt when the content actually changed. Otherwise every
     // dev-server start would dirty blok.json (780KB) for no reason.

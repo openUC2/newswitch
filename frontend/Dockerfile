@@ -13,6 +13,16 @@ RUN yarn install --frozen-lockfile
 
 COPY --chown=node:node . .
 
-EXPOSE 5173
+# Defaults matching the repo's root .env; compose overrides them per service.
+# BACKEND_PORT is here because .env.docker expands ${BACKEND_PORT:-8099} into the
+# schema URLs the codegen fetches at boot.
+ENV FRONTEND_PORT=5173 \
+    BACKEND_PORT=8099
 
-CMD ["yarn", "dev", "--mode", "docker", "--host", "0.0.0.0", "--port", "5173"]
+# Documentation only, and resolved at BUILD time - a runtime -e FRONTEND_PORT still works,
+# it just is not reflected here.
+EXPOSE ${FRONTEND_PORT}
+
+# Via `sh -c` so $FRONTEND_PORT is expanded rather than passed as a literal string,
+# and `exec` so the signal path to yarn is not broken by an intermediate shell.
+CMD ["sh", "-c", "exec yarn dev --mode docker --host 0.0.0.0 --port \"$FRONTEND_PORT\""]

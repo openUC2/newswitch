@@ -1,0 +1,72 @@
+ID,Group,Function,Lock,CapabilityKey,M0_DISCONNECTED,M1_OBSERVER,M2_IDLE,M3_LIVE,M4_MOVING,M5_PROCEDURE,M6_SAFE_ERROR,M7_CALIB_MANUAL,Requirement,Notes,Status
+S-01,Session,Backend connection indicator,,,V,V,V,V,V,V,V,V,IF-UI-004,,ACTIVE
+S-02,Session,Device connection indicators,,,V,V,V,V,V,V,V,V,IF-UI-003,,ACTIVE
+S-03,Session,Connected-user list,,,V,V,V,V,V,V,V,V,REQ-SES-011,,ACTIVE
+S-04,Session,Control-authority indicator,,,V,V,V,V,V,V,V,V,REQ-SES-011,,ACTIVE
+S-05,Session,Request control,,,H,A,H,H,H,H,D,H,REQ-SES-003,,ACTIVE
+S-06,Session,Release control,,,H,H,A,A,D,C,D,D,REQ-SES-012,,ACTIVE
+S-07,Session,Safe state / stop all,,,H,D,A,A,A,C,D,A,REQ-SAF-001,See OP-028 (observer access),ACTIVE
+S-08,Session,Acknowledge error / recover,,,H,D,H,H,H,H,A,H,REQ-DEV-005,,ACTIVE
+S-09,Session,Stale-state banner,,,V,H,H,H,H,H,H,H,INV-005,,ACTIVE
+D-01,Devices,Device list / status,,,V,V,V,V,V,V,V,V,REQ-DEV-002,,ACTIVE
+D-02,Devices,Initialise / start device,,,H,D,A,D,D,D,A,D,REQ-DEV-001,,ACTIVE
+D-03,Devices,Stop device,,,H,D,C,C,D,D,D,D,REQ-DEV-001,,ACTIVE
+D-04,Devices,Reload device configuration,,,H,D,C,D,D,D,C,D,REQ-DAT-002,,ACTIVE
+C-01,Camera,Select live-view camera,camera_parameters,,H,D,A,A,A,D,D,A,REQ-IMG-002,,ACTIVE
+C-02,Camera,Start live view,camera_parameters,,H,D,A,H,A,D,D,H,REQ-IMG-002,,ACTIVE
+C-03,Camera,Stop live view,camera_parameters,,H,D,H,A,A,D,D,A,REQ-IMG-002,,ACTIVE
+C-04,Camera,Snapshot,io,,H,D,A,A,D,D,D,A,REQ-IMG-004,See OP-030 (snapshot while moving),ACTIVE
+C-05,Camera,Camera name,camera_parameters,,H,D,A,A,A,D,D,D,REQ-CAM-001,,ACTIVE
+C-06,Camera,Exposure time (slider + entry),camera_parameters,exposure,H,D,A,A,A,D,D,A,REQ-CAM-002,Per-camera G1 gate,ACTIVE
+C-07,Camera,Gain (slider + entry),camera_parameters,gain,H,D,A,A,A,D,D,A,REQ-CAM-003,Per-camera G1 gate,ACTIVE
+C-08,Camera,Frame rate (slider + entry),camera_parameters,framerate,H,D,A,A,A,D,D,A,REQ-CAM-004,Per-camera G1 gate,ACTIVE
+C-09,Camera,Channel weighting,,channel_weighting,H,H,H,A,H,H,H,A,REQ-CAM-005,Live viewer only; see OP-003,ACTIVE
+C-10,Camera,Live image canvas,,,V,V,H,V,V,V,H,V,REQ-IMG-002,,ACTIVE
+C-11,Camera,Frame-drop / rate indicator,,,V,V,H,V,V,V,H,V,REQ-IMG-012,,ACTIVE
+C-12,Camera,Video-plane (SFU) connection indicator,,,V,V,V,V,V,V,V,V,IF-CM-012,Video plane is separate from the control plane since DEC-001 (LiveKit),ACTIVE
+L-01,Illumination,Light source on/off,illumination,switchable,H,D,A,A,A,D,D,A,REQ-LGT-001,,ACTIVE
+L-02,Illumination,Light source power (slider + entry),illumination,power,H,D,A,A,A,D,D,A,REQ-LGT-002,G9 value gate: hidden while source is off,ACTIVE
+L-03,Illumination,Light source identity / wavelength,,wavelength,V,V,V,V,V,V,V,V,REQ-LGT-005,,ACTIVE
+L-04,Illumination,Emission indicator,,,V,V,V,V,V,V,V,V,NFR-SAF-003,,ACTIVE
+T-01,Stage,Jog / step buttons (+/- per axis),stage_position,jog,H,D,A,A,A,D,D,A,REQ-STG-001,Per-axis G1 gate,ACTIVE
+T-02,Stage,Position display (X/Y/Z),,,V,V,V,V,V,V,V,V,REQ-STG-006,,ACTIVE
+T-03,Stage,Absolute position entry + confirm,stage_position,absolute,H,D,A,A,D,D,D,A,REQ-STG-009,,ACTIVE
+T-04,Stage,Home (separate menu),stage_position,home,H,D,C,C,D,D,D,D,REQ-STG-004,Must not sit in the centre of the direction cluster (REQ-STG-005),ACTIVE
+T-05,Stage,Stop motion,stage_position,,H,D,H,H,A,H,H,A,REQ-STG-011,,ACTIVE
+T-06,Stage,Jog / step mode switch,stage_position,,H,D,A,A,D,D,D,A,REQ-STG-008,,ACTIVE
+T-07,Stage,Step size (separate menu),stage_position,,H,D,A,A,D,D,D,A,REQ-STG-007,,ACTIVE
+T-08,Stage,Velocity (separate menu),stage_position,velocity,H,D,A,A,D,D,D,D,REQ-STG-007,Per-controller G1 gate,ACTIVE
+T-09,Stage,Acceleration (separate menu),stage_position,acceleration,H,D,A,A,D,D,D,D,REQ-STG-007,Per-controller G1 gate,ACTIVE
+T-10,Stage,Jerk (separate menu),stage_position,jerk,H,D,A,A,D,D,D,D,REQ-STG-007,Per-controller G1 gate,ACTIVE
+T-11,Stage,Travel-limit display,,limit_min/limit_max,V,V,V,V,V,V,V,V,REQ-STG-010,,ACTIVE
+O-01,Optics,Objective selection,objective,switchable,H,D,A,C,D,D,D,D,REQ-OPT-001,Confirm in LIVE: changes FOV and focus,ACTIVE
+O-02,Optics,Filter selection,filter_bank,switchable,H,D,A,A,A,D,D,D,REQ-OPT-002,,ACTIVE
+O-03,Optics,Rotator control,UNCLEAR,axes,H,D,A,A,A,D,D,D,REQ-OPT-003,Lock undefined; see OP-032,DRAFT
+O-04,Optics,Light-path view,,,V,V,V,V,V,V,V,V,REQ-OPT-004,,ACTIVE
+P-01,Procedures,Z-scan configure,stage_position+camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-001,,ACTIVE
+P-02,Procedures,Z-scan start,stage_position+camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-001,,ACTIVE
+P-03,Procedures,Autofocus select measure,camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-003,Measure set unspecified; see OP-005,DRAFT
+P-04,Procedures,Autofocus start,stage_position+camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-003,,ACTIVE
+P-05,Procedures,Focus lock on/off,stage_position,,H,D,A,A,D,D,D,D,REQ-PRC-005,Principle unspecified; see OP-006,DRAFT
+P-06,Procedures,Overview image start,stage_position+camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-007,,ACTIVE
+P-07,Procedures,Calibration manual mode,stage_position+objective,,H,D,A,D,D,D,D,A,REQ-PRC-011,,ACTIVE
+P-08,Procedures,Calibration automatic mode,stage_position+objective,,H,D,A,D,D,D,D,H,REQ-PRC-011,,ACTIVE
+P-09,Procedures,Calibration set landmark,stage_position,,H,D,H,H,H,H,H,A,REQ-PRC-009,,ACTIVE
+P-10,Procedures,Calibration accept / reject result,objective,,H,D,H,H,H,H,H,A,REQ-PRC-012,,ACTIVE
+P-11,Procedures,XY stitching configure & start,stage_position+camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-014,Overlap/blending unspecified; see OP-007,DRAFT
+P-12,Procedures,Time series configure & start,camera_parameters,,H,D,A,A,D,D,D,D,REQ-PRC-017,Bounds unspecified; see OP-026,DRAFT
+P-13,Procedures,Sample-area definition,stage_position,,H,D,A,A,D,D,D,D,REQ-PRC-018,,ACTIVE
+P-14,Procedures,Sample-area fine adjustment at power-up,stage_position,,H,D,A,D,D,D,D,D,REQ-PRC-019,,ACTIVE
+P-15,Procedures,Abort running procedure,,,H,D,H,H,H,A,D,A,REQ-PRC-020,,ACTIVE
+P-16,Procedures,Procedure progress display,,,V,V,H,H,H,V,V,V,REQ-PRC-021,,ACTIVE
+X-01,Data,Acquired-data viewer,,,V,V,V,V,V,V,V,V,REQ-DAT-001,,ACTIVE
+X-02,Data,Export / download dataset,io,,H,A,A,A,A,A,A,A,REQ-DAT-006,Observer permitted; confirm against OP-004,ACTIVE
+X-03,Data,Clear acquired data,expanse_state,,H,D,C,D,D,D,D,D,REQ-DAT-005,,ACTIVE
+X-04,Data,Browse historical states,,,V,V,V,V,V,V,V,V,REQ-HIS-001,,ACTIVE
+X-05,Data,Re-apply a historical state,all device locks,,H,D,C,D,D,D,D,D,REQ-HIS-003,May switch lasers on; see OP-008 and OP-013,DRAFT
+X-06,Data,Storage-capacity indicator,,,V,V,V,V,V,V,V,V,REQ-DAT-008,,ACTIVE
+G-01,Diagnostics,Log viewer,,,V,A,A,A,A,A,A,A,REQ-LOG-001,,ACTIVE
+G-02,Diagnostics,Log level selection,,,H,D,A,A,A,A,A,A,REQ-LOG-004,,ACTIVE
+G-03,Diagnostics,Settings view (read),,,V,V,V,V,V,V,V,V,REQ-DAT-002,,ACTIVE
+G-04,Diagnostics,Settings edit,,,H,D,C,D,D,D,D,D,REQ-DAT-002,,ACTIVE
+G-05,Diagnostics,Error / notification area,,,V,V,V,V,V,V,V,V,REQ-LOG-005,,ACTIVE
