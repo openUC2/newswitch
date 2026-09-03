@@ -1375,7 +1375,7 @@ requires-dist = [
     { name = "pyserial-asyncio", specifier = ">=0.6" },
     { name = "pystackreg", specifier = ">=0.2.8" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "rekuest-next", specifier = ">=2.2.1" },
+    { name = "rekuest-next", specifier = ">=2.3.1" },
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "tifffile", specifier = ">=2026.1.28" },
     { name = "useq-schema", specifier = ">=0.8.1" },
@@ -2335,7 +2335,7 @@ wheels = [
 
 [[package]]
 name = "rekuest-next"
-version = "2.2.1"
+version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -2348,9 +2348,9 @@ dependencies = [
     { name = "rath" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/08/cd02a79cb61718c2a735600dc241c8dfb5a1c7a9e03fd52cd54718b5c040/rekuest_next-2.2.1.tar.gz", hash = "sha256:bea307077d1847917140fca7fb687c3c9047eae75b257c0f8319596cdc4c3777", size = 259051, upload-time = "2026-08-21T14:20:54.717Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/4a/08c0f9c7debb133328d088a0837f870fce8b92e5aa789ad2fc1085d580ea/rekuest_next-2.3.1.tar.gz", hash = "sha256:34c4ef8664ca658ccc7d438eb4b2a66ecf11b2987fae1a10261d500289e3a3a4", size = 270812, upload-time = "2026-08-28T12:03:08.266Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/18/270920ceae0ef454ada18d637da6d6bc9714fd67f3c6259d4f27014b96dd/rekuest_next-2.2.1-py3-none-any.whl", hash = "sha256:696d734bb652f575dbf705b97df328a16494e87177365116b3c76125011fda0e", size = 320845, upload-time = "2026-08-21T14:20:53.53Z" },
+    { url = "https://files.pythonhosted.org/packages/83/bf/95be7c4effc4f08c5a54c20f78e2e600343806b4089740086a68fc988c1f/rekuest_next-2.3.1-py3-none-any.whl", hash = "sha256:192b9c8f60e74715f0505a9d81012ed44d8eeada975e86c91666660ae603aa7d", size = 337993, upload-time = "2026-08-28T12:03:06.385Z" },
 ]
 
 [[package]]
