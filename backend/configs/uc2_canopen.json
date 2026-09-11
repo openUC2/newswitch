@@ -1,5 +1,5 @@
 {
-  "_comment": "Full openUC2 setup where the HOST is the CANopen master (direct CAN access, one node per board). Needs a real CAN interface: SocketCAN (MCP2515 HAT on a Pi: interface=socketcan, channel=can0, bring the link up first with `sudo ip link set can0 up type can bitrate 500000`) or a Waveshare USB-CAN-A adapter (interface=waveshare, port=<its serial device>). NOTE: a USB-connected UC2 CAN-HAT master (e.g. /dev/cu.SLAB_USBtoUART at 921600 baud) is NOT a CAN interface — it bridges serial JSON to CAN itself; use configs/uc2_serial.json for that topology. Boot with: NEWSWITCH_CONFIG=configs/uc2_canopen.json uvicorn main:app --port 8099.",
+  "_comment": "Portable example for a direct CANopen UC2 microscope. Keep machine-specific port values and tuning in a local override file such as configs/uc2_canopen.local.json, which is git-ignored. Boot with: NEWSWITCH_CONFIG=configs/uc2_canopen.json uvicorn main:app --port 8099. For a SocketCAN Pi setup use interface=socketcan with channel=can0; for a Waveshare USB-CAN-A adapter use interface=waveshare and set uc2_can_port to the device path in the local override.",
   "use_virtual_microscope": false,
   "uc2_transport": "canopen",
   "uc2_can_interface": "socketcan",

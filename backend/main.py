@@ -18,17 +18,18 @@ from pathlib import Path
 
 from newswitch.app import ImswitchConfig, create_app
 
-os.environ["NEWSWITCH_CONFIG"] = (
-    "/Users/bene/Dropbox/Dokumente/Promotion/PROJECTS/MicronController/newswitch/backend/configs/uc2_serial.json"
-)
-
 
 def load_config() -> ImswitchConfig:
     """Build the app config, optionally from the NEWSWITCH_CONFIG JSON file."""
     config_path = os.environ.get("NEWSWITCH_CONFIG")
     if not config_path:
         return ImswitchConfig()
-    return ImswitchConfig.model_validate_json(Path(config_path).read_text())
+
+    candidate = Path(config_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path(__file__).resolve().parent / candidate
+
+    return ImswitchConfig.model_validate_json(candidate.read_text())
 
 
 app = create_app(load_config())

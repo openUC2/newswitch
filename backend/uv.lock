@@ -1382,8 +1382,8 @@ requires-dist = [
     { name = "rekuest-next", specifier = ">=2.3.1" },
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "tifffile", specifier = ">=2026.1.28" },
-    { name = "uc2-rest", marker = "extra == 'uc2'", specifier = ">=0.2.0.36" },
-    { name = "uc2canopen", marker = "extra == 'uc2'", specifier = ">=0.1.4" },
+    { name = "uc2-rest", marker = "extra == 'uc2'", git = "https://github.com/openUC2/UC2-REST.git?rev=60f15bfc543baf41e46996cd149b298419de5eac" },
+    { name = "uc2canopen", marker = "extra == 'uc2'", specifier = ">=0.2.0" },
     { name = "useq-schema", specifier = ">=0.8.1" },
     { name = "uvicorn", specifier = ">=0.40.0" },
     { name = "zarrs", specifier = ">=0.2.2" },
@@ -2858,30 +2858,26 @@ wheels = [
 
 [[package]]
 name = "uc2-rest"
-version = "0.2.0.39"
-source = { registry = "https://pypi.org/simple" }
+version = "0.0.0"
+source = { git = "https://github.com/openUC2/UC2-REST.git?rev=60f15bfc543baf41e46996cd149b298419de5eac#60f15bfc543baf41e46996cd149b298419de5eac" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pyserial" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/0f/85c64484c6039932327347103794a9f85584a721659ac4c15becd96d96a3/uc2_rest-0.2.0.39.tar.gz", hash = "sha256:96bc29f26e7b6e8f448dae7ac7af0ae6f1bd9151994dbb13b37bbd739c170129", size = 73744, upload-time = "2026-07-08T14:21:13.438Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/71/3867405fe298bbdeab10a2be688029e1245924f0851367d638137c51b607/uc2_rest-0.2.0.39-py3-none-any.whl", hash = "sha256:f6953b96c0dbe5095ae7034a47f86869e8706555d4d3d7a2079106c67db478f0", size = 87737, upload-time = "2026-07-08T14:21:12.453Z" },
-]
 
 [[package]]
 name = "uc2canopen"
-version = "0.1.4"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyserial" },
     { name = "python-can" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/66/42f0827f2d9ac047c771058e12a8ecf856e31362c88438f4b12886e97215/uc2canopen-0.1.4.tar.gz", hash = "sha256:2a3093cc1ab7d3f1dc939149169ddd49cb50ae80a49ceff28bd76cb881ecbc6c", size = 45910, upload-time = "2026-06-22T13:28:23.809Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/57/393221955f6ee25a394baa2e33d89f19ddda80c8d9adca1701aee4b2ed1a/uc2canopen-0.2.1.tar.gz", hash = "sha256:b34314353735b9e3698a8382c6a1d19e7985219c4254866cf8a51f7fcb164dd8", size = 62671, upload-time = "2026-07-21T15:20:34.097Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/97/6f/00a2b6c58dfd6ade073a65b9c3d53466f7174112de9dd189446ee46e036f/uc2canopen-0.1.4-py3-none-any.whl", hash = "sha256:0b2620ec436d717330f7d66bef2dfcb8bf034d0504b0009eb275282a1e8fb292", size = 25003, upload-time = "2026-06-22T13:28:22.661Z" },
+    { url = "https://files.pythonhosted.org/packages/98/ba/f274881b7d8dfd3c10221c1e6e566f53a3b16ce6559c292560f460d08ee5/uc2canopen-0.2.1-py3-none-any.whl", hash = "sha256:18fbd2a0f8f3b9d4979cf68a01798da877f9f7a71754bc1bde79a4fed4bcaa48", size = 36135, upload-time = "2026-07-21T15:20:33.221Z" },
 ]
 
 [[package]]

@@ -117,7 +117,8 @@ class ImswitchConfig(BaseModel):
 
     server: str = "localhost"
     port: int = 8001
-    use_virtual_microscope: bool = False
+    # Without an explicit hardware config, start safely in simulation mode.
+    use_virtual_microscope: bool = True
     db_path: str = "agent_data.db"
     available_cubes: list[str] = ["cube1", "cube2", "cube3"]
     # UC2 hardware transport (used when use_virtual_microscope is False).
@@ -184,12 +185,21 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
     Returns a tuple of managers (implementing their protocols) and their associated states
     for dependency injection into registered functions.
     """
-    print(f"Initializing virtual microscope managers (config: {app_context})")
-
     # Load state from esp32 or other hardware interfaces here if needed, for now we just initialize them with default values
     # Which cubes are isntalled
     if not app_context:
         app_context = ImswitchConfig()
+
+    mode = "virtual" if app_context.use_virtual_microscope else "real hardware"
+    print(f"Initializing {mode} microscope managers")
+    print(f"UC2 transport: {app_context.uc2_transport}")
+    if app_context.uc2_transport == "canopen":
+        print(
+            "CAN interface: "
+            f"{app_context.uc2_can_interface}, "
+            f"channel={app_context.uc2_can_channel}, "
+            f"port={app_context.uc2_can_port}"
+        )
 
     frame_broadcaster = FrameBroadcaster()
 

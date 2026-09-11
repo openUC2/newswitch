@@ -34,13 +34,11 @@ dependencies = [
 types = [
     "annotated-types>=0.5.0",
 ]
-# Real openUC2 hardware transports. The asyncio facades (uc2rest.aio /
-# uc2canopen.aio) need uc2-rest > 0.2.0.39 and uc2canopen >= 0.2.0, which are
-# not released yet — during development install the local checkouts on top:
-#   uv pip install -e ../../../UC2-REST -e ../../../UC2-REST-CANOPEN
+# Real openUC2 hardware transports. uc2rest.aio is not in the current PyPI
+# release, so use the verified upstream revision that provides AsyncUC2Client.
 uc2 = [
-    "uc2-rest>=0.2.0.36",
-    "uc2canopen>=0.1.4",
+    "uc2-rest @ git+https://github.com/openUC2/UC2-REST.git@60f15bfc543baf41e46996cd149b298419de5eac",
+    "uc2canopen>=0.2.0",
 ]
 
 [tool.uv]
@@ -105,6 +103,9 @@ include = ["newswitch"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 markers = [

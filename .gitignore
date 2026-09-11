@@ -70,6 +70,9 @@ ipython_config.py
 # Real login credentials. auth.example.yaml is the committed template.
 backend/auth.yaml
 
+# Local machine override files for hardware-specific config (kept out of git)
+backend/configs/*.local.json
+
 # Backend runtime artifacts (the app writes these into its CWD)
 *.db
 db.sqlite3
