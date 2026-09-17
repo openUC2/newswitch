@@ -6,6 +6,7 @@ import {
   useStageState,
 } from "@/apps/default/hooks/states";
 import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 function StatusBadge({
   label,
@@ -34,6 +35,7 @@ function StatusBadge({
 }
 
 export function StatusPanel() {
+  const { t } = useTranslation();
   const { data: camera, loading: cameraLoading } = useCameraState({
     subscribe: true,
   });
@@ -49,22 +51,22 @@ export function StatusPanel() {
   return (
     <div className="flex items-center gap-1.5">
       <StatusBadge
-        label="Cam"
+        label={t("microscope.cameraShort")}
         isLoading={cameraLoading}
         isConnected={!!camera}
       />
       <StatusBadge
-        label="Stage"
+        label={t("microscope.stageShort")}
         isLoading={stageLoading}
         isConnected={!!stage}
       />
       <StatusBadge
-        label="Light"
+        label={t("microscope.lightShort")}
         isLoading={illuminationLoading}
         isConnected={!!illumination}
       />
       <StatusBadge
-        label="Obj"
+        label={t("microscope.objectiveShort")}
         isLoading={objectiveLoading}
         isConnected={!!objective}
       />

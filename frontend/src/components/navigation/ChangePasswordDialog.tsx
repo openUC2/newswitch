@@ -7,6 +7,7 @@
  */
 
 import { useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { BACKEND_API } from "@/constants";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export function ChangePasswordDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -53,7 +55,7 @@ export function ChangePasswordDialog({
     setError(null);
 
     if (newPassword !== confirmPassword) {
-      setError("The new passwords do not match.");
+      setError(t("auth.passwordsMismatch"));
       return;
     }
 
@@ -69,20 +71,20 @@ export function ChangePasswordDialog({
       });
 
       if (response.status === 401) {
-        setError("Current password is incorrect.");
+        setError(t("auth.currentPasswordIncorrect"));
         return;
       }
       if (!response.ok) {
-        setError("Could not change the password.");
+        setError(t("auth.passwordChangeFailed"));
         return;
       }
 
       const { token } = (await response.json()) as { token: string };
       setToken(token);
-      toast.success("Password changed.");
+      toast.success(t("auth.passwordChanged"));
       handleOpenChange(false);
     } catch {
-      setError("Could not reach the microscope backend.");
+      setError(t("auth.backendUnavailable"));
     } finally {
       setSubmitting(false);
     }
@@ -92,15 +94,16 @@ export function ChangePasswordDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
+          <DialogTitle>{t("auth.changePassword")}</DialogTitle>
           <DialogDescription>
-            You will stay signed in on this device; every other session is
-            signed out.
+            {t("auth.passwordChangeDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="current-password">Current password</Label>
+            <Label htmlFor="current-password">
+              {t("auth.currentPassword")}
+            </Label>
             <Input
               id="current-password"
               type="password"
@@ -111,7 +114,7 @@ export function ChangePasswordDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-password">New password</Label>
+            <Label htmlFor="new-password">{t("auth.newPassword")}</Label>
             <Input
               id="new-password"
               type="password"
@@ -122,7 +125,9 @@ export function ChangePasswordDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Label htmlFor="confirm-password">
+              {t("auth.confirmPassword")}
+            </Label>
             <Input
               id="confirm-password"
               type="password"
@@ -139,7 +144,9 @@ export function ChangePasswordDialog({
           )}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Changing..." : "Change password"}
+              {submitting
+                ? t("auth.changingPassword")
+                : t("auth.changePassword")}
             </Button>
           </DialogFooter>
         </form>

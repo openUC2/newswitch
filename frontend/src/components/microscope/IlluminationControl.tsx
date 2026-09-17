@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Power, Waves } from "lucide-react";
 import { OptimisticSlider } from "../ui/optimistic_slider";
 import { ResponsiveGrid } from "../ui/responsive-grid";
+import { useTranslation } from "react-i18next";
 
 // Color mapping for wavelengths
 const getWavelengthColor = (wavelength: number): string => {
@@ -51,6 +52,7 @@ const getKindLabel = (kind: string): string => {
 };
 
 export function IlluminationControl() {
+  const { t } = useTranslation();
   const { data: illuminationState, loading: stateLoading } =
     useIlluminationState({ subscribe: true });
   const { assign: turnOnIllumination, isLoading: isTurningOn } =
@@ -172,7 +174,7 @@ export function IlluminationControl() {
                   •
                 </span>
                 <span className="hidden text-xs text-muted-foreground @[300px]:inline">
-                  Slot {source.slot}
+                  {t("common.slot", { slot: source.slot })}
                 </span>
               </div>
             </div>
@@ -181,7 +183,7 @@ export function IlluminationControl() {
 
         {(!illuminations || illuminations.length === 0) && !stateLoading && (
           <div className="text-center py-4 text-sm text-muted-foreground col-span-full">
-            No light sources available
+            {t("microscope.noLightSources")}
           </div>
         )}
       </ResponsiveGrid>
@@ -199,7 +201,7 @@ export function IlluminationControl() {
           className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-medium transition-colors disabled:opacity-50"
         >
           <Power className="h-4 w-4" />
-          Turn Off All
+          {t("microscope.turnOffAll")}
         </button>
       )}
     </div>

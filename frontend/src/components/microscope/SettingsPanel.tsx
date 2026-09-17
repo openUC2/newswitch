@@ -27,6 +27,7 @@ import {
   Target,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CameraControl } from "./CameraControl";
 import { FilterBankControl } from "./FilterBankControl";
 import { IlluminationControl } from "./IlluminationControl";
@@ -73,6 +74,7 @@ function SettingsSection({
 }
 
 export function SettingsPanel() {
+  const { t } = useTranslation();
   const { data: cameraState } = useCameraState({ subscribe: true });
   const { data: objectiveState } = useObjectiveState({ subscribe: true });
   // Live view and capture controls
@@ -102,7 +104,7 @@ export function SettingsPanel() {
       <div className="p-3 border-b space-y-2">
         <h2 className="text-sm font-semibold flex items-center gap-2">
           <Settings2 className="h-4 w-4" />
-          Settings
+          {t("microscope.settings")}
         </h2>
 
         {/* Acquisition Controls */}
@@ -123,12 +125,12 @@ export function SettingsPanel() {
             {isLive ? (
               <>
                 <Square className="h-3 w-3" />
-                Stop
+                {t("microscope.stop")}
               </>
             ) : (
               <>
                 <Play className="h-3 w-3" />
-                Live
+                {t("microscope.live")}
               </>
             )}
           </Button>
@@ -144,7 +146,7 @@ export function SettingsPanel() {
             ) : (
               <Camera className="h-3 w-3" />
             )}
-            {isDownloading ? "Save" : isCapturing ? "Snap" : "Snap"}
+            {isDownloading ? t("common.save") : t("microscope.snap")}
           </Button>
           <Button
             variant="secondary"
@@ -159,7 +161,10 @@ export function SettingsPanel() {
 
       <div className="flex-1 overflow-y-auto">
         {/* Camera Settings */}
-        <SettingsSection title="Camera" icon={<Camera className="h-4 w-4" />}>
+        <SettingsSection
+          title={t("microscope.camera")}
+          icon={<Camera className="h-4 w-4" />}
+        >
           <CameraControl />
         </SettingsSection>
 
@@ -167,13 +172,16 @@ export function SettingsPanel() {
 
         {/* Illumination Settings */}
         <SettingsSection
-          title="Illumination"
+          title={t("microscope.illumination")}
           icon={<Sun className="h-4 w-4" />}
         >
           <IlluminationControl />
         </SettingsSection>
         {/* Illumination Settings */}
-        <SettingsSection title="Filters" icon={<Filter className="h-4 w-4" />}>
+        <SettingsSection
+          title={t("microscope.filters")}
+          icon={<Filter className="h-4 w-4" />}
+        >
           <FilterBankControl />
         </SettingsSection>
 
@@ -181,10 +189,12 @@ export function SettingsPanel() {
 
         {/* Objective Settings */}
         <SettingsSection
-          title="Objective"
+          title={t("microscope.objective")}
           icon={<Target className="h-4 w-4" />}
           badge={
-            objectiveState?.slot ? `Slot ${objectiveState.slot}` : undefined
+            objectiveState?.slot
+              ? t("common.slot", { slot: objectiveState.slot })
+              : undefined
           }
         >
           <ObjectiveControl />

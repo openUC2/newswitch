@@ -12,8 +12,10 @@ import { useObjectiveState } from "@/apps/default/hooks/states";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export function ObjectiveControl() {
+  const { t } = useTranslation();
   const { data: objectiveState, loading: stateLoading } = useObjectiveState({
     subscribe: true,
   });
@@ -122,7 +124,9 @@ export function ObjectiveControl() {
 
       {/* Objective Carousel/Grid */}
       <div className="space-y-2">
-        <span className="text-xs text-muted-foreground">Available Lenses</span>
+        <span className="text-xs text-muted-foreground">
+          {t("microscope.availableLenses")}
+        </span>
         <div className="flex gap-2 overflow-x-auto pb-2">
           {objectiveState?.mounted_lenses?.map((lens) => {
             const isActive = objectiveState?.slot === lens.slot;
@@ -160,9 +164,14 @@ export function ObjectiveControl() {
                     <div className="text-xs space-y-1">
                       <p className="font-medium">{lens.name}</p>
                       <p>NA: {lens.numerical_aperture}</p>
-                      <p>Working Distance: {lens.working_distance}mm</p>
-                      <p>Binning: {lens.binning_factor}×</p>
-                      <p>Slot: {lens.slot}</p>
+                      <p>
+                        {t("microscope.workingDistance")}:{" "}
+                        {lens.working_distance} mm
+                      </p>
+                      <p>
+                        {t("microscope.binning")}: {lens.binning_factor}×
+                      </p>
+                      <p>{t("common.slot", { slot: lens.slot })}</p>
                     </div>
                   </TooltipContent>
                 </Tooltip>
@@ -174,7 +183,7 @@ export function ObjectiveControl() {
             objectiveState.mounted_lenses.length === 0) &&
             !stateLoading && (
               <div className="text-center py-4 text-sm text-muted-foreground w-full">
-                No objectives mounted
+                {t("microscope.noObjectives")}
               </div>
             )}
         </div>

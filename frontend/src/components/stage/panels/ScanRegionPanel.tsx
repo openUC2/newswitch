@@ -20,12 +20,14 @@ import {
 } from "@/apps/default/hooks/actions";
 import { ActionButton } from "@/components/ActionButton";
 import { getOptionsFromZod } from "@/hooks/zodToChoices";
+import { useTranslation } from "react-i18next";
 
 const scanPatternOptions = getOptionsFromZod(
   ScanRegionArgsSchema.shape.scan_order,
 );
 
 export const ScanRegionPanel = () => {
+  const { t } = useTranslation();
   // 1. Get Domain Data
 
   const selectedRegionId = useScansStore((s) => s.selectedRegionId);
@@ -96,7 +98,7 @@ export const ScanRegionPanel = () => {
             overlap: screenPos.region.overlap,
           }}
         >
-          Scan
+          {t("microscope.scan")}
         </ActionButton>
 
         <div className="flex flex-col gap-1.5">
@@ -107,7 +109,7 @@ export const ScanRegionPanel = () => {
             }
           >
             <SelectTrigger className="h-5 text-xs text-white">
-              <SelectValue placeholder="Select pattern" />
+              <SelectValue placeholder={t("microscope.selectScanPattern")} />
             </SelectTrigger>
             <SelectContent className="text-white text-xs">
               {scanPatternOptions.map((option) => (
@@ -127,7 +129,7 @@ export const ScanRegionPanel = () => {
 
         <div className="flex flex-row my-auto gap-2">
           <Label className="text-[9px] text-slate-400 uppercase tracking-wider">
-            Overlap
+            {t("microscope.overlap")}
           </Label>
           <Input
             type="number"
@@ -146,7 +148,7 @@ export const ScanRegionPanel = () => {
           onClick={() => deleteRegion(screenPos.region.id)}
           className="text-muted-foreground hover:text-white text-xs transition-colors"
         >
-          Del
+          {t("common.delete")}
         </button>
       </div>
     </div>

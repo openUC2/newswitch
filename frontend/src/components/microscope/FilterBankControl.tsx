@@ -11,6 +11,7 @@ import { useFilterBankState } from "@/apps/default/hooks/states";
 import { cn } from "@/lib/utils";
 import { RotateCw } from "lucide-react";
 import { ResponsiveGrid } from "../ui/responsive-grid";
+import { useTranslation } from "react-i18next";
 
 // Color mapping for filter wavelengths
 const getWavelengthColor = (wavelength: number): string => {
@@ -32,6 +33,7 @@ const getWavelengthTextColor = (wavelength: number): string => {
 };
 
 export function FilterBankControl() {
+  const { t } = useTranslation();
   const { data: filterBankState, loading: stateLoading } = useFilterBankState({
     subscribe: true,
   });
@@ -121,7 +123,7 @@ export function FilterBankControl() {
                   T: {(filter.transmission * 100).toFixed(0)}%
                 </span>
                 <span className="hidden text-xs text-muted-foreground @[360px]:inline">
-                  Slot {filter.slot}
+                  {t("common.slot", { slot: filter.slot })}
                 </span>
               </div>
             </div>
@@ -130,7 +132,7 @@ export function FilterBankControl() {
 
         {(!filters || filters.length === 0) && !stateLoading && (
           <div className="text-center py-4 text-sm text-muted-foreground col-span-full">
-            No filters available
+            {t("microscope.noFilters")}
           </div>
         )}
       </ResponsiveGrid>
@@ -145,7 +147,7 @@ export function FilterBankControl() {
           disabled={isLoading}
         >
           <RotateCw className={cn("h-4 w-4", isToggling && "animate-spin")} />
-          Cycle to Next Filter
+          {t("microscope.nextFilter")}
         </Button>
       )}
     </div>

@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Helpers – z_slices is number[] in the schema, but we edit as comma string
@@ -140,6 +141,7 @@ type FormValues = AcquireMultidimensionalAcquisitionArgs;
 // ---------------------------------------------------------------------------
 
 export function MultidimensionalAcquisitionDialog() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [selectedTimepoint, setSelectedTimepoint] = useState(0);
   const [selectedPosition, setSelectedPosition] = useState(0);
@@ -256,9 +258,9 @@ export function MultidimensionalAcquisitionDialog() {
         <Button variant="outline" className="w-full h-14 justify-start">
           <Grid3X3 className="h-5 w-5 mr-3" />
           <div className="flex-1 text-left">
-            <div className="font-medium">Multidimensional Acquisition</div>
+            <div className="font-medium">{t("acquisition.title")}</div>
             <div className="text-xs text-muted-foreground">
-              Configure XYZ + channels + time
+              {t("acquisition.summary")}
             </div>
           </div>
         </Button>
@@ -268,11 +270,9 @@ export function MultidimensionalAcquisitionDialog() {
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Grid3X3 className="h-5 w-5" />
-            Multidimensional Acquisition
+            {t("acquisition.title")}
           </DialogTitle>
-          <DialogDescription>
-            Configure timepoints, positions, z-stacks, and channels
-          </DialogDescription>
+          <DialogDescription>{t("acquisition.description")}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -287,7 +287,9 @@ export function MultidimensionalAcquisitionDialog() {
                 name="config.file_name"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel className="text-xs">File Name</FormLabel>
+                    <FormLabel className="text-xs">
+                      {t("acquisition.fileName")}
+                    </FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="acquisition_001" />
                     </FormControl>
@@ -300,7 +302,9 @@ export function MultidimensionalAcquisitionDialog() {
                 name="config.file_format"
                 render={({ field }) => (
                   <FormItem className="w-28">
-                    <FormLabel className="text-xs">Format</FormLabel>
+                    <FormLabel className="text-xs">
+                      {t("acquisition.format")}
+                    </FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="tiff" />
                     </FormControl>
@@ -316,7 +320,7 @@ export function MultidimensionalAcquisitionDialog() {
                 onClick={handleInitFromState}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Init from State
+                {t("acquisition.initFromState")}
               </Button>
             </div>
 
@@ -328,7 +332,7 @@ export function MultidimensionalAcquisitionDialog() {
               <div className="w-48 border-r flex flex-col">
                 <div className="px-3 py-2 flex items-center justify-between">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Timepoints
+                    {t("acquisition.timepoints")}
                   </span>
                   <Button
                     type="button"
@@ -382,8 +386,9 @@ export function MultidimensionalAcquisitionDialog() {
                             )}
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {tpPositions.length} position
-                            {tpPositions.length !== 1 && "s"}
+                            {t("acquisition.positionCount", {
+                              count: tpPositions.length,
+                            })}
                           </div>
                         </button>
                       );
@@ -396,7 +401,7 @@ export function MultidimensionalAcquisitionDialog() {
               <div className="w-44 border-r flex flex-col">
                 <div className="px-3 py-2 flex items-center justify-between">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Positions
+                    {t("acquisition.positionsLabel")}
                   </span>
                   <PositionAddButton
                     control={form.control}
@@ -465,7 +470,7 @@ export function MultidimensionalAcquisitionDialog() {
                     />
                   ) : (
                     <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-                      Add a position to get started
+                      {t("acquisition.addPositionToStart")}
                     </div>
                   )}
                 </div>
@@ -479,7 +484,7 @@ export function MultidimensionalAcquisitionDialog() {
               {isLoading && progress !== null && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span>Acquisition Progress</span>
+                    <span>{t("acquisition.progress")}</span>
                     <span>{Math.round(progress)}%</span>
                   </div>
                   <Progress value={progress} className="h-1.5" />
@@ -488,13 +493,15 @@ export function MultidimensionalAcquisitionDialog() {
 
               {task && (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Status</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("acquisition.status")}
+                  </span>
                   <Badge
                     variant={
                       task.status === "completed" ? "default" : "secondary"
                     }
                   >
-                    {task.status}
+                    {t(`taskStatus.${task.status}`)}
                   </Badge>
                 </div>
               )}
@@ -507,12 +514,12 @@ export function MultidimensionalAcquisitionDialog() {
                     onClick={handleCancel}
                   >
                     <Square className="h-4 w-4 mr-2" />
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 ) : (
                   <Button type="submit" disabled={isLoading}>
                     <Play className="h-4 w-4 mr-2" />
-                    Start Acquisition
+                    {t("acquisition.start")}
                   </Button>
                 )}
               </DialogFooter>
@@ -543,6 +550,7 @@ function PositionAddButton({
   defaultChannels: Streams[];
   onAdded: (index: number) => void;
 }) {
+  const { t } = useTranslation();
   const positionsField = useFieldArray({
     control,
     name: `config.timepoints.${timepointIndex}.positions`,
@@ -566,7 +574,7 @@ function PositionAddButton({
       variant="ghost"
       size="icon"
       className="h-6 w-6"
-      title="Add position from current stage"
+      title={t("acquisition.addPositionFromStage")}
       onClick={addFromStage}
     >
       <Plus className="h-4 w-4" />
@@ -589,6 +597,7 @@ function PositionEditor({
   positionIndex: number;
   onRemove?: () => void;
 }) {
+  const { t } = useTranslation();
   const stacksField = useFieldArray({
     control,
     name: `config.timepoints.${timepointIndex}.positions.${positionIndex}.stacks`,
@@ -600,7 +609,7 @@ function PositionEditor({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <MapPin className="h-4 w-4" />
-          Position {positionIndex + 1}
+          {t("acquisition.position", { position: positionIndex + 1 })}
         </h3>
         {onRemove && (
           <Button
@@ -611,7 +620,7 @@ function PositionEditor({
             onClick={onRemove}
           >
             <Trash2 className="h-3 w-3" />
-            Remove
+            {t("acquisition.remove")}
           </Button>
         )}
       </div>
@@ -669,7 +678,7 @@ function PositionEditor({
         onClick={() => stacksField.append(makeDefaultStack())}
       >
         <Plus className="h-3.5 w-3.5" />
-        Add Stack
+        {t("acquisition.addStack")}
       </Button>
     </div>
   );
@@ -694,6 +703,7 @@ function StackEditor({
   canRemove: boolean;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const channelsField = useFieldArray({
     control,
     name: `config.timepoints.${timepointIndex}.positions.${positionIndex}.stacks.${stackIndex}.channels`,
@@ -707,7 +717,7 @@ function StackEditor({
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-semibold flex items-center gap-1.5">
           <Layers className="h-3.5 w-3.5" />
-          Stack {stackIndex + 1}
+          {t("acquisition.stack", { stack: stackIndex + 1 })}
         </h4>
         {canRemove && (
           <Button
@@ -729,7 +739,9 @@ function StackEditor({
           name={`${stackBase}.z_offset`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Z Offset</FormLabel>
+              <FormLabel className="text-xs">
+                Z {t("acquisition.offset")}
+              </FormLabel>
               <FormControl>
                 <Input
                   type="number"
@@ -751,7 +763,9 @@ function StackEditor({
           name={`${stackBase}.z_step`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Z Step</FormLabel>
+              <FormLabel className="text-xs">
+                Z {t("acquisition.step")}
+              </FormLabel>
               <FormControl>
                 <Input
                   type="number"
@@ -775,7 +789,9 @@ function StackEditor({
           name={`${stackBase}.z_slices`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Z Slices</FormLabel>
+              <FormLabel className="text-xs">
+                Z {t("acquisition.slices")}
+              </FormLabel>
               <FormControl>
                 <Input
                   value={zSlicesToString(field.value ?? [])}
@@ -798,7 +814,7 @@ function StackEditor({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">
-            Channels
+            {t("acquisition.channels")}
           </span>
           <Button
             type="button"
@@ -808,7 +824,7 @@ function StackEditor({
             onClick={() => channelsField.append(makeDefaultStream())}
           >
             <Plus className="h-3 w-3" />
-            Channel
+            {t("acquisition.channels")}
           </Button>
         </div>
 
@@ -850,6 +866,7 @@ function ChannelEditor({
   canRemove: boolean;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const basePath =
     `config.timepoints.${timepointIndex}.positions.${positionIndex}.stacks.${stackIndex}.channels.${channelIndex}` as const;
 
@@ -866,7 +883,9 @@ function ChannelEditor({
           name={`${basePath}.detector`}
           render={({ field }) => (
             <FormItem className="flex-1">
-              <FormLabel className="text-xs">Detector</FormLabel>
+              <FormLabel className="text-xs">
+                {t("acquisition.detector")}
+              </FormLabel>
               <FormControl>
                 <Input {...field} placeholder="camera_1" />
               </FormControl>
@@ -878,7 +897,9 @@ function ChannelEditor({
           name={`${basePath}.mapping`}
           render={({ field }) => (
             <FormItem className="flex-1">
-              <FormLabel className="text-xs">Mapping</FormLabel>
+              <FormLabel className="text-xs">
+                {t("acquisition.mapping")}
+              </FormLabel>
               <FormControl>
                 <Input {...field} placeholder="GFP" />
               </FormControl>
@@ -922,7 +943,9 @@ function ChannelEditor({
               name={`${basePath}.illuminations.${illIdx}.source`}
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel className="text-[10px]">Source</FormLabel>
+                  <FormLabel className="text-[10px]">
+                    {t("acquisition.source")}
+                  </FormLabel>
                   <FormControl>
                     <Input {...field} className="h-7 text-xs" />
                   </FormControl>
@@ -956,7 +979,9 @@ function ChannelEditor({
               name={`${basePath}.illuminations.${illIdx}.intensity`}
               render={({ field }) => (
                 <FormItem className="w-16">
-                  <FormLabel className="text-[10px]">Int.</FormLabel>
+                  <FormLabel className="text-[10px]">
+                    {t("acquisition.intensity")}
+                  </FormLabel>
                   <FormControl>
                     <Input
                       type="number"
