@@ -9,10 +9,17 @@ import { useCameraState } from "@/apps/default/hooks/states";
 import { cn } from "@/lib/utils";
 import { Gauge, MonitorUp, Timer } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { OptimisticSlider } from "../ui/optimistic_slider";
 import { ResponsiveGrid } from "../ui/responsive-grid";
 
 export function CameraControl() {
+  const { t, i18n } = useTranslation();
+  const formatNumber = (value: number, digits = 1) =>
+    new Intl.NumberFormat(i18n.resolvedLanguage, {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: digits,
+    }).format(value);
   const { data: cameraState, loading: stateLoading } = useCameraState({
     subscribe: true,
   });
@@ -105,8 +112,8 @@ export function CameraControl() {
                   <div className="flex items-center justify-between gap-2 @[280px]:justify-end">
                     {isActive && (
                       <span className="hidden text-xs font-mono text-muted-foreground @[340px]:inline">
-                        {detector.current_exposure_time.toFixed(0)}ms /{" "}
-                        {detector.current_gain.toFixed(1)}×
+                        {formatNumber(detector.current_exposure_time, 0)} ms /{" "}
+                        {formatNumber(detector.current_gain)}×
                       </span>
                     )}
                     <Switch
@@ -129,7 +136,7 @@ export function CameraControl() {
                     {detector.pixel_size_um}µm
                   </span>
                   <span className="hidden text-xs text-muted-foreground @[360px]:inline">
-                    Slot {detector.slot}
+                    {t("common.slot", { slot: detector.slot })}
                   </span>
                 </div>
               </div>
@@ -143,11 +150,11 @@ export function CameraControl() {
                       <div className="flex items-center gap-2">
                         <Timer className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
-                          Exposure
+                          {t("microscope.exposure")}
                         </span>
                       </div>
                       <span className="text-xs font-mono">
-                        {currentExposure.toFixed(1)} ms
+                        {formatNumber(currentExposure)} ms
                       </span>
                     </div>
                     <OptimisticSlider
@@ -201,11 +208,11 @@ export function CameraControl() {
                       <div className="flex items-center gap-2">
                         <Gauge className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
-                          Gain
+                          {t("microscope.gain")}
                         </span>
                       </div>
                       <span className="text-xs font-mono">
-                        {currentGain.toFixed(1)}×
+                        {formatNumber(currentGain)}×
                       </span>
                     </div>
                     <OptimisticSlider

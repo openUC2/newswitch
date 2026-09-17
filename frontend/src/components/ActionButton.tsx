@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { type VariantProps } from "class-variance-authority";
 import React, { type ButtonHTMLAttributes } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 /** Generate a unique local reference */
 function generateReference(): string {
@@ -42,6 +43,7 @@ export function ActionButton<TArgs, TReturn>({
   disabled,
   ...props
 }: ActionButtonProps<TArgs, TReturn>) {
+  const { t } = useTranslation();
   const actionApi = useAction(action);
 
   const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -50,8 +52,10 @@ export function ActionButton<TArgs, TReturn>({
 
     // Check if any lockKey has an active task
     if (actionApi.isLocked) {
-      toast.warning("Action locked", {
-        description: `Another task (${actionApi.lockedBy}) is using a required resource.`,
+      toast.warning(t("microscope.actionLocked"), {
+        description: t("microscope.actionLockedDescription", {
+          task: actionApi.lockedBy ?? "?",
+        }),
       });
       return;
     }
@@ -77,7 +81,7 @@ export function ActionButton<TArgs, TReturn>({
     } catch (e) {
       console.error(e);
       if (e instanceof Error) {
-        toast.error(`Failed to assign ${action.name}`, {
+        toast.error(t("microscope.actionFailed", { action: action.name }), {
           description: e.message,
         });
       }
@@ -106,7 +110,9 @@ export function ActionButton<TArgs, TReturn>({
         <Tooltip>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipContent>
-            Action locked by task: {actionApi.lockedBy || "unknown"}
+            {t("microscope.actionLockedTooltip", {
+              task: actionApi.lockedBy || "?",
+            })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

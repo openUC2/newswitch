@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { BACKEND_API } from "@/constants";
 import { AccountMenu } from "@/components/navigation/AccountMenu";
 import {
@@ -82,6 +83,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function UsersPage() {
+  const { t } = useTranslation();
   const { username: myUsername } = useAuth();
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,12 +97,12 @@ export function UsersPage() {
       setUsers(await fetchJson<ApiUser[]>("/auth/users"));
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not load users.",
+        error instanceof Error ? error.message : t("users.loadFailed"),
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void reload();
@@ -118,7 +120,7 @@ export function UsersPage() {
       await reload();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not update user.",
+        error instanceof Error ? error.message : t("users.updateFailed"),
       );
     }
   };
@@ -128,11 +130,11 @@ export function UsersPage() {
       await fetchJson(`/auth/users/${encodeURIComponent(username)}`, {
         method: "DELETE",
       });
-      toast.success(`Deleted '${username}'.`);
+      toast.success(t("users.deleted", { username }));
       await reload();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not delete user.",
+        error instanceof Error ? error.message : t("users.deleteFailed"),
       );
     } finally {
       setDeleteTarget(null);
@@ -146,26 +148,30 @@ export function UsersPage() {
         <Button variant="ghost" size="sm" className="w-fit" asChild>
           <Link to="/">
             <ArrowLeft className="h-4 w-4" />
-            Back to microscope
+            {t("navigation.backToMicroscope")}
           </Link>
         </Button>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Users</CardTitle>
-              <CardDescription>Manage accounts and roles.</CardDescription>
+              <CardTitle>{t("users.title")}</CardTitle>
+              <CardDescription>{t("users.description")}</CardDescription>
             </div>
-            <Button onClick={() => setCreateOpen(true)}>Add user</Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              {t("users.add")}
+            </Button>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Enabled</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("auth.username")}</TableHead>
+                  <TableHead>{t("users.role")}</TableHead>
+                  <TableHead>{t("users.enabled")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("users.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -175,7 +181,7 @@ export function UsersPage() {
                       {user.username}
                       {user.username === myUsername && (
                         <Badge variant="secondary" className="ml-2">
-                          you
+                          {t("users.you")}
                         </Badge>
                       )}
                     </TableCell>
@@ -192,7 +198,7 @@ export function UsersPage() {
                         <SelectContent>
                           {ROLES.map((role) => (
                             <SelectItem key={role} value={role}>
-                              {role}
+                              {t(`roles.${role}`)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -213,14 +219,16 @@ export function UsersPage() {
                           size="sm"
                           onClick={() => setPasswordTarget(user.username)}
                         >
-                          Reset password
+                          {t("users.resetPassword")}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           disabled={user.username === myUsername}
                           onClick={() => setDeleteTarget(user.username)}
-                          aria-label={`Delete ${user.username}`}
+                          aria-label={t("users.deleteLabel", {
+                            username: user.username,
+                          })}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -234,7 +242,7 @@ export function UsersPage() {
                       colSpan={4}
                       className="text-center text-muted-foreground"
                     >
-                      No users yet.
+                      {t("users.noUsers")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -260,19 +268,20 @@ export function UsersPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete '{deleteTarget}'?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("users.deleteTitle", { username: deleteTarget })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the account and signs it out everywhere.
-              This cannot be undone.
+              {t("users.deleteDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => deleteTarget && deleteUser(deleteTarget)}
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -290,6 +299,7 @@ function CreateUserDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("operator");
@@ -308,13 +318,13 @@ function CreateUserDialog({
         method: "POST",
         body: JSON.stringify({ username, password, role }),
       });
-      toast.success(`Created '${username}'.`);
+      toast.success(t("users.created", { username }));
       reset();
       onOpenChange(false);
       onCreated();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not create user.",
+        error instanceof Error ? error.message : t("users.createFailed"),
       );
     } finally {
       setSubmitting(false);
@@ -325,11 +335,11 @@ function CreateUserDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add user</DialogTitle>
+          <DialogTitle>{t("users.add")}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-username">Username</Label>
+            <Label htmlFor="new-username">{t("auth.username")}</Label>
             <Input
               id="new-username"
               value={username}
@@ -338,7 +348,7 @@ function CreateUserDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-user-password">Password</Label>
+            <Label htmlFor="new-user-password">{t("auth.password")}</Label>
             <Input
               id="new-user-password"
               type="password"
@@ -347,7 +357,7 @@ function CreateUserDialog({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label>Role</Label>
+            <Label>{t("users.role")}</Label>
             <Select
               value={role}
               onValueChange={(value) => setRole(value as Role)}
@@ -358,7 +368,7 @@ function CreateUserDialog({
               <SelectContent>
                 {ROLES.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {option}
+                    {t(`roles.${option}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -370,7 +380,7 @@ function CreateUserDialog({
             onClick={onSubmit}
             disabled={submitting || !username || !password}
           >
-            {submitting ? "Creating..." : "Create"}
+            {submitting ? t("users.creating") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -385,6 +395,7 @@ function SetPasswordDialog({
   username: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -396,12 +407,12 @@ function SetPasswordDialog({
         method: "POST",
         body: JSON.stringify({ password }),
       });
-      toast.success(`Password for '${username}' reset.`);
+      toast.success(t("users.passwordReset", { username }));
       setPassword("");
       onOpenChange(false);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not reset password.",
+        error instanceof Error ? error.message : t("users.resetFailed"),
       );
     } finally {
       setSubmitting(false);
@@ -412,10 +423,10 @@ function SetPasswordDialog({
     <Dialog open={username !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reset password for '{username}'</DialogTitle>
+          <DialogTitle>{t("users.resetPasswordFor", { username })}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="reset-password">New password</Label>
+          <Label htmlFor="reset-password">{t("auth.newPassword")}</Label>
           <Input
             id="reset-password"
             type="password"
@@ -426,7 +437,7 @@ function SetPasswordDialog({
         </div>
         <DialogFooter>
           <Button onClick={onSubmit} disabled={submitting || !password}>
-            {submitting ? "Resetting..." : "Reset password"}
+            {submitting ? t("users.resetting") : t("users.resetPassword")}
           </Button>
         </DialogFooter>
       </DialogContent>

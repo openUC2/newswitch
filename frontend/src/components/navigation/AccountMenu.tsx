@@ -7,6 +7,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { LogOut, ScrollText, ShieldUser, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,10 +21,12 @@ import {
 import { useAuth } from "@/lib/auth/context";
 import { cn } from "@/lib/utils";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
+import { LanguageMenu } from "./LanguageMenu";
 
 export function AccountMenu({ className }: { className?: string }) {
   const { username, role, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   return (
@@ -34,7 +37,7 @@ export function AccountMenu({ className }: { className?: string }) {
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Account menu"
+            aria-label={t("auth.accountMenu")}
             className={cn(
               "fixed right-3 top-3 z-50 h-8 w-8 bg-background/70 backdrop-blur hover:bg-background",
               className,
@@ -46,7 +49,7 @@ export function AccountMenu({ className }: { className?: string }) {
         <DropdownMenuContent align="end">
           {username && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              {username} · {role}
+              {username} · {role ? t(`roles.${role}`) : ""}
             </div>
           )}
           {role === "admin" && (
@@ -54,25 +57,26 @@ export function AccountMenu({ className }: { className?: string }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate("/admin/users")}>
                 <ShieldUser className="h-4 w-4" />
-                Manage users
+                {t("navigation.manageUsers")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/admin/audit")}>
                 <ScrollText className="h-4 w-4" />
-                Audit log
+                {t("navigation.auditLog")}
               </DropdownMenuItem>
             </>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setPasswordDialogOpen(true)}>
             <KeyRound className="h-4 w-4" />
-            Change password
+            {t("auth.changePassword")}
           </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={logout}>
             <LogOut className="h-4 w-4" />
-            Log out
+            {t("auth.logOut")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <LanguageMenu className="fixed right-12 top-3 z-50 hover:bg-background" />
       <ChangePasswordDialog
         open={passwordDialogOpen}
         onOpenChange={setPasswordDialogOpen}

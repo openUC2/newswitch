@@ -2,10 +2,11 @@
  * Admin-only view of the login audit trail (successes, failures, logouts).
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { BACKEND_API } from "@/constants";
 import { AccountMenu } from "@/components/navigation/AccountMenu";
 import { Badge } from "@/components/ui/badge";
@@ -44,10 +45,11 @@ const EVENT_VARIANT: Record<
 };
 
 export function AuditLogPage() {
+  const { t, i18n } = useTranslation();
   const [events, setEvents] = useState<LoginEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     try {
       const response = await authFetch(`${BACKEND_API}/auth/audit`);
@@ -55,18 +57,16 @@ export function AuditLogPage() {
       setEvents((await response.json()) as LoginEvent[]);
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not load the audit log.",
+        error instanceof Error ? error.message : t("audit.loadFailed"),
       );
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     void reload();
-  }, []);
+  }, [reload]);
 
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
@@ -75,23 +75,21 @@ export function AuditLogPage() {
         <Button variant="ghost" size="sm" className="w-fit" asChild>
           <Link to="/">
             <ArrowLeft className="h-4 w-4" />
-            Back to microscope
+            {t("navigation.backToMicroscope")}
           </Link>
         </Button>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Audit log</CardTitle>
-              <CardDescription>
-                Recent logins, failures and logouts.
-              </CardDescription>
+              <CardTitle>{t("navigation.auditLog")}</CardTitle>
+              <CardDescription>{t("audit.description")}</CardDescription>
             </div>
             <Button
               variant="outline"
               size="icon"
               onClick={reload}
-              aria-label="Refresh"
+              aria-label={t("common.refresh")}
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -100,23 +98,26 @@ export function AuditLogPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Event</TableHead>
+                  <TableHead>{t("audit.when")}</TableHead>
+                  <TableHead>{t("audit.user")}</TableHead>
+                  <TableHead>{t("audit.event")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {events.map((event, index) => (
                   <TableRow key={`${event.created_at}-${index}`}>
                     <TableCell className="text-muted-foreground">
-                      {event.created_at}
+                      {new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+                        dateStyle: "medium",
+                        timeStyle: "medium",
+                      }).format(new Date(event.created_at))}
                     </TableCell>
                     <TableCell className="font-medium">
                       {event.username}
                     </TableCell>
                     <TableCell>
                       <Badge variant={EVENT_VARIANT[event.event]}>
-                        {event.event.replace("_", " ")}
+                        {t(`audit.events.${event.event}`)}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -127,7 +128,7 @@ export function AuditLogPage() {
                       colSpan={3}
                       className="text-center text-muted-foreground"
                     >
-                      No events yet.
+                      {t("audit.noEvents")}
                     </TableCell>
                   </TableRow>
                 )}
