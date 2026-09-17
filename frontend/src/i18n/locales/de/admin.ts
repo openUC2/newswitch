@@ -1,0 +1,41 @@
+export const users = {
+  title: "Benutzer",
+  description: "Konten und Rollen verwalten.",
+  add: "Benutzer hinzufügen",
+  role: "Rolle",
+  enabled: "Aktiv",
+  actions: "Aktionen",
+  you: "du",
+  resetPassword: "Passwort zurücksetzen",
+  resetPasswordFor: "Passwort für „{{username}}“ zurücksetzen",
+  resetting: "Wird zurückgesetzt...",
+  noUsers: "Noch keine Benutzer vorhanden.",
+  deleteLabel: "{{username}} löschen",
+  deleteTitle: "„{{username}}“ löschen?",
+  deleteDescription:
+    "Das Konto wird dauerhaft entfernt und überall abgemeldet. Dies kann nicht rückgängig gemacht werden.",
+  deleted: "„{{username}}“ wurde gelöscht.",
+  created: "„{{username}}“ wurde erstellt.",
+  passwordReset: "Das Passwort für „{{username}}“ wurde zurückgesetzt.",
+  creating: "Wird erstellt...",
+  loadFailed: "Die Benutzer konnten nicht geladen werden.",
+  updateFailed: "Der Benutzer konnte nicht aktualisiert werden.",
+  deleteFailed: "Der Benutzer konnte nicht gelöscht werden.",
+  createFailed: "Der Benutzer konnte nicht erstellt werden.",
+  resetFailed: "Das Passwort konnte nicht zurückgesetzt werden.",
+} as const;
+
+export const audit = {
+  description: "Letzte Anmeldungen, Fehler und Abmeldungen.",
+  when: "Zeitpunkt",
+  user: "Benutzer",
+  event: "Ereignis",
+  noEvents: "Noch keine Ereignisse vorhanden.",
+  loadFailed: "Das Audit-Protokoll konnte nicht geladen werden.",
+  events: {
+    login_success: "Anmeldung erfolgreich",
+    login_failure: "Anmeldung fehlgeschlagen",
+    logout: "Abgemeldet",
+    session_expired: "Sitzung abgelaufen",
+  },
+} as const;
