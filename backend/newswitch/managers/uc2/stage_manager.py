@@ -15,6 +15,7 @@ from typing import Optional
 
 from koil import unkoil
 from rekuest_next import model
+from rekuest_next.state.lock import acquired_locks
 
 from newswitch.protocols.stage import StageState
 from newswitch.protocols.uc2 import UC2BusManager
@@ -28,6 +29,9 @@ class UC2StageConfig:
     axes: list[str] = field(default_factory=lambda: ["X", "Y", "Z", "A"])
     # Homing order matters mechanically: lift Z away from the sample first.
     home_axes: list[str] = field(default_factory=lambda: ["Z", "X", "Y"])
+    registered_step_sizes: list[float] = field(
+        default_factory=lambda: [10.0, 100.0, 1000.0, 10000.0]
+    )
     default_speed: float = 5000.0  # micrometers per second
 
 
@@ -47,6 +51,12 @@ class UC2StageManager:
         self.stage_state = stage_state
         self.state = stage_state
         self.config = config or UC2StageConfig()
+        if not self.config.registered_step_sizes or any(
+            step <= 0 for step in self.config.registered_step_sizes
+        ):
+            raise ValueError("registered_step_sizes must contain positive values")
+        with acquired_locks("stage_position"):
+            self.stage_state.registered_step_sizes = list(self.config.registered_step_sizes)
 
     def move(
         self,

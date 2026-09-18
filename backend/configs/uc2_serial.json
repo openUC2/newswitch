@@ -19,6 +19,7 @@
   "uc2_stage": {
     "axes": ["X", "Y", "Z", "A"],
     "home_axes": ["Z", "X", "Y"],
+    "registered_step_sizes": [10.0, 100.0, 1000.0, 10000.0],
     "default_speed": 5000.0
   },
   "uc2_illumination": {

@@ -10,6 +10,7 @@ from rekuest_next.state.lock import acquired_locks
 from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.managers.uc2.rest_bus import UC2RestBusConfig
 from newswitch.managers.uc2.dispatch import apply_uc2_event
+from newswitch.managers.uc2.stage_manager import UC2StageConfig, UC2StageManager
 from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.protocols.stage import StageState
 from newswitch.protocols.uc2 import (
@@ -97,6 +98,29 @@ def test_canopen_unit_conversion_roundtrip() -> None:
     assert bus.axis_for_node(99) is None
 
 
+def test_uc2_stage_exposes_configured_jog_distances() -> None:
+    """Hardware setups publish practical XY jog distances to the frontend."""
+    stage_state = StageState()
+
+    UC2StageManager(
+        stage_state=stage_state,
+        bus=make_virtual_bus(),
+        config=UC2StageConfig(registered_step_sizes=[10.0, 100.0, 1000.0, 10000.0]),
+    )
+
+    assert stage_state.registered_step_sizes == [10.0, 100.0, 1000.0, 10000.0]
+
+
+def test_uc2_stage_rejects_invalid_jog_distances() -> None:
+    """Zero or negative jog distances cannot be exposed to the controls."""
+    with pytest.raises(ValueError, match="positive values"):
+        UC2StageManager(
+            stage_state=StageState(),
+            bus=make_virtual_bus(),
+            config=UC2StageConfig(registered_step_sizes=[100.0, 0.0]),
+        )
+
+
 def test_apply_uc2_event_updates_states() -> None:
     """Dispatch mirrors hardware events into stage and bus states."""
     stage_state = StageState()
@@ -141,6 +165,7 @@ def test_shipped_config_files_load() -> None:
     assert rest_bus_cfg.require_master is True
     assert rest_bus_cfg.steps_per_um_x == pytest.approx(3.2)
     assert serial_cfg.uc2_stage["home_axes"] == ["Z", "X", "Y"]
+    assert serial_cfg.uc2_stage["registered_step_sizes"] == [10.0, 100.0, 1000.0, 10000.0]
     assert len(serial_cfg.uc2_illumination["sources"]) == 3
 
     can_cfg = ImswitchConfig.model_validate_json((configs_dir / "uc2_canopen.json").read_text())
