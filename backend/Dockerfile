@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.8.3 /uv /usr/local/bin/uv
 
+# pystackreg ships no aarch64 wheel and must compile its C++ extension on Raspberry Pi.
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PYTHONUNBUFFERED=1 \
