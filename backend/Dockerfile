@@ -4,7 +4,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.8.3 /uv /usr/local/bin/uv
 
 # pystackreg ships no aarch64 wheel and must compile its C++ extension on Raspberry Pi.
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes g++ \
+    && apt-get install --no-install-recommends --yes g++ git \
     && rm -rf /var/lib/apt/lists/*
 
 ENV UV_LINK_MODE=copy \
@@ -23,10 +23,10 @@ USER app
 
 # Dependency layer, cached across source edits
 COPY --chown=app:app pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --extra uc2
 
 COPY --chown=app:app . .
-RUN uv sync --frozen
+RUN uv sync --frozen --extra uc2
 
 # Defaults matching the repo's root .env. compose overrides them per service, and
 # `docker run -e BACKEND_PORT=...` works too - CMD/HEALTHCHECK below both read them.
