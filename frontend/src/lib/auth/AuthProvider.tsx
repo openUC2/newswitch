@@ -19,10 +19,12 @@ import { AuthContext, InvalidCredentialsError, type Role } from "./context";
 import { clearToken, getToken, setToken, subscribe } from "./token";
 
 type Identity = { username: string; role: Role };
+type ResolvedIdentity = { token: string; value: Identity | null };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(() => getToken());
-  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [resolvedIdentity, setResolvedIdentity] =
+    useState<ResolvedIdentity | null>(null);
 
   // Anything that clears the token - a 401 in authFetch, a 1008 websocket close,
   // another tab logging out - lands here and re-renders the guard.
@@ -31,10 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // The token says *that* someone is logged in; this fills in *who* and with what
   // role, which RequireAdmin and the account menu need but the token alone can't say.
   useEffect(() => {
-    if (!token) {
-      setIdentity(null);
-      return;
-    }
+    if (!token) return;
     let cancelled = false;
     fetch(`${BACKEND_API}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -43,15 +42,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         response.ok ? (response.json() as Promise<Identity>) : null,
       )
       .then((data) => {
-        if (!cancelled) setIdentity(data);
+        if (!cancelled) setResolvedIdentity({ token, value: data });
       })
       .catch(() => {
-        if (!cancelled) setIdentity(null);
+        if (!cancelled) setResolvedIdentity({ token, value: null });
       });
     return () => {
       cancelled = true;
     };
   }, [token]);
+
+  const identity =
+    token && resolvedIdentity?.token === token ? resolvedIdentity.value : null;
 
   const login = useCallback(async (username: string, password: string) => {
     const response = await fetch(`${BACKEND_API}/auth/login`, {
