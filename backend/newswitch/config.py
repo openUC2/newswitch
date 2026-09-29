@@ -19,7 +19,7 @@ APP_NAME = "newswitch"
 
 # Extensions understood by the config loaders, in the order they are tried when a
 # name is given without one.
-CONFIG_SUFFIXES = (".yaml", ".yml", ".json")
+CONFIG_SUFFIXES = (".yaml", ".yml")
 
 # Repository root, derived from this module's location rather than from the working
 # directory, so the same .env is read no matter where the process was started.
@@ -119,7 +119,7 @@ class Paths(BaseSettings):
         managed folder. A bare name is looked up inside `config_dir`:
 
         * with a known suffix   -> ``config_dir / name``
-        * without a suffix      -> the first of .yaml/.yml/.json that exists
+        * without a suffix      -> the first of .yaml/.yml that exists
 
         Args:
             name: Bare file name, name without suffix, or an explicit path.

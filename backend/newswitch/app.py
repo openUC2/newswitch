@@ -23,6 +23,7 @@ from rekuest_next import jsx
 import koil
 from rekuest_next.register import register
 from rekuest_next.agents.hooks.startup import startup
+from rekuest_next.agents.hooks.shutdown import shutdown
 from rekuest_next.agents.hooks.background import background
 
 
@@ -54,6 +55,8 @@ from newswitch.protocols.calibration import CalibrationState
 from newswitch.protocols.detector import Detector
 from newswitch.protocols.io import IOManager, IOState
 from newswitch import protocols
+from newswitch import config_io
+from newswitch.config_io import adapters
 
 # Import concrete implementations
 from newswitch.managers.virtual import (
@@ -62,6 +65,10 @@ from newswitch.managers.virtual import (
     VirtualDetectorManager,
     VirtualObjectiveManager,
     VirtualFilterBankManager,
+    FilterBankConfig,
+    LEDConfig,
+    ObjectiveConfig,
+    StageConfig as VirtualStageConfig,
 )
 from newswitch.managers.io import LocalFileIOManager, LocalFileConfig
 
@@ -104,6 +111,9 @@ class ImswitchConfig(BaseModel):
     use_virtual_microscope: bool = True
     db_path: str = "agent_data.db"
     available_cubes: list[str] = ["cube1", "cube2", "cube3"]
+    config_file: Optional[str] = None
+    """Device configuration (e.g. ``newswitch-config.yaml``); a bare name is resolved
+    against the managed config directory. None keeps the built-in virtual devices."""
 
 
 # ====================
@@ -178,21 +188,56 @@ async def provide_managers(
 
     serial_state = SerialState()
 
+    # Devices from newswitch-config.yaml; every manager whose device kind is missing
+    # from the file (or when no file is configured) keeps its built-in defaults.
+    devices = config_io.load_config(config.config_file).config if config.config_file else None
+    led_config = objective_config = filter_bank_config = virtual_stage_config = None
+    configured_detectors = None
+    serial_port, serial_baudrate = "/dev/ttyUSB0", 115200
+    if devices is not None:
+        sources = adapters.illuminations(devices)
+        if sources is not None:
+            led_config = LEDConfig(sources=sources)
+        lenses = adapters.objective_lenses(devices)
+        if lenses is not None:
+            objective_config = ObjectiveConfig(objectives=lenses[0], default_slot=lenses[1])
+        filters = adapters.filters(devices)
+        if filters is not None:
+            filter_bank_config = FilterBankConfig(filters=filters[0], default_slot=filters[1])
+        configured_detectors = adapters.detectors(devices)
+        if devices.stages:
+            adapters.apply_stage_limits(devices, stage_state)
+            virtual_stage_config = VirtualStageConfig(
+                min_x=stage_state.min_x,
+                max_x=stage_state.max_x,
+                min_y=stage_state.min_y,
+                max_y=stage_state.max_y,
+                min_z=stage_state.min_z,
+                max_z=stage_state.max_z,
+                min_a=stage_state.min_a,
+                max_a=stage_state.max_a,
+            )
+        serial_cfg = adapters.serial_settings(devices)
+        if serial_cfg is not None:
+            serial_port, serial_baudrate = serial_cfg.port, serial_cfg.baudrate
+
     if config.use_virtual_microscope:
         serial = VirtualSerialManager(state=serial_state)
-        stage = VirtualStageManager(stage=stage_state)
+        stage = VirtualStageManager(stage=stage_state, config=virtual_stage_config)
     else:
         serial = UC2SerialManager(
             state=serial_state,
-            port="/dev/ttyUSB0",
-            baudrate=115200,
+            port=serial_port,
+            baudrate=serial_baudrate,
             stage_state=stage_state,
-        )  # Replace with actual serial manager for hardware
+        )
         stage = UC2StageManager(stage_state=stage_state, serial_manager=serial)  #
 
-    led = VirtualLEDManager(illumination_state=illumination_state)
-    objective = VirtualObjectiveManager(objective_state=objective_state)
-    filter_bank = VirtualFilterBankManager(filter_bank_state=filter_bank_state)
+    led = VirtualLEDManager(illumination_state=illumination_state, config=led_config)
+    objective = VirtualObjectiveManager(objective_state=objective_state, config=objective_config)
+    filter_bank = VirtualFilterBankManager(
+        filter_bank_state=filter_bank_state, config=filter_bank_config
+    )
     detector = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
@@ -200,6 +245,7 @@ async def provide_managers(
         broadcaster=frame_broadcaster,
         objective_state=objective_state,
         filter_bank_state=filter_bank_state,
+        detectors=configured_detectors,
     )
     io_manager = LocalFileIOManager(
         state=io_state,
@@ -289,6 +335,31 @@ async def provide_managers(
         acquistion_manager,
         cache_manager,
     )
+
+
+@shutdown
+def save_device_config(
+    app_context: ImswitchConfig,
+    camera_state: CameraState,
+    objective_state: ObjectiveState,
+    filter_bank_state: FilterBankState,
+    stage_state: StageState,
+) -> None:
+    """Write runtime values (exposure, gain, revolver positions, stage position) back.
+
+    The file is re-read rather than kept from startup, so edits made while newswitch was
+    running are preserved; only the runtime values are merged in.
+    """
+    if not app_context.config_file:
+        return
+    try:
+        cfg_file = config_io.load_config(app_context.config_file)
+        adapters.sync_runtime_state(
+            cfg_file.config, camera_state, objective_state, filter_bank_state, stage_state
+        )
+        print(f"Saved device configuration to {cfg_file.save()}")
+    except config_io.ConfigError as exc:
+        print(f"Device configuration not saved: {exc}")
 
 
 @background

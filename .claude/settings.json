@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(uv:*)",
+      "Bash(yarn:*)",
+      "Bash(just check)",
+      "Bash(just lint)",
+      "Bash(just fmt)",
+      "Bash(just fmt-check)",
+      "Bash(just types)",
+      "Bash(just test)",
+      "Bash(just test-backend)",
+      "Bash(just test-frontend)",
+      "Bash(just test-all)",
+      "Bash(just drift-check)"
+    ],
+    "deny": [
+      //"Bash(git commit:*)",
+      "Bash(git push:*)",
+      //"Bash(git merge:*)",
+      //"Bash(git rebase:*)",
+      //"Bash(git reset:*)",
+      //"Bash(git cherry-pick:*)"
+    ]
+  }
+}

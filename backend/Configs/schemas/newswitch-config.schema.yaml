@@ -1,0 +1,1501 @@
+# JSON Schema (Draft 2020-12) for newswitch-config.yaml.
+# Generated from newswitch.config_io.devices -- do not edit by hand.
+# Regenerate with: uv run python -m newswitch.config_io --export-schema
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$defs:
+  AxisConfig:
+    additionalProperties: false
+    description: One motorized axis of a stage (no ``type`` key; only valid inside a stage).
+    properties:
+      label:
+        description: Direction of the axis
+        enum:
+        - x
+        - y
+        - z
+        - a
+        - rx
+        - ry
+        - rz
+        title: Label
+        type: string
+      steps_per_um:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - type: 'null'
+        description: Motor steps per um; null for a servo stage
+        title: Steps Per Um
+        x_firmware: full
+      homing_required:
+        description: Axis must be homed before use
+        title: Homing Required
+        type: boolean
+        x_firmware: full
+      inverted:
+        default: false
+        title: Inverted
+        type: boolean
+      pos:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Position; min/max give the travel
+        x_firmware: full
+        x_unit: um
+      vel:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Velocity
+        x_firmware: full
+        x_unit: um/s
+      acc:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Acceleration
+        x_firmware: full
+        x_unit: um/s**2
+      jerk:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Jerk
+        x_firmware: full
+        x_unit: um/s**3
+    required:
+    - label
+    - steps_per_um
+    - homing_required
+    title: AxisConfig
+    type: object
+  CanOpenProtocol:
+    additionalProperties: false
+    description: CANopen device (node) on a CAN bus.
+    properties:
+      protocol:
+        const: canopen
+        default: canopen
+        title: Protocol
+        type: string
+      node_id:
+        maximum: 127
+        minimum: 1
+        title: Node Id
+        type: integer
+      eds_file:
+        anyOf:
+        - format: path
+          type: string
+        - type: 'null'
+        default: null
+        title: Eds File
+      sdo_timeout:
+        default: 0.5
+        title: Sdo Timeout
+        type: number
+      heartbeat_period_ms:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Heartbeat Period Ms
+      transport:
+        $ref: '#/$defs/CanTransport'
+        default:
+          type: can
+          interface: socketcan
+          channel: can0
+          bitrate: 500000
+    required:
+    - node_id
+    title: CanOpenProtocol
+    type: object
+  CanTransport:
+    additionalProperties: false
+    description: CAN bus interface (based on python-can).
+    properties:
+      type:
+        const: can
+        default: can
+        title: Type
+        type: string
+      interface:
+        default: socketcan
+        enum:
+        - socketcan
+        - pcan
+        - kvaser
+        - slcan
+        - gs_usb
+        - virtual
+        title: Interface
+        type: string
+      channel:
+        default: can0
+        title: Channel
+        type: string
+      bitrate:
+        default: 500000
+        title: Bitrate
+        type: integer
+    title: CanTransport
+    type: object
+  ControllerConfig:
+    additionalProperties: false
+    description: Controller board (e.g. UC2 mainboard) that other devices are attached to.
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      connection:
+        description: Connection to the controller
+        discriminator:
+          mapping:
+            canopen: '#/$defs/CanOpenProtocol'
+            gige-vision: '#/$defs/GigEVisionProtocol'
+            modbus: '#/$defs/ModbusProtocol'
+            register-map: '#/$defs/RegisterMapProtocol'
+            uc2-rest: '#/$defs/Uc2RestProtocol'
+            usb3-vision: '#/$defs/Usb3VisionProtocol'
+          propertyName: protocol
+        oneOf:
+        - $ref: '#/$defs/Uc2RestProtocol'
+        - $ref: '#/$defs/CanOpenProtocol'
+        - $ref: '#/$defs/ModbusProtocol'
+        - $ref: '#/$defs/RegisterMapProtocol'
+        - $ref: '#/$defs/GigEVisionProtocol'
+        - $ref: '#/$defs/Usb3VisionProtocol'
+        title: Connection
+      firmware:
+        $ref: '#/$defs/Firmware'
+        description: Firmware running on the controller
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: controller
+        default: controller
+        title: Type
+        type: string
+    required:
+    - type
+    - name
+    - connection
+    - firmware
+    title: ControllerConfig
+    type: object
+  DetectorConfig:
+    additionalProperties: false
+    description: Camera or single-diode detector.
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      connection:
+        anyOf:
+        - discriminator:
+            mapping:
+              canopen: '#/$defs/CanOpenProtocol'
+              gige-vision: '#/$defs/GigEVisionProtocol'
+              modbus: '#/$defs/ModbusProtocol'
+              register-map: '#/$defs/RegisterMapProtocol'
+              uc2-rest: '#/$defs/Uc2RestProtocol'
+              usb3-vision: '#/$defs/Usb3VisionProtocol'
+            propertyName: protocol
+          oneOf:
+          - $ref: '#/$defs/Uc2RestProtocol'
+          - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/ModbusProtocol'
+          - $ref: '#/$defs/RegisterMapProtocol'
+          - $ref: '#/$defs/GigEVisionProtocol'
+          - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: 'null'
+        default: null
+        description: Own connection; required when no controller is given
+        title: Connection
+      controller:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: device_id of the controller this device is attached to
+        title: Controller
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: detector
+        default: detector
+        title: Type
+        type: string
+      pixelcount:
+        anyOf:
+        - maxItems: 2
+          minItems: 2
+          prefixItems:
+          - exclusiveMinimum: 0
+            type: integer
+          - exclusiveMinimum: 0
+            type: integer
+          type: array
+        - type: 'null'
+        default: null
+        description: Sensor resolution [x, y]
+        title: Pixelcount
+        x_firmware: full
+      pixelpitch_um:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - maxItems: 2
+          minItems: 2
+          prefixItems:
+          - exclusiveMinimum: 0
+            type: number
+          - exclusiveMinimum: 0
+            type: number
+          type: array
+        - type: 'null'
+        default: null
+        description: Center-to-center pixel distance in um
+        title: Pixelpitch Um
+        x_firmware: full
+      pixelsize_um:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - maxItems: 2
+          minItems: 2
+          prefixItems:
+          - exclusiveMinimum: 0
+            type: number
+          - exclusiveMinimum: 0
+            type: number
+          type: array
+        - type: 'null'
+        default: null
+        description: Photosensitive width per pixel in um; <= pitch
+        title: Pixelsize Um
+        x_firmware: full
+      channels:
+        default: 1
+        description: Number of color/spectral channels
+        exclusiveMinimum: 0
+        title: Channels
+        type: integer
+        x_firmware: full
+      exposure_time_ms:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Integration time
+        x_firmware: limits
+        x_unit: ms
+      framerate_per_sec:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Frame rate
+        x_firmware: limits
+        x_unit: Hz
+      gain_db:
+        anyOf:
+        - $ref: '#/$defs/PhysVal'
+        - type: 'null'
+        default: null
+        description: Analog gain
+        x_firmware: limits
+        x_unit: dB
+      binning:
+        default: 1
+        description: Symmetric hardware binning
+        enum:
+        - 1
+        - 2
+        - 4
+        title: Binning
+        type: integer
+        x_firmware: full
+      trigger:
+        anyOf:
+        - $ref: '#/$defs/Trigger'
+        - type: 'null'
+        default: null
+    required:
+    - type
+    - name
+    title: DetectorConfig
+    type: object
+  FilterConfig:
+    additionalProperties: false
+    description: Optical filter (passive; mounted in a revolver).
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      wavelength:
+        description: Center wavelength in nm
+        exclusiveMinimum: 0
+        title: Wavelength
+        type: number
+      bandwidth:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - type: 'null'
+        default: null
+        description: Bandwidth in nm
+        title: Bandwidth
+      spec_shape:
+        anyOf:
+        - enum:
+          - gauss
+          - tophat
+          type: string
+        - type: 'null'
+        default: null
+        description: Spectral shape
+        title: Spec Shape
+      transmission:
+        default: 1.0
+        description: Peak transmission
+        maximum: 1.0
+        minimum: 0.0
+        title: Transmission
+        type: number
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: filter
+        default: filter
+        title: Type
+        type: string
+    required:
+    - type
+    - name
+    - wavelength
+    title: FilterConfig
+    type: object
+  Firmware:
+    additionalProperties: false
+    description: Firmware running on a controller.
+    properties:
+      name:
+        title: Name
+        type: string
+      version:
+        title: Version
+        type: string
+    required:
+    - name
+    - version
+    title: Firmware
+    type: object
+  GigEVisionProtocol:
+    additionalProperties: false
+    description: GigE Vision camera; the transport is managed by the camera SDK.
+    properties:
+      protocol:
+        const: gige-vision
+        default: gige-vision
+        title: Protocol
+        type: string
+      serial_number:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Serial Number
+      ip:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Ip
+      mac:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Mac
+      user_defined_name:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: User Defined Name
+      packet_size:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Packet Size
+    title: GigEVisionProtocol
+    type: object
+  HttpTransport:
+    additionalProperties: false
+    description: HTTP(S) connection, e.g. uc2-rest over Wi-Fi/Ethernet.
+    properties:
+      type:
+        const: http
+        default: http
+        title: Type
+        type: string
+      host:
+        title: Host
+        type: string
+      port:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Port
+      scheme:
+        default: http
+        enum:
+        - http
+        - https
+        title: Scheme
+        type: string
+      base_path:
+        default: ''
+        title: Base Path
+        type: string
+      timeout:
+        default: 5.0
+        title: Timeout
+        type: number
+      verify_ssl:
+        default: true
+        title: Verify Ssl
+        type: boolean
+      token:
+        anyOf:
+        - format: password
+          type: string
+          writeOnly: true
+        - type: 'null'
+        default: null
+        title: Token
+      ws_path:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Ws Path
+    required:
+    - host
+    title: HttpTransport
+    type: object
+  I2cTransport:
+    additionalProperties: false
+    description: "I2C bus + slave address (the address is part of the I2C link layer).\n\nBus speed is not configurable from user space on Linux; on a Raspberry Pi\nit is set in config.txt (dtparam=i2c_arm_baudrate=...)."
+    properties:
+      type:
+        const: i2c
+        default: i2c
+        title: Type
+        type: string
+      bus:
+        default: 1
+        title: Bus
+        type: integer
+      address:
+        maximum: 1023
+        minimum: 0
+        title: Address
+        type: integer
+      ten_bit:
+        default: false
+        title: Ten Bit
+        type: boolean
+      force:
+        default: false
+        title: Force
+        type: boolean
+    required:
+    - address
+    title: I2cTransport
+    type: object
+  LightsourceConfig:
+    additionalProperties: false
+    description: Illumination source (LED, laser, ...).
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      connection:
+        anyOf:
+        - discriminator:
+            mapping:
+              canopen: '#/$defs/CanOpenProtocol'
+              gige-vision: '#/$defs/GigEVisionProtocol'
+              modbus: '#/$defs/ModbusProtocol'
+              register-map: '#/$defs/RegisterMapProtocol'
+              uc2-rest: '#/$defs/Uc2RestProtocol'
+              usb3-vision: '#/$defs/Usb3VisionProtocol'
+            propertyName: protocol
+          oneOf:
+          - $ref: '#/$defs/Uc2RestProtocol'
+          - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/ModbusProtocol'
+          - $ref: '#/$defs/RegisterMapProtocol'
+          - $ref: '#/$defs/GigEVisionProtocol'
+          - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: 'null'
+        default: null
+        description: Own connection; required when no controller is given
+        title: Connection
+      controller:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: device_id of the controller this device is attached to
+        title: Controller
+      wavelength:
+        description: Wavelength in nm
+        exclusiveMinimum: 0
+        title: Wavelength
+        type: number
+      bandwidth:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - type: 'null'
+        default: null
+        description: Bandwidth in nm
+        title: Bandwidth
+      spec_shape:
+        anyOf:
+        - enum:
+          - gauss
+          - tophat
+          type: string
+        - type: 'null'
+        default: null
+        description: Spectral shape
+        title: Spec Shape
+      max_intensity:
+        anyOf:
+        - minimum: 0
+          type: number
+        - type: 'null'
+        default: null
+        description: Maximum intensity; None means not settable
+        title: Max Intensity
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: lightsource
+        default: lightsource
+        title: Type
+        type: string
+      channels:
+        default: 1
+        description: Number of color/spectral channels
+        exclusiveMinimum: 0
+        title: Channels
+        type: integer
+        x_firmware: full
+      coherence:
+        default: incoherent
+        enum:
+        - coherent
+        - incoherent
+        - partial
+        title: Coherence
+        type: string
+      polarization:
+        default: random
+        enum:
+        - s
+        - p
+        - random
+        title: Polarization
+        type: string
+      trigger:
+        anyOf:
+        - $ref: '#/$defs/Trigger'
+        - type: 'null'
+        default: null
+    required:
+    - type
+    - name
+    - wavelength
+    title: LightsourceConfig
+    type: object
+  ModbusProtocol:
+    additionalProperties: false
+    description: Modbus RTU/ASCII on serial lines (typically RS485 multidrop) or Modbus TCP.
+    properties:
+      protocol:
+        const: modbus
+        default: modbus
+        title: Protocol
+        type: string
+      unit_id:
+        maximum: 255
+        minimum: 0
+        title: Unit Id
+        type: integer
+      framing:
+        anyOf:
+        - enum:
+          - rtu
+          - ascii
+          - mbap
+          type: string
+        - type: 'null'
+        default: null
+        title: Framing
+      response_timeout:
+        default: 0.5
+        title: Response Timeout
+        type: number
+      retries:
+        default: 2
+        title: Retries
+        type: integer
+      transport:
+        discriminator:
+          mapping:
+            rs422: '#/$defs/Rs422Transport'
+            rs485: '#/$defs/Rs485Transport'
+            serial: '#/$defs/SerialTransport'
+            tcp: '#/$defs/TcpTransport'
+          propertyName: type
+        oneOf:
+        - $ref: '#/$defs/Rs485Transport'
+        - $ref: '#/$defs/Rs422Transport'
+        - $ref: '#/$defs/SerialTransport'
+        - $ref: '#/$defs/TcpTransport'
+        title: Transport
+    required:
+    - unit_id
+    - transport
+    title: ModbusProtocol
+    type: object
+  ObjectiveConfig:
+    additionalProperties: false
+    description: Objective lens (passive; mounted in a revolver).
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      magnification:
+        description: Magnification
+        exclusiveMinimum: 0
+        title: Magnification
+        type: number
+      na:
+        description: Numerical aperture
+        exclusiveMinimum: 0
+        title: Na
+        type: number
+      wd:
+        description: Working distance in mm
+        exclusiveMinimum: 0
+        title: Wd
+        type: number
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: objective
+        default: objective
+        title: Type
+        type: string
+    required:
+    - type
+    - name
+    - magnification
+    - na
+    - wd
+    title: ObjectiveConfig
+    type: object
+  PhysVal:
+    anyOf:
+    - description: 'Shorthand for {value: <number>}'
+      type: number
+    - additionalProperties: false
+      description: "A physical value with its device limits.\n\nOnly ``value`` may be changed by the software at runtime; it is written back to the\nfile on shutdown. The other members describe what the device allows."
+      properties:
+        inc:
+          default: 2.220446049250313e-16
+          description: Step size
+          exclusiveMinimum: 0
+          title: Inc
+          type: number
+        preset_vals:
+          items:
+            type: number
+          title: Preset Vals
+          type: array
+        value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Value
+        min:
+          default: -.inf
+          title: Min
+          type: number
+        max:
+          default: .inf
+          title: Max
+          type: number
+        unit:
+          default: ''
+          title: Unit
+          type: string
+      title: PhysVal
+      type: object
+    description: Physical value with its device limits
+  RegisterMapProtocol:
+    additionalProperties: false
+    description: Register read/write devices (sensors, DACs, IO expanders, ...).
+    properties:
+      protocol:
+        const: register-map
+        default: register-map
+        title: Protocol
+        type: string
+      register_width:
+        default: 8
+        enum:
+        - 8
+        - 16
+        title: Register Width
+        type: integer
+      byte_order:
+        default: big
+        enum:
+        - big
+        - little
+        title: Byte Order
+        type: string
+      register_file:
+        anyOf:
+        - format: path
+          type: string
+        - type: 'null'
+        default: null
+        title: Register File
+      retries:
+        default: 2
+        title: Retries
+        type: integer
+      transport:
+        $ref: '#/$defs/I2cTransport'
+    required:
+    - transport
+    title: RegisterMapProtocol
+    type: object
+  RevolverConfig:
+    additionalProperties: false
+    description: Filter wheel or objective turret holding objectives or filters.
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      connection:
+        anyOf:
+        - discriminator:
+            mapping:
+              canopen: '#/$defs/CanOpenProtocol'
+              gige-vision: '#/$defs/GigEVisionProtocol'
+              modbus: '#/$defs/ModbusProtocol'
+              register-map: '#/$defs/RegisterMapProtocol'
+              uc2-rest: '#/$defs/Uc2RestProtocol'
+              usb3-vision: '#/$defs/Usb3VisionProtocol'
+            propertyName: protocol
+          oneOf:
+          - $ref: '#/$defs/Uc2RestProtocol'
+          - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/ModbusProtocol'
+          - $ref: '#/$defs/RegisterMapProtocol'
+          - $ref: '#/$defs/GigEVisionProtocol'
+          - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: 'null'
+        default: null
+        description: Own connection; required when no controller is given
+        title: Connection
+      controller:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: device_id of the controller this device is attached to
+        title: Controller
+      channels:
+        description: device_id of the objective/filter at each position; null = empty
+        items:
+          anyOf:
+          - type: string
+          - type: 'null'
+        minItems: 1
+        title: Channels
+        type: array
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: revolver
+        default: revolver
+        title: Type
+        type: string
+      selected_channel:
+        default: 0
+        description: Position (0-based index into channels) in use
+        minimum: 0
+        title: Selected Channel
+        type: integer
+        x_firmware: full
+    required:
+    - type
+    - name
+    - channels
+    title: RevolverConfig
+    type: object
+  Rs422Transport:
+    additionalProperties: false
+    description: "Differential, full-duplex UART via an RS422 adapter.\n\nSame line settings as serial, but no DTR/RTS-based MCU reset:\nthose lines are not wired to the target on an RS422 link."
+    properties:
+      port:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port
+      port_pattern:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port Pattern
+      vid:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Vid
+      pid:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Pid
+      serial_number:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Serial Number
+      baudrate:
+        default: 115200
+        title: Baudrate
+        type: integer
+      bytesize:
+        default: 8
+        enum:
+        - 5
+        - 6
+        - 7
+        - 8
+        title: Bytesize
+        type: integer
+      parity:
+        default: N
+        enum:
+        - N
+        - E
+        - O
+        - M
+        - S
+        title: Parity
+        type: string
+      stopbits:
+        default: 1
+        enum:
+        - 1
+        - 1.5
+        - 2
+        title: Stopbits
+        type: number
+      timeout:
+        default: 1.0
+        title: Timeout
+        type: number
+      write_timeout:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: 1.0
+        title: Write Timeout
+      rtscts:
+        default: false
+        title: Rtscts
+        type: boolean
+      type:
+        const: rs422
+        default: rs422
+        title: Type
+        type: string
+    title: Rs422Transport
+    type: object
+  Rs485Transport:
+    additionalProperties: false
+    description: "Differential, half-duplex, multidrop UART via an RS485 adapter.\n\nHalf duplex means the driver direction must be switched between\ntransmit and receive:\n  auto     -> the adapter switches by itself (most USB-RS485 adapters)\n  kernel   -> Linux driver toggles RTS (TIOCSRS485, e.g. UART + transceiver on a Pi)\n  software -> pyserial toggles RTS from Python (timing not guaranteed)"
+    properties:
+      port:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port
+      port_pattern:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port Pattern
+      vid:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Vid
+      pid:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Pid
+      serial_number:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Serial Number
+      baudrate:
+        default: 115200
+        title: Baudrate
+        type: integer
+      bytesize:
+        default: 8
+        enum:
+        - 5
+        - 6
+        - 7
+        - 8
+        title: Bytesize
+        type: integer
+      parity:
+        default: N
+        enum:
+        - N
+        - E
+        - O
+        - M
+        - S
+        title: Parity
+        type: string
+      stopbits:
+        default: 1
+        enum:
+        - 1
+        - 1.5
+        - 2
+        title: Stopbits
+        type: number
+      timeout:
+        default: 1.0
+        title: Timeout
+        type: number
+      write_timeout:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: 1.0
+        title: Write Timeout
+      rtscts:
+        default: false
+        title: Rtscts
+        type: boolean
+      type:
+        const: rs485
+        default: rs485
+        title: Type
+        type: string
+      direction_control:
+        default: auto
+        enum:
+        - auto
+        - kernel
+        - software
+        title: Direction Control
+        type: string
+      rts_level_for_tx:
+        default: true
+        title: Rts Level For Tx
+        type: boolean
+      rts_level_for_rx:
+        default: false
+        title: Rts Level For Rx
+        type: boolean
+      delay_before_tx:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: null
+        title: Delay Before Tx
+      delay_before_rx:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: null
+        title: Delay Before Rx
+      echo:
+        default: false
+        title: Echo
+        type: boolean
+    title: Rs485Transport
+    type: object
+  SerialTransport:
+    additionalProperties: false
+    description: USB-UART / RS232 / TTL, e.g. a directly attached ESP32.
+    properties:
+      port:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port
+      port_pattern:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port Pattern
+      vid:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Vid
+      pid:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Pid
+      serial_number:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Serial Number
+      baudrate:
+        default: 115200
+        title: Baudrate
+        type: integer
+      bytesize:
+        default: 8
+        enum:
+        - 5
+        - 6
+        - 7
+        - 8
+        title: Bytesize
+        type: integer
+      parity:
+        default: N
+        enum:
+        - N
+        - E
+        - O
+        - M
+        - S
+        title: Parity
+        type: string
+      stopbits:
+        default: 1
+        enum:
+        - 1
+        - 1.5
+        - 2
+        title: Stopbits
+        type: number
+      timeout:
+        default: 1.0
+        title: Timeout
+        type: number
+      write_timeout:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: 1.0
+        title: Write Timeout
+      rtscts:
+        default: false
+        title: Rtscts
+        type: boolean
+      type:
+        const: serial
+        default: serial
+        title: Type
+        type: string
+      reset_on_connect:
+        default: false
+        title: Reset On Connect
+        type: boolean
+      boot_delay:
+        default: 0.0
+        title: Boot Delay
+        type: number
+    title: SerialTransport
+    type: object
+  StageConfig:
+    additionalProperties: false
+    description: Motorized stage made of one or more axes.
+    properties:
+      name:
+        description: Model designation
+        title: Name
+        type: string
+      device_id:
+        description: Unique identifier; equals the entry's mapping key
+        title: Device Id
+        type: string
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      connection:
+        anyOf:
+        - discriminator:
+            mapping:
+              canopen: '#/$defs/CanOpenProtocol'
+              gige-vision: '#/$defs/GigEVisionProtocol'
+              modbus: '#/$defs/ModbusProtocol'
+              register-map: '#/$defs/RegisterMapProtocol'
+              uc2-rest: '#/$defs/Uc2RestProtocol'
+              usb3-vision: '#/$defs/Usb3VisionProtocol'
+            propertyName: protocol
+          oneOf:
+          - $ref: '#/$defs/Uc2RestProtocol'
+          - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/ModbusProtocol'
+          - $ref: '#/$defs/RegisterMapProtocol'
+          - $ref: '#/$defs/GigEVisionProtocol'
+          - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: 'null'
+        default: null
+        description: Own connection; required when no controller is given
+        title: Connection
+      controller:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: device_id of the controller this device is attached to
+        title: Controller
+      axes:
+        description: Axes of the stage
+        items:
+          $ref: '#/$defs/AxisConfig'
+        minItems: 1
+        title: Axes
+        type: array
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: stage
+        default: stage
+        title: Type
+        type: string
+    required:
+    - type
+    - name
+    - axes
+    title: StageConfig
+    type: object
+  TcpTransport:
+    additionalProperties: false
+    description: Raw TCP socket.
+    properties:
+      type:
+        const: tcp
+        default: tcp
+        title: Type
+        type: string
+      host:
+        title: Host
+        type: string
+      port:
+        maximum: 65535
+        minimum: 1
+        title: Port
+        type: integer
+      timeout:
+        default: 5.0
+        title: Timeout
+        type: number
+      terminator:
+        default: "\n"
+        title: Terminator
+        type: string
+      keepalive:
+        default: true
+        title: Keepalive
+        type: boolean
+    required:
+    - host
+    - port
+    title: TcpTransport
+    type: object
+  Trigger:
+    additionalProperties: false
+    description: Trigger of a device. Omit it for free-running operation.
+    properties:
+      type:
+        enum:
+        - software
+        - hardware
+        title: Type
+        type: string
+      edge:
+        anyOf:
+        - enum:
+          - rising
+          - falling
+          type: string
+        - type: 'null'
+        default: null
+        title: Edge
+      level:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: null
+        title: Level
+    required:
+    - type
+    title: Trigger
+    type: object
+  Uc2RestProtocol:
+    additionalProperties: false
+    description: JSON command protocol of openUC2 controllers (ESP32 firmware).
+    properties:
+      protocol:
+        const: uc2-rest
+        default: uc2-rest
+        title: Protocol
+        type: string
+      response_timeout:
+        default: 2.0
+        title: Response Timeout
+        type: number
+      retries:
+        default: 1
+        title: Retries
+        type: integer
+      transport:
+        discriminator:
+          mapping:
+            http: '#/$defs/HttpTransport'
+            rs422: '#/$defs/Rs422Transport'
+            serial: '#/$defs/SerialTransport'
+            tcp: '#/$defs/TcpTransport'
+          propertyName: type
+        oneOf:
+        - $ref: '#/$defs/SerialTransport'
+        - $ref: '#/$defs/Rs422Transport'
+        - $ref: '#/$defs/HttpTransport'
+        - $ref: '#/$defs/TcpTransport'
+        title: Transport
+    required:
+    - transport
+    title: Uc2RestProtocol
+    type: object
+  Usb3VisionProtocol:
+    additionalProperties: false
+    description: USB3 Vision camera; the transport is managed by the camera SDK.
+    properties:
+      protocol:
+        const: usb3-vision
+        default: usb3-vision
+        title: Protocol
+        type: string
+      serial_number:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Serial Number
+      user_defined_name:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: User Defined Name
+      index:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Index
+    title: Usb3VisionProtocol
+    type: object
+additionalProperties: false
+description: Top level of ``newswitch-config.yaml``.
+properties:
+  newswitch_version:
+    description: newswitch version the file was written for
+    title: Newswitch Version
+    type: string
+  devices:
+    additionalProperties:
+      discriminator:
+        mapping:
+          controller: '#/$defs/ControllerConfig'
+          detector: '#/$defs/DetectorConfig'
+          filter: '#/$defs/FilterConfig'
+          lightsource: '#/$defs/LightsourceConfig'
+          objective: '#/$defs/ObjectiveConfig'
+          revolver: '#/$defs/RevolverConfig'
+          stage: '#/$defs/StageConfig'
+        propertyName: type
+      oneOf:
+      - $ref: '#/$defs/LightsourceConfig'
+      - $ref: '#/$defs/DetectorConfig'
+      - $ref: '#/$defs/ControllerConfig'
+      - $ref: '#/$defs/StageConfig'
+      - $ref: '#/$defs/ObjectiveConfig'
+      - $ref: '#/$defs/RevolverConfig'
+      - $ref: '#/$defs/FilterConfig'
+    description: All devices, keyed by device_id
+    title: Devices
+    type: object
+required:
+- newswitch_version
+- devices
+title: NewswitchConfig
+type: object

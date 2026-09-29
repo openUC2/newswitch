@@ -139,6 +139,7 @@ class VirtualDetectorManager:
         broadcaster: FrameBroadcaster,
         config: Optional[DetectorConfig] = None,
         filter_bank_state: Optional[FilterBankState] = None,
+        detectors: Optional[list[Detector]] = None,
     ) -> None:
         """
         Initialize the virtual detector manager.
@@ -150,6 +151,8 @@ class VirtualDetectorManager:
             broadcaster: Frame broadcaster for video streaming.
             config: Detector configuration. Uses defaults if not provided.
             filter_bank_state: Shared state for filter bank (affects spectral filtering).
+            detectors: Detectors to expose (e.g. from newswitch-config.yaml). Uses the
+                built-in R/G/B channels if not provided.
         """
         self.state = camera_state
         self.stage_state = stage_state
@@ -176,10 +179,13 @@ class VirtualDetectorManager:
         self._cache = FrameCache()
 
         # Initialize detectors
-        self._initialize_detectors()
+        self._initialize_detectors(detectors)
 
-    def _initialize_detectors(self) -> None:
-        """Initialize the list of detectors."""
+    def _initialize_detectors(self, detectors: Optional[list[Detector]] = None) -> None:
+        """Initialize the list of detectors, falling back to the built-in virtual ones."""
+        if detectors is not None:
+            self.state.detectors = list(detectors)
+            return
         # Create default virtual detectors
         self.state.detectors = [
             Detector(

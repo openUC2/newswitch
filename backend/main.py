@@ -6,5 +6,6 @@ string it can re-evaluate, which is what `app` below provides.
 """
 
 from newswitch.app import ImswitchConfig, create_app
+from newswitch.config_io import DEFAULT_CONFIG_NAME
 
-app = create_app(ImswitchConfig())
+app = create_app(ImswitchConfig(config_file=DEFAULT_CONFIG_NAME))

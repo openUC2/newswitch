@@ -1,8 +1,8 @@
 """Tests for `newswitch.config`: where files live and how names are resolved.
 
-`Paths` is the single place that knows the folder layout. The loaders in
-`newswitch.schemas` go through `config_file()` / `schema_file()`, so the resolution
-rules pinned here decide what ``load_config("Devices")`` actually opens.
+`Paths` is the single place that knows the folder layout. `newswitch.config_io` goes
+through `config_file()` / `schema_file()`, so the resolution rules pinned here decide what
+``load_config("newswitch-config")`` actually opens.
 """
 
 import os
@@ -98,7 +98,7 @@ def test_environment_overrides(config_dir: Path) -> None:
 def test_app_name_and_suffixes() -> None:
     """The supported extensions are tried in this order for a name without one."""
     assert APP_NAME == "newswitch"
-    assert CONFIG_SUFFIXES == (".yaml", ".yml", ".json")
+    assert CONFIG_SUFFIXES == (".yaml", ".yml")
 
 
 def test_device_settings_file(config_dir: Path) -> None:
@@ -120,7 +120,7 @@ def test_config_file_with_suffix(config_dir: Path) -> None:
     assert get_paths().config_file("Devices.yml") == config_dir / "Devices.yml"
 
 
-@pytest.mark.parametrize("suffix", [".yaml", ".yml", ".json"])
+@pytest.mark.parametrize("suffix", [".yaml", ".yml"])
 def test_config_file_without_suffix(config_dir: Path, suffix: str) -> None:
     """A name without a suffix finds whichever supported extension exists.
 
@@ -132,13 +132,13 @@ def test_config_file_without_suffix(config_dir: Path, suffix: str) -> None:
     assert get_paths().config_file("Devices").suffix == suffix
 
 
-def test_config_file_prefers_yaml_over_json(config_dir: Path) -> None:
+def test_config_file_prefers_yaml_over_yml(config_dir: Path) -> None:
     """With several candidates present, `CONFIG_SUFFIXES` decides the winner.
 
     Args:
         config_dir: The temporary config directory fixture.
     """
-    for suffix in (".yaml", ".yml", ".json"):
+    for suffix in (".yml", ".yaml", ".json"):
         (config_dir / f"Devices{suffix}").write_text("devices: []", encoding="utf-8")
     assert get_paths().config_file("Devices").suffix == ".yaml"
 
@@ -169,7 +169,8 @@ def test_config_file_missing_lists_candidates(config_dir: Path) -> None:
         get_paths().config_file("Devices")
 
     message = str(excinfo.value)
-    assert "Devices.yaml" in message and "Devices.yml" in message and "Devices.json" in message
+    assert "Devices.yaml" in message and "Devices.yml" in message
+    assert "Devices.json" not in message  # JSON configs are not supported
 
 
 def test_config_file_for_writing(config_dir: Path) -> None:
@@ -195,10 +196,11 @@ def test_schema_file(config_dir: Path) -> None:
     schemas = config_dir / "schemas"
     schemas.mkdir()
 
-    assert get_paths().schema_file("camera.schema.json") == schemas / "camera.schema.json"
+    name = "newswitch-config.schema.yaml"
+    assert get_paths().schema_file(name) == schemas / name
 
     with pytest.raises(FileNotFoundError):
-        get_paths().schema_file("camera.schema.json", must_exist=True)
+        get_paths().schema_file(name, must_exist=True)
 
 
 def test_ensure_writable_dirs_creates_them(config_dir: Path) -> None:

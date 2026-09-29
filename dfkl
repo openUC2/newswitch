@@ -1,0 +1,12 @@
+Warnung: Ignoriere Referenz mit fehlerhaftem Namen refs/heads/DEV_KC [conflicted]
+Warnung: Ignoriere Referenz mit fehlerhaftem Namen refs/heads/KC/Settings [conflicted 2]
+Warnung: Ignoriere Referenz mit fehlerhaftem Namen refs/heads/KC/Settings [conflicted]
+Warnung: Ignoriere Referenz mit fehlerhaftem Namen refs/heads/SRS [conflicted]
+  DEV_BD[m
+  DEV_KC[m
+  FIX_KC[m
+  KC/Settings.part[m
+  REV_MANAGER_KC[m
+  SRS[m
+  docs/playwright-e2e[m
+  main[m

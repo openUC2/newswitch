@@ -1,0 +1,134 @@
+# newswitch device configuration -- the one file describing every device.
+#
+# Schema: Configs/schemas/newswitch-config.schema.yaml (generated, do not edit)
+# Keys:   see backend/newswitch/config_io/devices.py; connections follow
+#         backend/docs/connection-reference.md
+#
+# Values marked "firmware" in the schema may be read from the device and are then
+# written back into this file (missing entries are added, comments are kept).
+newswitch_version: v1.0.2
+devices:
+  my-favorite-mainboard:
+    type: controller
+    name: UC2-Mainboard-v4
+    manufacturer: openUC2
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port_pattern: /dev/ttyUSB*
+        baudrate: 115200
+    firmware:
+      name: esp32-uc2-standalone-4
+      version: v2026.0.0-beta.3
+
+  hotlaser123:
+    type: lightsource
+    name: boison-488
+    manufacturer: Boison
+    wavelength: 488
+    bandwidth: 2.0
+    spec_shape: gauss
+    max_intensity: 100.0
+    coherence: coherent
+    controller: my-favorite-mainboard
+
+  bigcamera42:
+    type: detector
+    name: MV-CA023-10UM
+    manufacturer: HIK ROBOTICS
+    tags:
+      - monochrome
+      - global-shutter
+      - gige
+    connection:
+      protocol: gige-vision
+      serial_number: 00F12345678
+    pixelcount: [1920, 1200]
+    pixelpitch_um: 10.0
+    channels: 1
+    exposure_time_ms:
+      value: 25.0
+      min: 0.024
+      max: 10000.0
+      inc: 0.001
+      unit: ms
+    framerate_per_sec:
+      value: 163.0
+      min: 0.5
+      max: 163.0
+      unit: Hz
+    gain_db:
+      value: 0.0
+      min: 0.0
+      max: 23.98
+      inc: 0.01
+      unit: dB
+    binning: 1
+    trigger:
+      type: hardware
+      edge: rising
+
+  just-some-boring-stage:
+    type: stage
+    name: xyz-linear-100
+    manufacturer: openUC2
+    controller: my-favorite-mainboard
+    axes:
+      - label: x
+        steps_per_um: 8.0
+        homing_required: true
+        pos: {min: 0.0, max: 100000.0, unit: um}
+        vel: {value: 5000.0, unit: um/s}
+      - label: y
+        steps_per_um: 8.0
+        homing_required: true
+        pos: {min: 0.0, max: 100000.0, unit: um}
+        vel: {value: 5000.0, unit: um/s}
+      - label: z
+        steps_per_um: 25.0
+        homing_required: true
+        inverted: true
+        pos: {min: 0.0, max: 10000.0, unit: um}
+
+  obj-10x:
+    type: objective
+    name: 10x Air
+    magnification: 10.0
+    na: 0.3
+    wd: 10.0
+  obj-40x:
+    type: objective
+    name: 40x Water
+    magnification: 40.0
+    na: 1.0
+    wd: 0.3
+
+  turret:
+    type: revolver
+    name: Objective turret
+    controller: my-favorite-mainboard
+    channels: [obj-10x, obj-40x, null]
+    selected_channel: 0
+
+  flt-gfp:
+    type: filter
+    name: GFP 525/50
+    wavelength: 525.0
+    bandwidth: 50.0
+    spec_shape: tophat
+    transmission: 0.92
+  flt-tritc:
+    type: filter
+    name: TRITC 572/28
+    wavelength: 572.0
+    bandwidth: 28.0
+    spec_shape: tophat
+    transmission: 0.9
+
+  filterwheel:
+    type: revolver
+    name: Emission filter wheel
+    controller: my-favorite-mainboard
+    channels: [null, flt-gfp, flt-tritc]
+    selected_channel: 1
