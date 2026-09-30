@@ -7,7 +7,7 @@ from typing import Any, Iterator
 import pytest
 from rekuest_next.state.lock import acquired_locks
 
-from newswitch.config_io import adapters, load_config
+from newswitch.config_io import DetectorConfig, RevolverConfig, adapters, load_config
 from newswitch.config_io.devices import NewswitchConfig
 from newswitch.managers.virtual import (
     FilterBankConfig,
@@ -21,7 +21,7 @@ from newswitch.protocols.illumination import IlluminationKind
 from newswitch.protocols.objective import ObjectiveState
 from newswitch.protocols.stage import StageState
 
-from .conftest import DocWriter
+from .conftest import DocWriter, get_device
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +59,9 @@ def config(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> NewswitchConfig
 
 def test_illuminations(config: NewswitchConfig) -> None:
     """Slots follow file order; only the first source starts switched on."""
-    led, laser = adapters.illuminations(config)
+    illuminations = adapters.illuminations(config)
+    assert illuminations is not None
+    led, laser = illuminations
     assert (led.slot, led.wavelength, led.kind) == (1, 470, IlluminationKind.LED)
     assert (laser.slot, laser.kind) == (2, IlluminationKind.LASER)
     assert led.is_active and led.intensity == 50.0 and led.max_intensity == 50.0
@@ -70,7 +72,9 @@ def test_illuminations(config: NewswitchConfig) -> None:
 
 def test_detectors(config: NewswitchConfig) -> None:
     """Pixel data are copied and exposure times converted from ms to s."""
-    (cam,) = adapters.detectors(config)
+    detectors = adapters.detectors(config)
+    assert detectors is not None
+    (cam,) = detectors
     assert (cam.slot, cam.name, cam.width, cam.height, cam.pixel_size_um) == (
         1,
         "Cam",
@@ -88,7 +92,9 @@ def test_detectors(config: NewswitchConfig) -> None:
 
 def test_objectives_follow_turret(config: NewswitchConfig) -> None:
     """Lenses get file-order slots; the turret's selection sets the default slot."""
-    lenses, default_slot = adapters.objective_lenses(config)
+    result = adapters.objective_lenses(config)
+    assert result is not None
+    lenses, default_slot = result
     assert [(lens.slot, lens.name, lens.numerical_aperture) for lens in lenses] == [
         (1, "10x", 0.3),
         (2, "40x", 1.0),
@@ -101,7 +107,9 @@ def test_objectives_follow_turret(config: NewswitchConfig) -> None:
 
 def test_filters_with_empty_position(config: NewswitchConfig) -> None:
     """An empty wheel position becomes the 'Open' filter and is selectable."""
-    filters, default_slot = adapters.filters(config)
+    result = adapters.filters(config)
+    assert result is not None
+    filters, default_slot = result
     assert [(f.slot, f.name) for f in filters] == [(adapters.OPEN_FILTER_SLOT, "Open"), (1, "GFP")]
     assert default_slot == adapters.OPEN_FILTER_SLOT
     state = FilterBankState()
@@ -141,7 +149,9 @@ def test_sync_runtime_state_and_save(
     """Runtime values land in the config and survive a save/load cycle."""
     cfg_file = load_config()
     camera_state = CameraState()
-    camera_state.detectors = adapters.detectors(cfg_file.config)
+    detectors = adapters.detectors(cfg_file.config)
+    assert detectors is not None
+    camera_state.detectors = detectors
     camera_state.detectors[0].current_exposure_time = 0.5
     stage_state = StageState()
     stage_state.x = 1234.0
@@ -154,18 +164,24 @@ def test_sync_runtime_state_and_save(
     cfg_file.save(backup=False)
 
     reloaded = load_config().config
-    assert reloaded.devices["cam"].exposure_time_ms.value == pytest.approx(500.0)
-    assert reloaded.devices["turret"].selected_channel == 0
-    assert reloaded.devices["wheel"].selected_channel == 1
-    assert reloaded.stages[0].axis("x").pos.value == pytest.approx(1234.0)
+    exposure = get_device(reloaded, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None and exposure.value == pytest.approx(500.0)
+    assert get_device(reloaded, "turret", RevolverConfig).selected_channel == 0
+    assert get_device(reloaded, "wheel", RevolverConfig).selected_channel == 1
+    x_axis = reloaded.stages[0].axis("x")
+    assert x_axis is not None and x_axis.pos is not None
+    assert x_axis.pos.value == pytest.approx(1234.0)
 
 
 def test_sync_skips_out_of_range_values(config: NewswitchConfig) -> None:
     """A runtime value outside the configured limits is not stored."""
     camera_state = CameraState()
-    camera_state.detectors = adapters.detectors(config)
+    detectors = adapters.detectors(config)
+    assert detectors is not None
+    camera_state.detectors = detectors
     camera_state.detectors[0].current_exposure_time = 50.0  # 50 000 ms > max 1000 ms
     adapters.sync_runtime_state(
         config, camera_state, ObjectiveState(), FilterBankState(), StageState()
     )
-    assert config.devices["cam"].exposure_time_ms.value == 10.0
+    exposure = get_device(config, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None and exposure.value == 10.0

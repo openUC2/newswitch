@@ -9,13 +9,39 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Protocol, TypeVar
 
 import pytest
 import yaml
 
-# (document, file name) -> path written to
-DocWriter = Callable[[Any, str], Path]
+from newswitch.config_io import DeviceBase, NewswitchConfig
+
+T = TypeVar("T", bound=DeviceBase)
+
+
+class DocWriter(Protocol):
+    """The `write_doc` helper: (document, file name) -> path written to."""
+
+    def __call__(self, document: Any, name: str = ...) -> Path:  # noqa: ANN401
+        """Write ``document`` as ``name`` (default: the managed config file)."""
+        ...
+
+
+def get_device(config: NewswitchConfig, device_id: str, cls: type[T]) -> T:
+    """Look up a device and narrow it to the class the test expects.
+
+    Args:
+        config: The loaded configuration.
+        device_id: Key in ``config.devices``.
+        cls: The expected device dataclass, e.g. `DetectorConfig`.
+
+    Returns:
+        The device, typed as ``cls``.
+    """
+    device = config.devices[device_id]
+    assert isinstance(device, cls)
+    return device
+
 
 CONTROLLER: dict[str, Any] = {
     "type": "controller",

@@ -10,7 +10,7 @@ import pytest
 
 from newswitch.config_io import ConfigError, ConfigWarning, DetectorConfig, load_config
 
-from .conftest import DocWriter
+from .conftest import DocWriter, get_device
 
 
 def _problems(write_doc: DocWriter, doc: Any) -> list[str]:  # noqa: ANN401
@@ -25,9 +25,10 @@ def test_loads_minimal_doc(write_doc: DocWriter, minimal_doc: dict[str, Any]) ->
     write_doc(minimal_doc)
     config = load_config().config
     assert list(config.devices) == list(minimal_doc["devices"])
-    assert isinstance(config.devices["cam"], DetectorConfig)
-    assert config.devices["cam"].device_id == "cam"
-    assert config.devices["cam"].exposure_time_ms.unit == "ms"
+    cam = config.devices["cam"]
+    assert isinstance(cam, DetectorConfig)
+    assert cam.device_id == "cam"
+    assert cam.exposure_time_ms is not None and cam.exposure_time_ms.unit == "ms"
 
 
 def test_explicit_path(tmp_path: Path, minimal_doc: dict[str, Any], write_doc: DocWriter) -> None:
@@ -142,7 +143,7 @@ def test_unconvertible_unit_warns_and_loads(
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         config = load_config().config
-    assert config.devices["cam"].exposure_time_ms is None
+    assert get_device(config, "cam", DetectorConfig).exposure_time_ms is None
     assert any(issubclass(w.category, ConfigWarning) for w in caught)
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -31,7 +32,7 @@ def _requires(path: Path) -> Path:
     return path
 
 
-def _load(path: Path) -> object:
+def _load(path: Path) -> Any:  # noqa: ANN401 - a parsed document is Any
     return to_plain(YAML(typ="safe").load(path))
 
 

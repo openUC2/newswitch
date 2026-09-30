@@ -1,5 +1,33 @@
 # STATUS
 
+## VS Code settings + config_io test typing (2026-10-01), implemented, not committed
+
+Plan: `~/.claude/plans/eager-imagining-wren.md` (approved).
+
+Cause of the VS Code errors: the Python Environments extension had selected the global Pixi
+interpreter (`~/pixiProject/.pixi/envs/default/bin/python3.14`), which lacks ruamel.yaml,
+pydantic_settings, fastapi, rekuest_next, ... The project venv is `backend/.venv` (3.12).
+
+- New root `.vscode/settings.json`: interpreter `backend/.venv`, typeCheckingMode `standard`,
+  pytest with cwd `backend` (test explorer works when the repo root is opened).
+- `backend/.vscode/settings.json`: `strict` → `standard` (strict gave ~420 `reportUnknown*`
+  errors from untyped ruamel.yaml), interpreter `.venv`.
+- `tests/config_io`: 77 pyright errors fixed, test code only. `DocWriter` is now a `Protocol`,
+  the new helper `get_device(config, id, cls)` in `conftest.py` gives typed device access, and
+  optional values are narrowed with asserts.
+- Checked: pyright (standard, venv) reports 0 errors for config_io, config, app and auth;
+  ruff format is clean; config_io tests 82/82 pass.
+
+Manual step (once per machine): an explicit interpreter selection overrides
+`defaultInterpreterPath`, so run "Python: Select Interpreter" → `backend/.venv/bin/python`.
+
+Open / known:
+- 29 pre-existing pyright errors outside the scope: `managers/helpers/psf.py` (`nipy`) and
+  `helpers/frame.py` (`skimage`) import packages that are not in pyproject; there are also
+  type issues in `virtual_stage`, `serial_manager`, `broadcasters/*`, `local_cache`,
+  `region_scan`, `test_virtual_stage`, `test_affine_matrix`.
+- The untracked root `.vscode/launch.json` still points at the removed `example_schemas.py`.
+
 ## config_io replaces newswitch/schemas (2026-09-30), implemented, not committed
 
 Plan: `~/.claude/plans/elegant-watching-bumblebee.md` (approved). All four phases are done.

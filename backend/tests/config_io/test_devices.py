@@ -108,7 +108,8 @@ def test_stage_axes() -> None:
         }
     )
     assert isinstance(stage, StageConfig)
-    assert stage.axis("x") is not None and stage.axis("x").inverted is False
+    x_axis = stage.axis("x")
+    assert x_axis is not None and x_axis.inverted is False
     assert stage.axis("y") is None
 
     for axes in (

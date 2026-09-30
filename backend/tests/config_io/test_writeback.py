@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import textwrap
+from typing import Callable
 
 import pytest
 
-from newswitch.config_io import ConfigError, load_config
+from newswitch.config_io import (
+    ConfigError,
+    ConfigFile,
+    DetectorConfig,
+    RevolverConfig,
+    StageConfig,
+    load_config,
+)
 
-from .conftest import DocWriter
+from .conftest import DocWriter, get_device
 
 DOC = textwrap.dedent(
     """\
@@ -59,10 +67,10 @@ DOC = textwrap.dedent(
 )
 
 
-def _saved(write_doc: DocWriter, change: object = None) -> str:
+def _saved(write_doc: DocWriter, change: Callable[[ConfigFile], None] | None = None) -> str:
     path = write_doc(DOC)
     cfg_file = load_config()
-    if callable(change):
+    if change is not None:
         change(cfg_file)
     cfg_file.save(backup=False)
     return path.read_text(encoding="utf-8")
@@ -86,10 +94,13 @@ def test_untouched_file_is_identical(write_doc: DocWriter) -> None:
 def test_runtime_value_written(write_doc: DocWriter) -> None:
     """A value changed at runtime replaces the old one in place."""
 
-    def change(cfg_file: object) -> None:
-        cfg_file.config.devices["cam"].exposure_time_ms.value = 20.0
-        cfg_file.config.devices["stage"].axes[0].pos.value = 12.5
-        cfg_file.config.devices["wheel"].selected_channel = 1
+    def change(cfg_file: ConfigFile) -> None:
+        exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
+        pos = get_device(cfg_file.config, "stage", StageConfig).axes[0].pos
+        assert exposure is not None and pos is not None
+        exposure.value = 20.0
+        pos.value = 12.5
+        get_device(cfg_file.config, "wheel", RevolverConfig).selected_channel = 1
 
     text = _saved(write_doc, change)
     assert "      value: 20.0\n      min: 0.1" in text
@@ -100,7 +111,7 @@ def test_runtime_value_written(write_doc: DocWriter) -> None:
 def test_firmware_limits_keep_value(write_doc: DocWriter) -> None:
     """Limits reported by the device are added; the user's value stays."""
 
-    def change(cfg_file: object) -> None:
+    def change(cfg_file: ConfigFile) -> None:
         cfg_file.apply_firmware(
             "cam",
             {
@@ -126,7 +137,7 @@ def test_firmware_limits_keep_value(write_doc: DocWriter) -> None:
 def test_firmware_full_and_units(write_doc: DocWriter) -> None:
     """Axis values are taken over completely and converted into the field's unit."""
 
-    def change(cfg_file: object) -> None:
+    def change(cfg_file: ConfigFile) -> None:
         cfg_file.apply_firmware(
             "stage", {"axes": {"x": {"vel": {"value": 2.0, "max": 5.0, "unit": "mm/s"}}}}
         )
@@ -168,7 +179,9 @@ def test_invalid_runtime_state_is_not_saved(write_doc: DocWriter) -> None:
     """An out-of-range runtime value blocks the save and leaves the file alone."""
     path = write_doc(DOC)
     cfg_file = load_config()
-    cfg_file.config.devices["cam"].exposure_time_ms.value = 5000.0
+    exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None
+    exposure.value = 5000.0
     with pytest.raises(ConfigError, match="refusing to save"):
         cfg_file.save()
     assert path.read_text(encoding="utf-8") == DOC
@@ -189,4 +202,5 @@ def test_save_twice_writes_only_new_changes(write_doc: DocWriter) -> None:
     first = path.read_text(encoding="utf-8")
     cfg_file.save(backup=False)
     assert path.read_text(encoding="utf-8") == first
-    assert load_config().config.devices["cam"].gain_db.value == 2.0
+    gain = get_device(load_config().config, "cam", DetectorConfig).gain_db
+    assert gain is not None and gain.value == 2.0
