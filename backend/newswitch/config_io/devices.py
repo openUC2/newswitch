@@ -94,6 +94,29 @@ class ConnectedDevice(DeviceBase):
 
 
 @dataclass(kw_only=True, config=STRICT)
+class CanOpenLaserBinding:
+    """PWM output on a UC2 laser CANopen node."""
+
+    type: Literal["canopen-laser"] = "canopen-laser"
+    node_id: int = Field(ge=1, le=127)
+    channel: int = Field(ge=0, le=3)
+    pwm_max: int = Field(default=1023, gt=0)
+
+
+@dataclass(kw_only=True, config=STRICT)
+class CanOpenLedMatrixBinding:
+    """RGB LED matrix on a UC2 CANopen node."""
+
+    type: Literal["canopen-led-matrix"] = "canopen-led-matrix"
+    node_id: int = Field(ge=1, le=127)
+
+
+LightsourceBinding = Annotated[
+    Union[CanOpenLaserBinding, CanOpenLedMatrixBinding], Field(discriminator="type")
+]
+
+
+@dataclass(kw_only=True, config=STRICT)
 class ControllerConfig(DeviceBase):
     """Controller board (e.g. UC2 mainboard) that other devices are attached to."""
 
@@ -107,7 +130,10 @@ class LightsourceConfig(ConnectedDevice):
     """Illumination source (LED, laser, ...)."""
 
     type: Literal["lightsource"] = "lightsource"
-    wavelength: PositiveFloat = Field(description="Wavelength in nm")
+    wavelength: float = Field(ge=0, description="Wavelength in nm; 0 for broadband/RGB light")
+    binding: LightsourceBinding | None = Field(
+        default=None, description="CANopen node and output used by this light source"
+    )
     bandwidth: PositiveFloat | None = Field(default=None, description="Bandwidth in nm")
     spec_shape: SpectralShape | None = Field(default=None, description="Spectral shape")
     channels: Annotated[PositiveInt, firmware_meta("Number of color/spectral channels")] = 1
@@ -183,6 +209,28 @@ class DetectorConfig(ConnectedDevice):
 
 
 @dataclass(kw_only=True, config=STRICT)
+class CanOpenMotorBinding:
+    """Address one motor on a CANopen node (sub-axis is zero-based)."""
+
+    type: Literal["canopen-motor"] = "canopen-motor"
+    node_id: int = Field(ge=1, le=127)
+    sub_axis: int = Field(default=0, ge=0, le=3)
+
+
+@dataclass(kw_only=True, config=STRICT)
+class Uc2MasterAxisBinding:
+    """Address one stepper through the UC2 master JSON protocol."""
+
+    type: Literal["uc2-master"] = "uc2-master"
+    stepper_id: int = Field(ge=0, le=3)
+
+
+AxisBinding = Annotated[
+    Union[CanOpenMotorBinding, Uc2MasterAxisBinding], Field(discriminator="type")
+]
+
+
+@dataclass(kw_only=True, config=STRICT)
 class AxisConfig:
     """One motorized axis of a stage (no ``type`` key; only valid inside a stage)."""
 
@@ -190,7 +238,16 @@ class AxisConfig:
     steps_per_um: Annotated[
         PositiveFloat | None, firmware_meta("Motor steps per um; null for a servo stage")
     ]
+    steps_per_deg: PositiveFloat | None = Field(
+        default=None, description="Motor steps per degree for a rotational axis"
+    )
     homing_required: Annotated[bool, firmware_meta("Axis must be homed before use")]
+    binding: AxisBinding | None = Field(
+        default=None, description="Motor address on a CANopen bus or UC2 serial master"
+    )
+    homing_speed_steps: int | None = Field(default=None, gt=0)
+    homing_direction: Literal[-1, 1] | None = None
+    homing_timeout_ms: int | None = Field(default=None, gt=0)
     inverted: bool = False
     pos: Annotated[
         PhysVal | None,
@@ -216,6 +273,17 @@ class AxisConfig:
         phys_meta("um/s**3", firmware="full", description="Jerk"),
     ] = None
 
+    @model_validator(mode="after")
+    def _bound_axis_scale(self) -> Self:
+        if self.binding is None:
+            return self
+        rotary = self.label in ("a", "rx", "ry", "rz")
+        if rotary and self.steps_per_deg is None:
+            raise ValueError("bound rotational axis needs steps_per_deg")
+        if not rotary and self.steps_per_um is None:
+            raise ValueError("bound linear axis needs steps_per_um")
+        return self
+
 
 @dataclass(kw_only=True, config=STRICT)
 class StageConfig(ConnectedDevice):
@@ -223,13 +291,36 @@ class StageConfig(ConnectedDevice):
 
     type: Literal["stage"] = "stage"
     axes: list[AxisConfig] = Field(min_length=1, description="Axes of the stage")
+    homing_order: list[AxisLabel] = Field(
+        default_factory=list, description="Axes to home in this mechanical order"
+    )
 
     @model_validator(mode="after")
     def _unique_labels(self) -> Self:
         labels = [axis.label for axis in self.axes]
         if len(labels) != len(set(labels)):
             raise ValueError(f"duplicate axis labels: {labels}")
+        if len(self.homing_order) != len(set(self.homing_order)) or any(
+            label not in labels for label in self.homing_order
+        ):
+            raise ValueError("homing_order must contain distinct axes from this stage")
+        bindings = [axis.binding for axis in self.axes if axis.binding is not None]
+        addresses = [
+            (binding.type, binding.node_id, binding.sub_axis)
+            if isinstance(binding, CanOpenMotorBinding)
+            else (binding.type, binding.stepper_id)
+            for binding in bindings
+        ]
+        if len(addresses) != len(set(addresses)):
+            raise ValueError("two stage axes address the same motor")
         return self
+
+    def connection_for_axes(self, config: NewswitchConfig) -> Connection | None:
+        """Resolve the stage's own connection or its referenced controller."""
+        if self.connection is not None:
+            return self.connection
+        controller = config.devices.get(self.controller) if self.controller else None
+        return controller.connection if isinstance(controller, ControllerConfig) else None
 
     def axis(self, label: AxisLabel) -> AxisConfig | None:
         """Return the axis with `label`, or None when the stage has no such axis.

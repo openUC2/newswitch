@@ -74,20 +74,24 @@ devices:
     name: xyz-linear-100
     manufacturer: openUC2
     controller: my-favorite-mainboard
+    homing_order: [z, x, y]
     axes:
       - label: x
         steps_per_um: 8.0
         homing_required: true
+        binding: {type: uc2-master, stepper_id: 1}
         pos: {min: 0.0, max: 100000.0, unit: um}
         vel: {value: 5000.0, unit: um/s}
       - label: y
         steps_per_um: 8.0
         homing_required: true
+        binding: {type: uc2-master, stepper_id: 2}
         pos: {min: 0.0, max: 100000.0, unit: um}
         vel: {value: 5000.0, unit: um/s}
       - label: z
         steps_per_um: 25.0
         homing_required: true
+        binding: {type: uc2-master, stepper_id: 3}
         inverted: true
         pos: {min: 0.0, max: 10000.0, unit: um}
 

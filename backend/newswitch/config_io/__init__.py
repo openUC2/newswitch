@@ -33,6 +33,9 @@ from .connection import Connection, check_shared_resources, resource_key, transp
 from .devices import (
     DEVICE_TYPES,
     AxisConfig,
+    CanOpenLaserBinding,
+    CanOpenLedMatrixBinding,
+    CanOpenMotorBinding,
     ConnectedDevice,
     ControllerConfig,
     DetectorConfig,
@@ -44,6 +47,7 @@ from .devices import (
     ObjectiveConfig,
     RevolverConfig,
     StageConfig,
+    Uc2MasterAxisBinding,
     field_markers,
 )
 from .document import DEFAULT_CONFIG_NAME
@@ -55,6 +59,9 @@ __all__ = [
     "DEFAULT_CONFIG_NAME",
     "DEVICE_TYPES",
     "AxisConfig",
+    "CanOpenLaserBinding",
+    "CanOpenLedMatrixBinding",
+    "CanOpenMotorBinding",
     "ConfigError",
     "ConfigFile",
     "ConfigWarning",
@@ -72,6 +79,7 @@ __all__ = [
     "PhysVal",
     "RevolverConfig",
     "StageConfig",
+    "Uc2MasterAxisBinding",
     "Trigger",
     "check_shared_resources",
     "config_schema",

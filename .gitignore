@@ -99,3 +99,8 @@ docs/_build/
 
 # Backups written by newswitch.config_io when saving the device config
 backend/Configs/*.bak
+
+# Local hardware settings and generated browser-test reports
+backend/configs/*.local.json
+frontend/playwright-report/
+frontend/test-results/
