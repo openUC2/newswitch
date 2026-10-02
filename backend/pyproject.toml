@@ -28,7 +28,6 @@ dependencies = [
     "zarrs>=0.2.2",
     "zstandard>=0.25.0",
     "jsonschema>=4.18",
-    "platformdirs>=4",
     "pydantic-settings>=2",
     "ruamel-yaml>=0.18",
 ]

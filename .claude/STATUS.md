@@ -1,6 +1,41 @@
 # STATUS
 
-## VS Code settings + config_io test typing (2026-10-01), implemented, not committed
+## base_config.yaml replaces config.py (2026-10-02), implemented, not committed
+
+Plan: `~/.claude/plans/eager-imagining-wren.md` (approved).
+
+- New `backend/base_config.yaml` (header: belongs to newswitch, do not delete). It holds
+  use_virtual_microscope, db_path, available_cubes, config_dir, schema_dir,
+  static_config_path, persistent_config_path and load_from_static_config_path.
+  server/port are not in it: host and port come from BACKEND_HOST/BACKEND_PORT in the root
+  `.env`, and the docker deployment is still open.
+- `ImswitchConfig` (`newswitch/app.py`) is now a pydantic-settings `BaseSettings`. It reads
+  `BASE_CONFIG_FILE` only (no env), with `extra="forbid"` and no hard-coded defaults.
+  - Relative dirs are taken relative to `backend/`; bare file names resolve against `config_dir`.
+  - `config_file` = static or persistent path; `ImswitchConfig(config_file=None)` gives virtual
+    devices (tests).
+  - It has an explicit `__init__(**values)` so pyright does not demand every field.
+- With `load_from_static_config_path: false`, startup copies static → persistent once
+  (`config_io.ensure_persistent_copy`) and writes back into the persistent file. Its
+  `*.persistent.yaml` is git-ignored. Checked by starting the app in a temp folder; the
+  static file stayed byte-identical.
+- `config_io` now works with explicit paths only: `load_config(path)` and
+  `export_schema(path)` have no defaults, and `DEFAULT_CONFIG_NAME` is gone. The CLI
+  (`python -m newswitch.config_io`) takes its defaults from `ImswitchConfig`.
+- Deleted: `newswitch/config.py` (Paths/get_paths, NEWSWITCH_*_DIR env vars, data/log dir,
+  suffix guessing, systemd note) and `tests/test_config_paths.py`. The `platformdirs`
+  dependency is dropped; with the newer uv, `uv lock` also normalized a few numpy markers.
+- Tests: new `tests/test_app_config.py` and persistent-copy tests in `tests/config_io/test_load.py`.
+  `config_io` tests now pass paths (fixture `config_path`).
+- Checks: ruff format and lint are clean (the old F401 are gone). pyright reports 0 errors in
+  the changed files and 29 in the whole backend, as before. `just test-backend` gives 154
+  passed and the 2 pre-existing failures.
+
+Open / known:
+- The config_io CLI now imports `newswitch.app`, so it prints a StarletteDeprecationWarning.
+- `server`/`port` were removed from `ImswitchConfig` (they were never read).
+
+## VS Code settings + config_io test typing (2026-10-01), implemented, committed
 
 Plan: `~/.claude/plans/eager-imagining-wren.md` (approved).
 
@@ -28,7 +63,7 @@ Open / known:
   `region_scan`, `test_virtual_stage`, `test_affine_matrix`.
 - The untracked root `.vscode/launch.json` still points at the removed `example_schemas.py`.
 
-## config_io replaces newswitch/schemas (2026-09-30), implemented, not committed
+## config_io replaces newswitch/schemas (2026-09-30), implemented, committed
 
 Plan: `~/.claude/plans/elegant-watching-bumblebee.md` (approved). All four phases are done.
 

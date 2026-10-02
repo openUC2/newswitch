@@ -16,13 +16,15 @@ generated schema.
 
 ```bash
 cd backend
-uv run python -m newswitch.config_io                  # validate + list the devices
-uv run python -m newswitch.config_io other.yaml       # any other file
+uv run python -m newswitch.config_io                  # validate + list the configured devices
+uv run python -m newswitch.config_io Configs/other.yaml  # any other file
 uv run python -m newswitch.config_io --export-schema  # regenerate the schema after model changes
 ```
 
-Bare names resolve against this folder (`NEWSWITCH_CONFIG_DIR` overrides it); explicit
-paths are used as given. Only `.yaml`/`.yml` are read.
+Which file is read is set in `backend/base_config.yaml`: `static_config_path` or, with
+`load_from_static_config_path: false`, `persistent_config_path` (created as a copy of the
+static file on first start). Bare names there resolve against this folder (`config_dir`);
+on the command line paths are used as given. Only `.yaml`/`.yml` are read.
 
 ## Layout
 

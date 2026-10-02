@@ -24,7 +24,9 @@ Bitte für jeden umgesetzten Plan einen neuen Eintrag am oberen Teil der Status.
 "Imswitch, aber neu": Mikroskop-Steuerung (openUC2) mit Web-Stack. Früher Alpha-Stand.
 
 - `backend/` — Python ≥3.11, FastAPI/uvicorn, Paket `newswitch/`, Einstieg `main.py`, Tests in
-  `tests/`. Abhängigkeiten über **uv**. Geräte-Konfiguration: eine Datei
+  `tests/`. Abhängigkeiten über **uv**. Basis-Einstellungen (Ordner, welche Gerätedatei,
+  db_path, …): `backend/base_config.yaml`, gelesen von `ImswitchConfig` in
+  `newswitch/app.py`. Geräte-Konfiguration: eine Datei
   `backend/Configs/newswitch-config.yaml`, gelesen von `newswitch/config_io/` (Schema, generiert:
   `Configs/schemas/newswitch-config.schema.yaml`). Entwickler-Überblick:
   `backend/docs/DEVELOPER_OVERVIEW.md`.

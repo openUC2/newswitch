@@ -175,8 +175,8 @@ VITE_SCHEMA_STATES_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/states
 VITE_SCHEMA_LOCKS_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/locks
 ```
 
-Apart from `BACKEND_HOST` / `BACKEND_PORT`, the backend reads no `.env` — the rest is configured in code
-via `ImswitchConfig` (`backend/newswitch/app.py`).
+Apart from `BACKEND_HOST` / `BACKEND_PORT`, the backend reads no `.env` — the rest is configured in
+`backend/base_config.yaml`, read by `ImswitchConfig` (`backend/newswitch/app.py`).
 
 ## Releases
 

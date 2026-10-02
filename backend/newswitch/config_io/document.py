@@ -4,8 +4,8 @@ The configuration is read with ruamel.yaml in round-trip mode, so comments, key 
 and flow/block style survive a write-back. Validation works on a plain copy
 (`to_plain`) of that tree; only the writer touches the tree itself.
 
-Bare names such as ``"newswitch-config.yaml"`` are resolved against the managed config
-directory (`newswitch.config.Paths.config_dir`); explicit paths are used as given.
+Paths are used as given; which file to read (and where it lives) is decided by
+`newswitch.app.ImswitchConfig` from ``backend/base_config.yaml``.
 """
 
 from __future__ import annotations
@@ -20,11 +20,7 @@ from typing import Any
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
-from ..config import get_paths
 from .errors import ConfigError
-
-#: File name of the one configuration file newswitch reads.
-DEFAULT_CONFIG_NAME = "newswitch-config.yaml"
 
 
 def _represent_none(representer: Any, data: None) -> Any:  # noqa: ANN401 - ruamel API
@@ -42,22 +38,45 @@ def _round_trip_yaml() -> YAML:
     return yaml
 
 
-def resolve_source(src: str | Path = DEFAULT_CONFIG_NAME) -> Path:
-    """Resolve a name or path to an existing YAML file.
+def resolve_source(src: str | Path) -> Path:
+    """Check that a configuration file exists.
 
     Args:
-        src: Bare name (with or without suffix) or an explicit path.
+        src: Path of the file.
 
     Returns:
-        Path to the existing file.
+        The path.
 
     Raises:
-        ConfigError: Nothing matched; the message lists what was tried.
+        ConfigError: The file does not exist.
     """
-    try:
-        return get_paths().config_file(src)
-    except FileNotFoundError as exc:
-        raise ConfigError(str(exc)) from exc
+    path = Path(src)
+    if not path.is_file():
+        raise ConfigError(f"No config file {str(path)!r}")
+    return path
+
+
+def ensure_persistent_copy(static: str | Path, persistent: str | Path) -> Path:
+    """Create the persistent configuration as a copy of the static one, if it is missing.
+
+    An existing persistent file is never touched. The copy keeps comments and layout.
+
+    Args:
+        static: The shipped configuration file.
+        persistent: The file newswitch reads and writes back at runtime.
+
+    Returns:
+        The persistent path.
+
+    Raises:
+        ConfigError: The persistent file is missing and so is the static one.
+    """
+    target = Path(persistent)
+    if not target.is_file():
+        source = resolve_source(static)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    return target
 
 
 def read_tree(path: Path) -> Any:  # noqa: ANN401 - a parsed document is Any

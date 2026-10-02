@@ -6,11 +6,18 @@ for controlling a virtual microscope through registered functions.
 """
 
 import os
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Any, Optional, Tuple
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import Field, ValidationInfo, field_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 from newswitch.hooks.software_autofocus import software_autofocus_hook
 from rekuest_next import pausepoint, progress
 from rekuest_next.agents.base import app_context
@@ -102,18 +109,83 @@ from newswitch.managers.python_hook_manager import PythonHookManager
 # ====================
 
 
-@app_context
-class ImswitchConfig(BaseModel):
-    """Configuration for imswitch application."""
+#: The base settings file; see the comments in it. Relative folders in it are taken
+#: relative to its own folder, so the working directory does not matter.
+BASE_CONFIG_FILE = Path(__file__).parent.parent / "base_config.yaml"
 
-    server: str = "localhost"
-    port: int = 8001
-    use_virtual_microscope: bool = True
-    db_path: str = "agent_data.db"
-    available_cubes: list[str] = ["cube1", "cube2", "cube3"]
-    config_file: Optional[str] = None
-    """Device configuration (e.g. ``newswitch-config.yaml``); a bare name is resolved
-    against the managed config directory. None keeps the built-in virtual devices."""
+
+@app_context
+class ImswitchConfig(BaseSettings):
+    """Configuration for imswitch application, read from `BASE_CONFIG_FILE`.
+
+    Keyword arguments override the file, e.g. ``ImswitchConfig(config_file=None)``.
+    Host and port are not part of it; they come from BACKEND_HOST / BACKEND_PORT.
+    """
+
+    # extra="forbid": a misspelled key in base_config.yaml is an error, not ignored
+    model_config = SettingsConfigDict(extra="forbid")
+
+    use_virtual_microscope: bool
+    db_path: str
+    available_cubes: list[str]
+
+    config_dir: Path
+    """Folder of the device configuration files."""
+    schema_dir: Path
+    """Folder of the generated schema files."""
+
+    static_config_path: Path
+    persistent_config_path: Path
+    load_from_static_config_path: bool
+
+    config_file: Optional[Path] = Field(
+        default_factory=lambda data: (
+            data["static_config_path"]
+            if data["load_from_static_config_path"]
+            else data["persistent_config_path"]
+        )
+    )
+    """Device configuration actually used: `static_config_path` or
+    `persistent_config_path`. None keeps the built-in virtual devices."""
+
+    def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
+        """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
+
+        Declared explicitly so type checkers do not demand every field as an argument:
+        the values normally come from the file, which they cannot see.
+        """
+        super().__init__(**values)
+
+    @field_validator("config_dir", "schema_dir")
+    @classmethod
+    def _relative_to_base_config(cls, path: Path) -> Path:
+        return path if path.is_absolute() else BASE_CONFIG_FILE.parent / path
+
+    @field_validator("static_config_path", "persistent_config_path")
+    @classmethod
+    def _bare_name_in_config_dir(cls, path: Path, info: ValidationInfo) -> Path:
+        # an explicit path (absolute, or with a directory part) is taken as given
+        if path.is_absolute() or path.parent != Path("."):
+            return path
+        return info.data["config_dir"] / path
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Read keyword arguments, then `BASE_CONFIG_FILE`; never the environment.
+
+        Raises:
+            FileNotFoundError: `BASE_CONFIG_FILE` does not exist.
+        """
+        if not BASE_CONFIG_FILE.is_file():
+            raise FileNotFoundError(f"{BASE_CONFIG_FILE} is missing; newswitch needs it to start")
+        return (init_settings, YamlConfigSettingsSource(settings_cls, yaml_file=BASE_CONFIG_FILE))
 
 
 # ====================
@@ -190,6 +262,8 @@ async def provide_managers(
 
     # Devices from newswitch-config.yaml; every manager whose device kind is missing
     # from the file (or when no file is configured) keeps its built-in defaults.
+    if config.config_file is not None and not config.load_from_static_config_path:
+        config_io.ensure_persistent_copy(config.static_config_path, config.persistent_config_path)
     devices = config_io.load_config(config.config_file).config if config.config_file else None
     led_config = objective_config = filter_bank_config = virtual_stage_config = None
     configured_detectors = None

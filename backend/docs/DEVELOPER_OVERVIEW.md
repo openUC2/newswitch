@@ -35,8 +35,11 @@ File: newswitch/app.py
 
 ### Device configuration (`newswitch/config_io/`)
 
-`ImswitchConfig.config_file` names the device file (`main.py` sets `newswitch-config.yaml`;
-bare names resolve against `backend/Configs/`). At startup `config_io.load_config()` validates
+`ImswitchConfig` reads `backend/base_config.yaml` (no environment variables, unknown keys are
+errors). `config_file` is `static_config_path` (`Configs/newswitch-config.yaml`) or, with
+`load_from_static_config_path: false`, `persistent_config_path`, which is created as a copy of
+the static file on first start; bare names resolve against `config_dir` (`backend/Configs/`).
+At startup `config_io.load_config()` validates
 it (jsonschema per device type, then pydantic) into one dataclass per device, and
 `config_io.adapters` turns those into the managers' dataclasses (`Illumination`, `Detector`,
 `ObjectiveLens`, `Filter`, stage limits, serial port). A device kind missing from the file,

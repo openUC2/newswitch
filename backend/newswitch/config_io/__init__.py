@@ -14,7 +14,7 @@ Layout
 * `validation`  -- jsonschema pass per device type, YAML schema export
 * `references`  -- cross-device checks
 * `writeback`   -- merge rules for writing back
-* `document`    -- ruamel round-trip I/O and path resolution
+* `document`    -- ruamel round-trip I/O, `ensure_persistent_copy`
 * `units`       -- pint unit conversion
 * `adapters`    -- dataclasses -> manager/protocol dataclasses
 
@@ -22,7 +22,7 @@ Typical use::
 
     from newswitch import config_io
 
-    cfg_file = config_io.load_config()      # managed newswitch-config.yaml
+    cfg_file = config_io.load_config(ImswitchConfig().config_file)
     for detector in cfg_file.config.detectors:
         ...
     cfg_file.save()
@@ -46,13 +46,12 @@ from .devices import (
     StageConfig,
     field_markers,
 )
-from .document import DEFAULT_CONFIG_NAME
+from .document import ensure_persistent_copy
 from .errors import ConfigError, ConfigWarning
 from .validation import config_schema, export_schema
 from .values import Firmware, PhysVal, Trigger
 
 __all__ = [
-    "DEFAULT_CONFIG_NAME",
     "DEVICE_TYPES",
     "AxisConfig",
     "ConfigError",
@@ -75,6 +74,7 @@ __all__ = [
     "Trigger",
     "check_shared_resources",
     "config_schema",
+    "ensure_persistent_copy",
     "export_schema",
     "field_markers",
     "load_config",

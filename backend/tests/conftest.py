@@ -7,7 +7,6 @@ fixture used by the `newswitch.config_io` tests.
 
 import asyncio
 from pathlib import Path
-from typing import Generator
 
 import pytest
 from fastapi import FastAPI
@@ -16,7 +15,6 @@ from rekuest_next.contrib.fastapi.testing import BufferedEvent
 
 from newswitch.app import ImswitchConfig, create_app
 from newswitch.auth import AllowAllAuthenticator
-from newswitch.config import get_paths
 
 # rekuest_next==2.1.1's AsyncAgentTestClient.collect_until_done()/BufferedEvent.is_done()
 # still check for a "DONE" event type, but the agent's wire protocol emits "COMPLETED"
@@ -37,7 +35,8 @@ def virtual_microscope_app() -> FastAPI:
     """
     # Authentication is bypassed rather than satisfied: AsyncAgentTestClient hardcodes
     # its websocket init payload, so there is no seam to hand it a token through.
-    app = create_app(ImswitchConfig(), authenticator=AllowAllAuthenticator())
+    # config_file=None: built-in virtual devices; never writes into backend/Configs
+    app = create_app(ImswitchConfig(config_file=None), authenticator=AllowAllAuthenticator())
     return app
 
 
@@ -52,29 +51,18 @@ def virtual_microscope_app() -> FastAPI:
 
 
 @pytest.fixture
-def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[Path, None, None]:
-    """Point `newswitch.config` at a throwaway config directory.
-
-    All four `Paths` fields are independent settings, so each one gets its own
-    environment override. `get_paths()` is `lru_cache`d, so the cache is cleared on
-    both sides of the test to keep the override from leaking.
+def config_dir(tmp_path: Path) -> Path:
+    """A throwaway folder for the configuration files of one test.
 
     Args:
         tmp_path: Pytest's built-in temporary path fixture.
-        monkeypatch: Pytest's environment patcher.
 
-    Yields:
+    Returns:
         Path to the temporary config directory.
     """
     root = tmp_path / "configs"
     root.mkdir()
-    monkeypatch.setenv("NEWSWITCH_CONFIG_DIR", str(root))
-    monkeypatch.setenv("NEWSWITCH_SCHEMA_DIR", str(root / "schemas"))
-    monkeypatch.setenv("NEWSWITCH_DATA_DIR", str(root / "data"))
-    monkeypatch.setenv("NEWSWITCH_LOG_DIR", str(root / "logs"))
-    get_paths.cache_clear()
-    yield root
-    get_paths.cache_clear()
+    return root
 
 
 async def collect_until_completed(

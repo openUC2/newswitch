@@ -99,3 +99,5 @@ docs/_build/
 
 # Backups written by newswitch.config_io when saving the device config
 backend/Configs/*.bak
+# Device config written back at runtime (persistent_config_path in backend/base_config.yaml)
+backend/Configs/*.persistent.yaml

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
@@ -53,8 +54,7 @@ def config(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> NewswitchConfig
         "channels": [None, "gfp"],
     }
     minimal_doc["devices"]["led"]["max_intensity"] = 50.0
-    write_doc(minimal_doc)
-    return load_config().config
+    return load_config(write_doc(minimal_doc)).config
 
 
 def test_illuminations(config: NewswitchConfig) -> None:
@@ -121,8 +121,7 @@ def test_missing_kinds_return_none(write_doc: DocWriter, minimal_doc: dict[str, 
     """Without devices of a kind the builders return None (keep manager defaults)."""
     for key in ("led", "laser", "cam", "obj10", "obj40", "turret", "gfp"):
         del minimal_doc["devices"][key]
-    write_doc(minimal_doc)
-    config = load_config().config
+    config = load_config(write_doc(minimal_doc)).config
     assert adapters.illuminations(config) is None
     assert adapters.detectors(config) is None
     assert adapters.objective_lenses(config) is None
@@ -143,11 +142,9 @@ def test_serial_settings(config: NewswitchConfig) -> None:
     assert settings == adapters.SerialSettings(port="/dev/ttyUSB0", baudrate=115200)
 
 
-def test_sync_runtime_state_and_save(
-    write_doc: DocWriter, minimal_doc: dict[str, Any], config: NewswitchConfig
-) -> None:
+def test_sync_runtime_state_and_save(config_path: Path, config: NewswitchConfig) -> None:
     """Runtime values land in the config and survive a save/load cycle."""
-    cfg_file = load_config()
+    cfg_file = load_config(config_path)  # the file the `config` fixture wrote
     camera_state = CameraState()
     detectors = adapters.detectors(cfg_file.config)
     assert detectors is not None
@@ -163,7 +160,7 @@ def test_sync_runtime_state_and_save(
     )
     cfg_file.save(backup=False)
 
-    reloaded = load_config().config
+    reloaded = load_config(config_path).config
     exposure = get_device(reloaded, "cam", DetectorConfig).exposure_time_ms
     assert exposure is not None and exposure.value == pytest.approx(500.0)
     assert get_device(reloaded, "turret", RevolverConfig).selected_channel == 0
