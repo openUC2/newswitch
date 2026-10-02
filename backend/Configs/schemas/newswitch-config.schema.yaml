@@ -20,6 +20,42 @@ $defs:
         - rz
         title: Label
         type: string
+      steps_per_deg:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - type: 'null'
+        default: null
+        description: Motor steps per degree for a rotational axis
+        title: Steps Per Deg
+      binding:
+        anyOf:
+        - discriminator:
+            mapping:
+              canopen-motor: '#/$defs/CanOpenMotorBinding'
+              uc2-master: '#/$defs/Uc2MasterAxisBinding'
+            propertyName: type
+          oneOf:
+          - $ref: '#/$defs/CanOpenMotorBinding'
+          - $ref: '#/$defs/Uc2MasterAxisBinding'
+        - type: 'null'
+        default: null
+        description: Motor address on a CANopen bus or UC2 serial master
+        title: Binding
+      homing_speed_steps:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Speed Steps
+      homing_timeout_ms:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Timeout Ms
       steps_per_um:
         anyOf:
         - exclusiveMinimum: 0
@@ -33,6 +69,15 @@ $defs:
         title: Homing Required
         type: boolean
         x_firmware: full
+      homing_direction:
+        anyOf:
+        - enum:
+          - -1
+          - 1
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Direction
       inverted:
         default: false
         title: Inverted
@@ -75,6 +120,96 @@ $defs:
     - homing_required
     title: AxisConfig
     type: object
+  CanBusProtocol:
+    additionalProperties: false
+    description: Shared CAN bus for devices that address their own CANopen nodes.
+    properties:
+      protocol:
+        const: can-bus
+        default: can-bus
+        title: Protocol
+        type: string
+      transport:
+        $ref: '#/$defs/CanTransport'
+        default:
+          type: can
+          interface: socketcan
+          channel: can0
+          port: null
+          bitrate: 500000
+    title: CanBusProtocol
+    type: object
+  CanOpenLaserBinding:
+    additionalProperties: false
+    description: PWM output on a UC2 laser CANopen node.
+    properties:
+      node_id:
+        maximum: 127
+        minimum: 1
+        title: Node Id
+        type: integer
+      channel:
+        maximum: 3
+        minimum: 0
+        title: Channel
+        type: integer
+      pwm_max:
+        default: 1023
+        exclusiveMinimum: 0
+        title: Pwm Max
+        type: integer
+      type:
+        const: canopen-laser
+        default: canopen-laser
+        title: Type
+        type: string
+    required:
+    - node_id
+    - channel
+    title: CanOpenLaserBinding
+    type: object
+  CanOpenLedMatrixBinding:
+    additionalProperties: false
+    description: RGB LED matrix on a UC2 CANopen node.
+    properties:
+      node_id:
+        maximum: 127
+        minimum: 1
+        title: Node Id
+        type: integer
+      type:
+        const: canopen-led-matrix
+        default: canopen-led-matrix
+        title: Type
+        type: string
+    required:
+    - node_id
+    title: CanOpenLedMatrixBinding
+    type: object
+  CanOpenMotorBinding:
+    additionalProperties: false
+    description: Address one motor on a CANopen node (sub-axis is zero-based).
+    properties:
+      node_id:
+        maximum: 127
+        minimum: 1
+        title: Node Id
+        type: integer
+      sub_axis:
+        default: 0
+        maximum: 3
+        minimum: 0
+        title: Sub Axis
+        type: integer
+      type:
+        const: canopen-motor
+        default: canopen-motor
+        title: Type
+        type: string
+    required:
+    - node_id
+    title: CanOpenMotorBinding
+    type: object
   CanOpenProtocol:
     additionalProperties: false
     description: CANopen device (node) on a CAN bus.
@@ -112,6 +247,7 @@ $defs:
           type: can
           interface: socketcan
           channel: can0
+          port: null
           bitrate: 500000
     required:
     - node_id
@@ -130,6 +266,7 @@ $defs:
         default: socketcan
         enum:
         - socketcan
+        - waveshare
         - pcan
         - kvaser
         - slcan
@@ -141,6 +278,12 @@ $defs:
         default: can0
         title: Channel
         type: string
+      port:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        title: Port
       bitrate:
         default: 500000
         title: Bitrate
@@ -169,6 +312,7 @@ $defs:
         description: Connection to the controller
         discriminator:
           mapping:
+            can-bus: '#/$defs/CanBusProtocol'
             canopen: '#/$defs/CanOpenProtocol'
             gige-vision: '#/$defs/GigEVisionProtocol'
             modbus: '#/$defs/ModbusProtocol'
@@ -179,6 +323,7 @@ $defs:
         oneOf:
         - $ref: '#/$defs/Uc2RestProtocol'
         - $ref: '#/$defs/CanOpenProtocol'
+        - $ref: '#/$defs/CanBusProtocol'
         - $ref: '#/$defs/ModbusProtocol'
         - $ref: '#/$defs/RegisterMapProtocol'
         - $ref: '#/$defs/GigEVisionProtocol'
@@ -229,6 +374,7 @@ $defs:
         anyOf:
         - discriminator:
             mapping:
+              can-bus: '#/$defs/CanBusProtocol'
               canopen: '#/$defs/CanOpenProtocol'
               gige-vision: '#/$defs/GigEVisionProtocol'
               modbus: '#/$defs/ModbusProtocol'
@@ -239,6 +385,7 @@ $defs:
           oneOf:
           - $ref: '#/$defs/Uc2RestProtocol'
           - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/CanBusProtocol'
           - $ref: '#/$defs/ModbusProtocol'
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
@@ -597,6 +744,7 @@ $defs:
         anyOf:
         - discriminator:
             mapping:
+              can-bus: '#/$defs/CanBusProtocol'
               canopen: '#/$defs/CanOpenProtocol'
               gige-vision: '#/$defs/GigEVisionProtocol'
               modbus: '#/$defs/ModbusProtocol'
@@ -607,6 +755,7 @@ $defs:
           oneOf:
           - $ref: '#/$defs/Uc2RestProtocol'
           - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/CanBusProtocol'
           - $ref: '#/$defs/ModbusProtocol'
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
@@ -623,10 +772,24 @@ $defs:
         description: device_id of the controller this device is attached to
         title: Controller
       wavelength:
-        description: Wavelength in nm
-        exclusiveMinimum: 0
+        description: Wavelength in nm; 0 for broadband/RGB light
+        minimum: 0
         title: Wavelength
         type: number
+      binding:
+        anyOf:
+        - discriminator:
+            mapping:
+              canopen-laser: '#/$defs/CanOpenLaserBinding'
+              canopen-led-matrix: '#/$defs/CanOpenLedMatrixBinding'
+            propertyName: type
+          oneOf:
+          - $ref: '#/$defs/CanOpenLaserBinding'
+          - $ref: '#/$defs/CanOpenLedMatrixBinding'
+        - type: 'null'
+        default: null
+        description: CANopen node and output used by this light source
+        title: Binding
       bandwidth:
         anyOf:
         - exclusiveMinimum: 0
@@ -906,6 +1069,7 @@ $defs:
         anyOf:
         - discriminator:
             mapping:
+              can-bus: '#/$defs/CanBusProtocol'
               canopen: '#/$defs/CanOpenProtocol'
               gige-vision: '#/$defs/GigEVisionProtocol'
               modbus: '#/$defs/ModbusProtocol'
@@ -916,6 +1080,7 @@ $defs:
           oneOf:
           - $ref: '#/$defs/Uc2RestProtocol'
           - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/CanBusProtocol'
           - $ref: '#/$defs/ModbusProtocol'
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
@@ -1286,6 +1451,7 @@ $defs:
         anyOf:
         - discriminator:
             mapping:
+              can-bus: '#/$defs/CanBusProtocol'
               canopen: '#/$defs/CanOpenProtocol'
               gige-vision: '#/$defs/GigEVisionProtocol'
               modbus: '#/$defs/ModbusProtocol'
@@ -1296,6 +1462,7 @@ $defs:
           oneOf:
           - $ref: '#/$defs/Uc2RestProtocol'
           - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/CanBusProtocol'
           - $ref: '#/$defs/ModbusProtocol'
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
@@ -1317,6 +1484,20 @@ $defs:
           $ref: '#/$defs/AxisConfig'
         minItems: 1
         title: Axes
+        type: array
+      homing_order:
+        description: Axes to home in this mechanical order
+        items:
+          enum:
+          - x
+          - y
+          - z
+          - a
+          - rx
+          - ry
+          - rz
+          type: string
+        title: Homing Order
         type: array
       manufacturer:
         anyOf:
@@ -1399,6 +1580,24 @@ $defs:
     required:
     - type
     title: Trigger
+    type: object
+  Uc2MasterAxisBinding:
+    additionalProperties: false
+    description: Address one stepper through the UC2 master JSON protocol.
+    properties:
+      stepper_id:
+        maximum: 3
+        minimum: 0
+        title: Stepper Id
+        type: integer
+      type:
+        const: uc2-master
+        default: uc2-master
+        title: Type
+        type: string
+    required:
+    - stepper_id
+    title: Uc2MasterAxisBinding
     type: object
   Uc2RestProtocol:
     additionalProperties: false

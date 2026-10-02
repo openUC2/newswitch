@@ -1,0 +1,70 @@
+# Direct CANopen stage example. A CAN bus is shared by all axes; each axis
+# addresses its own motor node. These values mirror configs/uc2_canopen.json
+# on main. Real hardware still requires the UC2 CAN bus adapter to be wired in.
+newswitch_version: v1.0.2
+devices:
+  sample-stage:
+    type: stage
+    name: UC2 XYZA stage
+    connection:
+      protocol: can-bus
+      transport:
+        type: can
+        interface: socketcan
+        channel: can0
+        bitrate: 500000
+    homing_order: [z, x, y]
+    axes:
+      - label: x
+        binding: {type: canopen-motor, node_id: 11, sub_axis: 0}
+        steps_per_um: 3.2
+        homing_required: true
+        homing_speed_steps: 15000
+        homing_direction: -1
+        homing_timeout_ms: 20000
+        vel: {value: 5000, unit: um/s}
+      - label: y
+        binding: {type: canopen-motor, node_id: 12, sub_axis: 0}
+        steps_per_um: 3.2
+        homing_required: true
+        homing_speed_steps: 15000
+        homing_direction: -1
+        homing_timeout_ms: 20000
+        vel: {value: 5000, unit: um/s}
+      - label: z
+        binding: {type: canopen-motor, node_id: 13, sub_axis: 0}
+        steps_per_um: 3.2
+        homing_required: true
+        homing_speed_steps: 15000
+        homing_direction: -1
+        homing_timeout_ms: 20000
+        vel: {value: 5000, unit: um/s}
+      - label: a
+        binding: {type: canopen-motor, node_id: 14, sub_axis: 0}
+        steps_per_um: null
+        steps_per_deg: 1.0
+        homing_required: false
+  laser-488:
+    type: lightsource
+    name: 488 nm laser
+    wavelength: 488
+    connection:
+      protocol: can-bus
+      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    binding: {type: canopen-laser, node_id: 21, channel: 0, pwm_max: 1023}
+  laser-635:
+    type: lightsource
+    name: 635 nm laser
+    wavelength: 635
+    connection:
+      protocol: can-bus
+      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    binding: {type: canopen-laser, node_id: 21, channel: 1, pwm_max: 1023}
+  led-matrix:
+    type: lightsource
+    name: UC2 LED matrix
+    wavelength: 0
+    connection:
+      protocol: can-bus
+      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    binding: {type: canopen-led-matrix, node_id: 20}

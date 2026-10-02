@@ -21,6 +21,7 @@ Properties without a default are **required**. Unknown properties are rejected (
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | `uc2-rest` | ✓ | ✓ | – | ✓ | ✓ | – | – | – |
 | `canopen` | – | – | – | – | – | ✓ | – | – |
+| `can-bus` | – | – | – | – | – | ✓ | – | – |
 | `modbus` | ✓ | ✓ | ✓ | – | ✓ | – | – | – |
 | `register-map` | – | – | – | – | – | – | ✓ | – |
 | `gige-vision` | – | – | – | – | – | – | – | ✓ |
@@ -53,6 +54,21 @@ CANopen device (node) on a CAN bus.
 | `sdo_timeout` | `float` (s) | `0.5` | Timeout for SDO (service data object) transfers. |
 | `heartbeat_period_ms` | `int` \| `null` | `null` | Expected heartbeat interval of the node; `null` disables monitoring. |
 | `transport` | `can` | `can` with defaults | CAN bus the node is attached to. |
+
+For a stage whose axes reside on different CANopen nodes, use `can-bus` on the
+stage instead of assigning a single `node_id` to the whole stage. Each axis then
+has a `binding` with its own `node_id` and `sub_axis`. The same bus can also
+serve light sources, whose bindings identify the laser or LED node.
+
+#### `can-bus`
+
+Shared CAN transport for devices on the same bus. It has no device-level `node_id`;
+axis and light-source bindings identify their respective CANopen nodes.
+
+| Property | Type / Allowed values | Default | Description |
+|---|---|---|---|
+| `protocol` | `"can-bus"` | – | Discriminator. |
+| `transport` | `can` | `can` with defaults | Shared CAN interface and bitrate. |
 
 #### 2.3 `modbus`
 
@@ -195,8 +211,9 @@ CAN bus interface (based on `python-can`).
 | Property | Type / Allowed values | Default | Description |
 |---|---|---|---|
 | `type` | `"can"` | – | Discriminator. |
-| `interface` | `"socketcan"` \| `"pcan"` \| `"kvaser"` \| `"slcan"` \| `"gs_usb"` \| `"virtual"` | `"socketcan"` | python-can backend / adapter type. |
+| `interface` | `"socketcan"` \| `"waveshare"` \| `"pcan"` \| `"kvaser"` \| `"slcan"` \| `"gs_usb"` \| `"virtual"` | `"socketcan"` | CAN adapter type. |
 | `channel` | `str` | `"can0"` | Bus channel, e.g. `can0`, `PCAN_USBBUS1`, or a serial port for `slcan`. |
+| `port` | `str` \| `null` | `null` | USB serial port for `waveshare`; required with that interface. |
 | `bitrate` | `int` | `500000` | Bus bitrate in bit/s (typically 125k, 250k, 500k, 1M). Must be identical for all devices on the bus. |
 
 #### 3.8 `i2c`

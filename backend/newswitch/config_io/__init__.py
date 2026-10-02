@@ -33,6 +33,9 @@ from .connection import Connection, check_shared_resources, resource_key, transp
 from .devices import (
     DEVICE_TYPES,
     AxisConfig,
+    CanOpenLaserBinding,
+    CanOpenLedMatrixBinding,
+    CanOpenMotorBinding,
     ConnectedDevice,
     ControllerConfig,
     DetectorConfig,
@@ -44,6 +47,7 @@ from .devices import (
     ObjectiveConfig,
     RevolverConfig,
     StageConfig,
+    Uc2MasterAxisBinding,
     field_markers,
 )
 from .document import ensure_persistent_copy
@@ -54,6 +58,9 @@ from .values import Firmware, PhysVal, Trigger
 __all__ = [
     "DEVICE_TYPES",
     "AxisConfig",
+    "CanOpenLaserBinding",
+    "CanOpenLedMatrixBinding",
+    "CanOpenMotorBinding",
     "ConfigError",
     "ConfigFile",
     "ConfigWarning",
@@ -71,6 +78,7 @@ __all__ = [
     "PhysVal",
     "RevolverConfig",
     "StageConfig",
+    "Uc2MasterAxisBinding",
     "Trigger",
     "check_shared_resources",
     "config_schema",

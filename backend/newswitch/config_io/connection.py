@@ -166,9 +166,18 @@ class CanTransport(_Base):
     """CAN bus interface (based on python-can)."""
 
     type: Literal["can"] = "can"
-    interface: Literal["socketcan", "pcan", "kvaser", "slcan", "gs_usb", "virtual"] = "socketcan"
+    interface: Literal["socketcan", "waveshare", "pcan", "kvaser", "slcan", "gs_usb", "virtual"] = (
+        "socketcan"
+    )
     channel: str = "can0"
+    port: str | None = None  # Waveshare USB-CAN-A serial device
     bitrate: int = 500_000
+
+    @model_validator(mode="after")
+    def _waveshare_port(self) -> Self:
+        if self.interface == "waveshare" and not self.port:
+            raise ValueError("waveshare CAN interface needs a serial port")
+        return self
 
 
 class I2cTransport(_Base):
@@ -230,6 +239,13 @@ class CanOpenProtocol(_Base):
     transport: CanTransport = CanTransport()
 
 
+class CanBusProtocol(_Base):
+    """Shared CAN bus for devices that address their own CANopen nodes."""
+
+    protocol: Literal["can-bus"] = "can-bus"
+    transport: CanTransport = CanTransport()
+
+
 class RegisterMapProtocol(_Base):
     """Register read/write devices (sensors, DACs, IO expanders, ...)."""
 
@@ -288,6 +304,7 @@ Connection = Annotated[
     Union[
         Uc2RestProtocol,
         CanOpenProtocol,
+        CanBusProtocol,
         ModbusProtocol,
         RegisterMapProtocol,
         GigEVisionProtocol,
@@ -312,7 +329,13 @@ def transport_of(connection: Connection) -> Transport | None:
         The transport model; None for GigE Vision and USB3 Vision.
     """
     match connection:
-        case Uc2RestProtocol() | CanOpenProtocol() | ModbusProtocol() | RegisterMapProtocol():
+        case (
+            Uc2RestProtocol()
+            | CanOpenProtocol()
+            | CanBusProtocol()
+            | ModbusProtocol()
+            | RegisterMapProtocol()
+        ):
             return connection.transport
     return None
 
@@ -333,7 +356,7 @@ def resource_key(t: Transport) -> tuple:
         case SerialTransport() | Rs422Transport() | Rs485Transport():
             return ("uart", t.port or t.port_pattern or (t.vid, t.pid, t.serial_number))
         case CanTransport():
-            return ("can", t.interface, t.channel)
+            return ("can", t.interface, t.port if t.interface == "waveshare" else t.channel)
         case I2cTransport():
             return ("i2c", t.bus)
         case HttpTransport():
@@ -376,7 +399,11 @@ def check_shared_resources(connections: Mapping[str, Connection]) -> dict[tuple,
         first_id, first_conn, first_t = members[0]
         ref_t = first_t.model_dump(exclude=PER_USER_FIELDS)
         for other_id, other_conn, other_t in members[1:]:
-            if other_conn.protocol != first_conn.protocol:
+            compatible_can = key[0] == "can" and {
+                first_conn.protocol,
+                other_conn.protocol,
+            } <= {"can-bus", "canopen"}
+            if other_conn.protocol != first_conn.protocol and not compatible_can:
                 errors.append(
                     f"{key}: '{first_id}' speaks {first_conn.protocol}, "
                     f"'{other_id}' speaks {other_conn.protocol}"

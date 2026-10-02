@@ -5,13 +5,24 @@ A single entry is validated by its dataclass; everything here needs the whole fi
 
 from __future__ import annotations
 
-from .connection import Connection, check_shared_resources
+from .connection import (
+    CanBusProtocol,
+    CanOpenProtocol,
+    Connection,
+    Uc2RestProtocol,
+    check_shared_resources,
+    resource_key,
+    transport_of,
+)
 from .devices import (
+    CanOpenLaserBinding,
+    CanOpenMotorBinding,
     ConnectedDevice,
     ControllerConfig,
     FilterConfig,
     NewswitchConfig,
     ObjectiveConfig,
+    Uc2MasterAxisBinding,
 )
 
 
@@ -43,6 +54,72 @@ def check_references(config: NewswitchConfig) -> list[str]:
                 problems.append(
                     f"devices.{device_id}.controller: {device.controller!r} is not a controller"
                 )
+
+    for stage in config.stages:
+        connection = stage.connection_for_axes(config)
+        bound = [axis for axis in stage.axes if axis.binding is not None]
+        if bound and len(bound) != len(stage.axes):
+            problems.append(f"devices.{stage.device_id}.axes: bind every axis or none")
+        for index, axis in enumerate(stage.axes):
+            binding = axis.binding
+            if binding is None or connection is None:
+                continue
+            where = f"devices.{stage.device_id}.axes.{index}.binding"
+            if isinstance(binding, CanOpenMotorBinding):
+                if not isinstance(connection, (CanBusProtocol, CanOpenProtocol)):
+                    problems.append(f"{where}: canopen binding requires a CAN connection")
+                elif (
+                    isinstance(connection, CanOpenProtocol)
+                    and binding.node_id != connection.node_id
+                ):
+                    problems.append(f"{where}: node_id differs from the connection's node_id")
+            elif isinstance(binding, Uc2MasterAxisBinding):
+                if not isinstance(connection, Uc2RestProtocol):
+                    problems.append(f"{where}: uc2-master binding requires a uc2-rest connection")
+                elif axis.label in ("x", "y", "z", "a"):
+                    expected = {"a": 0, "x": 1, "y": 2, "z": 3}[axis.label]
+                    if binding.stepper_id != expected:
+                        problems.append(
+                            f"{where}.stepper_id: current UC2 serial driver uses {expected} "
+                            f"for axis {axis.label!r}"
+                        )
+                else:
+                    problems.append(
+                        f"{where}: current UC2 serial driver cannot address {axis.label!r}"
+                    )
+
+    used_light_outputs: dict[tuple, str] = {}
+    for source in config.lightsources:
+        binding = source.binding
+        if binding is None:
+            continue
+        connection = source.connection
+        if connection is None and source.controller is not None:
+            controller = devices.get(source.controller)
+            if isinstance(controller, ControllerConfig):
+                connection = controller.connection
+        where = f"devices.{source.device_id}.binding"
+        if not isinstance(connection, (CanBusProtocol, CanOpenProtocol)):
+            problems.append(f"{where}: CAN light binding requires a CAN connection")
+            continue
+        if isinstance(connection, CanOpenProtocol) and binding.node_id != connection.node_id:
+            problems.append(f"{where}: node_id differs from the connection's node_id")
+        transport = transport_of(connection)
+        assert transport is not None
+        bus = resource_key(transport)
+        node_key = (bus, binding.node_id)
+        kind = "laser" if isinstance(binding, CanOpenLaserBinding) else "led-matrix"
+        for address, other in used_light_outputs.items():
+            if address[:2] == node_key and address[2] != kind:
+                problems.append(f"{where}: CAN node {binding.node_id} is already used by {other}")
+        output = binding.channel if isinstance(binding, CanOpenLaserBinding) else 0
+        address = (*node_key, kind, output)
+        if address in used_light_outputs:
+            problems.append(
+                f"{where}: CAN light output is already used by {used_light_outputs[address]}"
+            )
+        else:
+            used_light_outputs[address] = source.device_id
 
     mounted_in: dict[str, str] = {}
     for revolver in config.revolvers:

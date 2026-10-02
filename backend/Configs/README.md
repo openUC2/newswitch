@@ -55,6 +55,41 @@ positions to those devices; `selected_channel` is a 0-based position.
 **Connection or controller:** lightsources, detectors, revolvers and stages need exactly
 one of `connection:` (own link) or `controller: <device_id>` (attached to a controller).
 
+## Stage axis wiring
+
+`AxisConfig.binding` identifies the motor behind each axis. On a UC2 master reached by
+`uc2-rest`, use `{type: uc2-master, stepper_id: 1}` for X, 2 for Y, 3 for Z, and 0 for A.
+Those IDs reflect the current serial driver. For direct CANopen, use a stage connection
+with `protocol: can-bus` and a shared CAN transport, then give each axis a
+`{type: canopen-motor, node_id: 11, sub_axis: 0}` binding. `sub_axis` is zero-based and is
+0 for boards with one motor. `steps_per_um` converts travel to motor steps.
+For a bound rotary axis (`a`, `rx`, `ry`, `rz`), use `steps_per_um: null` and
+`steps_per_deg` instead.
+The current `pos`/`vel`/`acc`/`jerk` fields still use linear units; rotary
+motion values need a separate unit model before they can configure the driver.
+
+If bindings are supplied, every axis in the stage must have one. Duplicate motor
+addresses are rejected. `homing_order` controls the mechanically safe sequence;
+per-axis `homing_speed_steps`, `homing_direction`, and `homing_timeout_ms` describe
+the homing command. See `uc2-canopen-stage.example.yaml` for a direct CAN example.
+These fields define the config contract; wiring them into the newer UC2 bus managers
+on `main` is separate integration work.
+For a Waveshare USB-CAN-A adapter, set `interface: waveshare` and its USB `port`
+under the CAN transport instead of the SocketCAN `channel`.
+
+## CAN light-source wiring
+
+Laser channels and the LED matrix can use the same `can-bus` transport as the
+stage. A laser uses `{type: canopen-laser, node_id: 21, channel: 0, pwm_max: 1023}`;
+another channel on that node uses `channel: 1`. The LED matrix uses
+`{type: canopen-led-matrix, node_id: 20}`. The `channel` in a laser binding is the
+output number in the CAN laser command; the connection's `transport.channel`
+names the host CAN interface. A broadband/RGB LED may use `wavelength: 0`.
+Duplicate light outputs and a laser/LED collision on one node are rejected.
+The example `uc2-canopen-stage.example.yaml` shows the shared bus and all three
+light sources. Each connected device currently repeats the bus settings;
+the runtime adapter still needs to consume these bindings and share the bus client.
+
 ## Physical values
 
 Exposure, frame rate, gain and the axis values `pos`/`vel`/`acc`/`jerk` are `PhysVal`s:
