@@ -102,5 +102,6 @@ backend/Configs/*.bak
 
 # Local hardware settings and generated browser-test reports
 backend/configs/*.local.json
+backend/Configs/*.persistent.yaml
 frontend/playwright-report/
 frontend/test-results/
