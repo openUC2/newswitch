@@ -24,12 +24,14 @@ from jsonschema.exceptions import ValidationError
 from pydantic import TypeAdapter
 
 from ..config import get_paths
+from .connection import Connection
 from .devices import DEVICE_TYPES, NewswitchConfig
 from .document import write_plain
 
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_FILE_NAME = "newswitch-config.schema.yaml"
-TOP_LEVEL_KEYS = ("newswitch_version", "devices")
+TOP_LEVEL_KEYS = ("newswitch_version", "connections", "devices")
+REQUIRED_TOP_LEVEL_KEYS = ("newswitch_version", "devices")
 
 
 def _most_specific(error: ValidationError) -> ValidationError:
@@ -76,7 +78,9 @@ def prepare_document(data: Any) -> tuple[dict[str, Any], list[str]]:  # noqa: AN
         return {}, [f"<root>: expected a mapping, got {type(data).__name__}"]
 
     problems = [f"<root>: unknown key {key!r}" for key in data if key not in TOP_LEVEL_KEYS]
-    problems += [f"<root>: missing key {key!r}" for key in TOP_LEVEL_KEYS if key not in data]
+    problems += [
+        f"<root>: missing key {key!r}" for key in REQUIRED_TOP_LEVEL_KEYS if key not in data
+    ]
 
     devices = data.get("devices")
     if devices is None:
@@ -108,6 +112,21 @@ def validate_document(document: dict[str, Any]) -> list[str]:
     version = document.get("newswitch_version")
     if version is not None and not isinstance(version, str):
         problems.append("newswitch_version: expected a string")
+
+    connections = document.get("connections", {})
+    if not isinstance(connections, dict):
+        problems.append("connections: expected a mapping of named connections")
+    else:
+        connection_validator = Draft202012Validator(TypeAdapter(Connection).json_schema())
+        for key, entry in connections.items():
+            where = f"connections.{key}"
+            if not isinstance(entry, dict):
+                problems.append(f"{where}: expected a mapping, got {type(entry).__name__}")
+                continue
+            for err in connection_validator.iter_errors(entry):
+                specific = _most_specific(err)
+                loc = ".".join(str(p) for p in specific.absolute_path)
+                problems.append(f"{where}{'.' + loc if loc else ''}: {specific.message}")
 
     validators = _type_validators()
     devices = document.get("devices")
