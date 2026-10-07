@@ -23,7 +23,6 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 from pydantic import TypeAdapter
 
-from ..config import get_paths
 from .connection import Connection
 from .devices import DEVICE_TYPES, NewswitchConfig
 from .document import write_plain
@@ -174,20 +173,19 @@ def config_schema() -> dict[str, Any]:
     return {"$schema": DIALECT, **schema}
 
 
-def export_schema(path: str | Path | None = None) -> Path:
+def export_schema(path: str | Path) -> Path:
     """Write the configuration schema as YAML.
 
     Args:
-        path: Target file; defaults to ``newswitch-config.schema.yaml`` in the managed
-            schema directory.
+        path: Target file, normally `SCHEMA_FILE_NAME` in
+            `newswitch.app.ImswitchConfig.schema_dir`.
 
     Returns:
         The path written to.
     """
-    target = get_paths().schema_file(SCHEMA_FILE_NAME) if path is None else Path(path)
     return write_plain(
         config_schema(),
-        target,
+        Path(path),
         header=(
             "JSON Schema (Draft 2020-12) for newswitch-config.yaml.\n"
             "Generated from newswitch.config_io.devices -- do not edit by hand.\n"

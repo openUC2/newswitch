@@ -69,7 +69,7 @@ DOC = textwrap.dedent(
 
 def _saved(write_doc: DocWriter, change: Callable[[ConfigFile], None] | None = None) -> str:
     path = write_doc(DOC)
-    cfg_file = load_config()
+    cfg_file = load_config(path)
     if change is not None:
         change(cfg_file)
     cfg_file.save(backup=False)
@@ -87,7 +87,7 @@ def test_untouched_file_is_identical(write_doc: DocWriter) -> None:
     """A file without scalar physical values survives a save byte for byte."""
     doc = DOC.replace("    gain_db: 2.0\n", "")
     path = write_doc(doc)
-    load_config().save(backup=False)
+    load_config(path).save(backup=False)
     assert path.read_text(encoding="utf-8") == doc
 
 
@@ -165,8 +165,7 @@ def test_defaults_are_never_added(write_doc: DocWriter) -> None:
 
 def test_rejects_non_firmware_fields(write_doc: DocWriter) -> None:
     """Only fields marked x_firmware can be reported."""
-    write_doc(DOC)
-    cfg_file = load_config()
+    cfg_file = load_config(write_doc(DOC))
     with pytest.raises(ConfigError, match="not a firmware-provided field"):
         cfg_file.apply_firmware("gfp", {"wavelength": 600})
     with pytest.raises(ConfigError, match="no such axis"):
@@ -178,7 +177,7 @@ def test_rejects_non_firmware_fields(write_doc: DocWriter) -> None:
 def test_invalid_runtime_state_is_not_saved(write_doc: DocWriter) -> None:
     """An out-of-range runtime value blocks the save and leaves the file alone."""
     path = write_doc(DOC)
-    cfg_file = load_config()
+    cfg_file = load_config(path)
     exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
     assert exposure is not None
     exposure.value = 5000.0
@@ -190,17 +189,17 @@ def test_invalid_runtime_state_is_not_saved(write_doc: DocWriter) -> None:
 def test_backup(write_doc: DocWriter) -> None:
     """save() keeps the previous file as .bak by default."""
     path = write_doc(DOC)
-    load_config().save()
+    load_config(path).save()
     assert path.with_name(path.name + ".bak").read_text(encoding="utf-8") == DOC
 
 
 def test_save_twice_writes_only_new_changes(write_doc: DocWriter) -> None:
     """After a save the snapshot is current, so a second save changes nothing."""
     path = write_doc(DOC)
-    cfg_file = load_config()
+    cfg_file = load_config(path)
     cfg_file.save(backup=False)
     first = path.read_text(encoding="utf-8")
     cfg_file.save(backup=False)
     assert path.read_text(encoding="utf-8") == first
-    gain = get_device(load_config().config, "cam", DetectorConfig).gain_db
+    gain = get_device(load_config(path).config, "cam", DetectorConfig).gain_db
     assert gain is not None and gain.value == 2.0

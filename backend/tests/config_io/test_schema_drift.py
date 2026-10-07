@@ -3,7 +3,8 @@
 1. ``Configs/schemas/newswitch-config.schema.yaml`` must match the dataclasses.
 2. ``Configs/newswitch-config.yaml`` must load and pass the exported schema.
 
-Both read the development-only ``Configs/`` folder and skip when it is gone.
+Both read the development-only ``Configs/`` folder (located via ``base_config.yaml``)
+and skip when it is gone.
 Regenerate the schema with ``uv run python -m newswitch.config_io --export-schema``.
 """
 
@@ -17,13 +18,14 @@ import pytest
 from jsonschema import Draft202012Validator
 from ruamel.yaml import YAML
 
-from newswitch.config import Paths
+from newswitch.app import ImswitchConfig
 from newswitch.config_io import config_schema, load_config
 from newswitch.config_io.document import to_plain
 from newswitch.config_io.validation import SCHEMA_FILE_NAME
 
-CONFIG_FILE = Paths().config_dir / "newswitch-config.yaml"
-SCHEMA_FILE = Paths().schema_dir / SCHEMA_FILE_NAME
+_SETTINGS = ImswitchConfig(config_file=None)
+CONFIG_FILE = _SETTINGS.static_config_path
+SCHEMA_FILE = _SETTINGS.schema_dir / SCHEMA_FILE_NAME
 
 
 def _requires(path: Path) -> Path:

@@ -2,7 +2,7 @@
 
 Documents are built in the tests themselves instead of reading ``backend/Configs``,
 which is a development-only folder; only ``test_schema_drift.py`` looks at the real
-files. `config_dir` (from the top-level conftest) redirects the managed paths.
+files. They are written into `config_dir`, a temporary folder from the top-level conftest.
 """
 
 from __future__ import annotations
@@ -18,12 +18,15 @@ from newswitch.config_io import DeviceBase, NewswitchConfig
 
 T = TypeVar("T", bound=DeviceBase)
 
+#: File name `write_doc` uses when no other name is given.
+DOC_NAME = "newswitch-config.yaml"
+
 
 class DocWriter(Protocol):
     """The `write_doc` helper: (document, file name) -> path written to."""
 
     def __call__(self, document: Any, name: str = ...) -> Path:  # noqa: ANN401
-        """Write ``document`` as ``name`` (default: the managed config file)."""
+        """Write ``document`` as ``name`` (default: `DOC_NAME`) into `config_dir`."""
         ...
 
 
@@ -124,6 +127,19 @@ def minimal_doc() -> dict[str, Any]:
 
 
 @pytest.fixture
+def config_path(config_dir: Path) -> Path:
+    """Where `write_doc` puts a document by default.
+
+    Args:
+        config_dir: The temporary config directory fixture.
+
+    Returns:
+        ``config_dir / DOC_NAME``.
+    """
+    return config_dir / DOC_NAME
+
+
+@pytest.fixture
 def write_doc(config_dir: Path) -> DocWriter:
     """Return a helper that writes a document as YAML into the temporary config dir.
 
@@ -137,7 +153,7 @@ def write_doc(config_dir: Path) -> DocWriter:
         A callable ``(document, name) -> Path``.
     """
 
-    def _write(document: Any, name: str = "newswitch-config.yaml") -> Path:  # noqa: ANN401
+    def _write(document: Any, name: str = DOC_NAME) -> Path:  # noqa: ANN401
         path = config_dir / name
         if isinstance(document, str):
             path.write_text(document, encoding="utf-8")

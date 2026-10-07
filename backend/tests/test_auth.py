@@ -34,7 +34,7 @@ CREDENTIALS = Credentials(username=USERNAME, password=PASSWORD)
 def authed_app() -> FastAPI:
     """The app with real credentials, so the gate is actually exercised."""
     return create_app(
-        ImswitchConfig(),
+        ImswitchConfig(config_file=None),
         authenticator=CredentialAuthenticator(CREDENTIALS),
     )
 

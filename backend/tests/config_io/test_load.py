@@ -8,22 +8,28 @@ from typing import Any, Callable
 
 import pytest
 
-from newswitch.config_io import ConfigError, ConfigWarning, DetectorConfig, load_config
+from newswitch.config_io import (
+    ConfigError,
+    ConfigWarning,
+    DetectorConfig,
+    ensure_persistent_copy,
+    load_config,
+)
 
 from .conftest import DocWriter, get_device
 
 
 def _problems(write_doc: DocWriter, doc: Any) -> list[str]:  # noqa: ANN401
-    write_doc(doc)
+    path = write_doc(doc)
     with pytest.raises(ConfigError) as info:
-        load_config()
+        load_config(path)
     return info.value.problems
 
 
 def test_loads_minimal_doc(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     """A valid file yields one dataclass per entry, keyed and ordered as in the file."""
-    write_doc(minimal_doc)
-    config = load_config().config
+    path = write_doc(minimal_doc)
+    config = load_config(path).config
     assert list(config.devices) == list(minimal_doc["devices"])
     cam = config.devices["cam"]
     assert isinstance(cam, DetectorConfig)
@@ -32,7 +38,7 @@ def test_loads_minimal_doc(write_doc: DocWriter, minimal_doc: dict[str, Any]) ->
 
 
 def test_explicit_path(tmp_path: Path, minimal_doc: dict[str, Any], write_doc: DocWriter) -> None:
-    """An explicit path bypasses the managed directory."""
+    """The loaded file remembers the path it was read from (and is saved to)."""
     path = write_doc(minimal_doc, "elsewhere.yml")
     assert load_config(path).path == path
 
@@ -40,8 +46,7 @@ def test_explicit_path(tmp_path: Path, minimal_doc: dict[str, Any], write_doc: D
 def test_device_id_must_match_key(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     """A stated device_id equal to the key is fine; a different one is an error."""
     minimal_doc["devices"]["cam"]["device_id"] = "cam"
-    write_doc(minimal_doc)
-    load_config()
+    load_config(write_doc(minimal_doc))
 
     minimal_doc["devices"]["cam"]["device_id"] = "other"
     problems = _problems(write_doc, minimal_doc)
@@ -129,9 +134,9 @@ def test_shared_resource_conflict(write_doc: DocWriter, minimal_doc: dict[str, A
 def test_version_mismatch_warns(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     """A file written for another major/minor version loads with a warning."""
     minimal_doc["newswitch_version"] = "v0.1.0-alpha.0"
-    write_doc(minimal_doc)
+    path = write_doc(minimal_doc)
     with pytest.warns(ConfigWarning, match="written for newswitch"):
-        load_config()
+        load_config(path)
 
 
 def test_unconvertible_unit_warns_and_loads(
@@ -139,10 +144,10 @@ def test_unconvertible_unit_warns_and_loads(
 ) -> None:
     """A value in an unusable unit is dropped with a warning instead of failing."""
     minimal_doc["devices"]["cam"]["exposure_time_ms"] = {"value": 1.0, "unit": "Hz"}
-    write_doc(minimal_doc)
+    path = write_doc(minimal_doc)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        config = load_config().config
+        config = load_config(path).config
     assert get_device(config, "cam", DetectorConfig).exposure_time_ms is None
     assert any(issubclass(w.category, ConfigWarning) for w in caught)
 
@@ -154,14 +159,33 @@ def test_rejects_json(config_dir: Path) -> None:
         load_config(config_dir / "cfg.json")
 
 
-def test_missing_file(config_dir: Path) -> None:
-    """A missing file is a ConfigError naming what was tried."""
+def test_missing_file(config_path: Path) -> None:
+    """A missing file is a ConfigError naming the path."""
     with pytest.raises(ConfigError, match="newswitch-config.yaml"):
-        load_config()
+        load_config(config_path)
 
 
 def test_unparseable(write_doc: DocWriter) -> None:
     """Broken YAML is a ConfigError."""
-    write_doc("devices: [unclosed\n")
+    path = write_doc("devices: [unclosed\n")
     with pytest.raises(ConfigError, match="cannot be parsed"):
-        load_config()
+        load_config(path)
+
+
+def test_persistent_copy_is_made_once(write_doc: DocWriter, config_dir: Path) -> None:
+    """The persistent file starts as a copy of the static one and is then left alone."""
+    static = write_doc("# keep this comment\nnewswitch_version: v1.0.0\ndevices: {}\n")
+    persistent = config_dir / "sub" / "persistent.yaml"
+
+    assert ensure_persistent_copy(static, persistent) == persistent
+    assert persistent.read_text(encoding="utf-8") == static.read_text(encoding="utf-8")
+
+    persistent.write_text("changed at runtime\n", encoding="utf-8")
+    ensure_persistent_copy(static, persistent)
+    assert persistent.read_text(encoding="utf-8") == "changed at runtime\n"
+
+
+def test_persistent_copy_needs_the_static_file(config_dir: Path) -> None:
+    """Without either file there is nothing to copy."""
+    with pytest.raises(ConfigError, match="static.yaml"):
+        ensure_persistent_copy(config_dir / "static.yaml", config_dir / "persistent.yaml")

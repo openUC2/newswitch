@@ -1,8 +1,10 @@
 """Inspect the configuration from the shell.
 
-python -m newswitch.config_io                        # managed newswitch-config.yaml
+python -m newswitch.config_io                        # ImswitchConfig().config_file
 python -m newswitch.config_io path/to/other.yaml
 python -m newswitch.config_io --export-schema        # regenerate the YAML schema
+
+The defaults come from ``backend/base_config.yaml`` via `newswitch.app.ImswitchConfig`.
 """
 
 from __future__ import annotations
@@ -12,9 +14,8 @@ import sys
 
 from .config_file import load_config
 from .devices import NewswitchConfig
-from .document import DEFAULT_CONFIG_NAME
 from .errors import ConfigError
-from .validation import export_schema
+from .validation import SCHEMA_FILE_NAME, export_schema
 
 
 def describe(config: NewswitchConfig) -> str:
@@ -41,16 +42,24 @@ def main(argv: list[str]) -> int:
     Returns:
         Process exit code: 0 on success, 1 when the file is invalid.
     """
+    # imported here, not at module level: newswitch.app itself imports config_io
+    from newswitch.app import ImswitchConfig
+
     parser = argparse.ArgumentParser(prog="python -m newswitch.config_io")
-    parser.add_argument("file", nargs="?", default=DEFAULT_CONFIG_NAME)
+    parser.add_argument("file", nargs="?", help="config file (default: base_config.yaml)")
     parser.add_argument("--export-schema", action="store_true", help="write the YAML schema")
     args = parser.parse_args(argv)
 
+    settings = ImswitchConfig()
     if args.export_schema:
-        print(f"wrote {export_schema()}")
+        print(f"wrote {export_schema(settings.schema_dir / SCHEMA_FILE_NAME)}")
         return 0
+    file = args.file or settings.config_file
+    if file is None:
+        print("[FAIL] no config file given and none configured")
+        return 1
     try:
-        print(describe(load_config(args.file).config))
+        print(describe(load_config(file).config))
     except ConfigError as exc:
         print(f"[FAIL] {exc}")
         return 1

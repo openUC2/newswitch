@@ -4,7 +4,7 @@ Typical use::
 
     from newswitch import config_io
 
-    cfg_file = config_io.load_config()              # managed newswitch-config.yaml
+    cfg_file = config_io.load_config(ImswitchConfig().config_file)
     cfg = cfg_file.config
     for detector in cfg.detectors: ...
 
@@ -28,7 +28,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from .devices import AxisConfig, Device, NewswitchConfig, StageConfig, field_markers
-from .document import DEFAULT_CONFIG_NAME, read_tree, resolve_source, to_plain, write_tree
+from .document import read_tree, resolve_source, to_plain, write_tree
 from .errors import ConfigError, ConfigWarning
 from .references import check_references
 from .validation import prepare_document, validate_document
@@ -272,11 +272,11 @@ def parse_tree(tree: Any, name: str = "<config>") -> NewswitchConfig:  # noqa: A
     return config
 
 
-def load_config(src: str | Path = DEFAULT_CONFIG_NAME) -> ConfigFile:
+def load_config(src: str | Path) -> ConfigFile:
     """Load and validate the configuration file.
 
     Args:
-        src: Bare name resolved against the managed config directory, or a path.
+        src: Path of the file (`newswitch.app.ImswitchConfig.config_file`).
 
     Returns:
         The loaded file, ready to be read by the managers and saved back.

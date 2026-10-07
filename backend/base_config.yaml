@@ -1,0 +1,22 @@
+# base_config.yaml -- base settings of newswitch, read by newswitch.app.ImswitchConfig.
+# This file belongs to newswitch. Do not delete it: the backend does not start without it.
+#
+# Host and port are not set here. They come from BACKEND_HOST / BACKEND_PORT in the
+# repository's root .env (deployment via docker is still an open point).
+
+use_virtual_microscope: true
+# SQLite file of the rekuest agent (state history); relative to the working directory
+db_path: agent_data.db
+available_cubes: [cube1, cube2, cube3]
+
+# Folders; relative paths are taken relative to this file's folder (backend/)
+config_dir: Configs
+schema_dir: Configs/schemas
+
+# Device configuration; bare names are resolved against config_dir
+static_config_path: newswitch-config.yaml
+persistent_config_path: newswitch-config.persistent.yaml
+# true:  read (and write back) static_config_path
+# false: read (and write back) persistent_config_path; on first start it is created
+#        as a copy of static_config_path
+load_from_static_config_path: true
