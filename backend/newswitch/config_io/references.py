@@ -23,6 +23,8 @@ from .devices import (
     NewswitchConfig,
     ObjectiveConfig,
     Uc2MasterAxisBinding,
+    Uc2MasterLaserBinding,
+    Uc2MasterLedMatrixBinding,
 )
 
 
@@ -46,6 +48,14 @@ def check_references(config: NewswitchConfig) -> list[str]:
     devices = config.devices
 
     for device_id, device in devices.items():
+        if (
+            isinstance(device, (ConnectedDevice, ControllerConfig))
+            and isinstance(device.connection, str)
+            and device.connection not in config.connections
+        ):
+            problems.append(
+                f"devices.{device_id}.connection: no named connection {device.connection!r}"
+            )
         if isinstance(device, ConnectedDevice) and device.controller is not None:
             target = devices.get(device.controller)
             if target is None:
@@ -93,12 +103,27 @@ def check_references(config: NewswitchConfig) -> list[str]:
         binding = source.binding
         if binding is None:
             continue
-        connection = source.connection
-        if connection is None and source.controller is not None:
-            controller = devices.get(source.controller)
-            if isinstance(controller, ControllerConfig):
-                connection = controller.connection
+        connection = config.connection_for(source)
+        if connection is None:
+            continue
         where = f"devices.{source.device_id}.binding"
+        if isinstance(binding, (Uc2MasterLaserBinding, Uc2MasterLedMatrixBinding)):
+            if not isinstance(connection, Uc2RestProtocol):
+                problems.append(f"{where}: UC2 master light binding requires a uc2-rest connection")
+                continue
+            transport = transport_of(connection)
+            assert transport is not None
+            kind = "laser" if isinstance(binding, Uc2MasterLaserBinding) else "led-matrix"
+            output = binding.channel if isinstance(binding, Uc2MasterLaserBinding) else 0
+            address = (resource_key(transport), kind, output)
+            if address in used_light_outputs:
+                problems.append(
+                    f"{where}: UC2 master light output is already used by "
+                    f"{used_light_outputs[address]}"
+                )
+            else:
+                used_light_outputs[address] = source.device_id
+            continue
         if not isinstance(connection, (CanBusProtocol, CanOpenProtocol)):
             problems.append(f"{where}: CAN light binding requires a CAN connection")
             continue
@@ -146,11 +171,15 @@ def check_references(config: NewswitchConfig) -> list[str]:
         if len(kinds) > 1:
             problems.append(f"devices.{revolver.device_id}.channels: mixes objectives and filters")
 
-    connections: dict[str, Connection] = {}
+    connections: dict[str, Connection] = dict(config.connections)
     for device_id, device in devices.items():
-        if isinstance(device, ControllerConfig):
+        if isinstance(device, ControllerConfig) and not isinstance(device.connection, str):
             connections[device_id] = device.connection
-        elif isinstance(device, ConnectedDevice) and device.connection is not None:
+        elif (
+            isinstance(device, ConnectedDevice)
+            and device.connection is not None
+            and not isinstance(device.connection, str)
+        ):
             connections[device_id] = device.connection
     try:
         check_shared_resources(connections)

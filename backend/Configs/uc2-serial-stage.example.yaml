@@ -1,0 +1,69 @@
+# UC2 stage reached through a USB-connected serial master. The host sends
+# UC2-REST JSON to the master; each axis is selected by its stepper_id.
+# Replace the port and mechanical calibration values for the actual machine.
+newswitch_version: v1.0.2
+devices:
+  uc2-master:
+    type: controller
+    name: UC2 serial master
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port: /dev/ttyUSB0
+        baudrate: 921600
+    firmware:
+      name: UC2_canopen_master
+      version: V2.0
+
+  sample-stage:
+    type: stage
+    name: UC2 XYZA stage via serial master
+    controller: uc2-master
+    homing_order: [z, x, y]
+    axes:
+      - label: x
+        binding: {type: uc2-master, stepper_id: 1}
+        steps_per_um: 3.2
+        homing_required: true
+        vel: {value: 5000, unit: um/s}
+      - label: y
+        binding: {type: uc2-master, stepper_id: 2}
+        steps_per_um: 3.2
+        homing_required: true
+        vel: {value: 5000, unit: um/s}
+      - label: z
+        binding: {type: uc2-master, stepper_id: 3}
+        steps_per_um: 3.2
+        homing_required: true
+        vel: {value: 5000, unit: um/s}
+      - label: a
+        binding: {type: uc2-master, stepper_id: 0}
+        steps_per_um: null
+        steps_per_deg: 1.0
+        homing_required: false
+
+  laser-488:
+    type: lightsource
+    name: 488 nm laser
+    wavelength: 488
+    coherence: coherent
+    max_intensity: 100
+    controller: uc2-master
+    binding: {type: uc2-master-laser, channel: 1, pwm_max: 1023}
+
+  laser-635:
+    type: lightsource
+    name: 635 nm laser
+    wavelength: 635
+    coherence: coherent
+    max_intensity: 100
+    controller: uc2-master
+    binding: {type: uc2-master-laser, channel: 2, pwm_max: 1023}
+
+  led-matrix:
+    type: lightsource
+    name: UC2 LED matrix
+    wavelength: 0
+    controller: uc2-master
+    binding: {type: uc2-master-led-matrix}

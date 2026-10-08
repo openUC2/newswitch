@@ -72,8 +72,8 @@ class DeviceBase:
 class ConnectedDevice(DeviceBase):
     """A device reached either through its own connection or through a controller."""
 
-    connection: Connection | None = Field(
-        default=None, description="Own connection; required when no controller is given"
+    connection: Connection | str | None = Field(
+        default=None, description="Own connection or name in top-level connections"
     )
     controller: str | None = Field(
         default=None, description="device_id of the controller this device is attached to"
@@ -91,6 +91,22 @@ class ConnectedDevice(DeviceBase):
 # ---------------------------------------------------------------------------
 # Device types
 # ---------------------------------------------------------------------------
+
+
+@dataclass(kw_only=True, config=STRICT)
+class Uc2MasterLaserBinding:
+    """Laser PWM channel reached through a UC2 serial master."""
+
+    type: Literal["uc2-master-laser"] = "uc2-master-laser"
+    channel: int = Field(ge=0, le=3)
+    pwm_max: int = Field(default=1023, gt=0)
+
+
+@dataclass(kw_only=True, config=STRICT)
+class Uc2MasterLedMatrixBinding:
+    """RGB LED matrix commanded through a UC2 serial master."""
+
+    type: Literal["uc2-master-led-matrix"] = "uc2-master-led-matrix"
 
 
 @dataclass(kw_only=True, config=STRICT)
@@ -112,7 +128,13 @@ class CanOpenLedMatrixBinding:
 
 
 LightsourceBinding = Annotated[
-    Union[CanOpenLaserBinding, CanOpenLedMatrixBinding], Field(discriminator="type")
+    Union[
+        Uc2MasterLaserBinding,
+        Uc2MasterLedMatrixBinding,
+        CanOpenLaserBinding,
+        CanOpenLedMatrixBinding,
+    ],
+    Field(discriminator="type"),
 ]
 
 
@@ -121,7 +143,7 @@ class ControllerConfig(DeviceBase):
     """Controller board (e.g. UC2 mainboard) that other devices are attached to."""
 
     type: Literal["controller"] = "controller"
-    connection: Connection = Field(description="Connection to the controller")
+    connection: Connection | str = Field(description="Connection to the controller")
     firmware: Firmware = Field(description="Firmware running on the controller")
 
 
@@ -132,7 +154,7 @@ class LightsourceConfig(ConnectedDevice):
     type: Literal["lightsource"] = "lightsource"
     wavelength: float = Field(ge=0, description="Wavelength in nm; 0 for broadband/RGB light")
     binding: LightsourceBinding | None = Field(
-        default=None, description="CANopen node and output used by this light source"
+        default=None, description="Laser channel or LED matrix address on the selected connection"
     )
     bandwidth: PositiveFloat | None = Field(default=None, description="Bandwidth in nm")
     spec_shape: SpectralShape | None = Field(default=None, description="Spectral shape")
@@ -317,10 +339,7 @@ class StageConfig(ConnectedDevice):
 
     def connection_for_axes(self, config: NewswitchConfig) -> Connection | None:
         """Resolve the stage's own connection or its referenced controller."""
-        if self.connection is not None:
-            return self.connection
-        controller = config.devices.get(self.controller) if self.controller else None
-        return controller.connection if isinstance(controller, ControllerConfig) else None
+        return config.connection_for(self)
 
     def axis(self, label: AxisLabel) -> AxisConfig | None:
         """Return the axis with `label`, or None when the stage has no such axis.
@@ -422,7 +441,20 @@ class NewswitchConfig:
     """Top level of ``newswitch-config.yaml``."""
 
     newswitch_version: str = Field(description="newswitch version the file was written for")
+    connections: dict[str, Connection] = Field(
+        default_factory=dict, description="Named reusable physical connections"
+    )
     devices: dict[str, Device] = Field(description="All devices, keyed by device_id")
+
+    def connection_for(self, device: ConnectedDevice | ControllerConfig) -> Connection | None:
+        """Resolve an inline or named connection, including a device's controller."""
+        selected = device.connection
+        if selected is None and isinstance(device, ConnectedDevice) and device.controller:
+            controller = self.devices.get(device.controller)
+            selected = controller.connection if isinstance(controller, ControllerConfig) else None
+        if isinstance(selected, str):
+            return self.connections.get(selected)
+        return selected
 
     @model_validator(mode="after")
     def _keys_are_device_ids(self) -> Self:

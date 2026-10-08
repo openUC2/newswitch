@@ -1,6 +1,20 @@
 ## Device Connection Reference
 
-Reference for the connection models in `connections.py`. Every device connection consists of a **protocol** (what is spoken) and, where applicable, a **transport** (over which medium the bytes travel).
+Reference for the connection models in `connection.py`. Every device connection consists of a **protocol** (what is spoken) and, where applicable, a **transport** (over which medium the bytes travel). A connection may be defined inline or once under top-level `connections` and referenced by name from several devices:
+
+```yaml
+connections:
+  main-can:
+    protocol: can-bus
+    transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+devices:
+  laser-488:
+    type: lightsource
+    name: 488 nm laser
+    wavelength: 488
+    connection: main-can
+    binding: {type: canopen-laser, node_id: 21, channel: 0}
+```
 
 ```yaml
 connection:

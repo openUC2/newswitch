@@ -30,6 +30,10 @@ on the command line paths are used as given. Only `.yaml`/`.yml` are read.
 
 ```yaml
 newswitch_version: v1.0.2
+connections:
+  main-can:              # optional named connection shared by multiple devices
+    protocol: can-bus
+    transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
 devices:
   <device_id>:            # the mapping key IS the device_id (a device_id: key is optional
     type: <type>          # and must then equal the key)
@@ -53,14 +57,16 @@ All keys are snake_case. Unknown keys are errors, so typos fail loudly.
 positions to those devices; `selected_channel` is a 0-based position.
 
 **Connection or controller:** lightsources, detectors, revolvers and stages need exactly
-one of `connection:` (own link) or `controller: <device_id>` (attached to a controller).
+one of `connection:` (inline link or name from `connections`) or
+`controller: <device_id>` (attached to a controller). Multiple devices can refer
+to the same named connection; the bus settings then appear only once.
 
 ## Stage axis wiring
 
 `AxisConfig.binding` identifies the motor behind each axis. On a UC2 master reached by
 `uc2-rest`, use `{type: uc2-master, stepper_id: 1}` for X, 2 for Y, 3 for Z, and 0 for A.
-Those IDs reflect the current serial driver. For direct CANopen, use a stage connection
-with `protocol: can-bus` and a shared CAN transport, then give each axis a
+Those IDs reflect the current serial driver. For direct CANopen, define a named
+connection with `protocol: can-bus`, let the stage refer to it, then give each axis a
 `{type: canopen-motor, node_id: 11, sub_axis: 0}` binding. `sub_axis` is zero-based and is
 0 for boards with one motor. `steps_per_um` converts travel to motor steps.
 For a bound rotary axis (`a`, `rx`, `ry`, `rz`), use `steps_per_um: null` and
@@ -74,21 +80,31 @@ per-axis `homing_speed_steps`, `homing_direction`, and `homing_timeout_ms` descr
 the homing command. See `uc2-canopen-stage.example.yaml` for a direct CAN example.
 These fields define the config contract; wiring them into the newer UC2 bus managers
 on `main` is separate integration work.
+`uc2-serial-stage.example.yaml` is a standalone serial example with explicit
+X/Y/Z/A axis names and stepper IDs plus laser channels and the LED matrix;
+`uc2-canopen-stage.example.yaml` shows the corresponding direct-CAN addresses.
 For a Waveshare USB-CAN-A adapter, set `interface: waveshare` and its USB `port`
 under the CAN transport instead of the SocketCAN `channel`.
 
-## CAN light-source wiring
+## Light-source wiring
 
-Laser channels and the LED matrix can use the same `can-bus` transport as the
-stage. A laser uses `{type: canopen-laser, node_id: 21, channel: 0, pwm_max: 1023}`;
+On a UC2 serial master, a laser uses
+`{type: uc2-master-laser, channel: 1, pwm_max: 1023}` and refers to the
+master through `controller`. A second laser can use channel 2. The matrix uses
+`{type: uc2-master-led-matrix}` because the current `led_fill` / `led_off`
+commands do not take a channel. These bindings do not expose any downstream
+CAN node IDs behind the serial master.
+
+Laser channels and the LED matrix can refer to the same named `can-bus`
+connection as the stage. A laser uses `{type: canopen-laser, node_id: 21, channel: 0, pwm_max: 1023}`;
 another channel on that node uses `channel: 1`. The LED matrix uses
 `{type: canopen-led-matrix, node_id: 20}`. The `channel` in a laser binding is the
 output number in the CAN laser command; the connection's `transport.channel`
 names the host CAN interface. A broadband/RGB LED may use `wavelength: 0`.
 Duplicate light outputs and a laser/LED collision on one node are rejected.
 The example `uc2-canopen-stage.example.yaml` shows the shared bus and all three
-light sources. Each connected device currently repeats the bus settings;
-the runtime adapter still needs to consume these bindings and share the bus client.
+light sources. The runtime adapter still needs to consume these bindings and
+share the bus client.
 
 ## Physical values
 

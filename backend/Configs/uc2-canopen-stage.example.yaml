@@ -2,17 +2,19 @@
 # addresses its own motor node. These values mirror configs/uc2_canopen.json
 # on main. Real hardware still requires the UC2 CAN bus adapter to be wired in.
 newswitch_version: v1.0.2
+connections:
+  main-can:
+    protocol: can-bus
+    transport:
+      type: can
+      interface: socketcan
+      channel: can0
+      bitrate: 500000
 devices:
   sample-stage:
     type: stage
     name: UC2 XYZA stage
-    connection:
-      protocol: can-bus
-      transport:
-        type: can
-        interface: socketcan
-        channel: can0
-        bitrate: 500000
+    connection: main-can
     homing_order: [z, x, y]
     axes:
       - label: x
@@ -48,23 +50,21 @@ devices:
     type: lightsource
     name: 488 nm laser
     wavelength: 488
-    connection:
-      protocol: can-bus
-      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    coherence: coherent
+    max_intensity: 100
+    connection: main-can
     binding: {type: canopen-laser, node_id: 21, channel: 0, pwm_max: 1023}
   laser-635:
     type: lightsource
     name: 635 nm laser
     wavelength: 635
-    connection:
-      protocol: can-bus
-      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    coherence: coherent
+    max_intensity: 100
+    connection: main-can
     binding: {type: canopen-laser, node_id: 21, channel: 1, pwm_max: 1023}
   led-matrix:
     type: lightsource
     name: UC2 LED matrix
     wavelength: 0
-    connection:
-      protocol: can-bus
-      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    connection: main-can
     binding: {type: canopen-led-matrix, node_id: 20}

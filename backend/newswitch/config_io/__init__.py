@@ -48,6 +48,8 @@ from .devices import (
     RevolverConfig,
     StageConfig,
     Uc2MasterAxisBinding,
+    Uc2MasterLaserBinding,
+    Uc2MasterLedMatrixBinding,
     field_markers,
 )
 from .document import ensure_persistent_copy
@@ -79,6 +81,8 @@ __all__ = [
     "RevolverConfig",
     "StageConfig",
     "Uc2MasterAxisBinding",
+    "Uc2MasterLaserBinding",
+    "Uc2MasterLedMatrixBinding",
     "Trigger",
     "check_shared_resources",
     "config_schema",

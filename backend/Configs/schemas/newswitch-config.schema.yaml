@@ -309,25 +309,27 @@ $defs:
         title: Tags
         type: array
       connection:
+        anyOf:
+        - discriminator:
+            mapping:
+              can-bus: '#/$defs/CanBusProtocol'
+              canopen: '#/$defs/CanOpenProtocol'
+              gige-vision: '#/$defs/GigEVisionProtocol'
+              modbus: '#/$defs/ModbusProtocol'
+              register-map: '#/$defs/RegisterMapProtocol'
+              uc2-rest: '#/$defs/Uc2RestProtocol'
+              usb3-vision: '#/$defs/Usb3VisionProtocol'
+            propertyName: protocol
+          oneOf:
+          - $ref: '#/$defs/Uc2RestProtocol'
+          - $ref: '#/$defs/CanOpenProtocol'
+          - $ref: '#/$defs/CanBusProtocol'
+          - $ref: '#/$defs/ModbusProtocol'
+          - $ref: '#/$defs/RegisterMapProtocol'
+          - $ref: '#/$defs/GigEVisionProtocol'
+          - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: string
         description: Connection to the controller
-        discriminator:
-          mapping:
-            can-bus: '#/$defs/CanBusProtocol'
-            canopen: '#/$defs/CanOpenProtocol'
-            gige-vision: '#/$defs/GigEVisionProtocol'
-            modbus: '#/$defs/ModbusProtocol'
-            register-map: '#/$defs/RegisterMapProtocol'
-            uc2-rest: '#/$defs/Uc2RestProtocol'
-            usb3-vision: '#/$defs/Usb3VisionProtocol'
-          propertyName: protocol
-        oneOf:
-        - $ref: '#/$defs/Uc2RestProtocol'
-        - $ref: '#/$defs/CanOpenProtocol'
-        - $ref: '#/$defs/CanBusProtocol'
-        - $ref: '#/$defs/ModbusProtocol'
-        - $ref: '#/$defs/RegisterMapProtocol'
-        - $ref: '#/$defs/GigEVisionProtocol'
-        - $ref: '#/$defs/Usb3VisionProtocol'
         title: Connection
       firmware:
         $ref: '#/$defs/Firmware'
@@ -390,9 +392,10 @@ $defs:
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
           - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: string
         - type: 'null'
         default: null
-        description: Own connection; required when no controller is given
+        description: Own connection or name in top-level connections
         title: Connection
       controller:
         anyOf:
@@ -760,9 +763,10 @@ $defs:
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
           - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: string
         - type: 'null'
         default: null
-        description: Own connection; required when no controller is given
+        description: Own connection or name in top-level connections
         title: Connection
       controller:
         anyOf:
@@ -782,13 +786,17 @@ $defs:
             mapping:
               canopen-laser: '#/$defs/CanOpenLaserBinding'
               canopen-led-matrix: '#/$defs/CanOpenLedMatrixBinding'
+              uc2-master-laser: '#/$defs/Uc2MasterLaserBinding'
+              uc2-master-led-matrix: '#/$defs/Uc2MasterLedMatrixBinding'
             propertyName: type
           oneOf:
+          - $ref: '#/$defs/Uc2MasterLaserBinding'
+          - $ref: '#/$defs/Uc2MasterLedMatrixBinding'
           - $ref: '#/$defs/CanOpenLaserBinding'
           - $ref: '#/$defs/CanOpenLedMatrixBinding'
         - type: 'null'
         default: null
-        description: CANopen node and output used by this light source
+        description: Laser channel or LED matrix address on the selected connection
         title: Binding
       bandwidth:
         anyOf:
@@ -1085,9 +1093,10 @@ $defs:
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
           - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: string
         - type: 'null'
         default: null
-        description: Own connection; required when no controller is given
+        description: Own connection or name in top-level connections
         title: Connection
       controller:
         anyOf:
@@ -1467,9 +1476,10 @@ $defs:
           - $ref: '#/$defs/RegisterMapProtocol'
           - $ref: '#/$defs/GigEVisionProtocol'
           - $ref: '#/$defs/Usb3VisionProtocol'
+        - type: string
         - type: 'null'
         default: null
-        description: Own connection; required when no controller is given
+        description: Own connection or name in top-level connections
         title: Connection
       controller:
         anyOf:
@@ -1599,6 +1609,40 @@ $defs:
     - stepper_id
     title: Uc2MasterAxisBinding
     type: object
+  Uc2MasterLaserBinding:
+    additionalProperties: false
+    description: Laser PWM channel reached through a UC2 serial master.
+    properties:
+      channel:
+        maximum: 3
+        minimum: 0
+        title: Channel
+        type: integer
+      pwm_max:
+        default: 1023
+        exclusiveMinimum: 0
+        title: Pwm Max
+        type: integer
+      type:
+        const: uc2-master-laser
+        default: uc2-master-laser
+        title: Type
+        type: string
+    required:
+    - channel
+    title: Uc2MasterLaserBinding
+    type: object
+  Uc2MasterLedMatrixBinding:
+    additionalProperties: false
+    description: RGB LED matrix commanded through a UC2 serial master.
+    properties:
+      type:
+        const: uc2-master-led-matrix
+        default: uc2-master-led-matrix
+        title: Type
+        type: string
+    title: Uc2MasterLedMatrixBinding
+    type: object
   Uc2RestProtocol:
     additionalProperties: false
     description: JSON command protocol of openUC2 controllers (ESP32 firmware).
@@ -1670,6 +1714,29 @@ properties:
     description: newswitch version the file was written for
     title: Newswitch Version
     type: string
+  connections:
+    additionalProperties:
+      discriminator:
+        mapping:
+          can-bus: '#/$defs/CanBusProtocol'
+          canopen: '#/$defs/CanOpenProtocol'
+          gige-vision: '#/$defs/GigEVisionProtocol'
+          modbus: '#/$defs/ModbusProtocol'
+          register-map: '#/$defs/RegisterMapProtocol'
+          uc2-rest: '#/$defs/Uc2RestProtocol'
+          usb3-vision: '#/$defs/Usb3VisionProtocol'
+        propertyName: protocol
+      oneOf:
+      - $ref: '#/$defs/Uc2RestProtocol'
+      - $ref: '#/$defs/CanOpenProtocol'
+      - $ref: '#/$defs/CanBusProtocol'
+      - $ref: '#/$defs/ModbusProtocol'
+      - $ref: '#/$defs/RegisterMapProtocol'
+      - $ref: '#/$defs/GigEVisionProtocol'
+      - $ref: '#/$defs/Usb3VisionProtocol'
+    description: Named reusable physical connections
+    title: Connections
+    type: object
   devices:
     additionalProperties:
       discriminator:
