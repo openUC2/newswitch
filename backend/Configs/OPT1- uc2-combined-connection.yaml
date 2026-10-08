@@ -1,0 +1,192 @@
+# The use case is the following:
+#
+#
+#  |---------|                  |---------|-- CAN (ID0, sub-ID1)-->|Stage1 X|
+#  |  RPI    | --- UC2 REST --- |  ESP32  |-- CAN (ID1, sub-ID1)-->|Laser 1 |
+#  | --------|                  |---------|-- PWM (laser_id1)-->|Laser 2 |
+#      |
+#      |
+#      |
+#      |-- CAN (ID21, sub-ID0) -->|Stage1 Z|
+#      |-- CAN (ID21, sub-ID0) -->|LED |
+#      |-- CAN (ID4, sub-ID1) -->|Filter Wheel|
+#
+# OPEN QUESTIONS:
+#   - How to picture Filter wheels? Are they just a special case of a stage with discrete positions?
+#
+#
+
+newswitch_version: v1.0.2
+devices:
+
+  # --- MAIN BOARDS ---
+  my-standalone-board:
+    type: controller
+    name: UC2-Mainboard-v4
+    manufacturer: openUC2
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port_pattern: /dev/ttyUSB*
+        baudrate: 115200
+    firmware:
+      name: esp32-uc2-standalone-4
+      version: v2026.0.0-beta.3
+    mapping:                # Mapping or byinding?
+      my-laser-serial:   # Whats better here? a general key + name ID or a specific key for each device type?
+        type: serial-laser
+        id: 2
+        pwm_max: 1023
+      my-laser-can:
+        type: canopen-laser,
+        id: 0
+        subid: 1   # Was channel at Florians setting
+        pwm_max: 1023  # Is this existing at CAN?
+      just-some-boring-stage.x:   # ok to handle axes like this? or put the axes in the mapping?
+        type: canopen-motor
+        id: 0
+        subid: 1
+
+  my-directly-connected-board:
+    type: controller
+    name: CAN_SERIAL_HAT
+    manufacturer: someDude
+    connection:
+      protocol: can-bus
+      transport:
+        type: can
+        interface: socketcan
+        channel: can0
+        bitrate: 500000
+    mapping:                # Mapping or byinding?
+      top-illumination-LED:   # Whats better here? a general key + name ID or a specific key for each device type?
+        type: canopen-laser,
+        id: 21,        # I
+        subid: 0,
+        pwm_max: 1023  # Is this existing at CAN?
+      my-filter-wheel:
+        type: canopen-revolver,
+        id: 4,
+        channel: 1,
+      just-some-boring-stage.z:   # ok to handle axes like this? or put the axes in the mapping?
+        type: canopen-motor
+        id: 21
+        subid: 0
+
+  my-usb3-camera-controll:
+    type: controller
+    name: USB3-Camera-Controller
+    manufacturer: theRPIGuys
+    connection:
+      protocol: usb3-vision
+    mapping:
+      bigcamera42:
+        type: usb3-vision-camera
+        serial_number: 00F12345678
+        index: 0
+
+
+
+
+  # --- LASERS AND LEDS---
+  #
+  # Note
+  #   - Controller is not neccesariy anymore
+  #   - max_intensity is ambiguous, shall be given by PWM Max!
+  my-laser-serial:
+    type: lightsource
+    name: boison-488
+    manufacturer: Boison
+    wavelength: 488
+    bandwidth: 2.0
+    spec_shape: gauss
+    max_intensity: 100.0 # This is ambiguous:: 100 % shall be given by PWM Max!
+    coherence: coherent
+
+  my-laser-can:
+    type: lightsource
+    name: jenoptik-1310
+    manufacturer: Jenoptik
+    wavelength: 1310
+    bandwidth: 2.0
+    spec_shape: gauss
+    max_intensity: 100.0 # This is ambiguous:: 100 % shall be given by PWM Max!
+    coherence: coherent
+
+  top-illumination-LED:
+    type: lightsource
+    name: cool-led
+    manufacturer: TheLEDCompany
+    wavelength: 193
+    bandwidth: 200
+    spec_shape: gauss
+    max_intensity: 100.0   # This is ambiguous:: 100 % shall be given by PWM Max!
+
+
+ # --- STAGES AND WHEELS ---
+
+  my-filter-wheel:
+    type: revolver
+    name: filter-wheel-1
+    manufacturer: openUC2
+    channel:
+      - null
+      - flt-gfp
+      - flt-tritc
+    selected_channel: 0
+
+  just-some-boring-stage:
+    type: stage
+    name: xyz-linear-100
+    manufacturer: openUC2
+    controller: my-favorite-mainboard
+    homing_order: [z, x, y]
+    axes:
+      x:
+        steps_per_um: 8.0
+        homing_required: true
+        binding: {type: uc2-master, stepper_id: 1}
+        pos: {min: 0.0, max: 100000.0, unit: um}
+        vel: {value: 5000.0, unit: um/s}
+        optikit_dsn_variable: sample-x
+      z:
+        steps_per_um: 4.0
+        inverted: true
+        pos: {min: 0.0, max: 10000.0, unit: um}
+        optikit_dsn_variable: sample-z
+
+  bigcamera42:
+    type: detector
+    name: MV-CA023-10UM
+    manufacturer: HIK ROBOTICS
+    tags:
+      - monochrome
+      - global-shutter
+      - gige
+    pixelcount: [1920, 1200]
+    pixelpitch_um: 10.0
+    channels: 1
+    exposure_time_ms:
+      value: 25.0
+      min: 0.024
+      max: 10000.0
+      inc: 0.001
+      unit: ms
+    framerate_per_sec:
+      value: 163.0
+      min: 0.5
+      max: 163.0
+      unit: Hz
+    gain_db:
+      value: 0.0
+      min: 0.0
+      max: 23.98
+      inc: 0.01
+      unit: dB
+    binning: 1
+    trigger:
+      type: hardware
+      edge: rising
+
+
