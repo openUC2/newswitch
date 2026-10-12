@@ -1,20 +1,14 @@
-# The use case is the following:
+# Sample on how to set up configs
+# Main boards (controllers) should cover all current use cases (based on Benes diagram)
+# id and subid used for identification of sub devices on the bus (CANopen, those manged by the Standalone board)
+#   note: transfer of id into stepper_id or laser_id must be done by SW
+# All conneciton information should be in the controller section, not in the sub devices (axes, lasers, stages, etc.)
+# Wheels for filters and/or objectives are represented as stages with a single axis with preset pos values
 #
-#
-#  |---------|                  |---------|-- CAN (ID0, sub-ID1)-->|Stage1 X|
-#  |  RPI    | --- UC2 REST --- |  ESP32  |-- CAN (ID1, sub-ID1)-->|Laser 1 |
-#  | --------|                  |---------|-- PWM (laser_id1)-->|Laser 2 |
-#      |
-#      |
-#      |
-#      |-- CAN (ID21, sub-ID0) -->|Stage1 Z|
-#      |-- CAN (ID21, sub-ID0) -->|LED |
-#      |-- CAN (ID4, sub-ID1) -->|Filter Wheel|
-#
-# OPEN QUESTIONS:
-#   - How to picture Filter wheels? Are they just a special case of a stage with discrete positions?
-#
-#
+# Open points are
+#  - How to handle triggering
+#  - Should we also set parameters that can and will be changed by the user (like exposure time, gain, pos, etc.) in the config? (currently only the boarders and units are set)
+
 
 newswitch_version: v1.0.2
 devices:
@@ -137,7 +131,6 @@ devices:
     wavelength: 488
     bandwidth: 2.0
     spec_shape: gauss
-    max_intensity: 100.0 # This is ambiguous:: 100 % shall be given by PWM Max!
     coherence: coherent
 
   my-laser-can:
@@ -147,7 +140,6 @@ devices:
     wavelength: 1310
     bandwidth: 2.0
     spec_shape: gauss
-    max_intensity: 100.0 # This is ambiguous:: 100 % shall be given by PWM Max!
     coherence: coherent
 
   top-illumination-LED:
