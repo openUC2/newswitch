@@ -27,17 +27,17 @@ devices:
     firmware:
       name: esp32-uc2-standalone-4
       version: v2026.0.0-beta.3
-    mapping:                # Mapping or byinding?
-      my-laser-serial:   # Whats better here? a general key + name ID or a specific key for each device type?
+    mapping:
+      my-laser-serial:
         type: serial-laser
         id: 2
         pwm_max: 1023
       my-laser-can:
         type: canopen-laser,
         id: 0
-        subid: 1   # Was channel at Florians setting
-        pwm_max: 1023  # Is this existing at CAN?
-      my-first-axis:   # ok to handle axes like this? or put the axes in the mapping?
+        subid: 1
+        pwm_max: 1023
+      my-first-axis:
         type: canopen-motor
         id: 0
         subid: 1
@@ -53,17 +53,17 @@ devices:
         interface: socketcan
         channel: can0
         bitrate: 500000
-    mapping:                # Mapping or byinding?
-      top-illumination-LED:   # Whats better here? a general key + name ID or a specific key for each device type?
+    mapping:
+      top-illumination-LED:
         type: canopen-laser,
-        id: 21,        # I
+        id: 21,
         subid: 0,
-        pwm_max: 1023  # Is this existing at CAN?
+        pwm_max: 1023
       my-filter-wheel:
         type: canopen-revolver,
         id: 4,
         channel: 1,
-      just-some-boring-stage.z:   # ok to handle axes like this? or put the axes in the mapping?
+      my-second-axis:
         type: canopen-motor
         id: 21
         subid: 0
@@ -77,18 +77,18 @@ devices:
       transport:
         type: serial
         port_pattern: /dev/ttyUSB*
-        baudrate: 921600  # This is the default for the UC2-HAT, but can be changed in the firmware
-    mapping:                # Mapping or byinding?
-      top-illumination-LED:   # Whats better here? a general key + name ID or a specific key for each device type?
+        baudrate: 921600
+    mapping:
+      top-illumination-LED:
         type: canopen-laser,
-        id: 21,        # I
+        id: 21,
         subid: 0,
         pwm_max: 1023
       my-filter-wheel:
         type: canopen-stage,
         id: 4,
         channel: 1,
-      just-some-boring-stage.z:   # ok to handle axes like this? or put the axes in the mapping?
+      my-second-axis:
         type: canopen-motor
         id: 21
         subid: 0
@@ -147,7 +147,7 @@ devices:
     spec_shape: gauss
 
 
- # --- STAGES AND WHEELS ---
+ # --- STAGES, AXES AND WHEELS ---
 
   my-filter-wheel:
     type: stage
