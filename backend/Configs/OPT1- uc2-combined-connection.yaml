@@ -120,10 +120,6 @@ devices:
 
 
   # --- LASERS AND LEDS---
-  #
-  # Note
-  #   - Controller is not neccesariy anymore
-  #   - max_intensity is ambiguous, shall be given by PWM Max!
   my-laser-serial:
     type: lightsource
     name: boison-488
@@ -149,7 +145,6 @@ devices:
     wavelength: 193
     bandwidth: 200
     spec_shape: gauss
-    max_intensity: 100.0   # This is ambiguous:: 100 % shall be given by PWM Max!
 
 
  # --- STAGES AND WHEELS ---
