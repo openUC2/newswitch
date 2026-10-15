@@ -59,7 +59,7 @@ def _explain(error: ValidationError) -> tuple[list[str], str]:
             if not isinstance(tag, str) or tag not in mapping:
                 return [*path, name], f"{tag!r} is not a known {name} (known: {', '.join(mapping)})"
             branch = [
-                i for i, sub in enumerate(error.validator_value) if sub == {"$ref": mapping[tag]}
+                i for i, sub in enumerate(schema.get("oneOf", [])) if sub == {"$ref": mapping[tag]}
             ]
             selected = [e for e in error.context if list(e.relative_schema_path)[:1] == branch]
             candidates = selected or candidates
