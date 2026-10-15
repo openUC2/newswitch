@@ -8,6 +8,12 @@ A `PhysVal` is a number together with the limits the device allows for it::
     exposure_time_ms: 25.0          # shorthand for {value: 25.0}
     exposure_time_ms: null          # not stated -> None, may be read from the firmware
 
+Presets are a list or a mapping value -> name; ``selected_index`` picks one of them
+(0-based, in file order)::
+
+    exposure_time_ms: {value: 10.0, preset_vals: [1, 10, 100], selected_index: 1}
+    exposure_time_ms: {value: 10.0, preset_vals: {1: short, 10: long}, selected_index: 1}
+
 Each field declares the unit newswitch works in. Its metadata is attached with
 `phys_meta` and its unit/sign rules with `in_unit`, `positive` and `non_negative`::
 
@@ -35,7 +41,8 @@ from pydantic_core import CoreSchema
 from .errors import ConfigWarning
 from .units import conversion_factor
 
-#: Shared configuration of every config dataclass: unknown keys are errors.
+#: Configuration of the value types (`PhysVal`, `Trigger`, `Firmware`): unknown keys are
+#: errors. Device entries accept further keys instead (see `devices.OPEN`).
 STRICT = ConfigDict(extra="forbid")
 
 #: What the device may say about a field: everything, or only the limits.
@@ -50,16 +57,21 @@ PHYS_VAL_DEFAULTS: dict[str, Any] = {
     "max": math.inf,
     "inc": EPS,
     "unit": "",
-    "preset_vals": [],
+    "preset_vals": None,
+    "selected_index": None,
 }
+
+#: Presets of a `PhysVal`: plain values, or values with a name (both in file order).
+Presets = list[float] | dict[float, str]
 
 
 @dataclass(kw_only=True, config=STRICT)
 class PhysVal:
     """A physical value with its device limits.
 
-    Only ``value`` may be changed by the software at runtime; it is written back to the
-    file on shutdown. The other members describe what the device allows.
+    Only ``value`` and ``selected_index`` may be changed by the software at runtime; they
+    are written back to the file on shutdown. The other members describe what the device
+    allows.
     """
 
     value: float | None = None
@@ -67,7 +79,12 @@ class PhysVal:
     max: float = math.inf
     inc: float = Field(default=EPS, gt=0, description="Step size")
     unit: str = ""
-    preset_vals: list[float] = Field(default_factory=list)
+    preset_vals: Presets | None = Field(
+        default=None, description="Preset values, as a list or as value -> name"
+    )
+    selected_index: int | None = Field(
+        default=None, ge=0, description="Selected preset (0-based index into preset_vals)"
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -83,6 +100,21 @@ class PhysVal:
             raise ValueError(f"min ({self.min}) must not exceed max ({self.max})")
         if self.value is not None and not self.min <= self.value <= self.max:
             raise ValueError(f"value {self.value} outside [{self.min}, {self.max}]")
+        return self
+
+    @model_validator(mode="after")
+    def _check_selection(self) -> Self:
+        if self.selected_index is None:
+            return self
+        count = len(self.preset_vals or ())
+        if count == 0:
+            raise ValueError(
+                f"selected_index {self.selected_index} set, but there are no preset_vals"
+            )
+        if self.selected_index >= count:
+            raise ValueError(
+                f"selected_index {self.selected_index} out of range ({count} preset_vals)"
+            )
         return self
 
     @classmethod
@@ -112,6 +144,16 @@ class PhysVal:
                 value -= self.inc
         return value
 
+    def preset_values(self) -> list[float]:
+        """The preset numbers in file order, whether stated as a list or with names.
+
+        Returns:
+            The values (the keys of a mapping); empty when there are no presets.
+        """
+        if isinstance(self.preset_vals, dict):
+            return list(self.preset_vals)
+        return list(self.preset_vals or ())
+
     def scaled(self, factor: float, unit: str) -> PhysVal:
         """Return a copy with every number multiplied by `factor` and a new unit.
 
@@ -120,15 +162,23 @@ class PhysVal:
             unit: Unit of the result.
 
         Returns:
-            The converted value.
+            The converted value (preset names and ``selected_index`` are kept).
         """
+        presets: Presets | None
+        if isinstance(self.preset_vals, dict):
+            presets = {v * factor: name for v, name in self.preset_vals.items()}
+        elif self.preset_vals is not None:
+            presets = [v * factor for v in self.preset_vals]
+        else:
+            presets = None
         return PhysVal(
             value=None if self.value is None else self.value * factor,
             min=self.min * factor,
             max=self.max * factor,
             inc=self.inc if self.inc == EPS else self.inc * factor,
             unit=unit,
-            preset_vals=[v * factor for v in self.preset_vals],
+            preset_vals=presets,
+            selected_index=self.selected_index,
         )
 
 
@@ -244,13 +294,14 @@ class Trigger:
 
 @dataclass(kw_only=True, config=STRICT)
 class Firmware:
-    """Firmware running on a controller."""
+    """Firmware running on a controller; None means not stated."""
 
-    name: str
-    version: str
+    name: str | None = None
+    version: str | None = None
 
 
 PositiveInt = Annotated[int, Field(gt=0)]
+NonNegativeInt = Annotated[int, Field(ge=0)]
 PositiveFloat = Annotated[float, Field(gt=0)]
 
 #: ``(x, y)`` pair of positive integers, written as ``[x, y]``.

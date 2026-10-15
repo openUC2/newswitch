@@ -36,16 +36,18 @@ File: newswitch/app.py
 ### Device configuration (`newswitch/config_io/`)
 
 `ImswitchConfig` reads `backend/base_config.yaml` (no environment variables, unknown keys are
-errors). `config_file` is `static_config_path` (`Configs/newswitch-config.yaml`) or, with
-`load_from_static_config_path: false`, `persistent_config_path`, which is created as a copy of
-the static file on first start; bare names resolve against `config_dir` (`backend/Configs/`).
-At startup `config_io.load_config()` validates
-it (jsonschema per device type, then pydantic) into one dataclass per device, and
-`config_io.adapters` turns those into the managers' dataclasses (`Illumination`, `Detector`,
-`ObjectiveLens`, `Filter`, stage limits, serial port). A device kind missing from the file,
-or `config_file=None` (the tests), keeps the manager's built-in virtual defaults. On shutdown
-exposure, gain, revolver positions and stage position are written back; comments stay intact.
-Details: `backend/Configs/README.md`.
+errors). The device configuration is read from `static_config_path`
+(`Configs/newswitch-config.yaml`) or, with `load_from_static_config_path: false`, from
+`persistent_config_path`, which is created as a copy of the static file on first start;
+bare names resolve against `config_dir` (`backend/Configs/`). The static file is never
+written: every change goes into the persistent one. At startup `config_io.open_config()`
+validates the file (jsonschema per device type, pydantic, cross-device references) into one
+dataclass per device, and `config_io.adapters` turns those into the managers' dataclasses
+(`Illumination`, `Detector`, `ObjectiveLens`, `Filter`, stage limits, serial port).
+Connection data lives only in controllers, whose `mapping` assigns the other devices.
+A device kind missing from the file, or `config_file=None` (the tests), keeps the manager's
+built-in virtual defaults. On shutdown exposure, gain, wheel positions and stage position
+are written back; comments stay intact. Details: `backend/Configs/README.md`.
 
 ### Registered functions
 

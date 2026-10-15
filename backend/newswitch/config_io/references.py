@@ -1,189 +1,109 @@
 """Checks that span several devices: references between entries and shared resources.
 
 A single entry is validated by its dataclass; everything here needs the whole file.
+
+Every key one entry names of another is described by a `Reference` (see `references`),
+so one loop finds all invalid entries: targets that do not exist, targets of the wrong
+type, and targets claimed twice within the same group. A new kind of reference is one
+more ``case`` in `references`.
 """
 
 from __future__ import annotations
 
-from .connection import (
-    CanBusProtocol,
-    CanOpenProtocol,
-    Connection,
-    Uc2RestProtocol,
-    check_shared_resources,
-    resource_key,
-    transport_of,
-)
-from .devices import (
-    CanOpenLaserBinding,
-    CanOpenMotorBinding,
-    ConnectedDevice,
-    ControllerConfig,
-    FilterConfig,
-    NewswitchConfig,
-    ObjectiveConfig,
-    Uc2MasterAxisBinding,
-    Uc2MasterLaserBinding,
-    Uc2MasterLedMatrixBinding,
-)
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+from .connection import Connection, check_shared_resources
+from .devices import ControllerConfig, Device, NewswitchConfig, StageConfig
+
+#: Device types a controller may map: everything that is driven through hardware.
+MAPPABLE = ("lightsource", "detector", "axis", "stage")
 
 
-def check_references(config: NewswitchConfig) -> list[str]:
-    """Return every cross-device problem, one readable line each (empty list = fine).
+@dataclass(frozen=True)
+class Reference:
+    """One entry naming another by its key."""
+
+    where: str
+    """Location in the file, e.g. ``devices.xyz.axes.x``."""
+    target: str
+    """The key named there."""
+    allowed: tuple[str, ...]
+    """Device types the target may have."""
+    is_error: bool
+    """A missing or mistyped target is an error (else a warning)."""
+    group: str
+    """A target may appear only once per group, e.g. in only one stage."""
+
+
+def references(key: str, device: Device) -> Iterator[Reference]:
+    """Every reference a device makes to other devices.
+
+    Args:
+        key: The device's key.
+        device: The device.
+
+    Yields:
+        One `Reference` per named key.
+    """
+    match device:
+        case StageConfig():
+            for direction, axis in device.axes.items():
+                yield Reference(f"devices.{key}.axes.{direction}", axis, ("axis",), True, "stage")
+        case ControllerConfig():
+            for target in device.mapping:
+                yield Reference(
+                    f"devices.{key}.mapping.{target}", target, MAPPABLE, False, "controller mapping"
+                )
+        case _:
+            pass
+
+
+def check_references(config: NewswitchConfig) -> tuple[list[str], list[str]]:
+    """Return every cross-device problem, one readable line each.
 
     Checked:
 
-    * ``controller`` names an existing device of type ``controller``.
-    * Revolver ``channels`` name existing objectives or filters, a revolver holds only
-      one of the two kinds, and no objective/filter sits in two positions.
-    * Devices with their own connection agree on shared physical resources.
+    * Stage axes name existing ``axis`` devices (error).
+    * Controller mappings name existing lightsources, detectors, axes or stages (warning).
+    * No axis is part of two stages, and no device is mapped by two controllers (error).
+    * Controllers on one physical resource agree on its settings (error).
 
     Args:
         config: The validated configuration.
 
     Returns:
-        The problems found.
+        ``(errors, warnings)``; both empty when everything is consistent.
     """
-    problems: list[str] = []
-    devices = config.devices
+    errors: list[str] = []
+    warnings: list[str] = []
+    claimed_by: dict[tuple[str, str], list[str]] = {}
 
-    for device_id, device in devices.items():
-        if (
-            isinstance(device, (ConnectedDevice, ControllerConfig))
-            and isinstance(device.connection, str)
-            and device.connection not in config.connections
-        ):
-            problems.append(
-                f"devices.{device_id}.connection: no named connection {device.connection!r}"
-            )
-        if isinstance(device, ConnectedDevice) and device.controller is not None:
-            target = devices.get(device.controller)
+    for key, device in config.devices.items():
+        for ref in references(key, device):
+            claimed_by.setdefault((ref.group, ref.target), []).append(ref.where)
+            target = config.devices.get(ref.target)
             if target is None:
-                problems.append(f"devices.{device_id}.controller: no device {device.controller!r}")
-            elif not isinstance(target, ControllerConfig):
-                problems.append(
-                    f"devices.{device_id}.controller: {device.controller!r} is not a controller"
-                )
-
-    for stage in config.stages:
-        connection = stage.connection_for_axes(config)
-        bound = [axis for axis in stage.axes if axis.binding is not None]
-        if bound and len(bound) != len(stage.axes):
-            problems.append(f"devices.{stage.device_id}.axes: bind every axis or none")
-        for index, axis in enumerate(stage.axes):
-            binding = axis.binding
-            if binding is None or connection is None:
-                continue
-            where = f"devices.{stage.device_id}.axes.{index}.binding"
-            if isinstance(binding, CanOpenMotorBinding):
-                if not isinstance(connection, (CanBusProtocol, CanOpenProtocol)):
-                    problems.append(f"{where}: canopen binding requires a CAN connection")
-                elif (
-                    isinstance(connection, CanOpenProtocol)
-                    and binding.node_id != connection.node_id
-                ):
-                    problems.append(f"{where}: node_id differs from the connection's node_id")
-            elif isinstance(binding, Uc2MasterAxisBinding):
-                if not isinstance(connection, Uc2RestProtocol):
-                    problems.append(f"{where}: uc2-master binding requires a uc2-rest connection")
-                elif axis.label in ("x", "y", "z", "a"):
-                    expected = {"a": 0, "x": 1, "y": 2, "z": 3}[axis.label]
-                    if binding.stepper_id != expected:
-                        problems.append(
-                            f"{where}.stepper_id: current UC2 serial driver uses {expected} "
-                            f"for axis {axis.label!r}"
-                        )
-                else:
-                    problems.append(
-                        f"{where}: current UC2 serial driver cannot address {axis.label!r}"
-                    )
-
-    used_light_outputs: dict[tuple, str] = {}
-    for source in config.lightsources:
-        binding = source.binding
-        if binding is None:
-            continue
-        connection = config.connection_for(source)
-        if connection is None:
-            continue
-        where = f"devices.{source.device_id}.binding"
-        if isinstance(binding, (Uc2MasterLaserBinding, Uc2MasterLedMatrixBinding)):
-            if not isinstance(connection, Uc2RestProtocol):
-                problems.append(f"{where}: UC2 master light binding requires a uc2-rest connection")
-                continue
-            transport = transport_of(connection)
-            assert transport is not None
-            kind = "laser" if isinstance(binding, Uc2MasterLaserBinding) else "led-matrix"
-            output = binding.channel if isinstance(binding, Uc2MasterLaserBinding) else 0
-            address = (resource_key(transport), kind, output)
-            if address in used_light_outputs:
-                problems.append(
-                    f"{where}: UC2 master light output is already used by "
-                    f"{used_light_outputs[address]}"
+                problem = f"{ref.where}: no device {ref.target!r}"
+            elif target.type not in ref.allowed:
+                problem = (
+                    f"{ref.where}: {ref.target!r} is a {target.type}, "
+                    f"expected {' or '.join(ref.allowed)}"
                 )
             else:
-                used_light_outputs[address] = source.device_id
-            continue
-        if not isinstance(connection, (CanBusProtocol, CanOpenProtocol)):
-            problems.append(f"{where}: CAN light binding requires a CAN connection")
-            continue
-        if isinstance(connection, CanOpenProtocol) and binding.node_id != connection.node_id:
-            problems.append(f"{where}: node_id differs from the connection's node_id")
-        transport = transport_of(connection)
-        assert transport is not None
-        bus = resource_key(transport)
-        node_key = (bus, binding.node_id)
-        kind = "laser" if isinstance(binding, CanOpenLaserBinding) else "led-matrix"
-        for address, other in used_light_outputs.items():
-            if address[:2] == node_key and address[2] != kind:
-                problems.append(f"{where}: CAN node {binding.node_id} is already used by {other}")
-        output = binding.channel if isinstance(binding, CanOpenLaserBinding) else 0
-        address = (*node_key, kind, output)
-        if address in used_light_outputs:
-            problems.append(
-                f"{where}: CAN light output is already used by {used_light_outputs[address]}"
-            )
-        else:
-            used_light_outputs[address] = source.device_id
+                continue
+            (errors if ref.is_error else warnings).append(problem)
 
-    mounted_in: dict[str, str] = {}
-    for revolver in config.revolvers:
-        kinds: set[str] = set()
-        for position, ref in enumerate(revolver.channels):
-            if ref is None:
-                continue
-            where = f"devices.{revolver.device_id}.channels.{position}"
-            target = devices.get(ref)
-            if target is None:
-                problems.append(f"{where}: no device {ref!r}")
-                continue
-            if isinstance(target, ObjectiveConfig):
-                kinds.add("objective")
-            elif isinstance(target, FilterConfig):
-                kinds.add("filter")
-            else:
-                problems.append(f"{where}: {ref!r} is neither an objective nor a filter")
-                continue
-            if ref in mounted_in:
-                problems.append(f"{where}: {ref!r} is already mounted in {mounted_in[ref]}")
-            else:
-                mounted_in[ref] = f"{revolver.device_id}.channels.{position}"
-        if len(kinds) > 1:
-            problems.append(f"devices.{revolver.device_id}.channels: mixes objectives and filters")
+    for (group, target), wheres in claimed_by.items():
+        if len(wheres) > 1:
+            errors.append(f"{target!r} appears in more than one {group}: {', '.join(wheres)}")
 
-    connections: dict[str, Connection] = dict(config.connections)
-    for device_id, device in devices.items():
-        if isinstance(device, ControllerConfig) and not isinstance(device.connection, str):
-            connections[device_id] = device.connection
-        elif (
-            isinstance(device, ConnectedDevice)
-            and device.connection is not None
-            and not isinstance(device.connection, str)
-        ):
-            connections[device_id] = device.connection
+    connections: dict[str, Connection] = {
+        key: controller.connection for key, controller in config.keyed(ControllerConfig).items()
+    }
     try:
         check_shared_resources(connections)
     except ValueError as exc:
-        problems.extend(f"shared resource: {line}" for line in str(exc).splitlines())
+        errors.extend(f"shared resource: {line}" for line in str(exc).splitlines())
 
-    return problems
+    return errors, warnings

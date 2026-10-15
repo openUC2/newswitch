@@ -1,0 +1,133 @@
+# Test-Config-persistent -- persistent configuration for tests/config_io/test_chain.py.
+# Same devices as Test-Config-static.yaml, but in the state of an earlier session:
+# exposure 50 ms, x at 2000 um, TRITC filter and 40x objective selected.
+newswitch_version: v1.0.2
+devices:
+
+  # --- CONTROLLERS (simulated) ---
+  sim-mainboard:
+    type: controller
+    name: Simulated UC2 mainboard
+    manufacturer: openUC2
+    connection:
+      protocol: simulated
+      transport: {type: simulated}
+    firmware: {name: esp32-uc2-standalone-4, version: v2026.0.0-beta.3}
+    mapping:
+      laser-488: {type: serial-laser, id: 1, pwm_max: 1023}
+      x-axis: {type: canopen-motor, id: 11}
+      y-axis: {type: canopen-motor, id: 12}
+      z-axis: {type: canopen-motor, id: 13}
+
+  sim-can-hat:
+    type: controller
+    name: Simulated CAN hat
+    connection:
+      protocol: simulated
+      transport: {type: simulated}
+    mapping:
+      led-top: {type: canopen-laser, id: 21, pwm_max: 1023}
+      filter-axis: {type: canopen-revolver, id: 4, subid: 1}
+      turret-axis: {type: canopen-revolver, id: 4, subid: 2}
+      cam: {type: simulated-camera, id: 0, serial_number: SIM-0001}
+
+  # --- LIGHT SOURCES ---
+  laser-488:
+    type: lightsource
+    name: Laser 488
+    wavelength: 488
+    coherence: coherent
+
+  led-top:
+    type: lightsource      # name defaults to the key
+
+  # --- STAGES AND AXES ---
+  xyz:
+    type: stage
+    name: XYZ stage
+    homing_order: [z, x, y]
+    axes:
+      x: x-axis
+      y: y-axis
+      z: z-axis
+
+  x-axis:
+    type: axis
+    steps_per_um: 8.0
+    homing_required: true
+    pos: {value: 2000.0, min: 0.0, max: 100000.0, unit: um}
+    vel: {value: 5.0, max: 10.0, unit: mm/s}
+    optikit_dsn_variable: sample-x   # a key newswitch does not know
+
+  y-axis:
+    type: axis
+    steps_per_um: 8.0
+    pos: {min: 0.0, max: 100.0, unit: mm}
+
+  z-axis:
+    type: axis
+    steps_per_um: null     # servo
+    inverted: true
+
+  filter-wheel:
+    type: stage
+    axes: {rz: filter-axis}
+
+  filter-axis:
+    type: axis
+    steps_per_um: 1.0
+    pos:
+      preset_vals: {0: "null", 1000: flt-gfp, 2000: flt-tritc}
+      selected_index: 2
+
+  turret:
+    type: stage
+    axes: {rz: turret-axis}
+
+  turret-axis:
+    type: axis
+    steps_per_um: 1.0
+    pos:
+      preset_vals: {0: obj-10x, 1000: obj-40x}
+      selected_index: 1
+
+  # --- PASSIVE OPTICS ---
+  flt-gfp:
+    type: filter
+    name: GFP 525/50
+    wavelength: 525.0
+    bandwidth: 50.0
+    transmission: 0.92
+
+  flt-tritc:
+    type: filter
+    name: TRITC 572/28
+    wavelength: 572.0
+    bandwidth: 28.0
+
+  obj-10x:
+    type: objective
+    name: 10x Air
+    magnification: 10.0
+    na: 0.3
+    wd: 10.0
+
+  obj-40x:
+    type: objective
+    name: 40x Water
+    magnification: 40.0
+    na: 1.0
+    wd: 0.3
+
+  # --- CAMERA ---
+  cam:
+    type: detector
+    name: Simulated camera
+    pixelcount: [1920, 1200]
+    pixelpitch_um: 5.86
+    exposure_time_ms:
+      value: 50.0
+      min: 0.024
+      max: 10000.0
+      unit: ms
+    gain_db: {value: 0.0, min: 0.0, max: 24.0, unit: dB}

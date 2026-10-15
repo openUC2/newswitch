@@ -5,89 +5,59 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $defs:
   AxisConfig:
-    additionalProperties: false
-    description: One motorized axis of a stage (no ``type`` key; only valid inside a stage).
+    description: One motorized axis; a stage names it under a direction.
     properties:
-      label:
-        description: Direction of the axis
-        enum:
-        - x
-        - y
-        - z
-        - a
-        - rx
-        - ry
-        - rz
-        title: Label
+      name:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
+        title: Name
+      tags:
+        description: Free-form labels
+        items:
+          type: string
+        title: Tags
+        type: array
+      inverted:
+        default: false
+        description: Axis runs in the opposite direction
+        title: Inverted
+        type: boolean
+      manufacturer:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Vendor name
+        title: Manufacturer
+        x_firmware: full
+      type:
+        const: axis
+        default: axis
+        title: Type
         type: string
-      steps_per_deg:
-        anyOf:
-        - exclusiveMinimum: 0
-          type: number
-        - type: 'null'
-        default: null
-        description: Motor steps per degree for a rotational axis
-        title: Steps Per Deg
-      binding:
-        anyOf:
-        - discriminator:
-            mapping:
-              canopen-motor: '#/$defs/CanOpenMotorBinding'
-              uc2-master: '#/$defs/Uc2MasterAxisBinding'
-            propertyName: type
-          oneOf:
-          - $ref: '#/$defs/CanOpenMotorBinding'
-          - $ref: '#/$defs/Uc2MasterAxisBinding'
-        - type: 'null'
-        default: null
-        description: Motor address on a CANopen bus or UC2 serial master
-        title: Binding
-      homing_speed_steps:
-        anyOf:
-        - exclusiveMinimum: 0
-          type: integer
-        - type: 'null'
-        default: null
-        title: Homing Speed Steps
-      homing_timeout_ms:
-        anyOf:
-        - exclusiveMinimum: 0
-          type: integer
-        - type: 'null'
-        default: null
-        title: Homing Timeout Ms
       steps_per_um:
         anyOf:
         - exclusiveMinimum: 0
           type: number
         - type: 'null'
-        description: Motor steps per um; null for a servo stage
+        description: Motor steps per um; null for a servo axis
         title: Steps Per Um
         x_firmware: full
       homing_required:
+        default: false
         description: Axis must be homed before use
         title: Homing Required
         type: boolean
         x_firmware: full
-      homing_direction:
-        anyOf:
-        - enum:
-          - -1
-          - 1
-          type: integer
-        - type: 'null'
-        default: null
-        title: Homing Direction
-      inverted:
-        default: false
-        title: Inverted
-        type: boolean
       pos:
         anyOf:
         - $ref: '#/$defs/PhysVal'
         - type: 'null'
         default: null
-        description: Position; min/max give the travel
+        description: Position; min/max give the travel, named presets the wheel slots
         x_firmware: full
         x_unit: um
       vel:
@@ -115,115 +85,19 @@ $defs:
         x_firmware: full
         x_unit: um/s**3
     required:
-    - label
+    - type
     - steps_per_um
-    - homing_required
     title: AxisConfig
-    type: object
-  CanBusProtocol:
-    additionalProperties: false
-    description: Shared CAN bus for devices that address their own CANopen nodes.
-    properties:
-      protocol:
-        const: can-bus
-        default: can-bus
-        title: Protocol
-        type: string
-      transport:
-        $ref: '#/$defs/CanTransport'
-        default:
-          type: can
-          interface: socketcan
-          channel: can0
-          port: null
-          bitrate: 500000
-    title: CanBusProtocol
-    type: object
-  CanOpenLaserBinding:
-    additionalProperties: false
-    description: PWM output on a UC2 laser CANopen node.
-    properties:
-      node_id:
-        maximum: 127
-        minimum: 1
-        title: Node Id
-        type: integer
-      channel:
-        maximum: 3
-        minimum: 0
-        title: Channel
-        type: integer
-      pwm_max:
-        default: 1023
-        exclusiveMinimum: 0
-        title: Pwm Max
-        type: integer
-      type:
-        const: canopen-laser
-        default: canopen-laser
-        title: Type
-        type: string
-    required:
-    - node_id
-    - channel
-    title: CanOpenLaserBinding
-    type: object
-  CanOpenLedMatrixBinding:
-    additionalProperties: false
-    description: RGB LED matrix on a UC2 CANopen node.
-    properties:
-      node_id:
-        maximum: 127
-        minimum: 1
-        title: Node Id
-        type: integer
-      type:
-        const: canopen-led-matrix
-        default: canopen-led-matrix
-        title: Type
-        type: string
-    required:
-    - node_id
-    title: CanOpenLedMatrixBinding
-    type: object
-  CanOpenMotorBinding:
-    additionalProperties: false
-    description: Address one motor on a CANopen node (sub-axis is zero-based).
-    properties:
-      node_id:
-        maximum: 127
-        minimum: 1
-        title: Node Id
-        type: integer
-      sub_axis:
-        default: 0
-        maximum: 3
-        minimum: 0
-        title: Sub Axis
-        type: integer
-      type:
-        const: canopen-motor
-        default: canopen-motor
-        title: Type
-        type: string
-    required:
-    - node_id
-    title: CanOpenMotorBinding
     type: object
   CanOpenProtocol:
     additionalProperties: false
-    description: CANopen device (node) on a CAN bus.
+    description: CANopen bus; each mapped device names its node with ``id`` (and ``subid``).
     properties:
       protocol:
         const: canopen
         default: canopen
         title: Protocol
         type: string
-      node_id:
-        maximum: 127
-        minimum: 1
-        title: Node Id
-        type: integer
       eds_file:
         anyOf:
         - format: path
@@ -243,14 +117,8 @@ $defs:
         title: Heartbeat Period Ms
       transport:
         $ref: '#/$defs/CanTransport'
-        default:
-          type: can
-          interface: socketcan
-          channel: can0
-          port: null
-          bitrate: 500000
     required:
-    - node_id
+    - transport
     title: CanOpenProtocol
     type: object
   CanTransport:
@@ -291,17 +159,15 @@ $defs:
     title: CanTransport
     type: object
   ControllerConfig:
-    additionalProperties: false
-    description: Controller board (e.g. UC2 mainboard) that other devices are attached to.
+    description: 'Controller board (e.g. UC2 mainboard): the only device with a connection.'
     properties:
       name:
-        description: Model designation
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
         title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
       tags:
         description: Free-form labels
         items:
@@ -309,31 +175,35 @@ $defs:
         title: Tags
         type: array
       connection:
-        anyOf:
-        - discriminator:
-            mapping:
-              can-bus: '#/$defs/CanBusProtocol'
-              canopen: '#/$defs/CanOpenProtocol'
-              gige-vision: '#/$defs/GigEVisionProtocol'
-              modbus: '#/$defs/ModbusProtocol'
-              register-map: '#/$defs/RegisterMapProtocol'
-              uc2-rest: '#/$defs/Uc2RestProtocol'
-              usb3-vision: '#/$defs/Usb3VisionProtocol'
-            propertyName: protocol
-          oneOf:
-          - $ref: '#/$defs/Uc2RestProtocol'
-          - $ref: '#/$defs/CanOpenProtocol'
-          - $ref: '#/$defs/CanBusProtocol'
-          - $ref: '#/$defs/ModbusProtocol'
-          - $ref: '#/$defs/RegisterMapProtocol'
-          - $ref: '#/$defs/GigEVisionProtocol'
-          - $ref: '#/$defs/Usb3VisionProtocol'
-        - type: string
-        description: Connection to the controller
+        description: How the controller is reached
+        discriminator:
+          mapping:
+            canopen: '#/$defs/CanOpenProtocol'
+            gige-vision: '#/$defs/GigEVisionProtocol'
+            modbus: '#/$defs/ModbusProtocol'
+            register-map: '#/$defs/RegisterMapProtocol'
+            simulated: '#/$defs/SimulatedProtocol'
+            uc2-rest: '#/$defs/Uc2RestProtocol'
+            usb3-vision: '#/$defs/Usb3VisionProtocol'
+          propertyName: protocol
+        oneOf:
+        - $ref: '#/$defs/Uc2RestProtocol'
+        - $ref: '#/$defs/CanOpenProtocol'
+        - $ref: '#/$defs/ModbusProtocol'
+        - $ref: '#/$defs/RegisterMapProtocol'
+        - $ref: '#/$defs/GigEVisionProtocol'
+        - $ref: '#/$defs/Usb3VisionProtocol'
+        - $ref: '#/$defs/SimulatedProtocol'
         title: Connection
       firmware:
         $ref: '#/$defs/Firmware'
         description: Firmware running on the controller
+      mapping:
+        additionalProperties:
+          $ref: '#/$defs/MappingEntry'
+        description: Key of a device in this file -> its address on this controller
+        title: Mapping
+        type: object
       manufacturer:
         anyOf:
         - type: string
@@ -349,61 +219,26 @@ $defs:
         type: string
     required:
     - type
-    - name
     - connection
-    - firmware
+    - mapping
     title: ControllerConfig
     type: object
   DetectorConfig:
-    additionalProperties: false
     description: Camera or single-diode detector.
     properties:
       name:
-        description: Model designation
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
         title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
       tags:
         description: Free-form labels
         items:
           type: string
         title: Tags
         type: array
-      connection:
-        anyOf:
-        - discriminator:
-            mapping:
-              can-bus: '#/$defs/CanBusProtocol'
-              canopen: '#/$defs/CanOpenProtocol'
-              gige-vision: '#/$defs/GigEVisionProtocol'
-              modbus: '#/$defs/ModbusProtocol'
-              register-map: '#/$defs/RegisterMapProtocol'
-              uc2-rest: '#/$defs/Uc2RestProtocol'
-              usb3-vision: '#/$defs/Usb3VisionProtocol'
-            propertyName: protocol
-          oneOf:
-          - $ref: '#/$defs/Uc2RestProtocol'
-          - $ref: '#/$defs/CanOpenProtocol'
-          - $ref: '#/$defs/CanBusProtocol'
-          - $ref: '#/$defs/ModbusProtocol'
-          - $ref: '#/$defs/RegisterMapProtocol'
-          - $ref: '#/$defs/GigEVisionProtocol'
-          - $ref: '#/$defs/Usb3VisionProtocol'
-        - type: string
-        - type: 'null'
-        default: null
-        description: Own connection or name in top-level connections
-        title: Connection
-      controller:
-        anyOf:
-        - type: string
-        - type: 'null'
-        default: null
-        description: device_id of the controller this device is attached to
-        title: Controller
       manufacturer:
         anyOf:
         - type: string
@@ -512,23 +347,20 @@ $defs:
         - $ref: '#/$defs/Trigger'
         - type: 'null'
         default: null
-    required:
-    - type
-    - name
     title: DetectorConfig
     type: object
+    required:
+    - type
   FilterConfig:
-    additionalProperties: false
-    description: Optical filter (passive; mounted in a revolver).
+    description: Optical filter (passive; may sit in a wheel).
     properties:
       name:
-        description: Model designation
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
         title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
       tags:
         description: Free-form labels
         items:
@@ -536,10 +368,13 @@ $defs:
         title: Tags
         type: array
       wavelength:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: number
+        - type: 'null'
+        default: null
         description: Center wavelength in nm
-        exclusiveMinimum: 0
         title: Wavelength
-        type: number
       bandwidth:
         anyOf:
         - exclusiveMinimum: 0
@@ -578,25 +413,26 @@ $defs:
         default: filter
         title: Type
         type: string
-    required:
-    - type
-    - name
-    - wavelength
     title: FilterConfig
     type: object
+    required:
+    - type
   Firmware:
     additionalProperties: false
-    description: Firmware running on a controller.
+    description: Firmware running on a controller; None means not stated.
     properties:
       name:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
         title: Name
-        type: string
       version:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
         title: Version
-        type: string
-    required:
-    - name
-    - version
     title: Firmware
     type: object
   GigEVisionProtocol:
@@ -726,78 +562,29 @@ $defs:
     title: I2cTransport
     type: object
   LightsourceConfig:
-    additionalProperties: false
     description: Illumination source (LED, laser, ...).
     properties:
       name:
-        description: Model designation
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
         title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
       tags:
         description: Free-form labels
         items:
           type: string
         title: Tags
         type: array
-      connection:
-        anyOf:
-        - discriminator:
-            mapping:
-              can-bus: '#/$defs/CanBusProtocol'
-              canopen: '#/$defs/CanOpenProtocol'
-              gige-vision: '#/$defs/GigEVisionProtocol'
-              modbus: '#/$defs/ModbusProtocol'
-              register-map: '#/$defs/RegisterMapProtocol'
-              uc2-rest: '#/$defs/Uc2RestProtocol'
-              usb3-vision: '#/$defs/Usb3VisionProtocol'
-            propertyName: protocol
-          oneOf:
-          - $ref: '#/$defs/Uc2RestProtocol'
-          - $ref: '#/$defs/CanOpenProtocol'
-          - $ref: '#/$defs/CanBusProtocol'
-          - $ref: '#/$defs/ModbusProtocol'
-          - $ref: '#/$defs/RegisterMapProtocol'
-          - $ref: '#/$defs/GigEVisionProtocol'
-          - $ref: '#/$defs/Usb3VisionProtocol'
-        - type: string
-        - type: 'null'
-        default: null
-        description: Own connection or name in top-level connections
-        title: Connection
-      controller:
-        anyOf:
-        - type: string
-        - type: 'null'
-        default: null
-        description: device_id of the controller this device is attached to
-        title: Controller
       wavelength:
-        description: Wavelength in nm; 0 for broadband/RGB light
-        minimum: 0
-        title: Wavelength
-        type: number
-      binding:
         anyOf:
-        - discriminator:
-            mapping:
-              canopen-laser: '#/$defs/CanOpenLaserBinding'
-              canopen-led-matrix: '#/$defs/CanOpenLedMatrixBinding'
-              uc2-master-laser: '#/$defs/Uc2MasterLaserBinding'
-              uc2-master-led-matrix: '#/$defs/Uc2MasterLedMatrixBinding'
-            propertyName: type
-          oneOf:
-          - $ref: '#/$defs/Uc2MasterLaserBinding'
-          - $ref: '#/$defs/Uc2MasterLedMatrixBinding'
-          - $ref: '#/$defs/CanOpenLaserBinding'
-          - $ref: '#/$defs/CanOpenLedMatrixBinding'
+        - exclusiveMinimum: 0
+          type: number
         - type: 'null'
         default: null
-        description: Laser channel or LED matrix address on the selected connection
-        title: Binding
+        description: Wavelength in nm
+        title: Wavelength
       bandwidth:
         anyOf:
         - exclusiveMinimum: 0
@@ -816,14 +603,21 @@ $defs:
         default: null
         description: Spectral shape
         title: Spec Shape
-      max_intensity:
+      pulse_length:
         anyOf:
-        - minimum: 0
+        - exclusiveMinimum: 0
           type: number
         - type: 'null'
         default: null
-        description: Maximum intensity; None means not settable
-        title: Max Intensity
+        description: Pulse length; null = continuous wave
+        title: Pulse Length
+      pulse_length_unit:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Unit of pulse_length; ignored without pulse_length
+        title: Pulse Length Unit
       manufacturer:
         anyOf:
         - type: string
@@ -865,11 +659,40 @@ $defs:
         - $ref: '#/$defs/Trigger'
         - type: 'null'
         default: null
+    title: LightsourceConfig
+    type: object
     required:
     - type
-    - name
-    - wavelength
-    title: LightsourceConfig
+  MappingEntry:
+    description: Address of one device on its controller.
+    properties:
+      type:
+        description: Kind of link on the controller, e.g. canopen-motor
+        title: Type
+        type: string
+      id:
+        description: CAN node id, or the id in the UC2-REST nomenclature
+        minimum: 0
+        title: Id
+        type: integer
+      subid:
+        default: 0
+        description: Sub-address below id (CAN sub id)
+        minimum: 0
+        title: Subid
+        type: integer
+      pwm_max:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: integer
+        - type: 'null'
+        default: null
+        description: Largest PWM value; required for PWM outputs, else null
+        title: Pwm Max
+    required:
+    - type
+    - id
+    title: MappingEntry
     type: object
   ModbusProtocol:
     additionalProperties: false
@@ -923,17 +746,15 @@ $defs:
     title: ModbusProtocol
     type: object
   ObjectiveConfig:
-    additionalProperties: false
-    description: Objective lens (passive; mounted in a revolver).
+    description: Objective lens (passive; may sit in a wheel).
     properties:
       name:
-        description: Model designation
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
         title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
       tags:
         description: Free-form labels
         items:
@@ -970,7 +791,6 @@ $defs:
         type: string
     required:
     - type
-    - name
     - magnification
     - na
     - wd
@@ -981,7 +801,7 @@ $defs:
     - description: 'Shorthand for {value: <number>}'
       type: number
     - additionalProperties: false
-      description: "A physical value with its device limits.\n\nOnly ``value`` may be changed by the software at runtime; it is written back to the\nfile on shutdown. The other members describe what the device allows."
+      description: "A physical value with its device limits.\n\nOnly ``value`` and ``selected_index`` may be changed by the software at runtime; they\nare written back to the file on shutdown. The other members describe what the device\nallows."
       properties:
         inc:
           default: 2.220446049250313e-16
@@ -990,10 +810,25 @@ $defs:
           title: Inc
           type: number
         preset_vals:
-          items:
-            type: number
+          anyOf:
+          - items:
+              type: number
+            type: array
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          default: null
+          description: Preset values, as a list or as value -> name
           title: Preset Vals
-          type: array
+        selected_index:
+          anyOf:
+          - minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Selected preset (0-based index into preset_vals)
+          title: Selected Index
         value:
           anyOf:
           - type: number
@@ -1054,91 +889,6 @@ $defs:
     required:
     - transport
     title: RegisterMapProtocol
-    type: object
-  RevolverConfig:
-    additionalProperties: false
-    description: Filter wheel or objective turret holding objectives or filters.
-    properties:
-      name:
-        description: Model designation
-        title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
-      tags:
-        description: Free-form labels
-        items:
-          type: string
-        title: Tags
-        type: array
-      connection:
-        anyOf:
-        - discriminator:
-            mapping:
-              can-bus: '#/$defs/CanBusProtocol'
-              canopen: '#/$defs/CanOpenProtocol'
-              gige-vision: '#/$defs/GigEVisionProtocol'
-              modbus: '#/$defs/ModbusProtocol'
-              register-map: '#/$defs/RegisterMapProtocol'
-              uc2-rest: '#/$defs/Uc2RestProtocol'
-              usb3-vision: '#/$defs/Usb3VisionProtocol'
-            propertyName: protocol
-          oneOf:
-          - $ref: '#/$defs/Uc2RestProtocol'
-          - $ref: '#/$defs/CanOpenProtocol'
-          - $ref: '#/$defs/CanBusProtocol'
-          - $ref: '#/$defs/ModbusProtocol'
-          - $ref: '#/$defs/RegisterMapProtocol'
-          - $ref: '#/$defs/GigEVisionProtocol'
-          - $ref: '#/$defs/Usb3VisionProtocol'
-        - type: string
-        - type: 'null'
-        default: null
-        description: Own connection or name in top-level connections
-        title: Connection
-      controller:
-        anyOf:
-        - type: string
-        - type: 'null'
-        default: null
-        description: device_id of the controller this device is attached to
-        title: Controller
-      channels:
-        description: device_id of the objective/filter at each position; null = empty
-        items:
-          anyOf:
-          - type: string
-          - type: 'null'
-        minItems: 1
-        title: Channels
-        type: array
-      manufacturer:
-        anyOf:
-        - type: string
-        - type: 'null'
-        default: null
-        description: Vendor name
-        title: Manufacturer
-        x_firmware: full
-      type:
-        const: revolver
-        default: revolver
-        title: Type
-        type: string
-      selected_channel:
-        default: 0
-        description: Position (0-based index into channels) in use
-        minimum: 0
-        title: Selected Channel
-        type: integer
-        x_firmware: full
-    required:
-    - type
-    - name
-    - channels
-    title: RevolverConfig
     type: object
   Rs422Transport:
     additionalProperties: false
@@ -1438,77 +1188,64 @@ $defs:
         type: number
     title: SerialTransport
     type: object
-  StageConfig:
+  SimulatedProtocol:
     additionalProperties: false
-    description: Motorized stage made of one or more axes.
+    description: 'Simulated controller: validates like a real one but opens no hardware.'
+    properties:
+      protocol:
+        const: simulated
+        default: simulated
+        title: Protocol
+        type: string
+      transport:
+        $ref: '#/$defs/SimulatedTransport'
+    required:
+    - transport
+    title: SimulatedProtocol
+    type: object
+  SimulatedTransport:
+    additionalProperties: false
+    description: 'No physical link: the controller and the devices behind it are simulated.'
+    properties:
+      type:
+        const: simulated
+        default: simulated
+        title: Type
+        type: string
+    title: SimulatedTransport
+    type: object
+  StageConfig:
+    description: 'Motorized stage: axis devices grouped by direction.'
     properties:
       name:
-        description: Model designation
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Display name; defaults to the key
         title: Name
-        type: string
-      device_id:
-        description: Unique identifier; equals the entry's mapping key
-        title: Device Id
-        type: string
       tags:
         description: Free-form labels
         items:
           type: string
         title: Tags
         type: array
-      connection:
-        anyOf:
-        - discriminator:
-            mapping:
-              can-bus: '#/$defs/CanBusProtocol'
-              canopen: '#/$defs/CanOpenProtocol'
-              gige-vision: '#/$defs/GigEVisionProtocol'
-              modbus: '#/$defs/ModbusProtocol'
-              register-map: '#/$defs/RegisterMapProtocol'
-              uc2-rest: '#/$defs/Uc2RestProtocol'
-              usb3-vision: '#/$defs/Usb3VisionProtocol'
-            propertyName: protocol
-          oneOf:
-          - $ref: '#/$defs/Uc2RestProtocol'
-          - $ref: '#/$defs/CanOpenProtocol'
-          - $ref: '#/$defs/CanBusProtocol'
-          - $ref: '#/$defs/ModbusProtocol'
-          - $ref: '#/$defs/RegisterMapProtocol'
-          - $ref: '#/$defs/GigEVisionProtocol'
-          - $ref: '#/$defs/Usb3VisionProtocol'
-        - type: string
-        - type: 'null'
-        default: null
-        description: Own connection or name in top-level connections
-        title: Connection
-      controller:
-        anyOf:
-        - type: string
-        - type: 'null'
-        default: null
-        description: device_id of the controller this device is attached to
-        title: Controller
       axes:
-        description: Axes of the stage
-        items:
-          $ref: '#/$defs/AxisConfig'
-        minItems: 1
-        title: Axes
-        type: array
-      homing_order:
-        description: Axes to home in this mechanical order
-        items:
-          enum:
-          - x
-          - y
-          - z
-          - a
-          - rx
-          - ry
-          - rz
+        additionalProperties:
           type: string
+        description: Direction (e.g. x) -> key of an axis device
+        minProperties: 1
+        title: Axes
+        type: object
+      homing_order:
+        anyOf:
+        - items:
+            type: string
+          type: array
+        - type: 'null'
+        default: null
+        description: Directions in homing order; null = home all in parallel
         title: Homing Order
-        type: array
       manufacturer:
         anyOf:
         - type: string
@@ -1524,7 +1261,6 @@ $defs:
         type: string
     required:
     - type
-    - name
     - axes
     title: StageConfig
     type: object
@@ -1590,58 +1326,6 @@ $defs:
     required:
     - type
     title: Trigger
-    type: object
-  Uc2MasterAxisBinding:
-    additionalProperties: false
-    description: Address one stepper through the UC2 master JSON protocol.
-    properties:
-      stepper_id:
-        maximum: 3
-        minimum: 0
-        title: Stepper Id
-        type: integer
-      type:
-        const: uc2-master
-        default: uc2-master
-        title: Type
-        type: string
-    required:
-    - stepper_id
-    title: Uc2MasterAxisBinding
-    type: object
-  Uc2MasterLaserBinding:
-    additionalProperties: false
-    description: Laser PWM channel reached through a UC2 serial master.
-    properties:
-      channel:
-        maximum: 3
-        minimum: 0
-        title: Channel
-        type: integer
-      pwm_max:
-        default: 1023
-        exclusiveMinimum: 0
-        title: Pwm Max
-        type: integer
-      type:
-        const: uc2-master-laser
-        default: uc2-master-laser
-        title: Type
-        type: string
-    required:
-    - channel
-    title: Uc2MasterLaserBinding
-    type: object
-  Uc2MasterLedMatrixBinding:
-    additionalProperties: false
-    description: RGB LED matrix commanded through a UC2 serial master.
-    properties:
-      type:
-        const: uc2-master-led-matrix
-        default: uc2-master-led-matrix
-        title: Type
-        type: string
-    title: Uc2MasterLedMatrixBinding
     type: object
   Uc2RestProtocol:
     additionalProperties: false
@@ -1714,39 +1398,16 @@ properties:
     description: newswitch version the file was written for
     title: Newswitch Version
     type: string
-  connections:
-    additionalProperties:
-      discriminator:
-        mapping:
-          can-bus: '#/$defs/CanBusProtocol'
-          canopen: '#/$defs/CanOpenProtocol'
-          gige-vision: '#/$defs/GigEVisionProtocol'
-          modbus: '#/$defs/ModbusProtocol'
-          register-map: '#/$defs/RegisterMapProtocol'
-          uc2-rest: '#/$defs/Uc2RestProtocol'
-          usb3-vision: '#/$defs/Usb3VisionProtocol'
-        propertyName: protocol
-      oneOf:
-      - $ref: '#/$defs/Uc2RestProtocol'
-      - $ref: '#/$defs/CanOpenProtocol'
-      - $ref: '#/$defs/CanBusProtocol'
-      - $ref: '#/$defs/ModbusProtocol'
-      - $ref: '#/$defs/RegisterMapProtocol'
-      - $ref: '#/$defs/GigEVisionProtocol'
-      - $ref: '#/$defs/Usb3VisionProtocol'
-    description: Named reusable physical connections
-    title: Connections
-    type: object
   devices:
     additionalProperties:
       discriminator:
         mapping:
+          axis: '#/$defs/AxisConfig'
           controller: '#/$defs/ControllerConfig'
           detector: '#/$defs/DetectorConfig'
           filter: '#/$defs/FilterConfig'
           lightsource: '#/$defs/LightsourceConfig'
           objective: '#/$defs/ObjectiveConfig'
-          revolver: '#/$defs/RevolverConfig'
           stage: '#/$defs/StageConfig'
         propertyName: type
       oneOf:
@@ -1754,10 +1415,10 @@ properties:
       - $ref: '#/$defs/DetectorConfig'
       - $ref: '#/$defs/ControllerConfig'
       - $ref: '#/$defs/StageConfig'
+      - $ref: '#/$defs/AxisConfig'
       - $ref: '#/$defs/ObjectiveConfig'
-      - $ref: '#/$defs/RevolverConfig'
       - $ref: '#/$defs/FilterConfig'
-    description: All devices, keyed by device_id
+    description: All devices, keyed by their identifier
     title: Devices
     type: object
 required:

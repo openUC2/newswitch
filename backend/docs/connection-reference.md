@@ -1,20 +1,30 @@
 ## Device Connection Reference
 
-Reference for the connection models in `connection.py`. Every device connection consists of a **protocol** (what is spoken) and, where applicable, a **transport** (over which medium the bytes travel). A connection may be defined inline or once under top-level `connections` and referenced by name from several devices:
+Reference for the connection models in `connection.py`. Only **controllers** have a connection. It consists of a **protocol** (what is spoken) and, where applicable, a **transport** (over which medium the bytes travel). The devices behind a controller carry no connection data; the controller's `mapping` assigns them by key and addresses them with `id` and `subid` (CAN node and sub id, or the id of the UC2-REST nomenclature):
 
 ```yaml
-connections:
-  main-can:
-    protocol: can-bus
-    transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
 devices:
+  can-hat:
+    type: controller
+    connection:
+      protocol: canopen
+      transport: {type: can, interface: socketcan, channel: can0, bitrate: 500000}
+    mapping:
+      laser-488: {type: canopen-laser, id: 21, subid: 0, pwm_max: 1023}
+      x-axis: {type: canopen-motor, id: 11}
   laser-488:
     type: lightsource
-    name: 488 nm laser
     wavelength: 488
-    connection: main-can
-    binding: {type: canopen-laser, node_id: 21, channel: 0}
+  x-axis:
+    type: axis
+    steps_per_um: 8.0
 ```
+
+A mapping entry has `type` (kind of link on the controller, free text), `id`, `subid`
+(default 0) and `pwm_max`. `pwm_max` is required when `type` contains `laser` or `pwm`
+and must be absent otherwise. `(id, subid)` is unique per controller, and a device is
+mapped by one controller only. Further keys (e.g. `serial_number`) are allowed in a
+mapping entry.
 
 ```yaml
 connection:
@@ -25,21 +35,23 @@ connection:
     <transport properties>
 ```
 
-Properties without a default are **required**. Unknown properties are rejected (`extra: forbid`).
+Properties without a default are **required**. Unknown properties are rejected (`extra: forbid`) — unlike device entries, which accept further keys.
 
 ---
 
 ### 1. Overview: Allowed Protocol / Transport Combinations
 
-| Protocol | `serial` | `rs422` | `rs485` | `http` | `tcp` | `can` | `i2c` | Transport handled by SDK |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `uc2-rest` | ✓ | ✓ | – | ✓ | ✓ | – | – | – |
-| `canopen` | – | – | – | – | – | ✓ | – | – |
-| `can-bus` | – | – | – | – | – | ✓ | – | – |
-| `modbus` | ✓ | ✓ | ✓ | – | ✓ | – | – | – |
-| `register-map` | – | – | – | – | – | – | ✓ | – |
-| `gige-vision` | – | – | – | – | – | – | – | ✓ |
-| `usb3-vision` | – | – | – | – | – | – | – | ✓ |
+| Protocol | `serial` | `rs422` | `rs485` | `http` | `tcp` | `can` | `i2c` | `simulated` | Transport handled by SDK |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `uc2-rest` | ✓ | ✓ | – | ✓ | ✓ | – | – | – | – |
+| `canopen` | – | – | – | – | – | ✓ | – | – | – |
+| `modbus` | ✓ | ✓ | ✓ | – | ✓ | – | – | – | – |
+| `register-map` | – | – | – | – | – | – | ✓ | – | – |
+| `gige-vision` | – | – | – | – | – | – | – | – | ✓ |
+| `usb3-vision` | – | – | – | – | – | – | – | – | ✓ |
+| `simulated` | – | – | – | – | – | – | – | ✓ | – |
+
+`modbus`, `register-map` and `gige-vision` are prepared but not used by any manager yet.
 
 ---
 
@@ -58,31 +70,16 @@ JSON command protocol of openUC2 controllers (ESP32 firmware).
 
 #### 2.2 `canopen`
 
-CANopen device (node) on a CAN bus.
+CANopen bus. Every CAN controller speaks `canopen`; the nodes on the bus are the devices
+in the controller's `mapping`, with the CAN node id as `id` (and the sub id as `subid`).
 
 | Property | Type / Allowed values | Default | Description |
 |---|---|---|---|
 | `protocol` | `"canopen"` | – | Discriminator. |
-| `node_id` | `int`, 1–127 | *required* | CANopen node ID; unique per bus, used to derive the COB-IDs. |
-| `eds_file` | `path` \| `null` | `null` | EDS/DCF file describing the device's object dictionary. |
+| `eds_file` | `path` \| `null` | `null` | EDS/DCF file shared by the nodes; a node-specific one can be a further key of its mapping entry. |
 | `sdo_timeout` | `float` (s) | `0.5` | Timeout for SDO (service data object) transfers. |
-| `heartbeat_period_ms` | `int` \| `null` | `null` | Expected heartbeat interval of the node; `null` disables monitoring. |
-| `transport` | `can` | `can` with defaults | CAN bus the node is attached to. |
-
-For a stage whose axes reside on different CANopen nodes, use `can-bus` on the
-stage instead of assigning a single `node_id` to the whole stage. Each axis then
-has a `binding` with its own `node_id` and `sub_axis`. The same bus can also
-serve light sources, whose bindings identify the laser or LED node.
-
-#### `can-bus`
-
-Shared CAN transport for devices on the same bus. It has no device-level `node_id`;
-axis and light-source bindings identify their respective CANopen nodes.
-
-| Property | Type / Allowed values | Default | Description |
-|---|---|---|---|
-| `protocol` | `"can-bus"` | – | Discriminator. |
-| `transport` | `can` | `can` with defaults | Shared CAN interface and bitrate. |
+| `heartbeat_period_ms` | `int` \| `null` | `null` | Expected heartbeat interval of the nodes; `null` disables monitoring. |
+| `transport` | `can` | *required* | CAN bus the nodes are attached to. |
 
 #### 2.3 `modbus`
 
@@ -133,6 +130,16 @@ USB3 Vision camera. Transport is managed by the camera SDK; the properties selec
 | `serial_number` | `str` \| `null` | `null` | Camera serial number (selector). |
 | `user_defined_name` | `str` \| `null` | `null` | User-assigned device name stored in the camera (selector). |
 | `index` | `int` \| `null` | `null` | Enumeration index; fallback only, not stable across reboots. |
+
+#### 2.7 `simulated`
+
+Simulated controller: validates like a real one but opens no hardware. Used by the tests;
+its devices are served by the virtual managers for now.
+
+| Property | Type / Allowed values | Default | Description |
+|---|---|---|---|
+| `protocol` | `"simulated"` | – | Discriminator. |
+| `transport` | `simulated` | *required* | `{type: simulated}`, no further settings. |
 
 ---
 
@@ -242,16 +249,24 @@ I2C bus plus slave address. The bus speed is not configurable from Linux user sp
 | `ten_bit` | `bool` | `false` | Use 10-bit addressing. |
 | `force` | `bool` | `false` | Access the address even if a kernel driver has claimed it. Per-user setting. |
 
+#### 3.9 `simulated`
+
+No physical link; only valid with the `simulated` protocol.
+
+| Property | Type / Allowed values | Default | Description |
+|---|---|---|---|
+| `type` | `"simulated"` | – | Discriminator. |
+
 ---
 
 ### 4. Shared Resources
 
-Devices whose transports resolve to the same physical resource share one opened handle. `check_shared_resources()` requires all devices on a resource to use the same protocol and identical resource-defining settings; only *per-user* settings may differ.
+Controllers whose transports resolve to the same physical resource share one opened handle. `check_shared_resources()` requires all controllers on a resource to use the same protocol and identical resource-defining settings; only *per-user* settings may differ. A `simulated` transport occupies no resource.
 
 | Transport | Resource key | Per-user settings (may differ) |
 |---|---|---|
 | `serial`, `rs422`, `rs485` | `("uart", port \| port_pattern \| (vid, pid, serial_number))` | `timeout`, `write_timeout` |
 | `http` | `("http", scheme, host, port)` | `timeout`, `token`, `base_path`, `ws_path` |
 | `tcp` | `("tcp", host, port)` | `timeout` |
-| `can` | `("can", interface, channel)` | – |
+| `can` | `("can", interface, port if waveshare else channel)` | – |
 | `i2c` | `("i2c", bus)` | `address`, `force` |

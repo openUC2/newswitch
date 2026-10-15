@@ -4,32 +4,40 @@ Every device type is a pydantic dataclass -- a real `dataclasses.dataclass` that
 validates, fills in defaults and exports a JSON Schema from the same definition. The
 entry's ``type`` key selects the class:
 
-    ============ ==================== ==================================
-    type         class                manager
-    ============ ==================== ==================================
+    ============ ==================== ==========================================
+    type         class                used for
+    ============ ==================== ==========================================
     lightsource  `LightsourceConfig`  Illumination
     detector     `DetectorConfig`     Detector
-    controller   `ControllerConfig`   (none yet)
-    stage        `StageConfig`        Stage (axes: `AxisConfig`)
+    controller   `ControllerConfig`   connection + mapping of the devices behind it
+    stage        `StageConfig`        Stage: axes grouped by direction
+    axis         `AxisConfig`         one motor; also a filter/objective wheel
     objective    `ObjectiveConfig`    ObjectiveLens
-    revolver     `RevolverConfig`     FilterBank / Objective turret
     filter       `FilterConfig`       Filter
-    ============ ==================== ==================================
+    ============ ==================== ==========================================
 
 Field conventions
 -----------------
 * A field without a default is required; ``steps_per_um`` is required but may be null.
 * Fields the device firmware can report carry ``x_firmware`` in their metadata
   (``"full"``, or ``"limits"`` for physical values whose ``value`` stays user-owned).
-* The mapping key of an entry is its ``device_id``; the loader fills it in.
+* The mapping key of an entry identifies the device; ``name`` defaults to it.
+* Only a controller knows how to reach hardware: its ``connection`` and its ``mapping``
+  (device key -> address on that controller). The other devices carry no connection data.
+* Device entries and mapping entries accept further keys. They are kept in ``extras`` and
+  are not validated.
+* A filter or objective wheel is a stage with one axis whose ``pos`` presets name the
+  filters/objectives: ``preset_vals: {0: "null", 1000: flt-gfp}`` (``"null"`` = empty).
 """
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Annotated, Any, Literal, Self, TypeVar, Union
 
-from pydantic import AfterValidator, Field, model_validator
+from pydantic import AfterValidator, ConfigDict, Field, model_validator
 from pydantic.dataclasses import dataclass
+from pydantic.json_schema import SkipJsonSchema
 
 from .connection import Connection
 from .values import (
@@ -37,6 +45,7 @@ from .values import (
     FloatOrPair,
     Firmware,
     IntPair,
+    NonNegativeInt,
     PhysVal,
     PositiveFloat,
     PositiveInt,
@@ -50,7 +59,12 @@ from .values import (
 )
 
 SpectralShape = Literal["gauss", "tophat"]
-AxisLabel = Literal["x", "y", "z", "a", "rx", "ry", "rz"]
+
+#: Configuration of device and mapping entries: further keys are allowed (see `_Extensible`).
+OPEN = ConfigDict(extra="ignore")
+
+#: Words in a mapping ``type`` marking a device on a PWM output (then ``pwm_max`` is needed).
+PWM_TYPE_WORDS = ("laser", "pwm")
 
 
 # ---------------------------------------------------------------------------
@@ -58,33 +72,99 @@ AxisLabel = Literal["x", "y", "z", "a", "rx", "ry", "rz"]
 # ---------------------------------------------------------------------------
 
 
-@dataclass(kw_only=True, config=STRICT)
-class DeviceBase:
+@dataclass(kw_only=True, config=OPEN)
+class _Extensible:
+    """Base of entries that accept further keys; those are collected in `extras`."""
+
+    extras: SkipJsonSchema[dict[str, Any]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collect_extras(cls, data: Any) -> Any:  # noqa: ANN401 - raw input
+        """Move every key that is not a field into ``extras``."""
+        if not isinstance(data, dict):
+            return data
+        known = {field.name for field in dataclasses.fields(cls)}
+        further = {key: value for key, value in data.items() if key not in known}
+        if not further:
+            return data
+        kept = {key: value for key, value in data.items() if key in known}
+        return {**kept, "extras": {**kept.get("extras", {}), **further}}
+
+
+@dataclass(kw_only=True, config=OPEN)
+class DeviceBase(_Extensible):
     """Fields shared by every device type."""
 
-    name: str = Field(description="Model designation")
-    device_id: str = Field(description="Unique identifier; equals the entry's mapping key")
+    name: str | None = Field(default=None, description="Display name; defaults to the key")
     manufacturer: Annotated[str | None, firmware_meta("Vendor name")] = None
     tags: list[str] = Field(default_factory=list, description="Free-form labels")
 
 
-@dataclass(kw_only=True, config=STRICT)
-class ConnectedDevice(DeviceBase):
-    """A device reached either through its own connection or through a controller."""
+# ---------------------------------------------------------------------------
+# Controller and its mapping
+# ---------------------------------------------------------------------------
 
-    connection: Connection | str | None = Field(
-        default=None, description="Own connection or name in top-level connections"
+
+@dataclass(kw_only=True, config=OPEN)
+class MappingEntry(_Extensible):
+    """Address of one device on its controller."""
+
+    type: str = Field(description="Kind of link on the controller, e.g. canopen-motor")
+    id: NonNegativeInt = Field(description="CAN node id, or the id in the UC2-REST nomenclature")
+    subid: NonNegativeInt = Field(default=0, description="Sub-address below id (CAN sub id)")
+    pwm_max: PositiveInt | None = Field(
+        default=None, description="Largest PWM value; required for PWM outputs, else null"
     )
-    controller: str | None = Field(
-        default=None, description="device_id of the controller this device is attached to"
+
+    @property
+    def is_pwm(self) -> bool:
+        """True when ``type`` names a PWM output (it contains "laser" or "pwm")."""
+        kind = self.type.lower()
+        return any(word in kind for word in PWM_TYPE_WORDS)
+
+    @property
+    def address(self) -> tuple[int, int]:
+        """``(id, subid)``; unique per controller."""
+        return (self.id, self.subid)
+
+    @model_validator(mode="after")
+    def _pwm_max_matches_type(self) -> Self:
+        if self.is_pwm and self.pwm_max is None:
+            raise ValueError(f"type {self.type!r} is a PWM output and needs pwm_max")
+        if not self.is_pwm and self.pwm_max is not None:
+            raise ValueError(
+                f"pwm_max is only valid for PWM outputs (type containing "
+                f"{' or '.join(PWM_TYPE_WORDS)}), not for {self.type!r}"
+            )
+        return self
+
+
+@dataclass(kw_only=True, config=OPEN)
+class ControllerConfig(DeviceBase):
+    """Controller board (e.g. UC2 mainboard): the only device with a connection."""
+
+    type: Literal["controller"] = "controller"
+    connection: Connection = Field(description="How the controller is reached")
+    firmware: Firmware = Field(
+        default_factory=Firmware, description="Firmware running on the controller"
+    )
+    mapping: dict[str, MappingEntry] = Field(
+        description="Key of a device in this file -> its address on this controller"
     )
 
     @model_validator(mode="after")
-    def _connection_or_controller(self) -> Self:
-        if self.connection is None and self.controller is None:
-            raise ValueError("needs either 'connection' or 'controller'")
-        if self.connection is not None and self.controller is not None:
-            raise ValueError("'connection' and 'controller' are mutually exclusive")
+    def _unique_addresses(self) -> Self:
+        used: dict[tuple[int, int], list[str]] = {}
+        for key, entry in self.mapping.items():
+            used.setdefault(entry.address, []).append(key)
+        clashes = [
+            f"id {address[0]}/subid {address[1]} is used by {', '.join(keys)}"
+            for address, keys in used.items()
+            if len(keys) > 1
+        ]
+        if clashes:
+            raise ValueError("mapping: " + "; ".join(clashes))
         return self
 
 
@@ -93,82 +173,28 @@ class ConnectedDevice(DeviceBase):
 # ---------------------------------------------------------------------------
 
 
-@dataclass(kw_only=True, config=STRICT)
-class Uc2MasterLaserBinding:
-    """Laser PWM channel reached through a UC2 serial master."""
-
-    type: Literal["uc2-master-laser"] = "uc2-master-laser"
-    channel: int = Field(ge=0, le=3)
-    pwm_max: int = Field(default=1023, gt=0)
-
-
-@dataclass(kw_only=True, config=STRICT)
-class Uc2MasterLedMatrixBinding:
-    """RGB LED matrix commanded through a UC2 serial master."""
-
-    type: Literal["uc2-master-led-matrix"] = "uc2-master-led-matrix"
-
-
-@dataclass(kw_only=True, config=STRICT)
-class CanOpenLaserBinding:
-    """PWM output on a UC2 laser CANopen node."""
-
-    type: Literal["canopen-laser"] = "canopen-laser"
-    node_id: int = Field(ge=1, le=127)
-    channel: int = Field(ge=0, le=3)
-    pwm_max: int = Field(default=1023, gt=0)
-
-
-@dataclass(kw_only=True, config=STRICT)
-class CanOpenLedMatrixBinding:
-    """RGB LED matrix on a UC2 CANopen node."""
-
-    type: Literal["canopen-led-matrix"] = "canopen-led-matrix"
-    node_id: int = Field(ge=1, le=127)
-
-
-LightsourceBinding = Annotated[
-    Union[
-        Uc2MasterLaserBinding,
-        Uc2MasterLedMatrixBinding,
-        CanOpenLaserBinding,
-        CanOpenLedMatrixBinding,
-    ],
-    Field(discriminator="type"),
-]
-
-
-@dataclass(kw_only=True, config=STRICT)
-class ControllerConfig(DeviceBase):
-    """Controller board (e.g. UC2 mainboard) that other devices are attached to."""
-
-    type: Literal["controller"] = "controller"
-    connection: Connection | str = Field(description="Connection to the controller")
-    firmware: Firmware = Field(description="Firmware running on the controller")
-
-
-@dataclass(kw_only=True, config=STRICT)
-class LightsourceConfig(ConnectedDevice):
+@dataclass(kw_only=True, config=OPEN)
+class LightsourceConfig(DeviceBase):
     """Illumination source (LED, laser, ...)."""
 
     type: Literal["lightsource"] = "lightsource"
-    wavelength: float = Field(ge=0, description="Wavelength in nm; 0 for broadband/RGB light")
-    binding: LightsourceBinding | None = Field(
-        default=None, description="Laser channel or LED matrix address on the selected connection"
-    )
+    wavelength: PositiveFloat | None = Field(default=None, description="Wavelength in nm")
     bandwidth: PositiveFloat | None = Field(default=None, description="Bandwidth in nm")
     spec_shape: SpectralShape | None = Field(default=None, description="Spectral shape")
     channels: Annotated[PositiveInt, firmware_meta("Number of color/spectral channels")] = 1
-    max_intensity: float | None = Field(
-        default=None, ge=0, description="Maximum intensity; None means not settable"
-    )
     coherence: Literal["coherent", "incoherent", "partial"] = "incoherent"
+    pulse_length: PositiveFloat | None = Field(
+        default=None, description="Pulse length; null = continuous wave"
+    )
+    pulse_length_unit: str | None = Field(
+        default=None, description="Unit of pulse_length; ignored without pulse_length"
+    )
     polarization: Literal["s", "p", "random"] = "random"
     trigger: Trigger | None = None
 
 
-@dataclass(kw_only=True, config=STRICT)
-class DetectorConfig(ConnectedDevice):
+@dataclass(kw_only=True, config=OPEN)
+class DetectorConfig(DeviceBase):
     """Camera or single-diode detector."""
 
     type: Literal["detector"] = "detector"
@@ -230,51 +256,24 @@ class DetectorConfig(ConnectedDevice):
         return (self.pixelcount[0] * pitch[0] / 1000.0, self.pixelcount[1] * pitch[1] / 1000.0)
 
 
-@dataclass(kw_only=True, config=STRICT)
-class CanOpenMotorBinding:
-    """Address one motor on a CANopen node (sub-axis is zero-based)."""
+@dataclass(kw_only=True, config=OPEN)
+class AxisConfig(DeviceBase):
+    """One motorized axis; a stage names it under a direction."""
 
-    type: Literal["canopen-motor"] = "canopen-motor"
-    node_id: int = Field(ge=1, le=127)
-    sub_axis: int = Field(default=0, ge=0, le=3)
-
-
-@dataclass(kw_only=True, config=STRICT)
-class Uc2MasterAxisBinding:
-    """Address one stepper through the UC2 master JSON protocol."""
-
-    type: Literal["uc2-master"] = "uc2-master"
-    stepper_id: int = Field(ge=0, le=3)
-
-
-AxisBinding = Annotated[
-    Union[CanOpenMotorBinding, Uc2MasterAxisBinding], Field(discriminator="type")
-]
-
-
-@dataclass(kw_only=True, config=STRICT)
-class AxisConfig:
-    """One motorized axis of a stage (no ``type`` key; only valid inside a stage)."""
-
-    label: AxisLabel = Field(description="Direction of the axis")
+    type: Literal["axis"] = "axis"
     steps_per_um: Annotated[
-        PositiveFloat | None, firmware_meta("Motor steps per um; null for a servo stage")
+        PositiveFloat | None, firmware_meta("Motor steps per um; null for a servo axis")
     ]
-    steps_per_deg: PositiveFloat | None = Field(
-        default=None, description="Motor steps per degree for a rotational axis"
-    )
-    homing_required: Annotated[bool, firmware_meta("Axis must be homed before use")]
-    binding: AxisBinding | None = Field(
-        default=None, description="Motor address on a CANopen bus or UC2 serial master"
-    )
-    homing_speed_steps: int | None = Field(default=None, gt=0)
-    homing_direction: Literal[-1, 1] | None = None
-    homing_timeout_ms: int | None = Field(default=None, gt=0)
-    inverted: bool = False
+    inverted: bool = Field(default=False, description="Axis runs in the opposite direction")
+    homing_required: Annotated[bool, firmware_meta("Axis must be homed before use")] = False
     pos: Annotated[
         PhysVal | None,
         AfterValidator(in_unit("um")),
-        phys_meta("um", firmware="full", description="Position; min/max give the travel"),
+        phys_meta(
+            "um",
+            firmware="full",
+            description="Position; min/max give the travel, named presets the wheel slots",
+        ),
     ] = None
     vel: Annotated[
         PhysVal | None,
@@ -295,70 +294,33 @@ class AxisConfig:
         phys_meta("um/s**3", firmware="full", description="Jerk"),
     ] = None
 
-    @model_validator(mode="after")
-    def _bound_axis_scale(self) -> Self:
-        if self.binding is None:
-            return self
-        rotary = self.label in ("a", "rx", "ry", "rz")
-        if rotary and self.steps_per_deg is None:
-            raise ValueError("bound rotational axis needs steps_per_deg")
-        if not rotary and self.steps_per_um is None:
-            raise ValueError("bound linear axis needs steps_per_um")
-        return self
 
-
-@dataclass(kw_only=True, config=STRICT)
-class StageConfig(ConnectedDevice):
-    """Motorized stage made of one or more axes."""
+@dataclass(kw_only=True, config=OPEN)
+class StageConfig(DeviceBase):
+    """Motorized stage: axis devices grouped by direction."""
 
     type: Literal["stage"] = "stage"
-    axes: list[AxisConfig] = Field(min_length=1, description="Axes of the stage")
-    homing_order: list[AxisLabel] = Field(
-        default_factory=list, description="Axes to home in this mechanical order"
+    axes: dict[str, str] = Field(
+        min_length=1, description="Direction (e.g. x) -> key of an axis device"
+    )
+    homing_order: list[str] | None = Field(
+        default=None, description="Directions in homing order; null = home all in parallel"
     )
 
     @model_validator(mode="after")
-    def _unique_labels(self) -> Self:
-        labels = [axis.label for axis in self.axes]
-        if len(labels) != len(set(labels)):
-            raise ValueError(f"duplicate axis labels: {labels}")
-        if len(self.homing_order) != len(set(self.homing_order)) or any(
-            label not in labels for label in self.homing_order
-        ):
-            raise ValueError("homing_order must contain distinct axes from this stage")
-        bindings = [axis.binding for axis in self.axes if axis.binding is not None]
-        addresses = [
-            (binding.type, binding.node_id, binding.sub_axis)
-            if isinstance(binding, CanOpenMotorBinding)
-            else (binding.type, binding.stepper_id)
-            for binding in bindings
-        ]
-        if len(addresses) != len(set(addresses)):
-            raise ValueError("two stage axes address the same motor")
+    def _homing_order_lists_every_axis(self) -> Self:
+        order = self.homing_order
+        if order is not None and (len(order) != len(set(order)) or set(order) != set(self.axes)):
+            raise ValueError(
+                f"homing_order {order} must list every axis of the stage "
+                f"({', '.join(self.axes)}) exactly once"
+            )
         return self
 
-    def connection_for_axes(self, config: NewswitchConfig) -> Connection | None:
-        """Resolve the stage's own connection or its referenced controller."""
-        return config.connection_for(self)
 
-    def axis(self, label: AxisLabel) -> AxisConfig | None:
-        """Return the axis with `label`, or None when the stage has no such axis.
-
-        Args:
-            label: Axis label, e.g. ``"x"``.
-
-        Returns:
-            The matching axis or None.
-        """
-        for axis in self.axes:
-            if axis.label == label:
-                return axis
-        return None
-
-
-@dataclass(kw_only=True, config=STRICT)
+@dataclass(kw_only=True, config=OPEN)
 class ObjectiveConfig(DeviceBase):
-    """Objective lens (passive; mounted in a revolver)."""
+    """Objective lens (passive; may sit in a wheel)."""
 
     type: Literal["objective"] = "objective"
     magnification: PositiveFloat = Field(description="Magnification")
@@ -366,43 +328,15 @@ class ObjectiveConfig(DeviceBase):
     wd: PositiveFloat = Field(description="Working distance in mm")
 
 
-@dataclass(kw_only=True, config=STRICT)
+@dataclass(kw_only=True, config=OPEN)
 class FilterConfig(DeviceBase):
-    """Optical filter (passive; mounted in a revolver)."""
+    """Optical filter (passive; may sit in a wheel)."""
 
     type: Literal["filter"] = "filter"
-    wavelength: PositiveFloat = Field(description="Center wavelength in nm")
+    wavelength: PositiveFloat | None = Field(default=None, description="Center wavelength in nm")
     bandwidth: PositiveFloat | None = Field(default=None, description="Bandwidth in nm")
     spec_shape: SpectralShape | None = Field(default=None, description="Spectral shape")
     transmission: float = Field(default=1.0, ge=0.0, le=1.0, description="Peak transmission")
-
-
-@dataclass(kw_only=True, config=STRICT)
-class RevolverConfig(ConnectedDevice):
-    """Filter wheel or objective turret holding objectives or filters."""
-
-    type: Literal["revolver"] = "revolver"
-    channels: list[str | None] = Field(
-        min_length=1,
-        description="device_id of the objective/filter at each position; null = empty",
-    )
-    selected_channel: Annotated[
-        int, Field(ge=0), firmware_meta("Position (0-based index into channels) in use")
-    ] = 0
-
-    @model_validator(mode="after")
-    def _selected_in_range(self) -> Self:
-        if self.selected_channel >= len(self.channels):
-            raise ValueError(
-                f"selected_channel {self.selected_channel} out of range "
-                f"(revolver has {len(self.channels)} positions)"
-            )
-        return self
-
-    @property
-    def selected_device_id(self) -> str | None:
-        """device_id at the selected position, None when that position is empty."""
-        return self.channels[self.selected_channel]
 
 
 # ---------------------------------------------------------------------------
@@ -415,8 +349,8 @@ Device = Annotated[
         DetectorConfig,
         ControllerConfig,
         StageConfig,
+        AxisConfig,
         ObjectiveConfig,
-        RevolverConfig,
         FilterConfig,
     ],
     Field(discriminator="type"),
@@ -428,8 +362,8 @@ DEVICE_TYPES: dict[str, type[DeviceBase]] = {
     "detector": DetectorConfig,
     "controller": ControllerConfig,
     "stage": StageConfig,
+    "axis": AxisConfig,
     "objective": ObjectiveConfig,
-    "revolver": RevolverConfig,
     "filter": FilterConfig,
 }
 
@@ -441,27 +375,25 @@ class NewswitchConfig:
     """Top level of ``newswitch-config.yaml``."""
 
     newswitch_version: str = Field(description="newswitch version the file was written for")
-    connections: dict[str, Connection] = Field(
-        default_factory=dict, description="Named reusable physical connections"
-    )
-    devices: dict[str, Device] = Field(description="All devices, keyed by device_id")
-
-    def connection_for(self, device: ConnectedDevice | ControllerConfig) -> Connection | None:
-        """Resolve an inline or named connection, including a device's controller."""
-        selected = device.connection
-        if selected is None and isinstance(device, ConnectedDevice) and device.controller:
-            controller = self.devices.get(device.controller)
-            selected = controller.connection if isinstance(controller, ControllerConfig) else None
-        if isinstance(selected, str):
-            return self.connections.get(selected)
-        return selected
+    devices: dict[str, Device] = Field(description="All devices, keyed by their identifier")
 
     @model_validator(mode="after")
-    def _keys_are_device_ids(self) -> Self:
+    def _name_defaults_to_key(self) -> Self:
         for key, device in self.devices.items():
-            if device.device_id != key:
-                raise ValueError(f"devices.{key}: device_id {device.device_id!r} != key {key!r}")
+            if device.name is None:
+                device.name = key
         return self
+
+    def keyed(self, cls: type[T]) -> dict[str, T]:
+        """All devices of one class with their keys, in file order.
+
+        Args:
+            cls: A device dataclass, e.g. `DetectorConfig`.
+
+        Returns:
+            ``{key: device}`` for the matching devices.
+        """
+        return {key: device for key, device in self.devices.items() if isinstance(device, cls)}
 
     def of_type(self, cls: type[T]) -> list[T]:
         """All devices of one class, in file order.
@@ -472,13 +404,13 @@ class NewswitchConfig:
         Returns:
             The matching devices.
         """
-        return [device for device in self.devices.values() if isinstance(device, cls)]
+        return list(self.keyed(cls).values())
 
-    def slot_of(self, device_id: str) -> int:
+    def slot_of(self, key: str) -> int:
         """1-based position of a device among the devices of its type, in file order.
 
         Args:
-            device_id: The device.
+            key: The device.
 
         Returns:
             The slot number used by the managers.
@@ -486,9 +418,36 @@ class NewswitchConfig:
         Raises:
             KeyError: No such device.
         """
-        device = self.devices[device_id]
-        same_type = [d.device_id for d in self.devices.values() if type(d) is type(device)]
-        return same_type.index(device_id) + 1
+        same_type = list(self.keyed(type(self.devices[key])))
+        return same_type.index(key) + 1
+
+    def stage_axes(self, stage: StageConfig) -> dict[str, AxisConfig]:
+        """Resolve a stage's directions to its axis devices.
+
+        Args:
+            stage: A stage of this configuration.
+
+        Returns:
+            ``{direction: axis}``; directions naming no axis device are left out (a loaded
+            configuration has none, see `references.check_references`).
+        """
+        axes = self.keyed(AxisConfig)
+        return {direction: axes[key] for direction, key in stage.axes.items() if key in axes}
+
+    def controller_of(self, key: str) -> tuple[str, MappingEntry] | None:
+        """The controller a device is mapped to, with its address there.
+
+        Args:
+            key: The device.
+
+        Returns:
+            ``(controller key, mapping entry)``, or None when no controller maps it.
+        """
+        for controller_key, controller in self.keyed(ControllerConfig).items():
+            entry = controller.mapping.get(key)
+            if entry is not None:
+                return controller_key, entry
+        return None
 
     @property
     def lightsources(self) -> list[LightsourceConfig]:
@@ -511,14 +470,14 @@ class NewswitchConfig:
         return self.of_type(StageConfig)
 
     @property
+    def axes(self) -> list[AxisConfig]:
+        """All axes, in file order."""
+        return self.of_type(AxisConfig)
+
+    @property
     def objectives(self) -> list[ObjectiveConfig]:
         """All objectives, in file order."""
         return self.of_type(ObjectiveConfig)
-
-    @property
-    def revolvers(self) -> list[RevolverConfig]:
-        """All revolvers, in file order."""
-        return self.of_type(RevolverConfig)
 
     @property
     def filters(self) -> list[FilterConfig]:
@@ -530,7 +489,7 @@ def field_markers(cls: type[Any]) -> dict[str, dict[str, Any]]:
     """Read the ``x_unit`` / ``x_firmware`` markers of a config dataclass.
 
     Args:
-        cls: A device dataclass or `AxisConfig`.
+        cls: A device dataclass.
 
     Returns:
         ``{field_name: {"x_unit": ..., "x_firmware": ...}}`` for every marked field.

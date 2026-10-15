@@ -8,7 +8,8 @@ from typing import Any, Iterator
 import pytest
 from rekuest_next.state.lock import acquired_locks
 
-from newswitch.config_io import DetectorConfig, RevolverConfig, adapters, load_config
+from newswitch.config_io import AxisConfig, DetectorConfig, FilterConfig, adapters, load_config
+from newswitch.config_io import ObjectiveConfig as ObjectiveDevice
 from newswitch.config_io.devices import NewswitchConfig
 from newswitch.managers.virtual import (
     FilterBankConfig,
@@ -34,7 +35,7 @@ def _locks() -> Iterator[None]:
 
 @pytest.fixture
 def config(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> NewswitchConfig:
-    """The minimal document, loaded.
+    """The minimal document plus a filter wheel whose first position is empty, loaded.
 
     Args:
         write_doc: Document writer fixture.
@@ -43,17 +44,18 @@ def config(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> NewswitchConfig
     Returns:
         The loaded configuration.
     """
-    cam = minimal_doc["devices"]["cam"]
+    devices = minimal_doc["devices"]
+    cam = devices["cam"]
     cam["exposure_time_ms"]["preset_vals"] = [1.0, 10.0]
     cam["gain_db"] = {"value": 3.0, "max": 20.0}
-    minimal_doc["devices"]["stage"]["axes"][0]["pos"] = {"min": 0, "max": 50, "unit": "mm"}
-    minimal_doc["devices"]["wheel"] = {
-        "type": "revolver",
-        "name": "Wheel",
-        "controller": "mainboard",
-        "channels": [None, "gfp"],
+    devices["ax-x"]["pos"] = {"min": 0, "max": 50, "unit": "mm"}
+    devices["wheel"] = {"type": "stage", "name": "Wheel", "axes": {"rz": "wheel-axis"}}
+    devices["wheel-axis"] = {
+        "type": "axis",
+        "steps_per_um": 1.0,
+        "pos": {"preset_vals": {0: "null", 500: "gfp"}},
     }
-    minimal_doc["devices"]["led"]["max_intensity"] = 50.0
+    devices["mainboard"]["mapping"]["wheel-axis"] = {"type": "canopen-revolver", "id": 5}
     return load_config(write_doc(minimal_doc)).config
 
 
@@ -64,10 +66,15 @@ def test_illuminations(config: NewswitchConfig) -> None:
     led, laser = illuminations
     assert (led.slot, led.wavelength, led.kind) == (1, 470, IlluminationKind.LED)
     assert (laser.slot, laser.kind) == (2, IlluminationKind.LASER)
-    assert led.is_active and led.intensity == 50.0 and led.max_intensity == 50.0
-    assert not laser.is_active
-    # no max_intensity -> fixed intensity
-    assert laser.min_intensity == laser.max_intensity == adapters.FIXED_INTENSITY
+    assert led.is_active and led.intensity == led.max_intensity == adapters.FULL_INTENSITY
+    assert not laser.is_active and laser.intensity == laser.min_intensity == 0.0
+
+
+def test_unknown_wavelength(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """A light source without wavelength reaches the manager as 0 (broadband/unknown)."""
+    del minimal_doc["devices"]["led"]["wavelength"]
+    illuminations = adapters.illuminations(load_config(write_doc(minimal_doc)).config)
+    assert illuminations is not None and illuminations[0].wavelength == 0.0
 
 
 def test_detectors(config: NewswitchConfig) -> None:
@@ -90,6 +97,30 @@ def test_detectors(config: NewswitchConfig) -> None:
     assert cam.min_gain == 0.0  # -inf in the file -> Detector default
 
 
+def test_detectors_named_presets(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """Named presets reach the detector as values in file order, converted to seconds."""
+    exposure = minimal_doc["devices"]["cam"]["exposure_time_ms"]
+    exposure["preset_vals"] = {100.0: "long", 1.0: "short"}
+    exposure["selected_index"] = 0
+    detectors = adapters.detectors(load_config(write_doc(minimal_doc)).config)
+    assert detectors is not None
+    assert detectors[0].preset_exposure_times == pytest.approx([0.1, 0.001])
+
+
+def test_wheels(config: NewswitchConfig) -> None:
+    """An axis whose presets name objectives or filters is a wheel; other names are empty."""
+    turret = adapters.wheel_holding(config, ObjectiveDevice)
+    assert turret is not None
+    assert (turret.key, turret.positions, turret.values) == (
+        "turret-axis",
+        ["obj10", None, "obj40"],
+        [0.0, 1000.0, 2000.0],
+    )
+    assert turret.selected == 2
+    wheel = adapters.wheel_holding(config, FilterConfig)
+    assert wheel is not None and wheel.positions == [None, "gfp"] and wheel.selected == 0
+
+
 def test_objectives_follow_turret(config: NewswitchConfig) -> None:
     """Lenses get file-order slots; the turret's selection sets the default slot."""
     result = adapters.objective_lenses(config)
@@ -99,7 +130,7 @@ def test_objectives_follow_turret(config: NewswitchConfig) -> None:
         (1, "10x", 0.3),
         (2, "40x", 1.0),
     ]
-    assert default_slot == 2  # turret.selected_channel 2 -> obj40
+    assert default_slot == 2  # turret-axis selected_index 2 -> obj40
     state = ObjectiveState()
     VirtualObjectiveManager(state, ObjectiveConfig(objectives=lenses, default_slot=default_slot))
     assert (state.slot, state.name, state.magnification) == (2, "40x", 40.0)
@@ -111,7 +142,7 @@ def test_filters_with_empty_position(config: NewswitchConfig) -> None:
     assert result is not None
     filters, default_slot = result
     assert [(f.slot, f.name) for f in filters] == [(adapters.OPEN_FILTER_SLOT, "Open"), (1, "GFP")]
-    assert default_slot == adapters.OPEN_FILTER_SLOT
+    assert default_slot == adapters.OPEN_FILTER_SLOT  # no selection -> first position
     state = FilterBankState()
     VirtualFilterBankManager(state, FilterBankConfig(filters=filters, default_slot=default_slot))
     assert state.get_active_filter().name == "Open"
@@ -119,13 +150,23 @@ def test_filters_with_empty_position(config: NewswitchConfig) -> None:
 
 def test_missing_kinds_return_none(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     """Without devices of a kind the builders return None (keep manager defaults)."""
-    for key in ("led", "laser", "cam", "obj10", "obj40", "turret", "gfp"):
-        del minimal_doc["devices"][key]
+    devices = minimal_doc["devices"]
+    for key in ("led", "laser", "cam", "obj10", "obj40", "turret", "turret-axis", "gfp"):
+        del devices[key]
+    devices["mainboard"]["mapping"] = {
+        key: entry for key, entry in devices["mainboard"]["mapping"].items() if key in devices
+    }
     config = load_config(write_doc(minimal_doc)).config
     assert adapters.illuminations(config) is None
     assert adapters.detectors(config) is None
     assert adapters.objective_lenses(config) is None
     assert adapters.filters(config) is None
+
+
+def test_motion_stage_skips_wheels(config: NewswitchConfig) -> None:
+    """The first stage without a wheel axis moves the sample."""
+    found = adapters.motion_stage(config)
+    assert found is not None and found[0] == "stage"
 
 
 def test_stage_limits(config: NewswitchConfig) -> None:
@@ -136,9 +177,14 @@ def test_stage_limits(config: NewswitchConfig) -> None:
     assert (state.min_z, state.max_z) == (StageState().min_z, StageState().max_z)
 
 
-def test_serial_settings(config: NewswitchConfig) -> None:
-    """The uc2-rest serial controller yields port and baud rate."""
-    settings = adapters.serial_settings(config)
+def test_serial_settings(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """A uc2-rest serial controller yields port and baud rate; a simulated one does not."""
+    assert adapters.serial_settings(load_config(write_doc(minimal_doc)).config) is None
+    minimal_doc["devices"]["mainboard"]["connection"] = {
+        "protocol": "uc2-rest",
+        "transport": {"type": "serial", "port": "/dev/ttyUSB0"},
+    }
+    settings = adapters.serial_settings(load_config(write_doc(minimal_doc)).config)
     assert settings == adapters.SerialSettings(port="/dev/ttyUSB0", baudrate=115200)
 
 
@@ -163,11 +209,12 @@ def test_sync_runtime_state_and_save(config_path: Path, config: NewswitchConfig)
     reloaded = load_config(config_path).config
     exposure = get_device(reloaded, "cam", DetectorConfig).exposure_time_ms
     assert exposure is not None and exposure.value == pytest.approx(500.0)
-    assert get_device(reloaded, "turret", RevolverConfig).selected_channel == 0
-    assert get_device(reloaded, "wheel", RevolverConfig).selected_channel == 1
-    x_axis = reloaded.stages[0].axis("x")
-    assert x_axis is not None and x_axis.pos is not None
-    assert x_axis.pos.value == pytest.approx(1234.0)
+    turret = get_device(reloaded, "turret-axis", AxisConfig).pos
+    assert turret is not None and (turret.selected_index, turret.value) == (0, 0.0)
+    wheel = get_device(reloaded, "wheel-axis", AxisConfig).pos
+    assert wheel is not None and (wheel.selected_index, wheel.value) == (1, 500.0)
+    x_pos = get_device(reloaded, "ax-x", AxisConfig).pos
+    assert x_pos is not None and x_pos.value == pytest.approx(1234.0)
 
 
 def test_sync_skips_out_of_range_values(config: NewswitchConfig) -> None:

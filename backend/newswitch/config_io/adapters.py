@@ -7,18 +7,22 @@ Direction config -> managers (at startup):
     ==================== ===================================================
     `LightsourceConfig`  `Illumination` (slot = file order among lightsources)
     `DetectorConfig`     `Detector` (exposure ms -> s)
-    `ObjectiveConfig`    `ObjectiveLens`, default slot from the turret
+    `ObjectiveConfig`    `ObjectiveLens`, default slot from the objective wheel
     `FilterConfig`       `Filter`, default slot from the filter wheel
-    `StageConfig`        limits of `StageState` (axes x/y/z/a only, until an axis
-                         manager exists)
+    `StageConfig`        limits of `StageState` (directions x/y/z/a of the first
+                         stage that is not a wheel, until an axis manager exists)
     `ControllerConfig`   `SerialSettings` for the UC2 serial manager
     ==================== ===================================================
+
+A **wheel** is an axis whose ``pos`` presets are named after filters or objectives, e.g.
+``preset_vals: {0: "null", 1000: flt-gfp}``; a name that is no such device (``"null"``)
+marks an empty position, and ``pos.selected_index`` is the position in use.
 
 Each builder returns None when the file has no device of that kind, so the caller can
 keep a manager's built-in defaults (the virtual microscope relies on that).
 
 Direction managers -> config (at shutdown): `sync_runtime_state` copies the values the
-software may change (exposure, gain, selected revolver positions, stage position) into
+software may change (exposure, gain, selected wheel positions, stage position) into
 the configuration, from where `ConfigFile.save` writes them back.
 """
 
@@ -36,10 +40,13 @@ from ..protocols.objective import ObjectiveLens, ObjectiveState
 from ..protocols.stage import StageState
 from .connection import SerialTransport, Uc2RestProtocol
 from .devices import (
+    AxisConfig,
+    ControllerConfig,
+    DetectorConfig,
+    DeviceBase,
     FilterConfig,
     NewswitchConfig,
     ObjectiveConfig,
-    RevolverConfig,
     StageConfig,
 )
 from .values import PhysVal
@@ -49,8 +56,8 @@ logger = logging.getLogger(__name__)
 #: Slot of the pseudo filter standing for an empty filter-wheel position.
 OPEN_FILTER_SLOT = 0
 
-#: Intensity of a light source whose intensity cannot be set (``max_intensity: null``).
-FIXED_INTENSITY = 100.0
+#: Upper end of every light source's intensity range (percent).
+FULL_INTENSITY = 100.0
 
 _COLORMAPS = (Colormap.RED, Colormap.GREEN, Colormap.BLUE)
 
@@ -61,6 +68,78 @@ def _finite(value: float, fallback: float) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Wheels and the motion stage
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Wheel:
+    """An axis whose named positions hold filters or objectives."""
+
+    key: str
+    """Key of the axis."""
+    axis: AxisConfig
+    positions: list[str | None]
+    """Key of the device at each preset position, None for an empty position."""
+    values: list[float]
+    """Axis position (um) of each preset."""
+
+    @property
+    def selected(self) -> int:
+        """Position in use; the first one when none is selected."""
+        assert self.axis.pos is not None
+        index = self.axis.pos.selected_index
+        return 0 if index is None else index
+
+
+def wheel_holding(config: NewswitchConfig, cls: type[DeviceBase]) -> Wheel | None:
+    """First axis whose ``pos`` presets name devices of `cls` (filters or objectives).
+
+    Args:
+        config: The loaded configuration.
+        cls: `FilterConfig` or `ObjectiveConfig`.
+
+    Returns:
+        The wheel, or None when no axis holds such devices.
+    """
+    held = config.keyed(cls)
+    for key, axis in config.keyed(AxisConfig).items():
+        presets = None if axis.pos is None else axis.pos.preset_vals
+        if not isinstance(presets, dict) or not any(name in held for name in presets.values()):
+            continue
+        positions = [name if name in held else None for name in presets.values()]
+        return Wheel(key=key, axis=axis, positions=positions, values=list(presets))
+    return None
+
+
+def motion_stage(config: NewswitchConfig) -> tuple[str, StageConfig] | None:
+    """The stage moving the sample: the first stage that has no wheel axis.
+
+    Args:
+        config: The loaded configuration.
+
+    Returns:
+        ``(key, stage)``, or None when every stage is a wheel (or there is none).
+    """
+    wheels = {
+        wheel.key
+        for wheel in (
+            wheel_holding(config, FilterConfig),
+            wheel_holding(config, ObjectiveConfig),
+        )
+        if wheel is not None
+    }
+    candidates = [
+        (key, stage)
+        for key, stage in config.keyed(StageConfig).items()
+        if not wheels & set(stage.axes.values())
+    ]
+    if len(candidates) > 1:
+        logger.warning("%d stages configured, only %r is used", len(candidates), candidates[0][0])
+    return candidates[0] if candidates else None
+
+
+# ---------------------------------------------------------------------------
 # config -> managers
 # ---------------------------------------------------------------------------
 
@@ -68,8 +147,8 @@ def _finite(value: float, fallback: float) -> float:
 def illuminations(config: NewswitchConfig) -> list[Illumination] | None:
     """Build the illumination sources.
 
-    The first source starts switched on at full intensity, the others off. A source
-    without ``max_intensity`` has a fixed intensity (min = max).
+    Every source has the intensity range 0..`FULL_INTENSITY`. The first source starts
+    switched on at full intensity, the others off. An unknown wavelength becomes 0.
 
     Args:
         config: The loaded configuration.
@@ -80,25 +159,19 @@ def illuminations(config: NewswitchConfig) -> list[Illumination] | None:
     sources = config.lightsources
     if not sources:
         return None
-    result = []
-    for index, source in enumerate(sources):
-        maximum = FIXED_INTENSITY if source.max_intensity is None else source.max_intensity
-        minimum = maximum if source.max_intensity is None else 0.0
-        result.append(
-            Illumination(
-                kind=IlluminationKind.LASER
-                if source.coherence == "coherent"
-                else IlluminationKind.LED,
-                slot=index + 1,
-                wavelength=source.wavelength,
-                channel=source.channels,
-                max_intensity=maximum,
-                min_intensity=minimum,
-                intensity=maximum if index == 0 else minimum,
-                is_active=index == 0,
-            )
+    return [
+        Illumination(
+            kind=IlluminationKind.LASER if source.coherence == "coherent" else IlluminationKind.LED,
+            slot=index + 1,
+            wavelength=0.0 if source.wavelength is None else source.wavelength,
+            channel=source.channels,
+            max_intensity=FULL_INTENSITY,
+            min_intensity=0.0,
+            intensity=FULL_INTENSITY if index == 0 else 0.0,
+            is_active=index == 0,
         )
-    return result
+        for index, source in enumerate(sources)
+    ]
 
 
 def detectors(config: NewswitchConfig) -> list[Detector] | None:
@@ -124,7 +197,7 @@ def detectors(config: NewswitchConfig) -> list[Detector] | None:
         gain = device.gain_db
         detector = Detector(
             slot=index + 1,
-            name=device.name,
+            name=device.name or defaults.name,
             width=width,
             height=height,
             is_active=True,
@@ -136,8 +209,9 @@ def detectors(config: NewswitchConfig) -> list[Detector] | None:
                 detector.current_exposure_time = exposure.value / 1000.0
             detector.min_exposure_time = _finite(exposure.min / 1000.0, defaults.min_exposure_time)
             detector.max_exposure_time = _finite(exposure.max / 1000.0, defaults.max_exposure_time)
-            if exposure.preset_vals:
-                detector.preset_exposure_times = [v / 1000.0 for v in exposure.preset_vals]
+            presets = exposure.preset_values()  # dict: its keys, in file order
+            if presets:
+                detector.preset_exposure_times = [v / 1000.0 for v in presets]
         if gain is not None:
             if gain.value is not None:
                 detector.current_gain = gain.value
@@ -147,15 +221,6 @@ def detectors(config: NewswitchConfig) -> list[Detector] | None:
     return result
 
 
-def _revolver_holding(config: NewswitchConfig, cls: type) -> RevolverConfig | None:
-    """First revolver whose positions hold devices of `cls` (objective or filter)."""
-    for revolver in config.revolvers:
-        for ref in revolver.channels:
-            if ref is not None and isinstance(config.devices[ref], cls):
-                return revolver
-    return None
-
-
 def objective_lenses(config: NewswitchConfig) -> tuple[list[ObjectiveLens], int] | None:
     """Build the objective lenses and the slot selected at startup.
 
@@ -163,24 +228,24 @@ def objective_lenses(config: NewswitchConfig) -> tuple[list[ObjectiveLens], int]
         config: The loaded configuration.
 
     Returns:
-        ``(lenses, default_slot)``, or None when there are no objectives. Without a
-        turret, or when its selected position is empty, slot 1 is selected.
+        ``(lenses, default_slot)``, or None when there are no objectives. Without an
+        objective wheel, or when its selected position is empty, slot 1 is selected.
     """
-    objectives = config.objectives
+    objectives = config.keyed(ObjectiveConfig)
     if not objectives:
         return None
     lenses = [
         ObjectiveLens(
             slot=index + 1,
-            name=objective.name,
+            name=objective.name or key,
             magnification=objective.magnification,
             numerical_aperture=objective.na,
             working_distance=objective.wd,
         )
-        for index, objective in enumerate(objectives)
+        for index, (key, objective) in enumerate(objectives.items())
     ]
-    turret = _revolver_holding(config, ObjectiveConfig)
-    selected = None if turret is None else turret.selected_device_id
+    wheel = wheel_holding(config, ObjectiveConfig)
+    selected = None if wheel is None else wheel.positions[wheel.selected]
     return lenses, 1 if selected is None else config.slot_of(selected)
 
 
@@ -197,48 +262,46 @@ def filters(config: NewswitchConfig) -> tuple[list[Filter], int] | None:
     Returns:
         ``(filters, default_slot)``, or None when there are no filters.
     """
-    devices = config.filters
+    devices = config.keyed(FilterConfig)
     if not devices:
         return None
     result = [
         Filter(
             slot=index + 1,
-            name=device.name,
-            center_wavelength=device.wavelength,
+            name=device.name or key,
+            center_wavelength=0.0 if device.wavelength is None else device.wavelength,
             bandwidth=0.0 if device.bandwidth is None else device.bandwidth,
             transmission=device.transmission,
         )
-        for index, device in enumerate(devices)
+        for index, (key, device) in enumerate(devices.items())
     ]
-    wheel = _revolver_holding(config, FilterConfig)
+    wheel = wheel_holding(config, FilterConfig)
     if wheel is None:
         return result, 1
-    if None in wheel.channels:
+    if None in wheel.positions:
         result.insert(0, Filter(slot=OPEN_FILTER_SLOT, name="Open"))
-    selected = wheel.selected_device_id
+    selected = wheel.positions[wheel.selected]
     return result, OPEN_FILTER_SLOT if selected is None else config.slot_of(selected)
 
 
 def apply_stage_limits(config: NewswitchConfig, stage_state: StageState) -> None:
-    """Copy the travel (``pos.min``/``pos.max``) of the first stage into `stage_state`.
+    """Copy the travel (``pos.min``/``pos.max``) of the motion stage into `stage_state`.
 
-    Only finite limits of the axes x, y, z and a are applied; other axes are logged and
-    skipped until an axis manager handles arbitrary axes.
+    Only finite limits of the directions x, y, z and a are applied; other directions are
+    logged and skipped until an axis manager handles arbitrary axes.
 
     Args:
         config: The loaded configuration.
         stage_state: The shared stage state; modified in place.
     """
-    stages = config.stages
-    if not stages:
+    found = motion_stage(config)
+    if found is None:
         return
-    if len(stages) > 1:
-        logger.warning("%d stages configured, only %r is used", len(stages), stages[0].device_id)
-    for axis in stages[0].axes:
+    for direction, axis in config.stage_axes(found[1]).items():
         if axis.pos is None:
             continue
         low, high = axis.pos.min, axis.pos.max
-        match axis.label:
+        match direction:
             case "x":
                 stage_state.min_x = _finite(low, stage_state.min_x)
                 stage_state.max_x = _finite(high, stage_state.max_x)
@@ -252,7 +315,7 @@ def apply_stage_limits(config: NewswitchConfig, stage_state: StageState) -> None
                 stage_state.min_a = _finite(low, stage_state.min_a)
                 stage_state.max_a = _finite(high, stage_state.max_a)
             case _:
-                logger.warning("stage axis %r is not supported yet, skipped", axis.label)
+                logger.warning("stage direction %r is not supported yet, skipped", direction)
 
 
 @dataclass
@@ -266,7 +329,8 @@ class SerialSettings:
 def serial_settings(config: NewswitchConfig) -> SerialSettings | None:
     """Serial settings of the first controller speaking uc2-rest over a serial port.
 
-    A ``port_pattern`` is resolved to the first matching device path.
+    A ``port_pattern`` is resolved to the first matching device path. Simulated
+    controllers are skipped.
 
     Args:
         config: The loaded configuration.
@@ -274,7 +338,7 @@ def serial_settings(config: NewswitchConfig) -> SerialSettings | None:
     Returns:
         The settings, or None when no such controller exists or no port matches.
     """
-    for controller in config.controllers:
+    for key, controller in config.keyed(ControllerConfig).items():
         connection = controller.connection
         if not isinstance(connection, Uc2RestProtocol):
             continue
@@ -286,7 +350,7 @@ def serial_settings(config: NewswitchConfig) -> SerialSettings | None:
             matches = sorted(glob.glob(transport.port_pattern))
             port = matches[0] if matches else None
         if port is None:
-            logger.warning("controller %r: no serial port found", controller.device_id)
+            logger.warning("controller %r: no serial port found", key)
             continue
         return SerialSettings(port=port, baudrate=transport.baudrate)
     return None
@@ -320,24 +384,29 @@ def _with_value(phys: PhysVal | None, value: float, unit: str, where: str) -> Ph
     return phys
 
 
-def _select(config: NewswitchConfig, revolver: RevolverConfig | None, slot: int) -> None:
-    """Point `revolver.selected_channel` at the device that has `slot`.
+def _select(config: NewswitchConfig, wheel: Wheel | None, slot: int) -> None:
+    """Turn `wheel` to the position holding the device that has `slot`.
+
+    Sets ``pos.selected_index`` and moves ``pos.value`` to that preset.
 
     Args:
         config: The configuration.
-        revolver: The revolver, or None.
+        wheel: The wheel, or None.
         slot: Slot of the selected objective/filter; `OPEN_FILTER_SLOT` = empty position.
     """
-    if revolver is None:
+    if wheel is None or wheel.axis.pos is None:
         return
-    for position, ref in enumerate(revolver.channels):
+    for position, ref in enumerate(wheel.positions):
         matches = (
             ref is None
             if slot == OPEN_FILTER_SLOT
             else (ref is not None and config.slot_of(ref) == slot)
         )
         if matches:
-            revolver.selected_channel = position
+            wheel.axis.pos.selected_index = position
+            wheel.axis.pos = _with_value(
+                wheel.axis.pos, wheel.values[position], "um", f"devices.{wheel.key}.pos"
+            )
             return
 
 
@@ -357,12 +426,12 @@ def sync_runtime_state(
         filter_bank_state: Selected filter slot.
         stage_state: Current stage position.
     """
-    for index, device in enumerate(config.detectors):
+    for index, (key, device) in enumerate(config.keyed(DetectorConfig).items()):
         slot = index + 1
         runtime = next((d for d in camera_state.detectors if d.slot == slot), None)
         if runtime is None:
             continue
-        where = f"devices.{device.device_id}"
+        where = f"devices.{key}"
         device.exposure_time_ms = _with_value(
             device.exposure_time_ms,
             runtime.current_exposure_time * 1000.0,
@@ -371,27 +440,15 @@ def sync_runtime_state(
         )
         device.gain_db = _with_value(device.gain_db, runtime.current_gain, "dB", f"{where}.gain_db")
 
-    _select(config, _revolver_holding(config, ObjectiveConfig), objective_state.slot)
-    _select(config, _revolver_holding(config, FilterConfig), filter_bank_state.current_slot)
+    _select(config, wheel_holding(config, ObjectiveConfig), objective_state.slot)
+    _select(config, wheel_holding(config, FilterConfig), filter_bank_state.current_slot)
 
-    stages: list[StageConfig] = config.stages
-    if stages:
-        for axis in stages[0].axes:
-            match axis.label:
-                case "x":
-                    position: float | None = stage_state.x
-                case "y":
-                    position = stage_state.y
-                case "z":
-                    position = stage_state.z
-                case "a":
-                    position = stage_state.a
-                case _:
-                    position = None
-            if position is not None:
-                axis.pos = _with_value(
-                    axis.pos,
-                    position,
-                    "um",
-                    f"devices.{stages[0].device_id}.axes.{axis.label}.pos",
-                )
+    found = motion_stage(config)
+    if found is None:
+        return
+    positions = {"x": stage_state.x, "y": stage_state.y, "z": stage_state.z, "a": stage_state.a}
+    for direction, axis_key in found[1].axes.items():
+        axis = config.devices.get(axis_key)
+        if direction not in positions or not isinstance(axis, AxisConfig):
+            continue
+        axis.pos = _with_value(axis.pos, positions[direction], "um", f"devices.{axis_key}.pos")

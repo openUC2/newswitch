@@ -1,10 +1,10 @@
-"""Tests for `load_config`: top level, device_id keys, error collection and references."""
+"""Tests for `load_config` / `open_config`: top level, error collection, file roles."""
 
 from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
@@ -14,6 +14,7 @@ from newswitch.config_io import (
     DetectorConfig,
     ensure_persistent_copy,
     load_config,
+    open_config,
 )
 
 from .conftest import DocWriter, get_device
@@ -33,7 +34,7 @@ def test_loads_minimal_doc(write_doc: DocWriter, minimal_doc: dict[str, Any]) ->
     assert list(config.devices) == list(minimal_doc["devices"])
     cam = config.devices["cam"]
     assert isinstance(cam, DetectorConfig)
-    assert cam.device_id == "cam"
+    assert cam.name == "Cam"
     assert cam.exposure_time_ms is not None and cam.exposure_time_ms.unit == "ms"
 
 
@@ -43,14 +44,15 @@ def test_explicit_path(tmp_path: Path, minimal_doc: dict[str, Any], write_doc: D
     assert load_config(path).path == path
 
 
-def test_device_id_must_match_key(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
-    """A stated device_id equal to the key is fine; a different one is an error."""
-    minimal_doc["devices"]["cam"]["device_id"] = "cam"
-    load_config(write_doc(minimal_doc))
-
-    minimal_doc["devices"]["cam"]["device_id"] = "other"
-    problems = _problems(write_doc, minimal_doc)
-    assert problems == ["devices.cam.device_id: 'other' differs from key 'cam'"]
+def test_further_keys_are_accepted(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """Device and mapping entries may carry keys newswitch does not know yet."""
+    minimal_doc["devices"]["cam"]["optikit_dsn_variable"] = "camera-1"
+    minimal_doc["devices"]["cam"]["device_id"] = "no longer used"
+    minimal_doc["devices"]["mainboard"]["mapping"]["cam"]["serial_number"] = "00F1"
+    config = load_config(write_doc(minimal_doc)).config
+    cam = get_device(config, "cam", DetectorConfig)
+    assert cam.extras == {"optikit_dsn_variable": "camera-1", "device_id": "no longer used"}
+    assert config.controllers[0].mapping["cam"].extras == {"serial_number": "00F1"}
 
 
 def test_collects_all_structural_problems(
@@ -62,7 +64,9 @@ def test_collects_all_structural_problems(
     minimal_doc["devices"]["gfp"]["transmission"] = 3
     minimal_doc["devices"]["obj10"]["type"] = "lens"
     minimal_doc["devices"]["led"].pop("type")
-    minimal_doc["devices"]["stage"]["axes"][0]["label"] = "q"
+    minimal_doc["devices"]["ax-z"].pop("steps_per_um")
+    minimal_doc["devices"]["stage"]["axes"]["y"] = 3
+    minimal_doc["devices"]["mainboard"]["mapping"]["cam"]["id"] = "21,"
     problems = _problems(write_doc, minimal_doc)
     joined = "\n".join(problems)
     assert "<root>: unknown key 'extra'" in joined
@@ -70,7 +74,9 @@ def test_collects_all_structural_problems(
     assert "devices.gfp.transmission:" in joined
     assert "devices.obj10.type: unknown device type 'lens'" in joined
     assert "devices.led: missing 'type'" in joined
-    assert "devices.stage.axes.0.label:" in joined
+    assert "devices.ax-z: 'steps_per_um' is a required property" in joined
+    assert "devices.stage.axes.y: 3 is not of type 'string'" in joined
+    assert "devices.mainboard.mapping.cam.id: '21,' is not of type 'integer'" in joined
 
 
 @pytest.mark.parametrize(
@@ -80,6 +86,10 @@ def test_collects_all_structural_problems(
         ({"devices": {}}, "<root>: missing key 'newswitch_version'"),
         ({"newswitch_version": "v1", "devices": []}, "devices: expected a mapping"),
         ({"newswitch_version": 1, "devices": {}}, "newswitch_version: expected a string"),
+        (
+            {"newswitch_version": "v1", "devices": {}, "connections": {}},
+            "<root>: unknown key 'connections'",
+        ),
     ],
 )
 def test_top_level(write_doc: DocWriter, doc: Any, expected: str) -> None:  # noqa: ANN401
@@ -93,42 +103,6 @@ def test_pydantic_errors_use_file_paths(write_doc: DocWriter, minimal_doc: dict[
     problems = _problems(write_doc, minimal_doc)
     assert len(problems) == 1
     assert problems[0].startswith("devices.cam.exposure_time_ms:")
-
-
-@pytest.mark.parametrize(
-    ("change", "expected"),
-    [
-        (lambda d: d["led"].update(controller="nope"), "devices.led.controller: no device 'nope'"),
-        (lambda d: d["led"].update(controller="cam"), "'cam' is not a controller"),
-        (lambda d: d["turret"]["channels"].append("missing"), "no device 'missing'"),
-        (lambda d: d["turret"]["channels"].append("led"), "neither an objective nor a filter"),
-        (lambda d: d["turret"]["channels"].append("gfp"), "mixes objectives and filters"),
-        (lambda d: d["turret"]["channels"].append("obj10"), "'obj10' is already mounted"),
-    ],
-)
-def test_references(
-    write_doc: DocWriter,
-    minimal_doc: dict[str, Any],
-    change: Callable[[dict[str, Any]], None],
-    expected: str,
-) -> None:
-    """References between devices are checked after validation."""
-    change(minimal_doc["devices"])
-    problems = _problems(write_doc, minimal_doc)
-    assert any(expected in p for p in problems), problems
-
-
-def test_shared_resource_conflict(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
-    """Two devices on one port must agree on its settings."""
-    minimal_doc["devices"]["other"] = {
-        **minimal_doc["devices"]["mainboard"],
-        "connection": {
-            "protocol": "uc2-rest",
-            "transport": {"type": "serial", "port": "/dev/ttyUSB0", "baudrate": 9600},
-        },
-    }
-    problems = _problems(write_doc, minimal_doc)
-    assert any("shared resource" in p and "baudrate" in p for p in problems)
 
 
 def test_version_mismatch_warns(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
@@ -189,3 +163,33 @@ def test_persistent_copy_needs_the_static_file(config_dir: Path) -> None:
     """Without either file there is nothing to copy."""
     with pytest.raises(ConfigError, match="static.yaml"):
         ensure_persistent_copy(config_dir / "static.yaml", config_dir / "persistent.yaml")
+
+
+def test_open_config_needs_two_files(config_dir: Path, write_doc: DocWriter) -> None:
+    """Static and persistent must be different files, or the static one would be written."""
+    static = write_doc("newswitch_version: v1.0.0\ndevices: {}\n", "static.yaml")
+    same = config_dir / "." / "static.yaml"
+    with pytest.raises(ConfigError, match="same file"):
+        open_config(static, same, from_static=True)
+
+
+@pytest.mark.parametrize("from_static", [True, False])
+def test_static_file_is_never_written(
+    config_dir: Path, write_doc: DocWriter, minimal_doc: dict[str, Any], from_static: bool
+) -> None:
+    """save() goes to the persistent file and refuses an explicit static target."""
+    static = write_doc(minimal_doc, "static.yaml")
+    persistent = config_dir / "persistent.yaml"
+    cfg_file = open_config(static, persistent, from_static=from_static)
+    assert cfg_file.path == (static if from_static else persistent)
+    assert cfg_file.target == persistent
+    with pytest.raises(ConfigError, match="refusing to write the static configuration"):
+        cfg_file.save(static)
+    assert cfg_file.save() == persistent
+
+
+def test_load_config_saves_in_place(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """A file loaded on its own is written back to itself."""
+    path = write_doc(minimal_doc)
+    cfg_file = load_config(path)
+    assert cfg_file.target == path and cfg_file.protected is None

@@ -24,7 +24,8 @@ def test_defaults() -> None:
     phys = PHYS.validate_python({})
     assert phys.value is None
     assert phys.min == -math.inf and phys.max == math.inf
-    assert phys.inc == EPS and phys.unit == "" and phys.preset_vals == []
+    assert phys.inc == EPS and phys.unit == ""
+    assert phys.preset_vals is None and phys.selected_index is None
 
 
 @pytest.mark.parametrize(
@@ -35,12 +36,47 @@ def test_defaults() -> None:
         {"value": 11, "max": 10},
         {"inc": 0},
         {"value": 1, "increment": 0.1},  # old key name is rejected
+        {"preset_vals": {"short": 1.0}},  # the mapping is value -> name, not name -> value
     ],
 )
 def test_invalid(data: dict) -> None:
     """Inconsistent limits and unknown keys are errors."""
     with pytest.raises(ValidationError):
         PHYS.validate_python(data)
+
+
+@pytest.mark.parametrize(
+    ("presets", "expected"),
+    [
+        ([1, 10], [1.0, 10.0]),
+        ({1: "short", 10: "long"}, [1.0, 10.0]),
+        ([], []),
+        (None, []),
+    ],
+)
+def test_preset_forms(presets: object, expected: list[float]) -> None:
+    """Presets are a list, a mapping value -> name or null; preset_values() flattens them."""
+    phys = PHYS.validate_python({"preset_vals": presets})
+    assert phys.preset_vals == presets
+    assert phys.preset_values() == expected
+
+
+@pytest.mark.parametrize("presets", [[1, 10], {1: "short", 10: "long"}])
+def test_selected_index_within_presets(presets: object) -> None:
+    """selected_index is a 0-based index into the presets, also for named ones."""
+    assert PHYS.validate_python({"preset_vals": presets, "selected_index": 1}).selected_index == 1
+    with pytest.raises(ValidationError, match="out of range"):
+        PHYS.validate_python({"preset_vals": presets, "selected_index": 2})
+    with pytest.raises(ValidationError):
+        PHYS.validate_python({"preset_vals": presets, "selected_index": -1})
+
+
+@pytest.mark.parametrize("presets", [None, [], {}])
+def test_selected_index_needs_presets(presets: object) -> None:
+    """Without presets selected_index must stay null."""
+    assert PHYS.validate_python({"preset_vals": presets}).selected_index is None
+    with pytest.raises(ValidationError, match="no preset_vals"):
+        PHYS.validate_python({"preset_vals": presets, "selected_index": 0})
 
 
 def test_clamp_snaps_to_grid() -> None:
@@ -69,6 +105,18 @@ def test_in_unit_converts_all_numbers() -> None:
     assert converted.max == pytest.approx(2000.0)
     assert converted.inc == pytest.approx(1.0)
     assert converted.preset_vals == pytest.approx([100.0])
+
+
+def test_in_unit_converts_named_presets() -> None:
+    """Named presets are converted too; names, order and selected_index are kept."""
+    converted = in_unit("ms")(
+        PhysVal(unit="s", preset_vals={0.1: "short", 2.0: "long"}, selected_index=1)
+    )
+    assert converted is not None
+    assert isinstance(converted.preset_vals, dict)
+    assert list(converted.preset_vals) == pytest.approx([100.0, 2000.0])
+    assert list(converted.preset_vals.values()) == ["short", "long"]
+    assert converted.selected_index == 1
 
 
 def test_in_unit_keeps_infinite_limits() -> None:

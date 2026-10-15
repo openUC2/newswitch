@@ -1,6 +1,7 @@
-"""Device connection models (see ``backend/docs/connection-reference.md``).
+"""Controller connection models (see ``backend/docs/connection-reference.md``).
 
-Layout (flat protocol properties, nested transport)::
+Only controllers have a connection; the devices behind a controller are addressed through
+its ``mapping``. Layout (flat protocol properties, nested transport)::
 
     connection:
       protocol: <name>
@@ -8,6 +9,9 @@ Layout (flat protocol properties, nested transport)::
       transport:
         type: <name>
         <transport properties>
+
+Unlike device entries, connections reject unknown keys, so a misspelled port setting fails
+loudly.
 """
 
 from __future__ import annotations
@@ -200,6 +204,12 @@ class I2cTransport(_Base):
         return self
 
 
+class SimulatedTransport(_Base):
+    """No physical link: the controller and the devices behind it are simulated."""
+
+    type: Literal["simulated"] = "simulated"
+
+
 Transport = Union[
     SerialTransport,
     Rs422Transport,
@@ -208,6 +218,7 @@ Transport = Union[
     TcpTransport,
     CanTransport,
     I2cTransport,
+    SimulatedTransport,
 ]
 
 
@@ -229,21 +240,13 @@ class Uc2RestProtocol(_Base):
 
 
 class CanOpenProtocol(_Base):
-    """CANopen device (node) on a CAN bus."""
+    """CANopen bus; each mapped device names its node with ``id`` (and ``subid``)."""
 
     protocol: Literal["canopen"] = "canopen"
-    node_id: int = Field(ge=1, le=127)
-    eds_file: Path | None = None
+    eds_file: Path | None = None  # object dictionary shared by the nodes, if any
     sdo_timeout: float = 0.5
     heartbeat_period_ms: int | None = None
-    transport: CanTransport = CanTransport()
-
-
-class CanBusProtocol(_Base):
-    """Shared CAN bus for devices that address their own CANopen nodes."""
-
-    protocol: Literal["can-bus"] = "can-bus"
-    transport: CanTransport = CanTransport()
+    transport: CanTransport
 
 
 class RegisterMapProtocol(_Base):
@@ -300,15 +303,22 @@ class Usb3VisionProtocol(_Base):
     index: int | None = None
 
 
+class SimulatedProtocol(_Base):
+    """Simulated controller: validates like a real one but opens no hardware."""
+
+    protocol: Literal["simulated"] = "simulated"
+    transport: SimulatedTransport
+
+
 Connection = Annotated[
     Union[
         Uc2RestProtocol,
         CanOpenProtocol,
-        CanBusProtocol,
         ModbusProtocol,
         RegisterMapProtocol,
         GigEVisionProtocol,
         Usb3VisionProtocol,
+        SimulatedProtocol,
     ],
     Field(discriminator="protocol"),
 ]
@@ -332,27 +342,30 @@ def transport_of(connection: Connection) -> Transport | None:
         case (
             Uc2RestProtocol()
             | CanOpenProtocol()
-            | CanBusProtocol()
             | ModbusProtocol()
             | RegisterMapProtocol()
+            | SimulatedProtocol()
         ):
             return connection.transport
     return None
 
 
-def resource_key(t: Transport) -> tuple:
+def resource_key(t: Transport) -> tuple | None:
     """Key identifying the physical resource behind a transport.
 
-    Devices with the same key share one opened resource (pool it).
+    Controllers with the same key share one opened resource (pool it).
     Note: CAN bitrate and I2C address are deliberately NOT part of the key.
 
     Args:
         t: The transport.
 
     Returns:
-        A hashable tuple, e.g. ``("uart", "/dev/ttyUSB0")``.
+        A hashable tuple, e.g. ``("uart", "/dev/ttyUSB0")``; None for a simulated
+        transport, which occupies no physical resource.
     """
     match t:
+        case SimulatedTransport():
+            return None
         case SerialTransport() | Rs422Transport() | Rs485Transport():
             return ("uart", t.port or t.port_pattern or (t.vid, t.pid, t.serial_number))
         case CanTransport():
@@ -372,46 +385,43 @@ PER_USER_FIELDS = {"timeout", "write_timeout", "address", "force", "token", "bas
 
 
 def check_shared_resources(connections: Mapping[str, Connection]) -> dict[tuple, list[str]]:
-    """Group devices by physical resource and report inconsistent sharing.
+    """Group controllers by physical resource and report inconsistent sharing.
 
     Args:
-        connections: ``device_id -> connection`` for every device that has its own
-            connection (devices behind a controller are not listed).
+        connections: ``controller key -> connection``.
 
     Returns:
-        ``{resource_key: [device_ids]}`` for every resource in use.
+        ``{resource_key: [controller keys]}`` for every physical resource in use
+        (simulated controllers are not listed).
 
     Raises:
-        ValueError: Devices on one resource disagree on resource-defining settings
+        ValueError: Controllers on one resource disagree on resource-defining settings
             (e.g. baudrate, bitrate, adapter type) or speak different protocols. The
             message holds one line per conflict.
     """
     groups: dict[tuple, list[tuple[str, Connection, Transport]]] = {}
-    for device_id, connection in connections.items():
+    for key, connection in connections.items():
         transport = transport_of(connection)
-        if transport is not None:
-            groups.setdefault(resource_key(transport), []).append(
-                (device_id, connection, transport)
-            )
+        resource = None if transport is None else resource_key(transport)
+        if transport is not None and resource is not None:
+            groups.setdefault(resource, []).append((key, connection, transport))
 
     errors = []
-    for key, members in groups.items():
-        first_id, first_conn, first_t = members[0]
+    for resource, members in groups.items():
+        first_key, first_conn, first_t = members[0]
         ref_t = first_t.model_dump(exclude=PER_USER_FIELDS)
-        for other_id, other_conn, other_t in members[1:]:
-            compatible_can = key[0] == "can" and {
-                first_conn.protocol,
-                other_conn.protocol,
-            } <= {"can-bus", "canopen"}
-            if other_conn.protocol != first_conn.protocol and not compatible_can:
+        for other_key, other_conn, other_t in members[1:]:
+            if other_conn.protocol != first_conn.protocol:
                 errors.append(
-                    f"{key}: '{first_id}' speaks {first_conn.protocol}, "
-                    f"'{other_id}' speaks {other_conn.protocol}"
+                    f"{resource}: '{first_key}' speaks {first_conn.protocol}, "
+                    f"'{other_key}' speaks {other_conn.protocol}"
                 )
             t = other_t.model_dump(exclude=PER_USER_FIELDS)
             diff = {k for k in ref_t.keys() | t.keys() if ref_t.get(k) != t.get(k)}
             if diff:
-                errors.append(f"{key}: '{first_id}' and '{other_id}' disagree on {sorted(diff)}")
+                errors.append(
+                    f"{resource}: '{first_key}' and '{other_key}' disagree on {sorted(diff)}"
+                )
     if errors:
         raise ValueError("\n".join(errors))
-    return {k: [device_id for device_id, _, _ in v] for k, v in groups.items()}
+    return {k: [key for key, _, _ in v] for k, v in groups.items()}

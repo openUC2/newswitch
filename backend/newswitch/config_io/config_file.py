@@ -1,20 +1,23 @@
-"""Load ``newswitch-config.yaml`` into dataclasses and write changes back.
+"""Load the device configuration into dataclasses and write changes back.
 
 Typical use::
 
     from newswitch import config_io
 
-    cfg_file = config_io.load_config(ImswitchConfig().config_file)
+    cfg_file = config_io.open_config(static, persistent, from_static=True)
     cfg = cfg_file.config
     for detector in cfg.detectors: ...
 
     cfg_file.apply_firmware("bigcamera42", {"exposure_time_ms": {"min": 0.02, "max": 1e4}})
     cfg.devices["bigcamera42"].exposure_time_ms.value = 30.0   # runtime change
-    cfg_file.save()                                            # comments stay intact
+    cfg_file.save()                    # into the persistent file; comments stay intact
 
-Loading runs four stages and reports all problems of a stage together: top level and
-``device_id`` keys, jsonschema per device type, pydantic (defaults, units, field rules),
-and cross-device references.
+The static file is never written: `open_config` reads it or the persistent file and always
+saves into the persistent one.
+
+Loading runs four stages and reports all problems of a stage together: top level,
+jsonschema per device type, pydantic (defaults, units, field rules), and cross-device
+references (errors fail, warnings are issued as `ConfigWarning`).
 """
 
 from __future__ import annotations
@@ -27,8 +30,8 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from .devices import AxisConfig, Device, NewswitchConfig, StageConfig, field_markers
-from .document import read_tree, resolve_source, to_plain, write_tree
+from .devices import Device, NewswitchConfig, field_markers
+from .document import ensure_persistent_copy, read_tree, resolve_source, to_plain, write_tree
 from .errors import ConfigError, ConfigWarning
 from .references import check_references
 from .validation import prepare_document, validate_document
@@ -83,6 +86,11 @@ def _check_version(stated: str) -> None:
         )
 
 
+def _same_file(a: Path, b: Path) -> bool:
+    """True when two paths name the same file (whether or not it exists yet)."""
+    return a.resolve() == b.resolve()
+
+
 def _dump(device: Any) -> dict[str, Any]:  # noqa: ANN401 - any device dataclass
     """Dump one device to a plain dict (python mode keeps inf and tuples).
 
@@ -98,70 +106,63 @@ def _dump(device: Any) -> dict[str, Any]:  # noqa: ANN401 - any device dataclass
 class ConfigFile:
     """A loaded configuration together with the YAML tree it came from."""
 
-    def __init__(self, path: Path, tree: Any, config: NewswitchConfig) -> None:  # noqa: ANN401
+    def __init__(
+        self,
+        path: Path,
+        tree: Any,  # noqa: ANN401 - a parsed document is Any
+        config: NewswitchConfig,
+        *,
+        target: Path | None = None,
+        protected: Path | None = None,
+    ) -> None:
         """Wrap an already validated configuration.
 
         Args:
-            path: File the configuration was read from and is saved to.
+            path: File the configuration was read from.
             tree: ruamel round-trip tree of that file.
             config: The validated configuration.
+            target: File `save` writes to; defaults to `path`.
+            protected: File that must never be written (the static configuration).
         """
         self.path = path
+        self.target = path if target is None else target
+        self.protected = protected
         self.tree = tree
         self.config = config
         self._snapshot: dict[str, dict[str, Any]] = {
             key: _dump(device) for key, device in config.devices.items()
         }
 
-    def apply_firmware(self, device_id: str, reported: dict[str, Any]) -> None:
+    def apply_firmware(self, key: str, reported: dict[str, Any]) -> None:
         """Merge values a device reported about itself into the configuration.
 
-        Only fields marked ``x_firmware`` are accepted. For ``"limits"`` fields the
-        ``value`` stays user-owned; min/max/inc/preset_vals are taken over. Physical
-        values may come in any compatible unit and are converted. Stage axes are
-        addressed by label: ``{"axes": {"x": {"vel": {"max": 1e4}}}}``.
+        Only fields marked ``x_firmware`` are accepted. For ``"limits"`` fields
+        ``value`` and ``selected_index`` stay user-owned; min/max/inc/preset_vals are
+        taken over. Physical values may come in any compatible unit and are converted.
+        An axis is a device of its own and reports under its own key.
 
         The device object in `config.devices` is replaced by a revalidated one, so
         call this before handing devices to the managers.
 
         Args:
-            device_id: The device the values belong to.
+            key: The device the values belong to.
             reported: ``{field: value}``; physical values as mappings of their members.
 
         Raises:
             KeyError: No such device.
             ConfigError: A field is not firmware-provided, or the merged result is invalid.
         """
-        device = self.config.devices[device_id]
+        device = self.config.devices[key]
         data = _dump(device)
         problems: list[str] = []
-
-        axes_reported = reported.get("axes")
-        top_level = {k: v for k, v in reported.items() if k != "axes"}
-        self._merge_into(data, field_markers(type(device)), top_level, device_id, problems)
-
-        if axes_reported is not None:
-            if not isinstance(device, StageConfig) or not isinstance(axes_reported, dict):
-                problems.append(f"{device_id}.axes: only stages have axes")
-            else:
-                axis_markers = field_markers(AxisConfig)
-                for label, values in axes_reported.items():
-                    index = next(
-                        (i for i, axis in enumerate(device.axes) if axis.label == label), None
-                    )
-                    if index is None:
-                        problems.append(f"{device_id}.axes.{label}: stage has no such axis")
-                        continue
-                    where = f"{device_id}.axes.{label}"
-                    self._merge_into(data["axes"][index], axis_markers, values, where, problems)
-
+        self._merge_into(data, field_markers(type(device)), reported, key, problems)
         if problems:
-            raise ConfigError(f"firmware values for {device_id!r} rejected", problems)
+            raise ConfigError(f"firmware values for {key!r} rejected", problems)
         try:
-            self.config.devices[device_id] = _DEVICE_ADAPTER.validate_python(data)
+            self.config.devices[key] = _DEVICE_ADAPTER.validate_python(data)
         except ValidationError as exc:
             raise ConfigError(
-                f"firmware values for {device_id!r} are invalid", _format_validation_error(exc)
+                f"firmware values for {key!r} are invalid", _format_validation_error(exc)
             ) from exc
 
     @staticmethod
@@ -172,10 +173,10 @@ class ConfigFile:
         where: str,
         problems: list[str],
     ) -> None:
-        """Merge reported values into one dumped device or axis.
+        """Merge reported values into one dumped device.
 
         Args:
-            data: Dumped device or axis; modified in place.
+            data: Dumped device; modified in place.
             markers: `field_markers` of its class.
             reported: Values the firmware reported for it.
             where: Location prefix for problem messages.
@@ -204,21 +205,26 @@ class ConfigFile:
             data[name] = merge_phys_from_firmware(data.get(name), supplied, marker["x_firmware"])
 
     def save(self, path: str | Path | None = None, *, backup: bool = True) -> Path:
-        """Write runtime and firmware changes back into the YAML file.
+        """Write runtime and firmware changes into the YAML file.
 
-        See `writeback` for which fields are written. Every device is revalidated first,
-        so an out-of-range runtime value is caught before anything is written.
+        The tree read from `path` is updated and written to `target` (see `writeback` for
+        which fields are written). Every device is revalidated first, so an out-of-range
+        runtime value is caught before anything is written.
 
         Args:
-            path: Target file; defaults to the file the configuration was loaded from.
+            path: Target file; defaults to `target`.
             backup: Keep the previous file as ``<name>.bak``.
 
         Returns:
             The path written to.
 
         Raises:
-            ConfigError: A device no longer validates.
+            ConfigError: A device no longer validates, or the target is the protected
+                static configuration.
         """
+        target = self.target if path is None else Path(path)
+        if self.protected is not None and _same_file(target, self.protected):
+            raise ConfigError(f"refusing to write the static configuration {str(target)!r}")
         current = {key: _dump(device) for key, device in self.config.devices.items()}
         problems: list[str] = []
         for key, data in current.items():
@@ -231,14 +237,8 @@ class ConfigFile:
 
         nodes = self.tree["devices"]
         for key, device in self.config.devices.items():
-            old, new, node = self._snapshot[key], current[key], nodes[key]
-            merge_fields(node, field_markers(type(device)), old, new)
-            if isinstance(device, StageConfig):
-                axis_markers = field_markers(AxisConfig)
-                for index, axis_node in enumerate(node["axes"]):
-                    merge_fields(axis_node, axis_markers, old["axes"][index], new["axes"][index])
+            merge_fields(nodes[key], field_markers(type(device)), self._snapshot[key], current[key])
 
-        target = self.path if path is None else Path(path)
         write_tree(self.tree, target, backup=backup)
         self._snapshot = current
         return target
@@ -265,21 +265,25 @@ def parse_tree(tree: Any, name: str = "<config>") -> NewswitchConfig:  # noqa: A
         config = _CONFIG_ADAPTER.validate_python(document)
     except ValidationError as exc:
         raise ConfigError(f"{name} failed validation:", _format_validation_error(exc)) from exc
-    problems = check_references(config)
-    if problems:
-        raise ConfigError(f"{name} has inconsistent references:", problems)
+    errors, notes = check_references(config)
+    if errors:
+        raise ConfigError(f"{name} has inconsistent references:", errors)
+    for note in notes:
+        warnings.warn(f"{name}: {note}", ConfigWarning, stacklevel=2)
     _check_version(config.newswitch_version)
     return config
 
 
 def load_config(src: str | Path) -> ConfigFile:
-    """Load and validate the configuration file.
+    """Load and validate one configuration file; `ConfigFile.save` writes it back in place.
+
+    Use `open_config` to run newswitch on a static/persistent pair.
 
     Args:
-        src: Path of the file (`newswitch.app.ImswitchConfig.config_file`).
+        src: Path of the file.
 
     Returns:
-        The loaded file, ready to be read by the managers and saved back.
+        The loaded file.
 
     Raises:
         ConfigError: The file is missing, unparseable or invalid.
@@ -287,3 +291,32 @@ def load_config(src: str | Path) -> ConfigFile:
     path = resolve_source(src)
     tree = read_tree(path)
     return ConfigFile(path, tree, parse_tree(tree, path.name))
+
+
+def open_config(static: str | Path, persistent: str | Path, *, from_static: bool) -> ConfigFile:
+    """Load the device configuration newswitch runs on.
+
+    The static file is never written. Changes are always saved into the persistent file:
+
+    * ``from_static=True``: the static file is read; saving overwrites the persistent file.
+    * ``from_static=False``: the persistent file is read (created as a copy of the static
+      one if it does not exist yet) and saved back in place.
+
+    Args:
+        static: ``static_config_path`` from ``base_config.yaml``.
+        persistent: ``persistent_config_path`` from ``base_config.yaml``.
+        from_static: ``load_from_static_config_path`` from ``base_config.yaml``.
+
+    Returns:
+        The loaded file; `ConfigFile.save` writes into `persistent`.
+
+    Raises:
+        ConfigError: Both paths name the same file, or the file to read is missing,
+            unparseable or invalid.
+    """
+    static, persistent = Path(static), Path(persistent)
+    if _same_file(static, persistent):
+        raise ConfigError(f"static and persistent configuration are the same file {str(static)!r}")
+    path = resolve_source(static if from_static else ensure_persistent_copy(static, persistent))
+    tree = read_tree(path)
+    return ConfigFile(path, tree, parse_tree(tree, path.name), target=persistent, protected=static)

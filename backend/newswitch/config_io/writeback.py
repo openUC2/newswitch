@@ -24,7 +24,10 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from .document import to_plain
 from .values import PHYS_VAL_DEFAULTS
 
-PHYS_MEMBERS = ("value", "min", "max", "inc", "unit", "preset_vals")
+PHYS_MEMBERS = ("value", "min", "max", "inc", "unit", "preset_vals", "selected_index")
+
+#: Members a ``"limits"`` firmware report never overwrites: the user's choices.
+USER_OWNED_PHYS_MEMBERS = ("value", "selected_index")
 
 
 def to_yaml_node(value: Any) -> Any:  # noqa: ANN401 - mirrors the input
@@ -131,6 +134,32 @@ def phys_carries_information(phys: dict[str, Any] | None) -> bool:
     )
 
 
+def _numeric_keys(value: Any) -> Any:  # noqa: ANN401 - mirrors the input
+    """Read mapping keys that look like numbers as floats, so ``1`` and ``1.0`` compare equal.
+
+    `to_plain` turns every key of the file into a string, while a dumped value -> name
+    preset mapping has float keys.
+
+    Args:
+        value: A plain value.
+
+    Returns:
+        The same value with numeric mapping keys as floats.
+    """
+    if isinstance(value, dict):
+        result: dict[Any, Any] = {}
+        for key, item in value.items():
+            try:
+                key = float(key)
+            except (TypeError, ValueError):
+                pass
+            result[key] = _numeric_keys(item)
+        return result
+    if isinstance(value, list):
+        return [_numeric_keys(item) for item in value]
+    return value
+
+
 def _write_phys(node: CommentedMap, name: str, old: Any, new: Any) -> None:  # noqa: ANN401
     """Write one physical-value field into `node` following the module rules.
 
@@ -158,8 +187,10 @@ def _write_phys(node: CommentedMap, name: str, old: Any, new: Any) -> None:  # n
             wanted = value is not None or member in target
         else:
             wanted = member in target or value != PHYS_VAL_DEFAULTS[member]
-        if wanted and (member not in target or to_plain(target[member]) != value):
-            target[member] = to_yaml_node(value)
+        if wanted and (
+            member not in target or _numeric_keys(to_plain(target[member])) != _numeric_keys(value)
+        ):
+            set_key(target, member, to_yaml_node(value))
     if not is_mapping:
         set_key(node, name, target)
 
@@ -212,7 +243,8 @@ def merge_phys_from_firmware(
         current: Dumped current value, or None.
         reported: Dumped `PhysVal` as reported by the firmware (already in the field's
             unit); only the members present in it are taken over.
-        kind: ``"limits"`` keeps the user-owned ``value``; ``"full"`` takes it too.
+        kind: ``"limits"`` keeps the user-owned ``value`` and ``selected_index``;
+            ``"full"`` takes them too.
 
     Returns:
         The merged dumped value.
@@ -221,7 +253,7 @@ def merge_phys_from_firmware(
     for member in PHYS_MEMBERS:
         if member not in reported:
             continue
-        if member == "value" and kind == "limits":
+        if member in USER_OWNED_PHYS_MEMBERS and kind == "limits":
             continue
         merged[member] = reported[member]
     return merged

@@ -145,8 +145,9 @@ class ImswitchConfig(BaseSettings):
             else data["persistent_config_path"]
         )
     )
-    """Device configuration actually used: `static_config_path` or
-    `persistent_config_path`. None keeps the built-in virtual devices."""
+    """Device configuration read at startup: `static_config_path` or
+    `persistent_config_path` (changes always go into the persistent one, see
+    `config_io.open_config`). None keeps the built-in virtual devices."""
 
     def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
         """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
@@ -260,11 +261,16 @@ async def provide_managers(
 
     serial_state = SerialState()
 
-    # Devices from newswitch-config.yaml; every manager whose device kind is missing
-    # from the file (or when no file is configured) keeps its built-in defaults.
-    if config.config_file is not None and not config.load_from_static_config_path:
-        config_io.ensure_persistent_copy(config.static_config_path, config.persistent_config_path)
-    devices = config_io.load_config(config.config_file).config if config.config_file else None
+    # Devices from the device configuration (static or persistent file, see
+    # base_config.yaml); every manager whose device kind is missing from it (or when no
+    # file is configured) keeps its built-in defaults.
+    devices = None
+    if config.config_file is not None:
+        devices = config_io.open_config(
+            config.static_config_path,
+            config.persistent_config_path,
+            from_static=config.load_from_static_config_path,
+        ).config
     led_config = objective_config = filter_bank_config = virtual_stage_config = None
     configured_detectors = None
     serial_port, serial_baudrate = "/dev/ttyUSB0", 115200
@@ -419,15 +425,20 @@ def save_device_config(
     filter_bank_state: FilterBankState,
     stage_state: StageState,
 ) -> None:
-    """Write runtime values (exposure, gain, revolver positions, stage position) back.
+    """Write runtime values (exposure, gain, wheel positions, stage position) back.
 
-    The file is re-read rather than kept from startup, so edits made while newswitch was
+    They always go into the persistent file; the static one is never written. The source
+    file is re-read rather than kept from startup, so edits made while newswitch was
     running are preserved; only the runtime values are merged in.
     """
     if not app_context.config_file:
         return
     try:
-        cfg_file = config_io.load_config(app_context.config_file)
+        cfg_file = config_io.open_config(
+            app_context.static_config_path,
+            app_context.persistent_config_path,
+            from_static=app_context.load_from_static_config_path,
+        )
         adapters.sync_runtime_state(
             cfg_file.config, camera_state, objective_state, filter_bank_state, stage_state
         )
