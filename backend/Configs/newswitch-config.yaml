@@ -1,0 +1,235 @@
+# newswitch device configuration -- static file (static_config_path in base_config.yaml).
+# newswitch never writes this file; runtime and firmware changes go into the persistent
+# file (persistent_config_path).
+#
+# Schema: Configs/schemas/newswitch-config.schema.yaml (generated, do not edit)
+# Keys:   see backend/newswitch/config_io/devices.py and Configs/README.md
+#
+# Based on "OPT1- uc2-combined-connection.yaml":
+# - All connection information is in the controllers. Their mapping assigns the other
+#   devices (axes, lasers, cameras, ...) by key; id and subid address them on the
+#   controller (CAN node, or the id of the UC2-REST nomenclature).
+#   Note: the translation of id into stepper_id or laser_id is done by the software.
+# - A device may be mapped by one controller only, and (controller, id, subid) is unique.
+# - Wheels for filters and/or objectives are stages with a single axis whose pos presets
+#   name the filters/objectives ("null" = empty position).
+# - Further keys (e.g. optikit_dsn_variable) are allowed; newswitch keeps but ignores them.
+#
+# Open points:
+#  - How to handle triggering
+#  - Which user-changeable parameters (exposure time, gain, pos, ...) should be set here
+#    (currently mostly the limits and units are set)
+
+newswitch_version: v1.0.2
+devices:
+
+  # --- MAIN BOARDS ---
+  my-standalone-board:
+    type: controller
+    name: UC2-Mainboard-v4
+    manufacturer: openUC2
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port_pattern: /dev/ttyUSB*
+        baudrate: 115200
+    firmware:
+      name: esp32-uc2-standalone-4
+      version: v2026.0.0-beta.3
+    mapping:
+      my-laser-serial:
+        type: serial-laser
+        id: 2
+        pwm_max: 1023
+      my-laser-can:
+        type: canopen-laser
+        id: 0
+        subid: 1
+        pwm_max: 1023
+      my-first-axis:
+        type: canopen-motor
+        id: 0
+        subid: 2
+
+  my-hat-board-via-can:
+    type: controller
+    name: CAN_HAT
+    manufacturer: someDude
+    connection:
+      protocol: canopen
+      transport:
+        type: can
+        interface: socketcan
+        channel: can0
+        bitrate: 500000
+    mapping:
+      top-illumination-LED:
+        type: canopen-laser
+        id: 21
+        subid: 0
+        pwm_max: 1023
+      my-filter-wheel-axis:
+        type: canopen-revolver
+        id: 4
+        subid: 1
+      my-second-axis:
+        type: canopen-motor
+        id: 22
+        subid: 0
+
+  my-hat-board-via-serial:
+    type: controller
+    name: SERIAL_HAT
+    manufacturer: someDude
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port_pattern: /dev/ttyACM*
+        baudrate: 921600
+    # Alternative to my-hat-board-via-can: move its mapping entries here to drive those
+    # devices through this board instead.
+    mapping: {}
+
+  my-usb3-camera-controll:
+    type: controller
+    name: USB3-Camera-Controller
+    manufacturer: theRPIGuys
+    connection:
+      protocol: usb3-vision
+    # Alternative to my-gigE-camera-controll for bigcamera42, e.g.
+    #   bigcamera42: {type: usb3-vision-camera, id: 0, serial_number: 00F12345678, index: 0}
+    mapping: {}
+
+  my-gigE-camera-controll:
+    type: controller
+    name: GigE-Camera-Controller
+    manufacturer: theRPIGuys
+    connection:
+      protocol: gige-vision
+    mapping:
+      bigcamera42:
+        type: gige-vision-camera
+        id: 0
+        serial_number: abcd1234
+        index: 0
+
+  # --- LASERS AND LEDS ---
+  my-laser-serial:
+    type: lightsource
+    name: boison-488
+    manufacturer: Boison
+    wavelength: 488
+    bandwidth: 2.0
+    spec_shape: gauss
+    coherence: coherent
+
+  my-laser-can:
+    type: lightsource
+    name: jenoptik-1310
+    manufacturer: Jenoptik
+    wavelength: 1310
+    bandwidth: 2.0
+    spec_shape: gauss
+    coherence: coherent
+
+  top-illumination-LED:
+    type: lightsource
+    name: cool-led
+    manufacturer: TheLEDCompany
+    wavelength: 193
+    bandwidth: 200
+    spec_shape: gauss
+
+  # --- STAGES, AXES AND WHEELS ---
+  my-filter-wheel:
+    type: stage
+    name: filter-wheel-1
+    manufacturer: openUC2
+    axes:
+      rz: my-filter-wheel-axis
+
+  my-filter-wheel-axis:
+    type: axis
+    steps_per_um: 8.0
+    pos:
+      preset_vals: {0: "null", 1000: flt-gfp, 2000: flt-tritc}
+      selected_index: 0
+
+  my-first-axis:
+    type: axis
+    steps_per_um: 8.0
+    homing_required: true
+    pos: {min: 0.0, max: 100000.0, unit: um}
+    vel: {value: 5000.0, unit: um/s}
+    optikit_dsn_variable: sample-x
+
+  my-second-axis:
+    type: axis
+    name: scanning-axis
+    manufacturer: openUC2
+    steps_per_um: 8.0
+    pos: {min: 0.0, max: 100000.0, unit: um}
+    vel: {value: 5000.0, unit: um/s}
+    optikit_dsn_variable: sample-z
+
+  just-some-boring-stage:
+    type: stage
+    name: xyz-linear-100
+    manufacturer: openUC2
+    homing_order: [z, x]
+    axes:
+      x: my-first-axis
+      z: my-second-axis
+
+  # --- FILTERS (in my-filter-wheel) ---
+  flt-gfp:
+    type: filter
+    name: GFP 525/50
+    wavelength: 525.0
+    bandwidth: 50.0
+    spec_shape: tophat
+    transmission: 0.92
+
+  flt-tritc:
+    type: filter
+    name: TRITC 572/28
+    wavelength: 572.0
+    bandwidth: 28.0
+    spec_shape: tophat
+    transmission: 0.9
+
+  # --- CAMERAS ---
+  bigcamera42:
+    type: detector
+    name: MV-CA023-10UM
+    manufacturer: HIK ROBOTICS
+    tags:
+      - monochrome
+      - global-shutter
+      - gige
+    pixelcount: [1920, 1200]
+    pixelpitch_um: 10.0
+    channels: 1
+    exposure_time_ms:
+      value: 25.0
+      min: 0.024
+      max: 10000.0
+      inc: 0.001
+      unit: ms
+    framerate_per_sec:
+      value: 163.0
+      min: 0.5
+      max: 163.0
+      unit: Hz
+    gain_db:
+      value: 0.0
+      min: 0.0
+      max: 23.98
+      inc: 0.01
+      unit: dB
+    binning: 1
+    trigger:
+      type: hardware
+      edge: rising

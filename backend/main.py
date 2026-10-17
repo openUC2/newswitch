@@ -18,24 +18,5 @@ from pathlib import Path
 
 from newswitch.app import ImswitchConfig, create_app
 
-
-def load_config() -> ImswitchConfig:
-    """Build the app config, optionally from the NEWSWITCH_CONFIG JSON file."""
-    config_path = os.environ.get("NEWSWITCH_CONFIG")
-    if not config_path:
-        return ImswitchConfig()
-
-    candidate = Path(config_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = Path(__file__).resolve().parent / candidate
-
-    return ImswitchConfig.model_validate_json(candidate.read_text())
-
-
-app = create_app(load_config())
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8099)
+# Settings, including which device configuration to load, come from base_config.yaml.
+app = create_app(ImswitchConfig())

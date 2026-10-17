@@ -1,0 +1,2 @@
+- fix /backend/configs.py for correct deployment
+- remove /backend/configs -> thats only for development purposes

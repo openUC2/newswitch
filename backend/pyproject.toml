@@ -6,7 +6,7 @@ readme-content-type = "text/markdown"
 homepage = "https://arkitekt.live"
 description = "A better openuc2 backend"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
-requires-python = ">=3.11, <4.0"
+requires-python = ">=3.11, <3.13"
 license = "GPL-3.0-or-later"
 dependencies = [
     "aiosqlite>=0.22.1",
@@ -27,7 +27,9 @@ dependencies = [
     "uvicorn>=0.40.0",
     "zarrs>=0.2.2",
     "zstandard>=0.25.0",
-    "argon2-cffi>=25.1.0",
+    "jsonschema>=4.18",
+    "pydantic-settings>=2",
+    "ruamel-yaml>=0.18",
 ]
 
 [project.optional-dependencies]
