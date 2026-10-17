@@ -1,6 +1,6 @@
 """Fixtures for the `newswitch.config_io` tests.
 
-Documents are built in the tests themselves instead of reading ``backend/Configs``,
+Documents are built in the tests themselves instead of reading ``backend/configs``,
 which is a development-only folder; only ``test_schema_drift.py`` looks at the real
 files. They are written into `config_dir`, a temporary folder from the top-level conftest.
 """

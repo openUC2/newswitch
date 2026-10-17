@@ -755,7 +755,7 @@ default_app_registry.register(scan_region)</code></pre>
             <tr><td><code>newswitch/hooks/</code></td><td>Policy functions bound through the <code>HookManager</code>, e.g. software autofocus.</td></tr>
             <tr><td><code>newswitch/broadcasters/</code></td><td>FrameBroadcaster and encoders.</td></tr>
             <tr><td><code>newswitch/routes/</code></td><td>Hand-written non-rekuest routes: <code>/stream</code> websockets, file and cache HTTP.</td></tr>
-            <tr><td><code>configs/</code></td><td>Whole-microscope setup files loaded via <code>NEWSWITCH_CONFIG</code>: <code>uc2_serial.json</code>, <code>uc2_canopen.json</code>.</td></tr>
+            <tr><td><code>configs/</code></td><td>Device configuration read via <code>base_config.yaml</code> (<code>newswitch-config.yaml</code>, generated schema in <code>schemas/</code>), and whole-microscope setup files loaded via <code>NEWSWITCH_CONFIG</code>: <code>uc2_serial.json</code>, <code>uc2_canopen.json</code>.</td></tr>
             <tr><td><code>tests/</code></td><td>pytest; agent-level tests drive the app through <code>AsyncAgentTestClient</code>.</td></tr>
           </tbody>
         </table>

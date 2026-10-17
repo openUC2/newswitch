@@ -5,9 +5,9 @@ newswitch reads **one** YAML file describing every device. The code lives in
 
 | Location | Purpose |
 | --- | --- |
-| `Configs/newswitch-config.yaml` | Static device configuration (example setup); newswitch never writes it |
-| `Configs/newswitch-config.persistent.yaml` | Persistent configuration: receives every change (git-ignored) |
-| `Configs/schemas/newswitch-config.schema.yaml` | JSON Schema (Draft 2020-12) as YAML, generated from the dataclasses |
+| `configs/newswitch-config.yaml` | Static device configuration (example setup); newswitch never writes it |
+| `configs/newswitch-config.persistent.yaml` | Persistent configuration: receives every change (git-ignored) |
+| `configs/schemas/newswitch-config.schema.yaml` | JSON Schema (Draft 2020-12) as YAML, generated from the dataclasses |
 | `newswitch/config_io/devices.py` | One dataclass per device type — the source of truth |
 | `newswitch/config_io/values.py` | `PhysVal`, `Trigger`, `Firmware` |
 | `newswitch/config_io/connection.py` | Controller connections, see `backend/docs/connection-reference.md` |
@@ -18,7 +18,7 @@ newswitch reads **one** YAML file describing every device. The code lives in
 ```bash
 cd backend
 uv run python -m newswitch.config_io                  # validate + list the configured devices
-uv run python -m newswitch.config_io Configs/other.yaml  # any other file
+uv run python -m newswitch.config_io configs/other.yaml  # any other file
 uv run python -m newswitch.config_io --export-schema  # regenerate the schema after model changes
 ```
 

@@ -35,7 +35,7 @@ def virtual_microscope_app() -> FastAPI:
     """
     # Authentication is bypassed rather than satisfied: AsyncAgentTestClient hardcodes
     # its websocket init payload, so there is no seam to hand it a token through.
-    # config_file=None: built-in virtual devices; never writes into backend/Configs
+    # config_file=None: built-in virtual devices; never writes into backend/configs
     app = create_app(ImswitchConfig(config_file=None), authenticator=AllowAllAuthenticator())
     return app
 
@@ -43,8 +43,8 @@ def virtual_microscope_app() -> FastAPI:
 # ---------------------------------------------------------------------------
 # Config fixtures for the newswitch.config_io tests.
 #
-# The tests build their own documents instead of reading backend/Configs, which
-# is a development-only folder (see Configs/__note__.md) and will disappear once
+# The tests build their own documents instead of reading backend/configs, which
+# is a development-only folder (see configs/__note__.md) and will disappear once
 # the deployment paths are final. Only tests/config_io/test_schema_drift.py looks
 # at the real files, and it skips when they are gone.
 # ---------------------------------------------------------------------------

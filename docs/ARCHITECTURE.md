@@ -315,7 +315,7 @@ can broadcast into additional slots (e.g. stitched-map tiles).
 | `newswitch/hooks/` | Policy functions bound through the `HookManager` (e.g. software autofocus). |
 | `newswitch/broadcasters/` | FrameBroadcaster + encoders. |
 | `newswitch/routes/` | Hand-written non-rekuest routes: `/stream` websockets, file/cache HTTP. |
-| `configs/` | Whole-microscope setup files loaded via `NEWSWITCH_CONFIG` (`uc2_serial.json`, `uc2_canopen.json`). |
+| `configs/` | Device configuration read via `base_config.yaml` (`newswitch-config.yaml`, generated schema in `schemas/`, see `configs/README.md`) and whole-microscope setup files loaded via `NEWSWITCH_CONFIG` (`uc2_serial.json`, `uc2_canopen.json`). |
 | `tests/` | pytest; agent-level tests drive the app through `AsyncAgentTestClient`. |
 
 ### The "controller/manager/widget" mapping for ImSwitch veterans

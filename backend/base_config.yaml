@@ -10,8 +10,8 @@ db_path: agent_data.db
 available_cubes: [cube1, cube2, cube3]
 
 # Folders; relative paths are taken relative to this file's folder (backend/)
-config_dir: Configs
-schema_dir: Configs/schemas
+config_dir: configs
+schema_dir: configs/schemas
 
 # Device configuration; bare names are resolved against config_dir.
 # newswitch never writes static_config_path; changes always go into persistent_config_path.

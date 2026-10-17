@@ -1,9 +1,9 @@
 """Guards against drift between the dataclasses and the files shipped next to them.
 
-1. ``Configs/schemas/newswitch-config.schema.yaml`` must match the dataclasses.
-2. ``Configs/newswitch-config.yaml`` must load and pass the exported schema.
+1. ``configs/schemas/newswitch-config.schema.yaml`` must match the dataclasses.
+2. ``configs/newswitch-config.yaml`` must load and pass the exported schema.
 
-Both read the development-only ``Configs/`` folder (located via ``base_config.yaml``)
+Both read the development-only ``configs/`` folder (located via ``base_config.yaml``)
 and skip when it is gone.
 Regenerate the schema with ``uv run python -m newswitch.config_io --export-schema``.
 """

@@ -20,8 +20,8 @@ BASE: dict[str, Any] = {
     "use_virtual_microscope": True,
     "db_path": "agent_data.db",
     "available_cubes": ["cube1", "cube2"],
-    "config_dir": "Configs",
-    "schema_dir": "Configs/schemas",
+    "config_dir": "configs",
+    "schema_dir": "configs/schemas",
     "static_config_path": "static.yaml",
     "persistent_config_path": "persistent.yaml",
     "load_from_static_config_path": True,
@@ -56,7 +56,7 @@ def write_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BaseWriter:
 def test_shipped_base_config_loads() -> None:
     """The committed base_config.yaml is complete and points at the shipped device file."""
     settings = ImswitchConfig()
-    assert settings.config_dir == BASE_CONFIG_FILE.parent / "Configs"
+    assert settings.config_dir == BASE_CONFIG_FILE.parent / "configs"
     assert settings.schema_dir == settings.config_dir / "schemas"
     assert settings.static_config_path == settings.config_dir / "newswitch-config.yaml"
     assert settings.static_config_path.is_file()
@@ -75,10 +75,10 @@ def test_values_come_from_the_file(write_base: BaseWriter) -> None:
 def test_static_or_persistent(write_base: BaseWriter) -> None:
     """`load_from_static_config_path` decides which device file is used."""
     base = write_base()
-    assert ImswitchConfig().config_file == base.parent / "Configs" / "static.yaml"
+    assert ImswitchConfig().config_file == base.parent / "configs" / "static.yaml"
 
     write_base(load_from_static_config_path=False)
-    assert ImswitchConfig().config_file == base.parent / "Configs" / "persistent.yaml"
+    assert ImswitchConfig().config_file == base.parent / "configs" / "persistent.yaml"
 
 
 def test_keyword_arguments_override_the_file(write_base: BaseWriter) -> None:
@@ -97,8 +97,8 @@ def test_relative_dirs_follow_the_base_file(
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
     settings = ImswitchConfig()
-    assert settings.config_dir == base.parent / "Configs"
-    assert settings.schema_dir == base.parent / "Configs" / "schemas"
+    assert settings.config_dir == base.parent / "configs"
+    assert settings.schema_dir == base.parent / "configs" / "schemas"
 
 
 def test_explicit_paths_are_kept(write_base: BaseWriter, tmp_path: Path) -> None:

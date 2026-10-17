@@ -2,8 +2,8 @@
 # newswitch never writes this file; runtime and firmware changes go into the persistent
 # file (persistent_config_path).
 #
-# Schema: Configs/schemas/newswitch-config.schema.yaml (generated, do not edit)
-# Keys:   see backend/newswitch/config_io/devices.py and Configs/README.md
+# Schema: configs/schemas/newswitch-config.schema.yaml (generated, do not edit)
+# Keys:   see backend/newswitch/config_io/devices.py and configs/README.md
 #
 # Based on "OPT1- uc2-combined-connection.yaml":
 # - All connection information is in the controllers. Their mapping assigns the other
