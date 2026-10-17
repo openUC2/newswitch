@@ -1,10 +1,12 @@
 """Pytest configuration and shared fixtures for newswitch tests.
 
 This module provides common fixtures used across multiple test modules,
-including the virtual microscope FastAPI application.
+including the virtual microscope FastAPI application and the config-directory
+fixture used by the `newswitch.config_io` tests.
 """
 
 import asyncio
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -33,8 +35,34 @@ def virtual_microscope_app() -> FastAPI:
     """
     # Authentication is bypassed rather than satisfied: AsyncAgentTestClient hardcodes
     # its websocket init payload, so there is no seam to hand it a token through.
-    app = create_app(ImswitchConfig(), authenticator=AllowAllAuthenticator())
+    # config_file=None: built-in virtual devices; never writes into backend/configs
+    app = create_app(ImswitchConfig(config_file=None), authenticator=AllowAllAuthenticator())
     return app
+
+
+# ---------------------------------------------------------------------------
+# Config fixtures for the newswitch.config_io tests.
+#
+# The tests build their own documents instead of reading backend/configs, which
+# is a development-only folder (see configs/__note__.md) and will disappear once
+# the deployment paths are final. Only tests/config_io/test_schema_drift.py looks
+# at the real files, and it skips when they are gone.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def config_dir(tmp_path: Path) -> Path:
+    """A throwaway folder for the configuration files of one test.
+
+    Args:
+        tmp_path: Pytest's built-in temporary path fixture.
+
+    Returns:
+        Path to the temporary config directory.
+    """
+    root = tmp_path / "configs"
+    root.mkdir()
+    return root
 
 
 async def collect_until_completed(

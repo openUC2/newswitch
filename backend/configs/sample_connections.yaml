@@ -1,0 +1,106 @@
+devices:
+  # --- uc2-rest over different transports -------------------------------
+  some-serial-stage:
+    name: stage
+
+    connection:
+      protocol: uc2-rest
+      response_timeout: 2.0
+      transport:
+        type: serial
+        port_pattern: /dev/serial/by-id/*CP2102*
+        baudrate: 115200
+        reset_on_connect: true
+        boot_delay: 2.0
+
+  some-http-stage:
+    name: stage-wifi
+    connection:
+      protocol: uc2-rest
+      transport: { type: http, host: uc2-stage.local }
+
+  some-rs422-controller:
+    name: remote-ctrl
+    connection:
+      protocol: uc2-rest
+      response_timeout: 3.0
+      retries: 2
+      transport:
+        type: rs422
+        port: /dev/serial/by-id/usb-FTDI_USB-RS422_Cable_FT1ABCDE-if00-port0
+        baudrate: 921600
+
+  # --- Modbus RTU on one RS485 bus (two slaves share the adapter) ------------
+  some-rs485-device:
+    name: heater
+    connection:
+      protocol: modbus
+      unit_id: 1
+      transport:
+        type: rs485
+        port: /dev/serial/by-id/usb-FTDI_USB-RS485_Cable_FT9XYZAB-if00-port0
+        baudrate: 19200
+        parity: E
+        direction_control: auto
+
+  some-rs485-pump:
+    name: pump
+    connection:
+      protocol: modbus
+      unit_id: 3
+      response_timeout: 1.0
+      transport:
+        type: rs485
+        port: /dev/serial/by-id/usb-FTDI_USB-RS485_Cable_FT9XYZAB-if00-port0
+        baudrate: 19200
+        parity: E
+        direction_control: auto
+        timeout: 2.0            # per-user setting, may differ
+
+  # --- CANopen -----------------------------------------------------------
+  some-canopen-motor:
+    name: z-motor
+    connection:
+      protocol: canopen
+      node_id: 5
+      eds_file: ./eds/motor.eds
+      heartbeat_period_ms: 1000
+      transport: { type: can, channel: can0, bitrate: 500000 }
+
+  # --- I2C register devices (sharing bus 1) --------------------------------
+  some-i2c-temp-sensor:
+    name: temp-sensor
+    connection:
+      protocol: register-map
+      register_width: 8
+      byte_order: big
+      transport: { type: i2c, bus: 1, address: 0x48 }
+
+
+  some-i2c-led-dac:
+    name: led-dac
+    connection:
+      protocol: register-map
+      register_width: 8
+      byte_order: big
+      transport: { type: i2c, bus: 1, address: 0x48 }
+
+  some-i2c-led-dac:
+    name: led-dac
+    connection:
+      protocol: register-map
+      transport: { type: i2c, bus: 1, address: 0x60 }
+
+  # --- cameras -------------------------------------------------------------
+  some-gigE-camera-main:
+    name: cam-main
+    connection:
+      protocol: gige-vision
+      serial_number: "DA1234567"
+      packet_size: 9000
+
+  some-usb3-camera:
+    name: cam-side
+    connection:
+      protocol: usb3-vision
+      user_defined_name: side-view

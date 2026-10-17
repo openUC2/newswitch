@@ -1,0 +1,280 @@
+"""Tests for writing runtime and firmware values back into the YAML file."""
+
+from __future__ import annotations
+
+import textwrap
+from typing import Callable
+
+import pytest
+
+from newswitch.config_io import (
+    AxisConfig,
+    ConfigError,
+    ConfigFile,
+    DetectorConfig,
+    load_config,
+)
+
+from .conftest import DocWriter, get_device
+
+DOC = textwrap.dedent(
+    """\
+    # top comment
+    newswitch_version: v1.0.0
+    devices:
+      mainboard:
+        type: controller
+        name: Board
+        connection:
+          protocol: simulated
+          transport: {type: simulated}
+        firmware: {name: fw, version: v1}
+        mapping:
+          cam: {type: camera, id: 0}
+          ax-x: {type: canopen-motor, id: 11}
+          wheel-axis: {type: canopen-revolver, id: 4}
+
+      cam:
+        type: detector
+        name: Cam   # inline comment
+        exposure_time_ms:
+          value: 10.0
+          min: 0.1
+          max: 1000.0
+          unit: ms
+        gain_db: 2.0
+        framerate_per_sec: null
+
+      stage:
+        type: stage
+        name: XY
+        axes: {x: ax-x}
+
+      ax-x:
+        type: axis
+        steps_per_um: 8.0
+        homing_required: true
+        pos: {value: 0.0, min: 0.0, max: 1000.0, unit: um}
+        optikit_dsn_variable: sample-x
+
+      wheel:
+        type: stage
+        name: Wheel
+        axes: {rz: wheel-axis}
+
+      wheel-axis:
+        type: axis
+        steps_per_um: 1.0
+        pos:
+          preset_vals: {0: gfp, 500: "null"}
+          unit: um
+
+      gfp:
+        type: filter
+        name: GFP
+        wavelength: 525
+    """
+)
+
+
+def _saved(write_doc: DocWriter, change: Callable[[ConfigFile], None] | None = None) -> str:
+    path = write_doc(DOC)
+    cfg_file = load_config(path)
+    if change is not None:
+        change(cfg_file)
+    cfg_file.save(backup=False)
+    return path.read_text(encoding="utf-8")
+
+
+def test_scalar_and_null_phys_become_mappings(write_doc: DocWriter) -> None:
+    """Unchanged, only the scalar physical value is rewritten, as a mapping."""
+    text = _saved(write_doc)
+    expected = DOC.replace("    gain_db: 2.0\n", "    gain_db:\n      value: 2.0\n      unit: dB\n")
+    assert text == expected  # comments, blank lines and flow style survive
+
+
+def test_untouched_file_is_identical(write_doc: DocWriter) -> None:
+    """A file without scalar physical values survives a save byte for byte."""
+    doc = DOC.replace("    gain_db: 2.0\n", "")
+    path = write_doc(doc)
+    load_config(path).save(backup=False)
+    assert path.read_text(encoding="utf-8") == doc
+
+
+def test_runtime_value_written(write_doc: DocWriter) -> None:
+    """A value changed at runtime replaces the old one in place."""
+
+    def change(cfg_file: ConfigFile) -> None:
+        exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
+        pos = get_device(cfg_file.config, "ax-x", AxisConfig).pos
+        wheel = get_device(cfg_file.config, "wheel-axis", AxisConfig).pos
+        assert exposure is not None and pos is not None and wheel is not None
+        exposure.value = 20.0
+        pos.value = 12.5
+        wheel.selected_index = 1
+
+    text = _saved(write_doc, change)
+    assert "      value: 20.0\n      min: 0.1" in text
+    assert "pos: {value: 12.5, min: 0.0, max: 1000.0, unit: um}" in text
+    assert (
+        '      preset_vals: {0: gfp, 500: "null"}\n      unit: um\n      selected_index: 1\n\n'
+        in text
+    )
+
+
+def test_firmware_limits_keep_value(write_doc: DocWriter) -> None:
+    """Limits reported by the device are added; the user's value stays."""
+
+    def change(cfg_file: ConfigFile) -> None:
+        cfg_file.apply_firmware(
+            "cam",
+            {
+                "exposure_time_ms": {"value": 99.0, "max": 500.0, "inc": 0.01},
+                "framerate_per_sec": {"min": 1.0, "max": 60.0, "preset_vals": [10, 30]},
+                "pixelcount": [1920, 1080],
+            },
+        )
+
+    text = _saved(write_doc, change)
+    assert (
+        "      value: 10.0\n      min: 0.1\n      max: 500.0\n      unit: ms\n      inc: 0.01"
+        in text
+    )
+    assert (
+        "framerate_per_sec:\n      min: 1.0\n      max: 60.0\n      unit: Hz\n      preset_vals: [10.0, 30.0]"
+        in text
+    )
+    # a new key goes above the blank line that separates devices
+    assert "    pixelcount: [1920, 1080]\n\n  stage:" in text
+
+
+def test_firmware_full_and_units(write_doc: DocWriter) -> None:
+    """Axis values are taken over completely and converted into the field's unit."""
+
+    def change(cfg_file: ConfigFile) -> None:
+        cfg_file.apply_firmware(
+            "ax-x",
+            {
+                "vel": {"value": 2.0, "max": 5.0, "unit": "mm/s"},
+                "steps_per_um": 16.0,
+                "manufacturer": "openUC2",
+            },
+        )
+
+    text = _saved(write_doc, change)
+    assert "    steps_per_um: 16.0\n" in text
+    assert (
+        "    optikit_dsn_variable: sample-x\n    manufacturer: openUC2\n"
+        "    vel:\n      value: 2000.0\n      max: 5000.0\n      unit: um/s\n\n  wheel:"
+    ) in text
+
+
+def test_defaults_are_never_added(write_doc: DocWriter) -> None:
+    """Fields the file does not state and nobody set stay absent."""
+    text = _saved(write_doc)
+    for key in (
+        "binning:",
+        "channels: 1",
+        "manufacturer:",
+        "acc:",
+        "inverted:",
+        "selected_index:",
+    ):
+        assert key not in text
+
+
+def test_rejects_non_firmware_fields(write_doc: DocWriter) -> None:
+    """Only fields marked x_firmware can be reported."""
+    cfg_file = load_config(write_doc(DOC))
+    with pytest.raises(ConfigError, match="not a firmware-provided field"):
+        cfg_file.apply_firmware("gfp", {"wavelength": 600})
+    with pytest.raises(ConfigError, match="axes: not a firmware-provided field"):
+        cfg_file.apply_firmware("stage", {"axes": {"x": "ax-x"}})
+    with pytest.raises(ConfigError, match="inverted: not a firmware-provided field"):
+        cfg_file.apply_firmware("ax-x", {"inverted": True})
+    with pytest.raises(ConfigError, match="invalid"):
+        cfg_file.apply_firmware("cam", {"exposure_time_ms": {"max": 1.0}})  # value 10 > max
+
+
+def test_invalid_runtime_state_is_not_saved(write_doc: DocWriter) -> None:
+    """An out-of-range runtime value blocks the save and leaves the file alone."""
+    path = write_doc(DOC)
+    cfg_file = load_config(path)
+    exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None
+    exposure.value = 5000.0
+    with pytest.raises(ConfigError, match="refusing to save"):
+        cfg_file.save()
+    assert path.read_text(encoding="utf-8") == DOC
+
+
+def test_backup(write_doc: DocWriter) -> None:
+    """save() keeps the previous file as .bak by default."""
+    path = write_doc(DOC)
+    load_config(path).save()
+    assert path.with_name(path.name + ".bak").read_text(encoding="utf-8") == DOC
+
+
+def test_save_twice_writes_only_new_changes(write_doc: DocWriter) -> None:
+    """After a save the snapshot is current, so a second save changes nothing."""
+    path = write_doc(DOC)
+    cfg_file = load_config(path)
+    cfg_file.save(backup=False)
+    first = path.read_text(encoding="utf-8")
+    cfg_file.save(backup=False)
+    assert path.read_text(encoding="utf-8") == first
+    gain = get_device(load_config(path).config, "cam", DetectorConfig).gain_db
+    assert gain is not None and gain.value == 2.0
+
+
+PRESET_DOC = DOC.replace(
+    "      unit: ms\n    gain_db: 2.0\n",
+    "      unit: ms\n      preset_vals: [1.0, 10.0]\n    gain_db: 2.0\n",
+)
+
+
+def test_runtime_selection_written(write_doc: DocWriter) -> None:
+    """A preset chosen at runtime is written back next to the presets."""
+    path = write_doc(PRESET_DOC)
+    cfg_file = load_config(path)
+    exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None
+    exposure.selected_index = 1
+    cfg_file.save(backup=False)
+    assert "      preset_vals: [1.0, 10.0]\n      selected_index: 1\n" in path.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_firmware_named_presets_keep_selection(write_doc: DocWriter) -> None:
+    """Named presets from the device become a mapping; the user's selection stays."""
+    path = write_doc(PRESET_DOC.replace("[1.0, 10.0]\n", "[1.0, 10.0]\n      selected_index: 1\n"))
+    cfg_file = load_config(path)
+    presets = {1.0: "short", 10.0: "mid", 100.0: "long"}
+    cfg_file.apply_firmware(
+        "cam", {"exposure_time_ms": {"preset_vals": presets, "selected_index": 0}}
+    )
+    cfg_file.save(backup=False)
+
+    exposure = get_device(load_config(path).config, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None
+    assert exposure.preset_vals == presets
+    assert exposure.selected_index == 1
+    assert "      selected_index: 1\n" in path.read_text(encoding="utf-8")
+
+
+def test_unchanged_named_presets_keep_their_spelling(write_doc: DocWriter) -> None:
+    """Integer keys in the file equal the float keys of the model; nothing is rewritten."""
+    doc = DOC.replace(
+        "      unit: ms\n    gain_db: 2.0\n",
+        "      unit: ms\n      preset_vals: {1: short, 10: long}\n    gain_db: 2.0\n",
+    )
+    path = write_doc(doc)
+    cfg_file = load_config(path)
+    exposure = get_device(cfg_file.config, "cam", DetectorConfig).exposure_time_ms
+    assert exposure is not None and exposure.preset_vals == {1.0: "short", 10.0: "long"}
+    exposure.value = 20.0
+    cfg_file.save(backup=False)
+    text = path.read_text(encoding="utf-8")
+    assert "      value: 20.0\n" in text
+    assert "      preset_vals: {1: short, 10: long}\n" in text

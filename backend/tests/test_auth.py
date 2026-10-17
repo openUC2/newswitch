@@ -43,7 +43,7 @@ def store(tmp_path: Path) -> UserStore:
 def authed_app(store: UserStore) -> FastAPI:
     """The app with a real account store, so the gate is actually exercised."""
     return create_app(
-        ImswitchConfig(),
+        ImswitchConfig(config_file=None),
         authenticator=UserStoreAuthenticator(store),
     )
 

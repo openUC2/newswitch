@@ -10,6 +10,8 @@
 **/.vscode/*
 !**/.vscode/settings.json
 !**/.vscode/extensions.json
+# Personal Claude Code settings and notes
+.claude/
 
 # ---------- Env ----------
 # The root .env (ports for the whole stack) plus frontend/.env and frontend/.env.docker
@@ -104,3 +106,12 @@ frontend/.auth/
 # ---------- Docs ----------
 docs/_build/
 /site
+
+# Backups written by newswitch.config_io when saving the device config
+backend/configs/*.bak
+
+# Local hardware settings and generated browser-test reports
+backend/configs/*.local.json
+backend/configs/*.persistent.yaml
+frontend/playwright-report/
+frontend/test-results/

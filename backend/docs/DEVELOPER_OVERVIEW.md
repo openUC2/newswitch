@@ -30,7 +30,24 @@ File: newswitch/app.py
   - `LocalFileIOManager`
 - **FrameBroadcaster** is created to serve live video encoders and share video streams.
 - **Startup hook** (`provide_managers`) returns all managers and states to the agent.
+- **Shutdown hook** (`save_device_config`) writes runtime values back into the device config.
 - **Background hook** (`run_detector_loop`) keeps acquisition running for live view.
+
+### Device configuration (`newswitch/config_io/`)
+
+`ImswitchConfig` reads `backend/base_config.yaml` (no environment variables, unknown keys are
+errors). The device configuration is read from `static_config_path`
+(`configs/newswitch-config.yaml`) or, with `load_from_static_config_path: false`, from
+`persistent_config_path`, which is created as a copy of the static file on first start;
+bare names resolve against `config_dir` (`backend/configs/`). The static file is never
+written: every change goes into the persistent one. At startup `config_io.open_config()`
+validates the file (jsonschema per device type, pydantic, cross-device references) into one
+dataclass per device, and `config_io.adapters` turns those into the managers' dataclasses
+(`Illumination`, `Detector`, `ObjectiveLens`, `Filter`, stage limits, serial port).
+Connection data lives only in controllers, whose `mapping` assigns the other devices.
+A device kind missing from the file, or `config_file=None` (the tests), keeps the manager's
+built-in virtual defaults. On shutdown exposure, gain, wheel positions and stage position
+are written back; comments stay intact. Details: `backend/configs/README.md`.
 
 ### Registered functions
 
@@ -76,6 +93,7 @@ File: newswitch/routes/ws/liveview.py
 ## Where to look next
 
 - Protocols and state definitions: newswitch/protocols/
+- Device configuration: newswitch/config_io/ and backend/configs/README.md
 - Manager implementations: newswitch/managers/
 - Frame generation and helpers: newswitch/managers/helpers/
 - Routes: newswitch/routes/http/ and newswitch/routes/ws/

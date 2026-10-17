@@ -6,11 +6,18 @@ for controlling a virtual microscope through registered functions.
 """
 
 import os
+from pathlib import Path
 from typing import Any, Optional, Tuple
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 from newswitch.hooks.software_autofocus import software_autofocus_hook
 from rekuest_next import pausepoint, progress
 from rekuest_next.agents.base import app_context
@@ -23,6 +30,7 @@ from rekuest_next import jsx
 import koil
 from rekuest_next.register import register
 from rekuest_next.agents.hooks.startup import startup
+from rekuest_next.agents.hooks.shutdown import shutdown
 from rekuest_next.agents.hooks.background import background
 
 
@@ -71,6 +79,8 @@ from newswitch.protocols.calibration import CalibrationState
 from newswitch.protocols.detector import Detector
 from newswitch.protocols.io import IOManager, IOState
 from newswitch import protocols
+from newswitch import config_io
+from newswitch.config_io import adapters
 
 # Import concrete implementations
 from newswitch.managers.virtual import (
@@ -79,6 +89,10 @@ from newswitch.managers.virtual import (
     VirtualDetectorManager,
     VirtualObjectiveManager,
     VirtualFilterBankManager,
+    FilterBankConfig,
+    LEDConfig,
+    ObjectiveConfig,
+    StageConfig as VirtualStageConfig,
 )
 from newswitch.managers.io import LocalFileIOManager, LocalFileConfig
 
@@ -111,16 +125,46 @@ from newswitch.managers.python_hook_manager import PythonHookManager
 # ====================
 
 
-@app_context
-class ImswitchConfig(BaseModel):
-    """Configuration for imswitch application."""
+#: The base settings file; see the comments in it. Relative folders in it are taken
+#: relative to its own folder, so the working directory does not matter.
+BASE_CONFIG_FILE = Path(__file__).parent.parent / "base_config.yaml"
 
-    server: str = "localhost"
-    port: int = 8001
-    # Without an explicit hardware config, start safely in simulation mode.
-    use_virtual_microscope: bool = True
-    db_path: str = "agent_data.db"
-    available_cubes: list[str] = ["cube1", "cube2", "cube3"]
+
+@app_context
+class ImswitchConfig(BaseSettings):
+    """Configuration for imswitch application, read from `BASE_CONFIG_FILE`.
+
+    Keyword arguments override the file, e.g. ``ImswitchConfig(config_file=None)``.
+    Host and port are not part of it; they come from BACKEND_HOST / BACKEND_PORT.
+    """
+
+    # extra="forbid": a misspelled key in base_config.yaml is an error, not ignored
+    model_config = SettingsConfigDict(extra="forbid")
+
+    use_virtual_microscope: bool
+    db_path: str
+    available_cubes: list[str]
+
+    config_dir: Path
+    """Folder of the device configuration files."""
+    schema_dir: Path
+    """Folder of the generated schema files."""
+
+    static_config_path: Path
+    persistent_config_path: Path
+    load_from_static_config_path: bool
+
+    config_file: Optional[Path] = Field(
+        default_factory=lambda data: (
+            data["static_config_path"]
+            if data["load_from_static_config_path"]
+            else data["persistent_config_path"]
+        )
+    )
+    """Device configuration read at startup: `static_config_path` or
+    `persistent_config_path` (changes always go into the persistent one, see
+    `config_io.open_config`). None keeps the built-in virtual devices."""
+
     # UC2 hardware transport (used when use_virtual_microscope is False).
     # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
     # over serial JSON). Both are plug-in replacements behind UC2BusManager.
@@ -140,6 +184,53 @@ class ImswitchConfig(BaseModel):
     uc2_illumination: dict[str, Any] = {}
     uc2_objective: dict[str, Any] = {}
     uc2_filter_bank: dict[str, Any] = {}
+
+    def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
+        """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
+
+        Declared explicitly so type checkers do not demand every field as an argument:
+        the values normally come from the file, which they cannot see.
+        """
+        super().__init__(**values)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_comment_keys(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        # JSON has no comments, so the files in backend/configs/ carry them as "_comment"
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if not str(key).startswith("_")}
+        return data
+
+    @field_validator("config_dir", "schema_dir")
+    @classmethod
+    def _relative_to_base_config(cls, path: Path) -> Path:
+        return path if path.is_absolute() else BASE_CONFIG_FILE.parent / path
+
+    @field_validator("static_config_path", "persistent_config_path")
+    @classmethod
+    def _bare_name_in_config_dir(cls, path: Path, info: ValidationInfo) -> Path:
+        # an explicit path (absolute, or with a directory part) is taken as given
+        if path.is_absolute() or path.parent != Path("."):
+            return path
+        return info.data["config_dir"] / path
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Read keyword arguments, then `BASE_CONFIG_FILE`; never the environment.
+
+        Raises:
+            FileNotFoundError: `BASE_CONFIG_FILE` does not exist.
+        """
+        if not BASE_CONFIG_FILE.is_file():
+            raise FileNotFoundError(f"{BASE_CONFIG_FILE} is missing; newswitch needs it to start")
+        return (init_settings, YamlConfigSettingsSource(settings_cls, yaml_file=BASE_CONFIG_FILE))
 
 
 # ====================
@@ -224,18 +315,60 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
 
     uc2_state = UC2State()
 
+    # Devices from the device configuration (static or persistent file, see
+    # base_config.yaml); every manager whose device kind is missing from it (or when no
+    # file is configured) keeps its built-in defaults.
+    devices = None
+    if config.config_file is not None:
+        devices = config_io.open_config(
+            config.static_config_path,
+            config.persistent_config_path,
+            from_static=config.load_from_static_config_path,
+        ).config
+    led_config = objective_config = filter_bank_config = virtual_stage_config = None
+    configured_detectors = None
+    if devices is not None:
+        sources = adapters.illuminations(devices)
+        if sources is not None:
+            led_config = LEDConfig(sources=sources)
+        lenses = adapters.objective_lenses(devices)
+        if lenses is not None:
+            objective_config = ObjectiveConfig(objectives=lenses[0], default_slot=lenses[1])
+        filters = adapters.filters(devices)
+        if filters is not None:
+            filter_bank_config = FilterBankConfig(filters=filters[0], default_slot=filters[1])
+        configured_detectors = adapters.detectors(devices)
+        if devices.stages:
+            adapters.apply_stage_limits(devices, stage_state)
+            virtual_stage_config = VirtualStageConfig(
+                min_x=stage_state.min_x,
+                max_x=stage_state.max_x,
+                min_y=stage_state.min_y,
+                max_y=stage_state.max_y,
+                min_z=stage_state.min_z,
+                max_z=stage_state.max_z,
+                min_a=stage_state.min_a,
+                max_a=stage_state.max_a,
+            )
+
     if config.use_virtual_microscope:
         uc2_bus: UC2BusManager = VirtualUC2Bus(state=uc2_state)
-        stage: StageManager = VirtualStageManager(stage=stage_state)
-        led: IlluminationManager = VirtualLEDManager(illumination_state=illumination_state)
+        stage: StageManager = VirtualStageManager(stage=stage_state, config=virtual_stage_config)
+        led: IlluminationManager = VirtualLEDManager(
+            illumination_state=illumination_state, config=led_config
+        )
     else:
         if config.uc2_transport == "rest":
-            # Nested per-component overrides win over the flat convenience fields.
             rest_kwargs: dict[str, Any] = {
                 "serialport": config.uc2_serial_port,
                 "baudrate": config.uc2_baudrate,
-                **config.uc2_rest,
             }
+            # A uc2-rest controller in the device configuration wins over the flat
+            # convenience fields; nested per-component overrides win over both.
+            serial_cfg = adapters.serial_settings(devices) if devices is not None else None
+            if serial_cfg is not None:
+                rest_kwargs.update(serialport=serial_cfg.port, baudrate=serial_cfg.baudrate)
+            rest_kwargs.update(config.uc2_rest)
             uc2_bus = UC2RestBus(state=uc2_state, config=UC2RestBusConfig(**rest_kwargs))
         else:
             can_kwargs: dict[str, Any] = {
@@ -261,9 +394,11 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
 
     # Objective + filter wheel: real bus-backed managers on hardware, virtual in sim.
     if config.use_virtual_microscope:
-        objective: ObjectiveManager = VirtualObjectiveManager(objective_state=objective_state)
+        objective: ObjectiveManager = VirtualObjectiveManager(
+            objective_state=objective_state, config=objective_config
+        )
         filter_bank: FilterBankManager = VirtualFilterBankManager(
-            filter_bank_state=filter_bank_state
+            filter_bank_state=filter_bank_state, config=filter_bank_config
         )
     else:
         objective_kwargs = dict(config.uc2_objective)
@@ -292,6 +427,7 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
         broadcaster=frame_broadcaster,
         objective_state=objective_state,
         filter_bank_state=filter_bank_state,
+        detectors=configured_detectors,
     )
     io_manager = LocalFileIOManager(
         state=io_state,
@@ -384,6 +520,36 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
         cache_manager,
         autofocus_state,
     )
+
+
+@shutdown
+def save_device_config(
+    app_context: ImswitchConfig,
+    camera_state: CameraState,
+    objective_state: ObjectiveState,
+    filter_bank_state: FilterBankState,
+    stage_state: StageState,
+) -> None:
+    """Write runtime values (exposure, gain, wheel positions, stage position) back.
+
+    They always go into the persistent file; the static one is never written. The source
+    file is re-read rather than kept from startup, so edits made while newswitch was
+    running are preserved; only the runtime values are merged in.
+    """
+    if not app_context.config_file:
+        return
+    try:
+        cfg_file = config_io.open_config(
+            app_context.static_config_path,
+            app_context.persistent_config_path,
+            from_static=app_context.load_from_static_config_path,
+        )
+        adapters.sync_runtime_state(
+            cfg_file.config, camera_state, objective_state, filter_bank_state, stage_state
+        )
+        print(f"Saved device configuration to {cfg_file.save()}")
+    except config_io.ConfigError as exc:
+        print(f"Device configuration not saved: {exc}")
 
 
 @background
