@@ -19,7 +19,7 @@ dependencies = [
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
     "pystackreg>=0.2.8",
-    "rekuest-next>=2.2.1",
+    "rekuest-next>=2.3.1",
     "pyyaml>=6",
     "scipy>=1.17.0",
     "tifffile>=2026.1.28",
@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn>=0.40.0",
     "zarrs>=0.2.2",
     "zstandard>=0.25.0",
+    "argon2-cffi>=25.1.0",
     "jsonschema>=4.18",
     "pydantic-settings>=2",
     "ruamel-yaml>=0.18",
@@ -35,6 +36,12 @@ dependencies = [
 [project.optional-dependencies]
 types = [
     "annotated-types>=0.5.0",
+]
+# Real openUC2 hardware transports. uc2rest.aio is not in the current PyPI
+# release, so use the verified upstream revision that provides AsyncUC2Client.
+uc2 = [
+    "uc2-rest @ git+https://github.com/openUC2/UC2-REST.git@60f15bfc543baf41e46996cd149b298419de5eac",
+    "uc2canopen>=0.2.0",
 ]
 
 [tool.uv]
@@ -99,6 +106,9 @@ include = ["newswitch"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 markers = [

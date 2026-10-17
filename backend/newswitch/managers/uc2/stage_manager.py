@@ -1,50 +1,62 @@
-"""
-Virtual Stage Manager
+"""UC2 stage manager: implements the StageManager protocol over a UC2 bus.
 
-A virtual stage/positioner manager for microscopy simulation.
-Handles X, Y, Z, and A (angle) positioning.
+Transport-agnostic — works identically over CANopen (``UC2CanBus``) and
+serial (``UC2RestBus``). All positions are micrometers (degrees for axis A);
+unit conversion to hardware steps happens inside the bus. Position telemetry
+flows back into ``StageState`` via the UC2 event dispatcher (see
+``newswitch.managers.uc2.dispatch``), not through this manager.
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass, field
 from typing import Optional
-import uuid
+
+from koil import unkoil
+from rekuest_next import model
+from rekuest_next.state.lock import acquired_locks
 
 from newswitch.protocols.stage import StageState
-from newswitch.protocols.serial_manager import SerialManager
-from rekuest_next import model
-from .serial_manager import JSONCommand
+from newswitch.protocols.uc2 import UC2BusManager
 
 
 @model
 @dataclass
-class StageConfig:
-    """Configuration for the virtual stage."""
+class UC2StageConfig:
+    """Configuration for the UC2 stage manager."""
 
-    min_x: float = -10000.0
-    max_x: float = 10000.0
-    min_y: float = -10000.0
-    max_y: float = 10000.0
-    min_z: float = -1000.0
-    max_z: float = 1000.0
-    min_a: float = -360.0
-    max_a: float = 360.0
-    # PSF computation dimensions (height, width)
-    psf_a_dimension: int = 128
-    psf_b_dimension: int = 128
+    axes: list[str] = field(default_factory=lambda: ["X", "Y", "Z", "A"])
+    # Homing order matters mechanically: lift Z away from the sample first.
+    home_axes: list[str] = field(default_factory=lambda: ["Z", "X", "Y"])
+    registered_step_sizes: list[float] = field(
+        default_factory=lambda: [10.0, 100.0, 1000.0, 10000.0]
+    )
+    default_speed: float = 5000.0  # micrometers per second
 
 
 class UC2StageManager:
-    """
-    Docstring for Manager
-    """
+    """Stage manager driving openUC2 motors through the UC2 bus."""
 
     state: StageState
 
-    def __init__(self, stage_state: StageState, serial_manager: SerialManager) -> None:
-        """Start the manager with the given state and serial manager."""
-        self.serial_manager = serial_manager
+    def __init__(
+        self,
+        stage_state: StageState,
+        bus: UC2BusManager,
+        config: Optional[UC2StageConfig] = None,
+    ) -> None:
+        """Initialize with the shared stage state and a connected UC2 bus."""
+        self.bus = bus
         self.stage_state = stage_state
         self.state = stage_state
+        self.config = config or UC2StageConfig()
+        if not self.config.registered_step_sizes or any(
+            step <= 0 for step in self.config.registered_step_sizes
+        ):
+            raise ValueError("registered_step_sizes must contain positive values")
+        with acquired_locks("stage_position"):
+            self.stage_state.registered_step_sizes = list(self.config.registered_step_sizes)
 
     def move(
         self,
@@ -55,75 +67,43 @@ class UC2StageManager:
         step_size: Optional[float] = None,
         is_absolute: bool = False,
     ) -> None:
+        """Move the stage; blocks until all requested axes finished moving.
+
+        Cancellation (e.g. from the UI) propagates into the bus, which stops
+        the affected axes on the hardware.
         """
-        Move the stage to a new position (protocol method).
+        unkoil(self._amove, x, y, z, a, is_absolute)
 
-        Args:
-            x: X position (absolute) or offset (relative)
-            y: Y position (absolute) or offset (relative)
-            z: Z position (absolute) or offset (relative)
-            a: Angle position (absolute) or offset (relative)
-            is_absolute: If True, values are absolute positions.
-                        If False, values are relative offsets.
-
-        Returns:
-            The new stage position after the move.
-        """
-        qid = uuid.uuid4().hex
-
-        self.serial_manager.run(
-            JSONCommand(
-                task="move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                    "step_size": step_size,
-                },
-                qid=qid,
-            ),
-            cancel_command=JSONCommand(
-                task="cancel_move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                },
-                qid=qid,
-            ),
-            pause_command=JSONCommand(
-                task="pause_move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                },
-                qid=qid,
-            ),
-            unpause_command=JSONCommand(
-                task="unpause_move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                },
-                qid=qid,
-            ),
-        )
+    async def _amove(
+        self,
+        x: Optional[float],
+        y: Optional[float],
+        z: Optional[float],
+        a: Optional[float],
+        is_absolute: bool,
+    ) -> None:
+        """Move all requested axes concurrently and await completion."""
+        targets = {"X": x, "Y": y, "Z": z, "A": a}
+        moves = [
+            self.bus.amove_axis(
+                axis,
+                target,
+                is_absolute=is_absolute,
+                speed=self.config.default_speed,
+            )
+            for axis, target in targets.items()
+            if target is not None and axis in self.config.axes
+        ]
+        if not moves:
+            return
+        await asyncio.gather(*moves)
 
     def move_home(self) -> None:
-        """Move the stage to the home position (0, 0, 0, 0) (protocol method)."""
-        return self.move(x=0.0, y=0.0, z=0.0, a=0.0, is_absolute=True)
+        """Home the configured axes in mechanically safe order (Z first)."""
+        unkoil(self._ahome)
 
-    @staticmethod
-    def _clamp(value: float, min_val: float, max_val: float) -> float:
-        """Clamp a value to the specified range."""
-        return max(min_val, min(max_val, value))
+    async def _ahome(self) -> None:
+        """Home axes sequentially in the configured order."""
+        for axis in self.config.home_axes:
+            if axis in self.config.axes:
+                await self.bus.ahome_axis(axis)

@@ -1,122 +1,78 @@
-"""
-Virtual Stage Manager
+"""UC2 galvo scanner manager driving the galvo through the UC2 bus.
 
-A virtual stage/positioner manager for microscopy simulation.
-Handles X, Y, Z, and A (angle) positioning.
+Works over both transports: CANopen uses the command-word doorbell protocol
+(OD 0x2600–0x260F; stop is its own nonzero code, never 0), serial uses
+``/galvo_act``. Positions are DAC counts (0..4095 for the 12-bit MCP4822).
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
-import uuid
+from typing import Any, Optional
 
-from newswitch.protocols.stage import StageState
-from newswitch.protocols.serial_manager import SerialManager
+from koil import unkoil
 from rekuest_next import model
-from .serial_manager import JSONCommand
+
+from newswitch.protocols.uc2 import UC2BusManager
 
 
 @model
 @dataclass
-class StageConfig:
-    """Configuration for the virtual stage."""
+class UC2GalvoConfig:
+    """Configuration for the UC2 galvo scanner."""
 
-    z_steps: int = 100
-    pattern: str = "raster"
-    min_x: float = -10000.0
-    max_x: float = 10000.0
+    dac_min: int = 0
+    dac_max: int = 4095
+    default_dwell_us: int = 1
+    default_trigger_mode: int = 1  # per-pixel camera trigger
 
 
 class UC2GalvoScanner:
-    """
-    Docstring for Manager
-    """
+    """Galvo scanner manager over the transport-agnostic UC2 bus."""
 
-    state: StageState
+    def __init__(self, bus: UC2BusManager, config: Optional[UC2GalvoConfig] = None) -> None:
+        """Initialize with a connected UC2 bus."""
+        self.bus = bus
+        self.config = config or UC2GalvoConfig()
 
-    def __init__(self, stage_state: StageState, serial_manager: SerialManager) -> None:
-        """Start the manager with the given state and serial manager."""
-        self.serial_manager = serial_manager
-        self.stage_state = stage_state
-        self.state = stage_state
+    def _clamp(self, value: int) -> int:
+        """Clamp a DAC value into the configured range."""
+        return max(self.config.dac_min, min(self.config.dac_max, int(value)))
 
-    def move(
+    def set_position(self, x: int, y: int) -> None:
+        """Move the galvo mirror to an absolute XY position (DAC counts)."""
+        unkoil(self.bus.agalvo_goto, self._clamp(x), self._clamp(y))
+
+    def raster_scan(
         self,
-        x: Optional[float] = None,
-        y: Optional[float] = None,
-        z: Optional[float] = None,
-        a: Optional[float] = None,
-        step_size: Optional[float] = None,
-        is_absolute: bool = False,
+        x_min: int = 500,
+        x_max: int = 3500,
+        y_min: int = 500,
+        y_max: int = 3500,
+        nx: int = 256,
+        ny: int = 256,
+        pixel_dwell_us: Optional[int] = None,
+        trigger_mode: Optional[int] = None,
+        bidirectional: bool = False,
     ) -> None:
-        """
-        Move the stage to a new position (protocol method).
-
-        Args:
-            x: X position (absolute) or offset (relative)
-            y: Y position (absolute) or offset (relative)
-            z: Z position (absolute) or offset (relative)
-            a: Angle position (absolute) or offset (relative)
-            is_absolute: If True, values are absolute positions.
-                        If False, values are relative offsets.
-
-        Returns:
-            The new stage position after the move.
-        """
-        qid = uuid.uuid4().hex
-
-        self.serial_manager.run(
-            JSONCommand(
-                task="move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                    "step_size": step_size,
-                },
-                qid=qid,
-            ),
-            cancel_command=JSONCommand(
-                task="cancel_move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                },
-                qid=qid,
-            ),
-            pause_command=JSONCommand(
-                task="pause_move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                },
-                qid=qid,
-            ),
-            unpause_command=JSONCommand(
-                task="unpause_move_stage",
-                assign_params={
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                    "a": a,
-                    "is_absolute": is_absolute,
-                },
-                qid=qid,
-            ),
+        """Configure and start a raster scan."""
+        unkoil(
+            self.bus.agalvo_raster,
+            self._clamp(x_min),
+            self._clamp(x_max),
+            self._clamp(y_min),
+            self._clamp(y_max),
+            nx,
+            ny,
+            pixel_dwell_us or self.config.default_dwell_us,
+            trigger_mode if trigger_mode is not None else self.config.default_trigger_mode,
+            bidirectional,
         )
 
-    def move_home(self) -> None:
-        """Move the stage to the home position (0, 0, 0, 0) (protocol method)."""
-        return self.move(x=0.0, y=0.0, z=0.0, a=0.0, is_absolute=True)
+    def stop(self) -> None:
+        """Stop any active scan."""
+        unkoil(self.bus.agalvo_stop)
 
-    @staticmethod
-    def _clamp(value: float, min_val: float, max_val: float) -> float:
-        """Clamp a value to the specified range."""
-        return max(min_val, min(max_val, value))
+    def get_status(self) -> dict[str, Any]:
+        """Read decoded galvo status flags."""
+        return unkoil(self.bus.agalvo_status)

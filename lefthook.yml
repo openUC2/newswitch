@@ -1,4 +1,9 @@
 # Activated by `just install` (npx lefthook install).
+
+# Sourced before every hook: fixes PATH for GUI/IDE commits whose minimal sh
+# cannot find uv (~/.local/bin) or yarn/node (/opt/homebrew/bin).
+rc: .lefthookrc
+
 commit-msg:
   commands:
     commitlint:

@@ -1,0 +1,6 @@
+# Sourced by lefthook before every hook command (see `rc:` in lefthook.yml).
+# Hooks run in a minimal, non-login `sh` (especially when committing from a GUI
+# or IDE), whose PATH often lacks uv (~/.local/bin) and yarn/node
+# (/opt/homebrew/bin on Apple Silicon). Prepend the usual install locations;
+# nonexistent directories in PATH are harmless.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

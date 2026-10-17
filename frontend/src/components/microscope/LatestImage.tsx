@@ -13,8 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTransport } from "@/lib/rekuest/transport/transport-context";
 import { Download, ImageIcon, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export function LatestImage() {
+  const { t } = useTranslation();
   const { data: ioState, loading: stateLoading } = useIOState({
     subscribe: true,
   });
@@ -61,14 +63,16 @@ export function LatestImage() {
         setError(null);
       } catch (err) {
         console.error("[LatestImage] Error fetching image:", err);
-        setError(err instanceof Error ? err.message : "Failed to load image");
+        setError(
+          err instanceof Error ? err.message : t("microscope.imageLoadFailed"),
+        );
       } finally {
         setIsLoadingImage(false);
       }
     };
 
     fetchImage();
-  }, [ioState?.last_saved_file, lastFile, apiEndpoint]);
+  }, [ioState?.last_saved_file, lastFile, apiEndpoint, t]);
 
   // Cleanup URL on unmount
   useEffect(() => {
@@ -103,20 +107,26 @@ export function LatestImage() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <ImageIcon className="h-5 w-5" />
-              Latest Image
+              {t("microscope.latestImage")}
             </CardTitle>
-            <CardDescription>Most recently saved image</CardDescription>
+            <CardDescription>
+              {t("microscope.latestImageDescription")}
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {stateLoading && <Badge variant="outline">Syncing...</Badge>}
-            {isLoadingImage && <Badge variant="secondary">Loading...</Badge>}
+            {stateLoading && (
+              <Badge variant="outline">{t("microscope.syncing")}</Badge>
+            )}
+            {isLoadingImage && (
+              <Badge variant="secondary">{t("common.loading")}</Badge>
+            )}
             {imageUrl && (
               <>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={handleRefresh}
-                  title="Refresh image"
+                  title={t("microscope.refreshImage")}
                 >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
@@ -124,7 +134,7 @@ export function LatestImage() {
                   variant="ghost"
                   size="icon"
                   onClick={handleDownload}
-                  title="Download image"
+                  title={t("microscope.downloadImage")}
                 >
                   <Download className="h-4 w-4" />
                 </Button>
@@ -157,7 +167,7 @@ export function LatestImage() {
               <div className="text-center p-4">
                 <ImageIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  No image captured yet
+                  {t("microscope.noImage")}
                 </p>
               </div>
             )}
@@ -165,7 +175,7 @@ export function LatestImage() {
             {imageUrl && !isLoadingImage && (
               <img
                 src={imageUrl}
-                alt="Latest captured image"
+                alt={t("microscope.latestImageAlt")}
                 className="w-full h-full object-contain"
               />
             )}

@@ -11,7 +11,7 @@ from typing import Any, Optional, Tuple
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -40,9 +40,27 @@ from newswitch.managers.acquistion_manager import AcquistionManager
 from newswitch.managers.cache.local_cache import LocalCacheManager
 from newswitch.managers.calibration import CalibrationManager
 from newswitch.managers.light_path import LightPathManager
-from newswitch.managers.uc2.serial_manager import UC2SerialManager
-from newswitch.managers.uc2.stage_manager import UC2StageManager
-from newswitch.managers.virtual.virtual_serial_manager import VirtualSerialManager
+from newswitch.managers.uc2.stage_manager import UC2StageConfig, UC2StageManager
+from newswitch.managers.uc2.illumination_manager import (
+    UC2IlluminationConfig,
+    UC2IlluminationManager,
+)
+from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+from newswitch.managers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
+from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus
+from newswitch.managers.uc2.dispatch import dispatch_uc2_events
+from newswitch.managers.uc2.objective_manager import UC2ObjectiveConfig, UC2ObjectiveManager
+from newswitch.managers.uc2.filter_bank_manager import (
+    UC2FilterBankConfig,
+    UC2FilterBankManager,
+)
+from newswitch.protocols.autofocus import AutofocusState
+from newswitch.protocols.filter_bank import Filter as OpticalFilter
+from newswitch.protocols.illumination import Illumination
+from newswitch.protocols.objective import ObjectiveLens
+from newswitch.protocols.uc2 import UC2BusManager, UC2State
+from newswitch.registers import uc2 as uc2_registers  # noqa: F401  (registration side effects)
+from newswitch.routines import autofocus as autofocus_routine  # noqa: F401  (registration)
 from newswitch.managers.expanse_manager import ExpanseManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.protocols import (
@@ -50,7 +68,6 @@ from newswitch.protocols import (
     StageState,
     IlluminationManager,
     IlluminationState,
-    SerialManager,
     DetectorManager,
     CameraState,
     ObjectiveManager,
@@ -83,18 +100,17 @@ from newswitch.managers.io import LocalFileIOManager, LocalFileConfig
 from newswitch.broadcasters import FrameBroadcaster
 
 # Import routes
-from newswitch.protocols.serial_manager import SerialState
 from newswitch.auth import (
     AuthMiddleware,
     Authenticator,
-    CredentialAuthenticator,
-    load_credentials,
+    default_authenticator,
     make_expand_user_from_request,
     router as auth_router,
 )
 from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
+from newswitch.routes.http.users import router as users_router
 
 # Import routines
 from newswitch.routines import scan_region
@@ -149,6 +165,26 @@ class ImswitchConfig(BaseSettings):
     `persistent_config_path` (changes always go into the persistent one, see
     `config_io.open_config`). None keeps the built-in virtual devices."""
 
+    # UC2 hardware transport (used when use_virtual_microscope is False).
+    # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
+    # over serial JSON). Both are plug-in replacements behind UC2BusManager.
+    uc2_transport: str = "rest"  # "canopen"
+    uc2_can_interface: Optional[str] = None  # "socketcan" | "waveshare" | None (auto)
+    uc2_can_channel: Optional[str] = "can0"
+    uc2_can_port: Optional[str] = None  # Waveshare USB-CAN-A serial port
+    uc2_serial_port: Optional[str] = None  # None = autodetect
+    uc2_baudrate: int = 962100
+    # Detailed per-component overrides, keyed like the corresponding config
+    # dataclasses (UC2CanBusConfig / UC2RestBusConfig / UC2StageConfig /
+    # UC2IlluminationConfig). Nested values win over the flat fields above.
+    # See backend/configs/*.json for complete examples.
+    uc2_can: dict[str, Any] = {}
+    uc2_rest: dict[str, Any] = {}
+    uc2_stage: dict[str, Any] = {}
+    uc2_illumination: dict[str, Any] = {}
+    uc2_objective: dict[str, Any] = {}
+    uc2_filter_bank: dict[str, Any] = {}
+
     def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
         """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
 
@@ -156,6 +192,14 @@ class ImswitchConfig(BaseSettings):
         the values normally come from the file, which they cannot see.
         """
         super().__init__(**values)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_comment_keys(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        # JSON has no comments, so the files in backend/configs/ carry them as "_comment"
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if not str(key).startswith("_")}
+        return data
 
     @field_validator("config_dir", "schema_dir")
     @classmethod
@@ -195,11 +239,12 @@ class ImswitchConfig(BaseSettings):
 
 
 @startup
-async def provide_managers(
+async def provide_managers(  # TODO: can we make this adaptive so that we read this list from a config like in ImSwitch?
     app_context: ImswitchConfig,
 ) -> Tuple[
     FrameBroadcaster,
-    SerialManager,
+    UC2BusManager,
+    UC2State,
     StageManager,
     IlluminationManager,
     DetectorManager,
@@ -213,7 +258,6 @@ async def provide_managers(
     ObjectiveState,
     FilterBankState,
     IOState,
-    SerialState,
     protocols.HookState,
     protocols.ExpanseState,
     CalibrationState,
@@ -224,6 +268,7 @@ async def provide_managers(
     protocols.MetadataManager,
     protocols.AcquistionManager,
     protocols.CacheManager,
+    AutofocusState,
 ]:
     """
     Startup function that initializes all microscope managers and states.
@@ -231,12 +276,21 @@ async def provide_managers(
     Returns a tuple of managers (implementing their protocols) and their associated states
     for dependency injection into registered functions.
     """
-    print(f"Initializing virtual microscope managers (config: {app_context})")
-
     # Load state from esp32 or other hardware interfaces here if needed, for now we just initialize them with default values
     # Which cubes are isntalled
     if not app_context:
         app_context = ImswitchConfig()
+
+    mode = "virtual" if app_context.use_virtual_microscope else "real hardware"
+    print(f"Initializing {mode} microscope managers")
+    print(f"UC2 transport: {app_context.uc2_transport}")
+    if app_context.uc2_transport == "canopen":
+        print(
+            "CAN interface: "
+            f"{app_context.uc2_can_interface}, "
+            f"channel={app_context.uc2_can_channel}, "
+            f"port={app_context.uc2_can_port}"
+        )
 
     frame_broadcaster = FrameBroadcaster()
 
@@ -259,7 +313,7 @@ async def provide_managers(
 
     io_state = IOState()
 
-    serial_state = SerialState()
+    uc2_state = UC2State()
 
     # Devices from the device configuration (static or persistent file, see
     # base_config.yaml); every manager whose device kind is missing from it (or when no
@@ -273,7 +327,6 @@ async def provide_managers(
         ).config
     led_config = objective_config = filter_bank_config = virtual_stage_config = None
     configured_detectors = None
-    serial_port, serial_baudrate = "/dev/ttyUSB0", 115200
     if devices is not None:
         sources = adapters.illuminations(devices)
         if sources is not None:
@@ -297,27 +350,76 @@ async def provide_managers(
                 min_a=stage_state.min_a,
                 max_a=stage_state.max_a,
             )
-        serial_cfg = adapters.serial_settings(devices)
-        if serial_cfg is not None:
-            serial_port, serial_baudrate = serial_cfg.port, serial_cfg.baudrate
 
     if config.use_virtual_microscope:
-        serial = VirtualSerialManager(state=serial_state)
-        stage = VirtualStageManager(stage=stage_state, config=virtual_stage_config)
-    else:
-        serial = UC2SerialManager(
-            state=serial_state,
-            port=serial_port,
-            baudrate=serial_baudrate,
-            stage_state=stage_state,
+        uc2_bus: UC2BusManager = VirtualUC2Bus(state=uc2_state)
+        stage: StageManager = VirtualStageManager(stage=stage_state, config=virtual_stage_config)
+        led: IlluminationManager = VirtualLEDManager(
+            illumination_state=illumination_state, config=led_config
         )
-        stage = UC2StageManager(stage_state=stage_state, serial_manager=serial)  #
+    else:
+        if config.uc2_transport == "rest":
+            rest_kwargs: dict[str, Any] = {
+                "serialport": config.uc2_serial_port,
+                "baudrate": config.uc2_baudrate,
+            }
+            # A uc2-rest controller in the device configuration wins over the flat
+            # convenience fields; nested per-component overrides win over both.
+            serial_cfg = adapters.serial_settings(devices) if devices is not None else None
+            if serial_cfg is not None:
+                rest_kwargs.update(serialport=serial_cfg.port, baudrate=serial_cfg.baudrate)
+            rest_kwargs.update(config.uc2_rest)
+            uc2_bus = UC2RestBus(state=uc2_state, config=UC2RestBusConfig(**rest_kwargs))
+        else:
+            can_kwargs: dict[str, Any] = {
+                "interface": config.uc2_can_interface,
+                "channel": config.uc2_can_channel,
+                "port": config.uc2_can_port,
+                **config.uc2_can,
+            }
+            uc2_bus = UC2CanBus(state=uc2_state, config=UC2CanBusConfig(**can_kwargs))
+        stage_config = UC2StageConfig(**config.uc2_stage) if config.uc2_stage else None
+        illumination_kwargs = dict(config.uc2_illumination)
+        if "sources" in illumination_kwargs:
+            illumination_kwargs["sources"] = [
+                Illumination(**source) for source in illumination_kwargs["sources"]
+            ]
+        illumination_config = (
+            UC2IlluminationConfig(**illumination_kwargs) if illumination_kwargs else None
+        )
+        stage = UC2StageManager(stage_state=stage_state, bus=uc2_bus, config=stage_config)
+        led = UC2IlluminationManager(
+            illumination_state=illumination_state, bus=uc2_bus, config=illumination_config
+        )
 
-    led = VirtualLEDManager(illumination_state=illumination_state, config=led_config)
-    objective = VirtualObjectiveManager(objective_state=objective_state, config=objective_config)
-    filter_bank = VirtualFilterBankManager(
-        filter_bank_state=filter_bank_state, config=filter_bank_config
-    )
+    # Objective + filter wheel: real bus-backed managers on hardware, virtual in sim.
+    if config.use_virtual_microscope:
+        objective: ObjectiveManager = VirtualObjectiveManager(
+            objective_state=objective_state, config=objective_config
+        )
+        filter_bank: FilterBankManager = VirtualFilterBankManager(
+            filter_bank_state=filter_bank_state, config=filter_bank_config
+        )
+    else:
+        objective_kwargs = dict(config.uc2_objective)
+        if "lenses" in objective_kwargs:
+            objective_kwargs["lenses"] = [
+                ObjectiveLens(**lens) for lens in objective_kwargs["lenses"]
+            ]
+        objective = UC2ObjectiveManager(
+            objective_state=objective_state,
+            bus=uc2_bus,
+            config=UC2ObjectiveConfig(**objective_kwargs) if objective_kwargs else None,
+        )
+        filter_kwargs = dict(config.uc2_filter_bank)
+        if "filters" in filter_kwargs:
+            filter_kwargs["filters"] = [OpticalFilter(**item) for item in filter_kwargs["filters"]]
+        filter_bank = UC2FilterBankManager(
+            filter_bank_state=filter_bank_state,
+            bus=uc2_bus,
+            config=UC2FilterBankConfig(**filter_kwargs) if filter_kwargs else None,
+        )
+
     detector = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
@@ -379,6 +481,8 @@ async def provide_managers(
 
     cache_manager = LocalCacheManager()
 
+    autofocus_state = AutofocusState()
+
     acquistion_manager = AcquistionManager(
         expanse_manager=expanse_manager,
         detector_manager=detector,
@@ -389,7 +493,8 @@ async def provide_managers(
 
     return (
         frame_broadcaster,
-        serial,
+        uc2_bus,
+        uc2_state,
         stage,
         led,
         detector,
@@ -403,7 +508,6 @@ async def provide_managers(
         objective_state,
         filter_bank_state,
         io_state,
-        serial_state,
         hook_state,
         expanse_state,
         calibration_state,
@@ -414,6 +518,7 @@ async def provide_managers(
         metadata_manager,
         acquistion_manager,
         cache_manager,
+        autofocus_state,
     )
 
 
@@ -456,6 +561,22 @@ def run_detector_loop(
     detector.acquire_live()
 
 
+@background
+async def run_uc2_bus(uc2_bus: UC2BusManager) -> None:
+    """Connect the UC2 hardware bus and pump its transport until shutdown."""
+    await uc2_bus.abackground()
+
+
+@background
+async def run_uc2_event_dispatch(
+    uc2_bus: UC2BusManager,
+    stage_state: StageState,
+    uc2_state: UC2State,
+) -> None:
+    """Mirror spontaneous UC2 hardware events into the shared reactive states."""
+    await dispatch_uc2_events(uc2_bus, stage_state, uc2_state)
+
+
 # ====================
 # Registered Functions - Illumination
 # ====================
@@ -466,7 +587,7 @@ def clear_expanse(expanse_manager: protocols.ExpanseManager) -> None:
 
 
 @register
-def set_illumination_intensity(
+def set_illumination_intensity(  # TODO: Why is this function here?!
     illumination: IlluminationManager,
     intensity: float,
     channel: int = 1,
@@ -496,7 +617,7 @@ def long_stuff_running() -> None:
 
 
 @register
-def turn_on_illumination(
+def turn_on_illumination(  # TODO: Why is this function here?!
     illumination: IlluminationManager,
     state: IlluminationState,
     channel: int = 1,
@@ -562,7 +683,7 @@ def failing_camera(camera: CameraState, intensity: int) -> str:
         )
     ],
 )
-def move_stage(
+def move_stage(  # TODO: Why is this function here?!
     stage: StageManager,
     x: Optional[float] = None,
     y: Optional[float] = None,
@@ -588,7 +709,7 @@ def move_stage(
 
 @register
 def move_home(stage: StageManager, state: StageState) -> None:
-    """Move stage to home position."""
+    """Move stage to home position."""  # TODO: Why is this function here?!
     pos = stage.move_home()
     return pos
 
@@ -599,6 +720,9 @@ def move_home(stage: StageManager, state: StageState) -> None:
 def kill_benedict(stage: StageManager, kill_hard: str, die_young: bool) -> None:
     """A function that simulates a critical failure to test error handling and lock release."""
     raise RuntimeError("Benedict has been killed. This is a simulated critical failure.")
+
+
+# TODO: Why was this function defined?
 
 
 @register
@@ -841,12 +965,12 @@ def create_app(
     """
 
     app = FastAPI(
-        title="Virtual Microscope API",
+        title="Virtual Microscope API",  # TODO: should we load this from config?
         description="Integrated virtual microscope controller with protocol-based managers based on rekuest-next",
         version="2.0.0",
     )
 
-    authenticator = authenticator or CredentialAuthenticator(load_credentials())
+    authenticator = authenticator or default_authenticator()
     app.state.authenticator = authenticator
 
     # Middleware order is load-bearing. `add_middleware` PREPENDS, so the LAST call
@@ -885,6 +1009,9 @@ def create_app(
 
     # Mount the public auth + health routes
     app.include_router(auth_router)
+
+    # Mount account/role/audit management routes (admin-only except /auth/me)
+    app.include_router(users_router)
 
     # Mount WebSocket routes for live video streaming
     app.include_router(liveview_router, prefix="/stream")

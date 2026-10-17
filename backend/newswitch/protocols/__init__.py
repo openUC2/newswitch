@@ -13,7 +13,18 @@ from .objective import ObjectiveManager, ObjectiveState
 from .filter_bank import FilterBankManager, FilterBankState, Filter
 from .io import IOManager, IOState, FileHandle, FileFormat
 from .light_path import LightPathManager, LightPathState
-from .serial_manager import SerialManager
+from .uc2 import (
+    UC2BusManager,
+    UC2State,
+    UC2Event,
+    PositionUpdate,
+    MotionDone,
+    HomingChanged,
+    EStopChanged,
+    ButtonPressed,
+    NodeSeen,
+    BusError,
+)
 from .hook_manager import (
     HookManager,
     Hook,
@@ -46,7 +57,6 @@ __all__ = [
     "ZCalibrationHook",
     "RegisteredHook",
     "HookState",
-    "SerialManager",
     # Illumination
     "IlluminationManager",
     "IlluminationState",
@@ -77,4 +87,15 @@ __all__ = [
     "IOState",
     "FileHandle",
     "FileFormat",
+    # UC2 hardware bus
+    "UC2BusManager",
+    "UC2State",
+    "UC2Event",
+    "PositionUpdate",
+    "MotionDone",
+    "HomingChanged",
+    "EStopChanged",
+    "ButtonPressed",
+    "NodeSeen",
+    "BusError",
 ]

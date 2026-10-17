@@ -1,0 +1,60 @@
+{
+  "_comment": "Full openUC2 setup driven by the USB-connected UC2 master (UC2-REST JSON protocol). This also covers the CAN-HAT master: the host talks serial JSON to the master, which bridges to its CAN slaves. Bench-validated 2026-07 against firmware UC2_canopen_master V2.0 on /dev/cu.SLAB_USBtoUART at 921600 baud. Set uc2_serial_port to null for auto-discovery. require_master keeps auto-discovery from picking a slave board. Boot with: NEWSWITCH_CONFIG=configs/uc2_serial.json uvicorn main:app --port 8099. steps_per_um 3.2 = 0.3125 um/step (openUC2 default lead screw); adjust per machine.",
+  "use_virtual_microscope": false,
+  "uc2_transport": "rest",
+  "uc2_serial_port": "/dev/cu.SLAB_USBtoUART",
+  "uc2_baudrate": 921600,
+  "uc2_rest": {
+    "identity": "UC2_Feather",
+    "device_id": null,
+    "require_master": true,
+    "steps_per_um_x": 3.2,
+    "steps_per_um_y": 3.2,
+    "steps_per_um_z": 3.2,
+    "steps_per_deg_a": 1.0,
+    "default_speed": 5000.0,
+    "move_timeout_s": 120.0,
+    "home_timeout_s": 30.0
+  },
+  "uc2_stage": {
+    "axes": ["X", "Y", "Z", "A"],
+    "home_axes": ["Z", "X", "Y"],
+    "registered_step_sizes": [10.0, 100.0, 1000.0, 10000.0],
+    "default_speed": 5000.0
+  },
+  "uc2_illumination": {
+    "pwm_max": 1023,
+    "sources": [
+      {
+        "slot": 1,
+        "channel": 1,
+        "kind": "LASER",
+        "wavelength": 488.0,
+        "intensity": 0.0,
+        "min_intensity": 0.0,
+        "max_intensity": 100.0,
+        "is_active": false
+      },
+      {
+        "slot": 2,
+        "channel": 2,
+        "kind": "LASER",
+        "wavelength": 635.0,
+        "intensity": 0.0,
+        "min_intensity": 0.0,
+        "max_intensity": 100.0,
+        "is_active": false
+      },
+      {
+        "slot": 3,
+        "channel": 3,
+        "kind": "LED",
+        "wavelength": 0.0,
+        "intensity": 0.0,
+        "min_intensity": 0.0,
+        "max_intensity": 100.0,
+        "is_active": false
+      }
+    ]
+  }
+}

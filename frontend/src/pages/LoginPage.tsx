@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import { LanguageMenu } from "../components/navigation/LanguageMenu";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -22,18 +24,19 @@ import {
 import { Input } from "../components/ui/input";
 import { InvalidCredentialsError, useAuth } from "../lib/auth/context";
 
-const loginSchema = z.object({
-  username: z.string().min(1, "Enter a username"),
-  password: z.string().min(1, "Enter a password"),
-});
-
-type LoginValues = z.infer<typeof loginSchema>;
+type LoginValues = { username: string; password: string };
 
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
+
+  const loginSchema = z.object({
+    username: z.string().min(1, t("auth.enterUsername")),
+    password: z.string().min(1, t("auth.enterPassword")),
+  });
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -56,18 +59,19 @@ export function LoginPage() {
     } catch (caught) {
       setError(
         caught instanceof InvalidCredentialsError
-          ? "Invalid username or password."
-          : "Could not reach the microscope backend.",
+          ? t("auth.invalidCredentials")
+          : t("auth.backendUnavailable"),
       );
     }
   };
 
   return (
     <div className="dark flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
+      <LanguageMenu className="fixed right-3 top-3" />
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Newswitch</CardTitle>
-          <CardDescription>Sign in to control the microscope.</CardDescription>
+          <CardTitle>{t("common.appName")}</CardTitle>
+          <CardDescription>{t("auth.signInDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -80,7 +84,7 @@ export function LoginPage() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Username</FormLabel>
+                    <FormLabel>{t("auth.username")}</FormLabel>
                     <FormControl>
                       <Input autoComplete="username" autoFocus {...field} />
                     </FormControl>
@@ -94,7 +98,7 @@ export function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>{t("auth.password")}</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
@@ -114,7 +118,9 @@ export function LoginPage() {
               )}
 
               <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? "Signing in..." : "Sign in"}
+                {form.formState.isSubmitting
+                  ? t("auth.signingIn")
+                  : t("auth.signIn")}
               </Button>
             </form>
           </Form>

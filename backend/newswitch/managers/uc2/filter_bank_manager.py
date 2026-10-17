@@ -1,212 +1,97 @@
-"""
-Virtual Filter Bank Manager
+"""UC2 filter bank manager: FilterBankManager protocol over the UC2 bus.
 
-A virtual filter bank manager for microscopy simulation.
-Handles filter switching with wavelength-dependent transmission profiles.
+Realizes the filter wheel as a rotation axis (default "A") driven to
+calibrated per-slot positions — the common openUC2 construction. Transport
+(CANopen node vs serial JSON) is hidden behind the UC2 bus.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List
-import math
+from typing import List, Optional
 
-from newswitch.protocols.filter_bank import FilterBankState, Filter
+from koil import unkoil
+from rekuest_next import model
+
+from newswitch.protocols.filter_bank import Filter, FilterBankState
+from newswitch.protocols.uc2 import UC2BusManager
 
 
+@model
 @dataclass
-class FilterBankConfig:
-    """Configuration for the virtual filter bank manager."""
+class UC2FilterBankConfig:
+    """Configuration for the UC2 filter bank manager."""
 
     filters: List[Filter] = field(
         default_factory=lambda: [
-            Filter(
-                slot=1,
-                name="DAPI",
-                center_wavelength=461.0,
-                bandwidth=40.0,
-                transmission=0.95,
-                is_active=True,  # First filter is active by default
-            ),
-            Filter(
-                slot=2,
-                name="GFP",
-                center_wavelength=525.0,
-                bandwidth=50.0,
-                transmission=0.92,
-                is_active=False,
-            ),
-            Filter(
-                slot=3,
-                name="TRITC",
-                center_wavelength=572.0,
-                bandwidth=28.0,
-                transmission=0.90,
-                is_active=False,
-            ),
-            Filter(
-                slot=4,
-                name="Cy5",
-                center_wavelength=670.0,
-                bandwidth=40.0,
-                transmission=0.88,
-                is_active=False,
-            ),
-            Filter(
-                slot=5,
-                name="Open",
-                center_wavelength=0.0,  # 0 means no filtering
-                bandwidth=0.0,
-                transmission=1.0,
-                is_active=False,
-            ),
+            Filter(slot=1, name="Open", center_wavelength=0.0, bandwidth=0.0),
+            Filter(slot=2, name="GFP 525/50", center_wavelength=525.0, bandwidth=50.0),
+            Filter(slot=3, name="RFP 605/70", center_wavelength=605.0, bandwidth=70.0),
         ]
     )
-    default_slot: int = 1
+    # Rotation axis carrying the wheel and its per-slot positions
+    # (degrees for "A"; micrometers for linear sliders). Index 0 = slot 1.
+    axis: str = "A"
+    slot_positions: List[float] = field(default_factory=lambda: [0.0, 120.0, 240.0])
 
 
 class UC2FilterBankManager:
-    """
-    A virtual filter bank manager for microscopy simulation.
-
-    Provides filter switching with wavelength-dependent transmission profiles.
-    Implements the FilterBankManager protocol.
-
-    The transmission profile uses a Gaussian approximation centered on the
-    filter's center wavelength with the bandwidth as FWHM.
-    """
+    """Filter bank manager driving an openUC2 filter wheel via the UC2 bus."""
 
     def __init__(
         self,
         filter_bank_state: FilterBankState,
-        config: Optional[FilterBankConfig] = None,
+        bus: UC2BusManager,
+        config: Optional[UC2FilterBankConfig] = None,
     ) -> None:
-        """
-        Initialize the virtual filter bank manager.
-
-        Args:
-            filter_bank_state: Shared state for filter bank parameters.
-            config: Filter bank configuration. Uses defaults if not provided.
-        """
+        """Initialize with shared filter state and a connected UC2 bus."""
         self.filter_bank_state = filter_bank_state
-        self.config = config or FilterBankConfig()
-
-        # Initialize filters from config
+        self.bus = bus
+        self.config = config or UC2FilterBankConfig()
         self.filter_bank_state.filters = list(self.config.filters)
+        self._mark_active(self.filter_bank_state.current_slot or 1)
 
-        # Set active filter to default
-        self._set_active_filter(self.config.default_slot)
-
-    def _get_filter(self, slot: int) -> Optional[Filter]:
-        """Get a filter by its slot number."""
-        for f in self.filter_bank_state.filters:
-            if f.slot == slot:
-                return f
-        return None
-
-    def _set_active_filter(self, slot: int) -> Filter:
-        """Internal method to set the active filter."""
-        target_filter = self._get_filter(slot)
-        if target_filter is None:
-            raise ValueError(f"No filter found with slot {slot}")
-
-        # Deactivate all filters
-        for f in self.filter_bank_state.filters:
-            f.is_active = False
-
-        # Activate the target filter
-        target_filter.is_active = True
+    def _mark_active(self, slot: int) -> None:
+        """Mirror the active slot into the shared state."""
         self.filter_bank_state.current_slot = slot
+        for filt in self.filter_bank_state.filters:
+            filt.is_active = filt.slot == slot
 
-        return target_filter
+    def _position_for_slot(self, slot: int) -> float:
+        """Return the calibrated wheel position for a slot (1-based)."""
+        positions = self.config.slot_positions
+        if not 1 <= slot <= len(positions):
+            raise ValueError(f"Filter slot {slot} out of range 1..{len(positions)}")
+        return positions[slot - 1]
 
     def switch_filter(self, slot: int) -> Filter:
-        """
-        Switch to a specific filter by slot number.
-
-        Args:
-            slot: Filter slot number to switch to.
-
-        Returns:
-            The newly active filter.
-
-        Raises:
-            ValueError: If the slot number is invalid.
-        """
-        return self._set_active_filter(slot)
+        """Switch to a specific filter slot (protocol method)."""
+        unkoil(self.bus.amove_axis, self.config.axis, self._position_for_slot(slot), True)
+        self._mark_active(slot)
+        return self.filter_bank_state.get_active_filter()
 
     def toggle_filter(self) -> Filter:
-        """
-        Toggle to the next filter in the wheel.
-
-        Cycles through available filters in order by slot number.
-
-        Returns:
-            The newly active filter.
-        """
-        slots = sorted([f.slot for f in self.filter_bank_state.filters])
-        current_idx = slots.index(self.filter_bank_state.current_slot)
-        next_idx = (current_idx + 1) % len(slots)
-        next_slot = slots[next_idx]
-
-        return self.switch_filter(next_slot)
+        """Toggle to the next filter in the wheel (protocol method)."""
+        slots = sorted(filt.slot for filt in self.filter_bank_state.filters)
+        if not slots:
+            raise ValueError("No filters configured")
+        current = self.filter_bank_state.current_slot
+        current_index = slots.index(current) if current in slots else -1
+        return self.switch_filter(slots[(current_index + 1) % len(slots)])
 
     def get_active_filter(self) -> Optional[Filter]:
-        """
-        Get the currently active filter.
-
-        Returns:
-            The active filter, or None if no filter is active.
-        """
-        for f in self.filter_bank_state.filters:
-            if f.is_active:
-                return f
-        return None
+        """Return the currently active filter, if any (protocol method)."""
+        try:
+            return self.filter_bank_state.get_active_filter()
+        except ValueError:
+            return None
 
     def get_transmission_at_wavelength(self, wavelength: float) -> float:
-        """
-        Calculate the transmission factor for a given wavelength.
-
-        Uses a Gaussian approximation of the filter passband.
-        For an "Open" filter (center_wavelength=0), returns full transmission.
-
-        Args:
-            wavelength: Wavelength in nm.
-
-        Returns:
-            Transmission factor (0.0 to 1.0).
-        """
-        active_filter = self.get_active_filter()
-        if active_filter is None:
-            return 1.0  # No filter means full transmission
-
-        # Open filter (no filtering)
-        if active_filter.center_wavelength == 0.0:
-            return active_filter.transmission
-
-        # Calculate Gaussian transmission profile
-        # FWHM to sigma conversion: sigma = FWHM / (2 * sqrt(2 * ln(2)))
-        if active_filter.bandwidth <= 0:
-            # Zero bandwidth means perfect blocking except at center
-            if abs(wavelength - active_filter.center_wavelength) < 1.0:
-                return active_filter.transmission
-            return 0.0
-
-        sigma = active_filter.bandwidth / (2.0 * math.sqrt(2.0 * math.log(2.0)))
-        delta = wavelength - active_filter.center_wavelength
-        gaussian = math.exp(-(delta**2) / (2.0 * sigma**2))
-
-        return active_filter.transmission * gaussian
-
-    def list_filters(self) -> list[Filter]:
-        """
-        List all available filters.
-
-        Returns:
-            List of all filters in the filter bank.
-        """
-        return self.filter_bank_state.filters
-
-    def background(self) -> None:
-        """Background task for the virtual filter bank manager."""
-        # For this simple implementation, we don't need a background loop
-        # since all operations are synchronous and triggered by registered functions.
-        pass
+        """Approximate the active filter's transmission at a wavelength (protocol method)."""
+        active = self.get_active_filter()
+        if active is None or active.center_wavelength <= 0.0 or active.bandwidth <= 0.0:
+            return 1.0  # open position / no filtering
+        half_width = active.bandwidth / 2.0
+        if abs(wavelength - active.center_wavelength) <= half_width:
+            return active.transmission
+        return 0.0

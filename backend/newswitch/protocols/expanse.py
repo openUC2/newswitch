@@ -1,7 +1,7 @@
 """
 Stage Manager Protocol
 
-Defines the protocol for stage/positioner control and associated state.
+Defines the protocol for stage/positioner control and associated state. # TODO: What is this?!
 """
 
 from typing import Protocol, runtime_checkable

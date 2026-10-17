@@ -8,14 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Activity,
-  History,
-  Loader2,
-  LogOut,
-  PlaySquare,
-  Radio,
-} from "lucide-react";
+import { Activity, History, Loader2, PlaySquare, Radio } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { buttonVariants, Button } from "@/components/ui/button";
@@ -25,7 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAuth } from "@/lib/auth/context";
+import { AccountMenu } from "./AccountMenu";
 import { useAppStateContext } from "@/lib/rekuest/app-state/app-state-context";
 import {
   selectLatestPatches,
@@ -35,6 +28,7 @@ import { useStateContext } from "@/lib/rekuest/state";
 import { useTransport } from "@/lib/rekuest/transport";
 import type { AppKey } from "@/lib/rekuest/types";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const DEBOUNCE_MS = 220;
 const TIMELINE_CHANGE_LIMIT = 8;
@@ -53,18 +47,18 @@ type AppTimelineBoundary = {
 const navigationItems = [
   {
     to: "/",
-    label: "Index",
+    labelKey: "navigation.index",
     icon: Activity,
   },
   {
     to: "/replay",
-    label: "Replay",
+    labelKey: "navigation.replay",
     icon: PlaySquare,
   },
 ] as const;
 
-const formatTimelineLabel = (ms: number) =>
-  new Date(ms).toLocaleString([], {
+const formatTimelineLabel = (ms: number, locale?: string) =>
+  new Date(ms).toLocaleString(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -90,6 +84,7 @@ type AppLatestChangesProps = {
 // patches as being surfaced in the nav chrome. Exported rather than deleted: it is
 // unfinished wiring, not dead code.
 export function AppLatestChanges({ appKey }: AppLatestChangesProps) {
+  const { t } = useTranslation();
   const latestPatches = useGlobalStateStore(
     appKey,
     selectLatestPatches(TIMELINE_CHANGE_LIMIT),
@@ -121,7 +116,9 @@ export function AppLatestChanges({ appKey }: AppLatestChangesProps) {
     <div className="rounded-2xl border border-border/50 bg-muted/25 p-3">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
         <span className="font-semibold text-foreground">{appKey}</span>
-        <span className="text-muted-foreground">Latest changes</span>
+        <span className="text-muted-foreground">
+          {t("navigation.latestChanges")}
+        </span>
       </div>
       <div className="flex flex-wrap gap-2">
         {recentChanges.map((patch, index) => (
@@ -222,16 +219,17 @@ function resetTimelineState(
 
 // TODO: not mounted (see AppLatestChanges above).
 export function RouteNavigationBar() {
+  const { t } = useTranslation();
   return (
     <div className="pointer-events-none fixed top-1/2 left-4 z-50 -translate-y-1/2">
       <div className="pointer-events-auto flex flex-col gap-2 rounded-2xl border border-border bg-background/85 p-2 shadow-lg backdrop-blur-sm dark">
-        {navigationItems.map(({ to, label, icon: Icon }) => (
+        {navigationItems.map(({ to, labelKey, icon: Icon }) => (
           <Tooltip key={to}>
             <TooltipTrigger asChild>
               <NavLink
                 to={to}
                 end={to === "/"}
-                aria-label={label}
+                aria-label={t(labelKey)}
                 className={({ isActive }) =>
                   cn(
                     buttonVariants({
@@ -246,7 +244,7 @@ export function RouteNavigationBar() {
               </NavLink>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={10}>
-              {label}
+              {t(labelKey)}
             </TooltipContent>
           </Tooltip>
         ))}
@@ -256,6 +254,7 @@ export function RouteNavigationBar() {
 }
 
 function TimelineFloater() {
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const appStateContext = useAppStateContext();
   const transport = useTransport();
@@ -369,7 +368,7 @@ function TimelineFloater() {
       );
 
       if (nextBoundaries.length === 0) {
-        throw new Error("No active session boundaries were available.");
+        throw new Error(t("navigation.noTimeline"));
       }
 
       const timelineEndMs = Math.max(
@@ -383,14 +382,14 @@ function TimelineFloater() {
       setMode("timeline");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to prepare timeline";
+        error instanceof Error ? error.message : t("navigation.timelineFailed");
       toast.error(message);
       void goLiveAll();
       setMode("live");
     } finally {
       setIsPreparingTimeline(false);
     }
-  }, [appKeys, fetchActiveSessionBoundaries, goLiveAll, stopLiveAll]);
+  }, [appKeys, fetchActiveSessionBoundaries, goLiveAll, stopLiveAll, t]);
 
   useEffect(() => {
     const wasReplayRoute = previousIsReplayRouteRef.current;
@@ -417,14 +416,12 @@ function TimelineFloater() {
       await goLiveAll();
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to return to live mode";
+        error instanceof Error ? error.message : t("navigation.liveFailed");
       toast.error(message);
     } finally {
       setIsReturningToLive(false);
     }
-  }, [goLiveAll]);
+  }, [goLiveAll, t]);
 
   useEffect(() => {
     if (
@@ -465,7 +462,7 @@ function TimelineFloater() {
         const message =
           error instanceof Error
             ? error.message
-            : "Failed to checkout timeline state";
+            : t("navigation.checkoutFailed");
         toast.error(message);
       } finally {
         if (!cancelled) {
@@ -479,7 +476,7 @@ function TimelineFloater() {
     return () => {
       cancelled = true;
     };
-  }, [boundaries, debouncedSelectedMs, mode]);
+  }, [boundaries, debouncedSelectedMs, mode, t]);
 
   const onSliderChange = useCallback(
     (value: number[]) => {
@@ -552,16 +549,24 @@ function TimelineFloater() {
                 <div className="flex min-w-0 flex-col gap-3 px-3 py-2">
                   <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                     <div className="font-medium">
-                      {formatTimelineLabel(timelineBounds.startMs)}
+                      {formatTimelineLabel(
+                        timelineBounds.startMs,
+                        i18n.resolvedLanguage,
+                      )}
                     </div>
                     <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-foreground">
                       {isCheckingOut ? (
                         <Loader2 className="size-3.5 animate-spin" />
                       ) : null}
-                      <span>{formatTimelineLabel(selectedMs)}</span>
+                      <span>
+                        {formatTimelineLabel(selectedMs, i18n.resolvedLanguage)}
+                      </span>
                     </div>
                     <div className="font-medium">
-                      {formatTimelineLabel(timelineBounds.endMs)}
+                      {formatTimelineLabel(
+                        timelineBounds.endMs,
+                        i18n.resolvedLanguage,
+                      )}
                     </div>
                   </div>
 
@@ -574,7 +579,7 @@ function TimelineFloater() {
                         <span className="font-semibold text-foreground">
                           {appKey}
                         </span>
-                        <span className="mx-1">rev</span>
+                        <span className="mx-1">{t("navigation.revision")}</span>
                         <span className="font-mono text-foreground">
                           {revision}
                         </span>
@@ -589,7 +594,7 @@ function TimelineFloater() {
                     max={100}
                     step={0.1}
                     className="w-full [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-track]]:h-2"
-                    aria-label="Timeline position"
+                    aria-label={t("navigation.timelinePosition")}
                   />
 
                   <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
@@ -602,9 +607,19 @@ function TimelineFloater() {
                           {boundary.appKey}
                         </span>
                         <span className="mx-1">•</span>
-                        <span>{formatTimelineLabel(boundary.startMs)}</span>
+                        <span>
+                          {formatTimelineLabel(
+                            boundary.startMs,
+                            i18n.resolvedLanguage,
+                          )}
+                        </span>
                         <span className="mx-1">→</span>
-                        <span>{formatTimelineLabel(boundary.endMs)}</span>
+                        <span>
+                          {formatTimelineLabel(
+                            boundary.endMs,
+                            i18n.resolvedLanguage,
+                          )}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -618,35 +633,11 @@ function TimelineFloater() {
   );
 }
 
-/** Ends the session. Floated rather than added to RouteNavigationBar, which this
- * chrome does not mount (see the TODO above it). */
-function LogoutButton() {
-  const { logout } = useAuth();
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Log out"
-          onClick={logout}
-          className="fixed right-3 top-3 z-50 h-8 w-8 bg-background/70 backdrop-blur hover:bg-background"
-        >
-          <LogOut className="h-4 w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="left">Log out</TooltipContent>
-    </Tooltip>
-  );
-}
-
 export function AppNavigationChrome({ children }: { children: ReactNode }) {
   return (
     <>
       <TimelineFloater />
-      <LogoutButton />
+      <AccountMenu />
       {children}
     </>
   );

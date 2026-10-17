@@ -61,6 +61,18 @@ dev:
     (cd frontend && exec yarn dev) &
     wait
 
+# Isolated stack for Playwright. Vite's test mode skips backend schema codegen so an
+# E2E run cannot dirty the committed generated frontend files.
+dev-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'trap - EXIT; kill 0' EXIT INT TERM
+    rm -f frontend/test-results/e2e-auth.db
+    (cd backend && NEWSWITCH_AUTH_DB=../frontend/test-results/e2e-auth.db exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}}) &
+    just wait-backend
+    (cd frontend && exec yarn dev --mode test) &
+    wait
+
 # ---------- quality ----------
 
 lint:
@@ -97,6 +109,21 @@ test-all:
     cd frontend && yarn test
 
 check: fmt-check lint types test
+
+# ---------- accounts ----------
+
+# List every account and its role (run on the appliance itself)
+list-users:
+    cd backend && uv run python -m newswitch.cli list-users
+
+# Recovery: set a new password for an existing account, e.g. after it's forgotten
+reset-password username password:
+    cd backend && uv run python -m newswitch.cli reset-password {{username}} {{password}}
+
+# Recovery: create a fresh admin account, e.g. if every admin got locked out
+create-admin username password:
+    cd backend && uv run python -m newswitch.cli create-admin {{username}} {{password}}
+
 
 # Fail if the committed generated code no longer matches the running backend.
 # Requires the backend to be up (`just dev-backend`).
