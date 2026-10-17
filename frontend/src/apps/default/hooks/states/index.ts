@@ -1,4 +1,5 @@
 import type { StateDefinition } from '@/lib/rekuest/state';
+import { AutofocusStateDefinition } from './AutofocusState';
 import { CalibrationStateDefinition } from './CalibrationState';
 import { CameraStateDefinition } from './CameraState';
 import { ExpanseStateDefinition } from './ExpanseState';
@@ -8,10 +9,16 @@ import { IOStateDefinition } from './IOState';
 import { IlluminationStateDefinition } from './IlluminationState';
 import { LightPathStateDefinition } from './LightPathState';
 import { ObjectiveStateDefinition } from './ObjectiveState';
-import { SerialStateDefinition } from './SerialState';
 import { StageStateDefinition } from './StageState';
+import { UC2StateDefinition } from './UC2State';
 
 export { createIndexedUnion } from './utils';
+export {
+  AutofocusStateSchema,
+  AutofocusStateDefinition,
+  useAutofocusState,
+} from './AutofocusState';
+export type { AutofocusState } from './AutofocusState';
 export {
   CalibratedLightPathSchema,
   CalibrationStateSchema,
@@ -166,19 +173,16 @@ export type {
   ObjectiveState,
 } from './ObjectiveState';
 export {
-  SerialStateSchema,
-  SerialStateDefinition,
-  useSerialState,
-} from './SerialState';
-export type { SerialState } from './SerialState';
-export {
   StageStateSchema,
   StageStateDefinition,
   useStageState,
 } from './StageState';
 export type { StageState } from './StageState';
+export { UC2StateSchema, UC2StateDefinition, useUC2State } from './UC2State';
+export type { UC2State } from './UC2State';
 
 export const globalStateDefinition = {
+  AutofocusState: AutofocusStateDefinition,
   CalibrationState: CalibrationStateDefinition,
   CameraState: CameraStateDefinition,
   ExpanseState: ExpanseStateDefinition,
@@ -188,8 +192,8 @@ export const globalStateDefinition = {
   IlluminationState: IlluminationStateDefinition,
   LightPathState: LightPathStateDefinition,
   ObjectiveState: ObjectiveStateDefinition,
-  SerialState: SerialStateDefinition,
   StageState: StageStateDefinition,
+  UC2State: UC2StateDefinition,
 } satisfies Record<string, StateDefinition<unknown>>;
 
 type InferStateDefinition<TDefinition> =

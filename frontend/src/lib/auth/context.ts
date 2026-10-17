@@ -6,9 +6,15 @@
 
 import { createContext, useContext } from "react";
 
+/** Mirrors the backend's `newswitch.users.Role` enum. */
+export type Role = "admin" | "operator" | "viewer" | "analyst";
+
 export type AuthContextValue = {
   token: string | null;
   isAuthenticated: boolean;
+  /** `null` while logged out, or briefly while `/auth/me` is still loading. */
+  username: string | null;
+  role: Role | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 };

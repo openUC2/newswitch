@@ -1,0 +1,134 @@
+{
+  "$comment": "First cut of the newswitch driver manifest — the versioned contract the optikit bindings wizard consumes (OPTIKIT-INTEGRATION.md §4, WP-192 (e) in optikit-v2 part2s). Served live as GET /system/drivers by a running newswitch; this file is the vendored snapshot for offline wizard runs, and the matching target while neither side is built. Deliberately naive: two drivers, just enough to make the matching real. Field types use JSON Schema draft 2020-12; '$comment' keys are annotations, not data.",
+
+  "contract": "v1",
+  "newswitch": "0.1.0-dev",
+
+  "schemas": {
+    "$comment": "Shapes shared by every driver. The newswitch loader owns these (CONFIG-MODEL.md §5.2 AxisBinding/HomingSpec/SlotBinding); a driver never redefines them. Units live in field names, always.",
+
+    "homing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "direction": { "enum": [-1, 1], "default": -1 },
+        "speed_steps_per_s": { "type": "integer", "minimum": 1, "default": 15000 },
+        "timeout_s": { "type": "number", "exclusiveMinimum": 0, "default": 20.0 }
+      }
+    },
+
+    "axis": {
+      "$comment": "One motor axis. Exactly one of steps_per_um (linear) / steps_per_deg (rotary). min/max are checked against the driven DOF's range at LINK time (E_RANGE_MISMATCH); steps-per-unit against its resolution (W_RESOLUTION_COARSE).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node": { "type": "integer", "minimum": 0, "$comment": "CANopen node id; null/absent for REST-addressed axes" },
+        "sub": { "type": "integer", "minimum": 0, "default": 0 },
+        "steps_per_um": { "type": "number", "exclusiveMinimum": 0 },
+        "steps_per_deg": { "type": "number", "exclusiveMinimum": 0 },
+        "sign": { "enum": [-1, 1], "default": 1 },
+        "min_um": { "type": "number" },
+        "max_um": { "type": "number" },
+        "min_deg": { "type": "number" },
+        "max_deg": { "type": "number" },
+        "max_speed_um_per_s": { "type": "number", "exclusiveMinimum": 0 },
+        "backlash_um": { "type": "number", "minimum": 0, "default": 0 },
+        "home": { "$ref": "#/schemas/homing" }
+      },
+      "oneOf": [
+        { "required": ["steps_per_um"], "not": { "required": ["steps_per_deg"] } },
+        { "required": ["steps_per_deg"], "not": { "required": ["steps_per_um"] } }
+      ]
+    }
+  },
+
+  "drivers": {
+
+    "uc2.stage": {
+      "version": "0.1.0",
+      "title": "UC2 motorized stage",
+      "description": "Multi-axis stepper stage over the UC2 bus (CANopen multi-node or REST/serial master).",
+      "verbs": ["drives"],
+      "roles": ["positioning", "scanning"],
+      "transports": ["uc2.canopen", "uc2.rest"],
+
+      "axes": {
+        "$comment": "What the wizard offers on the 'drives' matching step: each declared axis binds to EXACTLY ONE design DOF whose kind matches, and only DOFs with actuation: firmware are offered (WP-192 (c)). Axis config validates against schemas/axis.",
+        "names": ["X", "Y", "Z", "A"],
+        "kinds": { "X": "linear", "Y": "linear", "Z": "linear", "A": "rotary" },
+        "dof_kind_for": { "linear": "translation", "rotary": "rotation" }
+      },
+
+      "params": {
+        "$comment": "Driver-level parameters (per-axis facts live in axes, transport facts on the transport entry).",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "default_speed_um_per_s": { "type": "number", "exclusiveMinimum": 0, "default": 5000.0 },
+          "settle_ms": { "type": "integer", "minimum": 0, "default": 0, "$comment": "wait after motion-done before reporting in-position" },
+          "home_on_start": { "type": "boolean", "default": false },
+          "home_order": { "type": "array", "items": { "enum": ["X", "Y", "Z", "A"] }, "default": ["Z", "X", "Y"] }
+        }
+      }
+    },
+
+    "uc2.rest.camera": {
+      "version": "0.1.0",
+      "title": "UC2 USB3 camera",
+      "description": "USB3 industrial camera (e.g. HIK, Thorlabs CS165MU) via the vendor SDK. Streams into the FrameBroadcaster.",
+      "verbs": ["mounts"],
+      "mounts_categories": ["detector"],
+      "$comment": "mounts_categories: the wizard offers this driver only for design components of these categories.",
+      "roles": ["acquisition", "focus_lock"],
+      "transports": [],
+
+      "reports": ["sensor_geometry"],
+      "$comment.reports": "At connect the driver reads sensor width/height/pixel pitch from the SDK and the loader compares them with the mounted design record — disagreement is E_SENSOR_MISMATCH per field (OPTIKIT-INTEGRATION.md §3). This is why the binding carries NO pixel_size_um: the record owns it (R1).",
+
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["serial"],
+        "properties": {
+          "serial": { "type": "string", "minLength": 1, "$comment": "which physical camera; the one fact only the bench knows" },
+          "default_binning": { "type": "integer", "minimum": 1, "default": 1 },
+          "pixel_format": { "enum": ["Mono8", "Mono12", "Mono16"], "default": "Mono8" },
+          "trigger": { "enum": ["continuous", "software", "hardware"], "default": "continuous" },
+          "exposure_ms_limits": {
+            "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }],
+            "minItems": 2, "maxItems": 2, "default": [0.01, 10000],
+            "$comment": "clamp for profile-set exposures; the profile owns the VALUE (L3), the driver owns the LIMIT"
+          }
+        }
+      }
+    }
+  },
+
+  "examples": {
+    "$comment": "One valid bindings.yml devices entry per driver, as YAML-equivalent JSON — what step 4 of the wizard emits.",
+    "devices": {
+      "stage.xyz": {
+        "driver": "uc2.stage@^0.1",
+        "transport": "main",
+        "roles": ["positioning", "scanning"],
+        "axes": {
+          "X": { "node": 11, "steps_per_um": 3.2, "sign": 1, "min_um": -25000, "max_um": 25000,
+                 "home": { "enabled": true, "direction": -1, "speed_steps_per_s": 15000, "timeout_s": 20 } },
+          "Y": { "node": 12, "steps_per_um": 3.2, "sign": 1, "min_um": -25000, "max_um": 25000,
+                 "home": { "enabled": true, "direction": -1, "speed_steps_per_s": 15000, "timeout_s": 20 } },
+          "Z": { "node": 13, "steps_per_um": 3.2, "sign": 1, "min_um": -7500, "max_um": 7500,
+                 "home": { "enabled": false } }
+        },
+        "drives": { "X": "sample.dx", "Y": "sample.dy", "Z": "objective.dz" },
+        "params": { "default_speed_um_per_s": 5000.0, "home_order": ["Z", "X", "Y"] }
+      },
+      "camera.main": {
+        "driver": "uc2.rest.camera@^0.1",
+        "mounts": "camera",
+        "roles": ["acquisition"],
+        "params": { "serial": "CS165MU-4711", "default_binning": 1, "pixel_format": "Mono12", "trigger": "continuous" }
+      }
+    }
+  }
+}

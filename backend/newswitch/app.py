@@ -40,9 +40,27 @@ from newswitch.managers.acquistion_manager import AcquistionManager
 from newswitch.managers.cache.local_cache import LocalCacheManager
 from newswitch.managers.calibration import CalibrationManager
 from newswitch.managers.light_path import LightPathManager
-from newswitch.managers.uc2.serial_manager import UC2SerialManager
-from newswitch.managers.uc2.stage_manager import UC2StageManager
-from newswitch.managers.virtual.virtual_serial_manager import VirtualSerialManager
+from newswitch.managers.uc2.stage_manager import UC2StageConfig, UC2StageManager
+from newswitch.managers.uc2.illumination_manager import (
+    UC2IlluminationConfig,
+    UC2IlluminationManager,
+)
+from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+from newswitch.managers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
+from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus
+from newswitch.managers.uc2.dispatch import dispatch_uc2_events
+from newswitch.managers.uc2.objective_manager import UC2ObjectiveConfig, UC2ObjectiveManager
+from newswitch.managers.uc2.filter_bank_manager import (
+    UC2FilterBankConfig,
+    UC2FilterBankManager,
+)
+from newswitch.protocols.autofocus import AutofocusState
+from newswitch.protocols.filter_bank import Filter as OpticalFilter
+from newswitch.protocols.illumination import Illumination
+from newswitch.protocols.objective import ObjectiveLens
+from newswitch.protocols.uc2 import UC2BusManager, UC2State
+from newswitch.registers import uc2 as uc2_registers  # noqa: F401  (registration side effects)
+from newswitch.routines import autofocus as autofocus_routine  # noqa: F401  (registration)
 from newswitch.managers.expanse_manager import ExpanseManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.protocols import (
@@ -50,7 +68,6 @@ from newswitch.protocols import (
     StageState,
     IlluminationManager,
     IlluminationState,
-    SerialManager,
     DetectorManager,
     CameraState,
     ObjectiveManager,
@@ -83,18 +100,17 @@ from newswitch.managers.io import LocalFileIOManager, LocalFileConfig
 from newswitch.broadcasters import FrameBroadcaster
 
 # Import routes
-from newswitch.protocols.serial_manager import SerialState
 from newswitch.auth import (
     AuthMiddleware,
     Authenticator,
-    CredentialAuthenticator,
-    load_credentials,
+    default_authenticator,
     make_expand_user_from_request,
     router as auth_router,
 )
 from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
+from newswitch.routes.http.users import router as users_router
 
 # Import routines
 from newswitch.routines import scan_region
@@ -195,11 +211,12 @@ class ImswitchConfig(BaseSettings):
 
 
 @startup
-async def provide_managers(
+async def provide_managers(  # TODO: can we make this adaptive so that we read this list from a config like in ImSwitch?
     app_context: ImswitchConfig,
 ) -> Tuple[
     FrameBroadcaster,
-    SerialManager,
+    UC2BusManager,
+    UC2State,
     StageManager,
     IlluminationManager,
     DetectorManager,
@@ -213,7 +230,6 @@ async def provide_managers(
     ObjectiveState,
     FilterBankState,
     IOState,
-    SerialState,
     protocols.HookState,
     protocols.ExpanseState,
     CalibrationState,
@@ -224,6 +240,7 @@ async def provide_managers(
     protocols.MetadataManager,
     protocols.AcquistionManager,
     protocols.CacheManager,
+    AutofocusState,
 ]:
     """
     Startup function that initializes all microscope managers and states.
@@ -231,12 +248,21 @@ async def provide_managers(
     Returns a tuple of managers (implementing their protocols) and their associated states
     for dependency injection into registered functions.
     """
-    print(f"Initializing virtual microscope managers (config: {app_context})")
-
     # Load state from esp32 or other hardware interfaces here if needed, for now we just initialize them with default values
     # Which cubes are isntalled
     if not app_context:
         app_context = ImswitchConfig()
+
+    mode = "virtual" if app_context.use_virtual_microscope else "real hardware"
+    print(f"Initializing {mode} microscope managers")
+    print(f"UC2 transport: {app_context.uc2_transport}")
+    if app_context.uc2_transport == "canopen":
+        print(
+            "CAN interface: "
+            f"{app_context.uc2_can_interface}, "
+            f"channel={app_context.uc2_can_channel}, "
+            f"port={app_context.uc2_can_port}"
+        )
 
     frame_broadcaster = FrameBroadcaster()
 
@@ -259,7 +285,7 @@ async def provide_managers(
 
     io_state = IOState()
 
-    serial_state = SerialState()
+    uc2_state = UC2State()
 
     # Devices from the device configuration (static or persistent file, see
     # base_config.yaml); every manager whose device kind is missing from it (or when no
@@ -379,6 +405,8 @@ async def provide_managers(
 
     cache_manager = LocalCacheManager()
 
+    autofocus_state = AutofocusState()
+
     acquistion_manager = AcquistionManager(
         expanse_manager=expanse_manager,
         detector_manager=detector,
@@ -389,7 +417,8 @@ async def provide_managers(
 
     return (
         frame_broadcaster,
-        serial,
+        uc2_bus,
+        uc2_state,
         stage,
         led,
         detector,
@@ -403,7 +432,6 @@ async def provide_managers(
         objective_state,
         filter_bank_state,
         io_state,
-        serial_state,
         hook_state,
         expanse_state,
         calibration_state,
@@ -414,6 +442,7 @@ async def provide_managers(
         metadata_manager,
         acquistion_manager,
         cache_manager,
+        autofocus_state,
     )
 
 
@@ -456,6 +485,22 @@ def run_detector_loop(
     detector.acquire_live()
 
 
+@background
+async def run_uc2_bus(uc2_bus: UC2BusManager) -> None:
+    """Connect the UC2 hardware bus and pump its transport until shutdown."""
+    await uc2_bus.abackground()
+
+
+@background
+async def run_uc2_event_dispatch(
+    uc2_bus: UC2BusManager,
+    stage_state: StageState,
+    uc2_state: UC2State,
+) -> None:
+    """Mirror spontaneous UC2 hardware events into the shared reactive states."""
+    await dispatch_uc2_events(uc2_bus, stage_state, uc2_state)
+
+
 # ====================
 # Registered Functions - Illumination
 # ====================
@@ -466,7 +511,7 @@ def clear_expanse(expanse_manager: protocols.ExpanseManager) -> None:
 
 
 @register
-def set_illumination_intensity(
+def set_illumination_intensity(  # TODO: Why is this function here?!
     illumination: IlluminationManager,
     intensity: float,
     channel: int = 1,
@@ -496,7 +541,7 @@ def long_stuff_running() -> None:
 
 
 @register
-def turn_on_illumination(
+def turn_on_illumination(  # TODO: Why is this function here?!
     illumination: IlluminationManager,
     state: IlluminationState,
     channel: int = 1,
@@ -562,7 +607,7 @@ def failing_camera(camera: CameraState, intensity: int) -> str:
         )
     ],
 )
-def move_stage(
+def move_stage(  # TODO: Why is this function here?!
     stage: StageManager,
     x: Optional[float] = None,
     y: Optional[float] = None,
@@ -588,7 +633,7 @@ def move_stage(
 
 @register
 def move_home(stage: StageManager, state: StageState) -> None:
-    """Move stage to home position."""
+    """Move stage to home position."""  # TODO: Why is this function here?!
     pos = stage.move_home()
     return pos
 
@@ -599,6 +644,9 @@ def move_home(stage: StageManager, state: StageState) -> None:
 def kill_benedict(stage: StageManager, kill_hard: str, die_young: bool) -> None:
     """A function that simulates a critical failure to test error handling and lock release."""
     raise RuntimeError("Benedict has been killed. This is a simulated critical failure.")
+
+
+# TODO: Why was this function defined?
 
 
 @register
@@ -841,12 +889,12 @@ def create_app(
     """
 
     app = FastAPI(
-        title="Virtual Microscope API",
+        title="Virtual Microscope API",  # TODO: should we load this from config?
         description="Integrated virtual microscope controller with protocol-based managers based on rekuest-next",
         version="2.0.0",
     )
 
-    authenticator = authenticator or CredentialAuthenticator(load_credentials())
+    authenticator = authenticator or default_authenticator()
     app.state.authenticator = authenticator
 
     # Middleware order is load-bearing. `add_middleware` PREPENDS, so the LAST call
@@ -885,6 +933,9 @@ def create_app(
 
     # Mount the public auth + health routes
     app.include_router(auth_router)
+
+    # Mount account/role/audit management routes (admin-only except /auth/me)
+    app.include_router(users_router)
 
     # Mount WebSocket routes for live video streaming
     app.include_router(liveview_router, prefix="/stream")

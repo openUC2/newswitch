@@ -5,10 +5,12 @@ import { useResumeTask } from "@/apps/default/hooks/useResumeTask";
 import { usePauseTask } from "@/apps/default/hooks/usePauseTask";
 import { useTaskStore } from "@/apps/default/hooks/useTaskStore";
 import { selectTask } from "@/lib/rekuest/task/store";
+import { useTranslation } from "react-i18next";
 
 export const ProgressDisplay = (props: {
   activeTaskId: string | null | undefined;
 }) => {
+  const { t } = useTranslation();
   const activeTaskId = props.activeTaskId;
 
   // Use the built-in selector which safely resolves both local references and server IDs
@@ -27,13 +29,13 @@ export const ProgressDisplay = (props: {
   if (!task) {
     return (
       <div className="flex items-center justify-between text-muted-foreground text-sm p-3 bg-muted/50 rounded-lg">
-        <span>Another app is controlling the stage</span>
+        <span>{t("microscope.anotherAppControlsStage")}</span>
         <Button
           variant="outline"
           size="sm"
           onClick={() => cancel(activeTaskId)}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
       </div>
     );
@@ -43,7 +45,9 @@ export const ProgressDisplay = (props: {
   return (
     <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Moving stage...</span>
+        <span className="text-muted-foreground">
+          {t("microscope.movingStage")}
+        </span>
         {task.progress !== null && task.progress !== undefined && (
           <span className="font-mono font-semibold">
             {Math.round(task.progress)}%
@@ -58,7 +62,7 @@ export const ProgressDisplay = (props: {
           className="flex-1"
           onClick={() => cancel(activeTaskId)}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
         {task.status === "paused" ? (
           <Button
@@ -67,7 +71,7 @@ export const ProgressDisplay = (props: {
             className="flex-1 animate-pulse"
             onClick={() => resume(activeTaskId)}
           >
-            Resume
+            {t("microscope.resume")}
           </Button>
         ) : (
           <Button
@@ -76,7 +80,7 @@ export const ProgressDisplay = (props: {
             className="flex-1"
             onClick={() => pause(activeTaskId)}
           >
-            Pause
+            {t("microscope.pause")}
           </Button>
         )}
       </div>

@@ -25,9 +25,16 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ProgressDisplay } from "../TaskDisplay";
 
 export function StageControl() {
+  const { t, i18n } = useTranslation();
+  const formatNumber = (value: number, digits: number) =>
+    new Intl.NumberFormat(i18n.resolvedLanguage, {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: digits,
+    }).format(value);
   const { data: stageState, loading: stateLoading } = useStageState({
     subscribe: true,
   });
@@ -80,11 +87,13 @@ export function StageControl() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Move className="h-4 w-4" />
-          <span className="text-sm font-medium">Stage Control</span>
+          <span className="text-sm font-medium">
+            {t("microscope.stageControl")}
+          </span>
         </div>
         {stateLoading && (
           <Badge variant="outline" className="text-xs">
-            Loading...
+            {t("common.loading")}
           </Badge>
         )}
       </div>
@@ -138,7 +147,11 @@ export function StageControl() {
                     {axis.label}
                   </div>
                   <div className="text-sm font-mono font-bold">
-                    {stateLoading ? "..." : (axis.value?.toFixed(1) ?? "—")}
+                    {stateLoading
+                      ? "..."
+                      : axis.value === undefined
+                        ? "—"
+                        : formatNumber(axis.value, 1)}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {axis.unit}
@@ -147,7 +160,9 @@ export function StageControl() {
               </TooltipTrigger>
               <TooltipContent>
                 <p>
-                  {axis.label}: {axis.value?.toFixed(3) ?? "N/A"} {axis.unit}
+                  {axis.label}:{" "}
+                  {axis.value === undefined ? "—" : formatNumber(axis.value, 3)}{" "}
+                  {axis.unit}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -158,7 +173,9 @@ export function StageControl() {
       {/* XY Joystick Controls */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">XY Movement</span>
+          <span className="text-xs text-muted-foreground">
+            {t("microscope.xyMovement")}
+          </span>
           <div className="flex gap-1">
             {stepSizes.slice(0, 4).map((size) => (
               <Button
@@ -232,7 +249,9 @@ export function StageControl() {
       {/* Z Control */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Z (Focus)</span>
+          <span className="text-xs text-muted-foreground">
+            {t("microscope.focus")}
+          </span>
           <div className="flex items-center gap-1">
             <Input
               type="number"
@@ -251,7 +270,7 @@ export function StageControl() {
             className="flex-1 h-9"
           >
             <ArrowUp className="h-3 w-3 mr-1" />
-            Up
+            {t("microscope.up")}
           </ActionButton>
           <ActionButton
             action={MoveStageDefinition}
@@ -260,14 +279,16 @@ export function StageControl() {
             className="flex-1 h-9"
           >
             <ArrowDown className="h-3 w-3 mr-1" />
-            Down
+            {t("microscope.down")}
           </ActionButton>
         </div>
       </div>
 
       {/* Absolute Position */}
       <div className="space-y-2 pt-2 border-t border-border/50">
-        <span className="text-xs text-muted-foreground">Go to Position</span>
+        <span className="text-xs text-muted-foreground">
+          {t("microscope.goToPosition")}
+        </span>
         <div className="grid grid-cols-3 gap-2">
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">X</span>
@@ -313,7 +334,7 @@ export function StageControl() {
           variant="secondary"
         >
           <RotateCcw className="h-3 w-3 mr-1" />
-          Move
+          {t("microscope.move")}
         </ActionButton>
       </div>
 

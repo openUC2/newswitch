@@ -1,0 +1,41 @@
+export const users = {
+  title: "Users",
+  description: "Manage accounts and roles.",
+  add: "Add user",
+  role: "Role",
+  enabled: "Enabled",
+  actions: "Actions",
+  you: "you",
+  resetPassword: "Reset password",
+  resetPasswordFor: "Reset password for '{{username}}'",
+  resetting: "Resetting...",
+  noUsers: "No users yet.",
+  deleteLabel: "Delete {{username}}",
+  deleteTitle: "Delete '{{username}}'?",
+  deleteDescription:
+    "This permanently removes the account and signs it out everywhere. This cannot be undone.",
+  deleted: "Deleted '{{username}}'.",
+  created: "Created '{{username}}'.",
+  passwordReset: "Password for '{{username}}' reset.",
+  creating: "Creating...",
+  loadFailed: "Could not load users.",
+  updateFailed: "Could not update user.",
+  deleteFailed: "Could not delete user.",
+  createFailed: "Could not create user.",
+  resetFailed: "Could not reset password.",
+} as const;
+
+export const audit = {
+  description: "Recent logins, failures and logouts.",
+  when: "When",
+  user: "User",
+  event: "Event",
+  noEvents: "No events yet.",
+  loadFailed: "Could not load the audit log.",
+  events: {
+    login_success: "Login successful",
+    login_failure: "Login failed",
+    logout: "Logged out",
+    session_expired: "Session expired",
+  },
+} as const;
