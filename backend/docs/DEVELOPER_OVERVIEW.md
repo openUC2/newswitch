@@ -85,15 +85,19 @@ controller (`protocol: gige-vision` / `usb3-vision`) is opened through uc2_cam_p
 is the detector's `manufacturer`, passed on unchanged; vendor-specific options come from the
 mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section "Cameras".
 
-- uc2_cam_py is a C++ extension; building it needs the MVS SDK (`/opt/MVS`) and Python 3.12,
-  also for its simulated camera. For now it is a path dependency on the unpacked archive in
-  `backend/external/` (git-ignored): `uv sync --extra camera`. CI runs with `UV_FROZEN=1`
-  and without the extra; the camera tests skip there.
+- uc2_cam_py (https://github.com/openUC2/UC2_cam_py, pinned to a commit in the extra
+  `camera`) is a C++ extension; building it needs the MVS SDK (`/opt/MVS`) and Python 3.12,
+  also for its simulated camera: `uv sync --extra camera`. CI leaves the extra out; the
+  camera tests skip there.
 - A camera acquires while anyone holds it (live stream, snapshot, `start_acquisition`); every
   start is a new session and, with `store_image_data`, a new `.uc2rb` file in
   `camera_recording_dir` (`base_config.yaml`).
+- `camera_debug_window` (`base_config.yaml`, shipped `true`) passes `debug_window=True` to
+  every `create_camera`: uc2_cam_py shows each camera's newest image in an X11 window, and the
+  manager holds the cameras from startup so the window always has an image.
 - `backend/configs/camTest_config.yaml` is a simulated camera for trying it out; boot with
-  `NEWSWITCH_CONFIG=configs/camTest.json` (real-hardware mode, own persistent file).
+  `NEWSWITCH_CONFIG=configs/camTest.json` (real-hardware mode, own persistent file). The
+  walkthrough is "End-to-end test for camera" in the root `README.md`.
 
 Managers are used in two places:
 - **Registered functions** (for control/automation)

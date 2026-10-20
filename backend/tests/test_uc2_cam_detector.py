@@ -8,6 +8,7 @@ Skipped without the extra "camera" (uc2_cam_py).
 from __future__ import annotations
 
 import dataclasses
+import logging
 import threading
 import time
 from pathlib import Path
@@ -36,7 +37,7 @@ SETTINGS = CameraSettings(
     vendor_options={"sensor_width": 400, "sensor_height": 200, "frame_rate": 100.0},
 )
 
-#: ``make_manager(*settings, broadcaster=None, detectors=None)``
+#: ``make_manager(*settings, broadcaster=None, detectors=None, debug_window=False)``
 ManagerFactory = Callable[..., UC2CamDetectorManager]
 
 
@@ -80,8 +81,8 @@ def make_manager(recording_dir: Path) -> Iterator[ManagerFactory]:
         recording_dir: The recording folder fixture.
 
     Yields:
-        ``make_manager(*settings, broadcaster=None, detectors=None)``; without settings
-        one camera with `SETTINGS`.
+        ``make_manager(*settings, broadcaster=None, detectors=None, debug_window=False)``;
+        without settings one camera with `SETTINGS`.
     """
     made: list[UC2CamDetectorManager] = []
 
@@ -89,6 +90,7 @@ def make_manager(recording_dir: Path) -> Iterator[ManagerFactory]:
         *settings: CameraSettings,
         broadcaster: FrameBroadcaster | None = None,
         detectors: list[Detector] | None = None,
+        debug_window: bool = False,
     ) -> UC2CamDetectorManager:
         manager = UC2CamDetectorManager(
             camera_state=CameraState(),
@@ -96,6 +98,7 @@ def make_manager(recording_dir: Path) -> Iterator[ManagerFactory]:
             cameras=list(settings) or [SETTINGS],
             detectors=detectors,
             recording_dir=recording_dir,
+            debug_window=debug_window,
         )
         made.append(manager)
         return manager
@@ -342,3 +345,43 @@ def test_close(manager: UC2CamDetectorManager) -> None:
     manager.close()
     with pytest.raises(RuntimeError, match="closed"):
         manager.start_acquisition(1)
+
+
+# ---------------------------------------------------------------------------
+# Debug window
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def no_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No display: uc2_cam_py logs an error instead of opening a window on the screen."""
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+
+
+def test_no_debug_window_by_default(manager: UC2CamDetectorManager) -> None:
+    """Without the debug window nothing is shown and the camera waits for a holder."""
+    assert manager._cameras[1].camera._debug_window is None
+    assert not is_recording(manager)
+
+
+@pytest.mark.usefixtures("no_display")
+def test_debug_window_keeps_the_camera_acquiring(
+    make_manager: ManagerFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The flag reaches uc2_cam_py; the camera acquires from the start until close()."""
+    with caplog.at_level(logging.ERROR, logger="newswitch.camera"):
+        manager = make_manager(debug_window=True)
+    camera = manager._cameras[1].camera
+    assert camera._debug_window is not None and not camera._debug_window.opened
+    assert "debug_window=True" in caplog.text  # no display: logged, camera unaffected
+    assert is_recording(manager)
+
+    manager.capture_image(1)
+    manager.start_acquisition(1)
+    manager.stop_acquisition(1)
+    manager.deactivate_detector(1)
+    assert is_recording(manager)  # none of these ends the debug hold
+
+    manager.close()
+    assert camera._debug_window is None

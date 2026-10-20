@@ -7,7 +7,8 @@
 #
 # The "camera" is a USB3 camera of the vendor "Simulated": uc2_cam_py simulates it (a
 # Gaussian spot walking over the sensor). Recordings go to camera_recording_dir of
-# base_config.yaml.
+# base_config.yaml; with camera_debug_window there a window shows the image. Walkthrough:
+# "End-to-end test for camera" in the repository's README.md.
 
 newswitch_version: v1.0.2
 devices:
@@ -22,7 +23,9 @@ devices:
         type: usb3-vision-camera
         id: 0
         buffer_size: 8
-        store_image_data: true
+        # true records every image to camera_recording_dir; with camera_debug_window the
+        # camera acquires all the time (about 12 MB/s here)
+        store_image_data: false
         # passed to uc2_cam_py unchanged; options of its simulated camera
         vendor_options:
           sensor_width: 640

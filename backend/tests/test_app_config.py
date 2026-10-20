@@ -62,6 +62,7 @@ def test_shipped_base_config_loads() -> None:
     assert settings.static_config_path.is_file()
     assert settings.config_file in (settings.static_config_path, settings.persistent_config_path)
     assert settings.camera_recording_dir == BASE_CONFIG_FILE.parent / "data" / "recordings"
+    assert settings.camera_debug_window is True
 
 
 def test_values_come_from_the_file(write_base: BaseWriter) -> None:
@@ -123,6 +124,14 @@ def test_camera_recording_dir(write_base: BaseWriter, tmp_path: Path) -> None:
     assert ImswitchConfig().camera_recording_dir == base.parent / "data" / "recordings"
     write_base(camera_recording_dir=str(tmp_path / "recordings"))
     assert ImswitchConfig().camera_recording_dir == tmp_path / "recordings"
+
+
+def test_camera_debug_window(write_base: BaseWriter) -> None:
+    """The debug window is off unless the file switches it on."""
+    write_base()
+    assert ImswitchConfig().camera_debug_window is False
+    write_base(camera_debug_window=True)
+    assert ImswitchConfig().camera_debug_window is True
 
 
 def test_unknown_key_is_an_error(write_base: BaseWriter) -> None:

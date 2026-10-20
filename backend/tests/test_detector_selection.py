@@ -89,12 +89,17 @@ def _build(config: ImswitchConfig, devices: NewswitchConfig | None) -> DetectorM
         )
 
 
-def _settings(tmp_path: Path, *, virtual: bool) -> ImswitchConfig:
-    """Base settings without a device file, recording into `tmp_path`."""
+def _settings(tmp_path: Path, *, virtual: bool, debug_window: bool = False) -> ImswitchConfig:
+    """Base settings without a device file, recording into `tmp_path`.
+
+    The debug window is off unless asked for: the shipped base config switches it on, and
+    no window may pop up during the tests.
+    """
     return ImswitchConfig(
         use_virtual_microscope=virtual,
         config_file=None,
         camera_recording_dir=tmp_path / "recordings",
+        camera_debug_window=debug_window,
     )
 
 
@@ -140,10 +145,32 @@ def test_real_hardware_opens_the_cameras(tmp_path: Path, camera_devices: Newswit
         (detector,) = manager.state.detectors
         assert (detector.slot, detector.name, detector.width, detector.height) == (1, "Sim", 64, 48)
         assert manager.get_camera_info(1).serial_number == "SIM-0001"
+        assert not manager.get_camera_info(1).is_recording  # no debug window: nobody holds it
     finally:
         app_module.close_cameras(manager)
     with pytest.raises(RuntimeError, match="closed"):
         manager.start_acquisition(1)
+
+
+def test_camera_debug_window_is_passed_on(
+    tmp_path: Path, camera_devices: NewswitchConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """camera_debug_window reaches uc2_cam_py, and the camera acquires for the window.
+
+    Without a display, so uc2_cam_py only logs an error instead of opening the window.
+    """
+    pytest.importorskip("uc2_cam_py")
+    from newswitch.managers.camera import UC2CamDetectorManager
+
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    manager = _build(_settings(tmp_path, virtual=False, debug_window=True), camera_devices)
+    try:
+        assert isinstance(manager, UC2CamDetectorManager)
+        assert manager._cameras[1].camera._debug_window is not None
+        assert manager.get_camera_info(1).is_recording
+    finally:
+        app_module.close_cameras(manager)
 
 
 def test_close_cameras_ignores_other_detectors(tmp_path: Path) -> None:

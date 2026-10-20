@@ -26,3 +26,9 @@ load_from_static_config_path: true
 # Folder the cameras (uc2_cam_py, extra "camera") record into; relative to this file's
 # folder. Recording is switched on per camera (store_image_data in its mapping entry).
 camera_recording_dir: data/recordings
+
+# Debug view without the frontend: every camera (real hardware only) opens a window that
+# shows its newest image, and acquires from startup on so the window always has one (with
+# store_image_data that means recording all the time). Without an X11 display only an
+# error is logged. Set false on headless machines.
+camera_debug_window: true

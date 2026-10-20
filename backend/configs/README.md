@@ -131,8 +131,12 @@ virtual microscope keeps its simulated detector.
 - After opening, the configured `value`s of exposure, gain and frame rate and the binning are
   written to the camera. The limits the camera reports replace the configured ones in the
   running detector.
+- `camera_debug_window: true` in `base_config.yaml` opens a uc2_cam_py window per camera
+  showing its newest image, and keeps the cameras acquiring from startup (so with
+  `store_image_data: true` they record all the time).
 - `camTest_config.yaml` is a simulated camera (`manufacturer: Simulated`) for trying it
-  out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app`.
+  out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app`. Walkthrough:
+  "End-to-end test for camera" in the root `README.md`.
 
 ## Stages, axes and wheels
 

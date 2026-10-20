@@ -12,6 +12,10 @@ holds it: the live stream, a snapshot, or `start_acquisition`. The first holder 
 the last one stops it, so a snapshot never ends a live stream. Every start is a new
 session (and a new file when recording).
 
+With ``debug_window`` uc2_cam_py shows each camera's newest image in a window of its own
+(debugging without the frontend); the cameras are then held from the start, so the window
+always has an image.
+
 Units: the `Detector` state keeps exposure times in seconds, uc2_cam_py in milliseconds.
 """
 
@@ -47,6 +51,8 @@ logger = logging.getLogger(__name__)
 LIVE = "live"
 #: Holder of a camera between `start_acquisition` and `stop_acquisition`.
 EXPLICIT = "explicit"
+#: Holder of every camera while its debug window is shown (from startup until `close`).
+DEBUG = "debug"
 
 #: Pause between two looks into the ring buffer while waiting for an image (s).
 POLL_INTERVAL_S = 0.002
@@ -123,6 +129,7 @@ class UC2CamDetectorManager:
         cameras: list[CameraSettings],
         detectors: list[Detector] | None = None,
         recording_dir: Path | None = None,
+        debug_window: bool = False,
     ) -> None:
         """Open the cameras, apply the configured settings and publish their detectors.
 
@@ -136,6 +143,9 @@ class UC2CamDetectorManager:
                 their ranges, pixel size and sample type. A camera without a configured
                 detector gets a default one.
             recording_dir: Folder for the recordings; None = uc2_cam_py's default.
+            debug_window: Show every camera's newest image in a uc2_cam_py window and keep
+                the cameras acquiring until `close`. Without an X11 display uc2_cam_py
+                only logs an error.
 
         Raises:
             TypeError, ValueError: Invalid camera settings.
@@ -150,7 +160,7 @@ class UC2CamDetectorManager:
         published: list[Detector] = []
         try:
             for settings in cameras:
-                camera = self._open(settings, recording_dir)
+                camera = self._open(settings, recording_dir, debug_window)
                 self._cameras[settings.slot] = _OpenCamera(settings=settings, camera=camera)
                 self._apply(settings, camera)
                 detector = configured.get(settings.slot) or Detector(
@@ -158,6 +168,9 @@ class UC2CamDetectorManager:
                 )
                 self._describe(detector, camera)
                 published.append(detector)
+            if debug_window:  # the window shows the newest image: keep images coming
+                for cam in self._cameras.values():
+                    self._hold(cam, DEBUG)
         except BaseException:
             self.close()
             raise
@@ -166,7 +179,9 @@ class UC2CamDetectorManager:
     # ------------------------------------------------------------------ setup
 
     @staticmethod
-    def _open(settings: CameraSettings, recording_dir: Path | None) -> uc2_cam_py.Camera:
+    def _open(
+        settings: CameraSettings, recording_dir: Path | None, debug_window: bool
+    ) -> uc2_cam_py.Camera:
         """Open one camera; values that are not configured keep uc2_cam_py's defaults."""
         options: dict[str, Any] = dict(settings.vendor_options)
         if settings.store_image_data is not None:
@@ -180,6 +195,7 @@ class UC2CamDetectorManager:
             start_on_init=False,
             image_file_path=recording_dir,
             logger=logging.getLogger(f"newswitch.camera.{settings.key}"),
+            debug_window=debug_window,
             **options,
         )
 
@@ -345,7 +361,8 @@ class UC2CamDetectorManager:
     def deactivate_detector(self, slot: int) -> None:
         """Deactivate a detector; its camera leaves the live stream at once.
 
-        An acquisition started with `start_acquisition` keeps running.
+        An acquisition started with `start_acquisition` keeps running, and so does a
+        camera held for its debug window.
 
         Args:
             slot: Detector slot number.

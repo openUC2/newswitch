@@ -10,11 +10,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# The extra "camera" (uc2_cam_py) is a path dependency on backend/external/, which is
-# git-ignored and therefore missing here. uv must not re-lock (that reads the path), so every
-# uv call uses uv.lock as it is, and the syncs leave the extra out.
-env:
-  UV_FROZEN: "1"
+# The backend syncs leave out the extra "camera": building uc2_cam_py needs the MVS SDK
+# (/opt/MVS), which the runners do not have. Its tests skip without it.
 
 jobs:
   changes:

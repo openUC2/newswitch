@@ -173,6 +173,10 @@ class ImswitchConfig(BaseSettings):
     """Folder the cameras record into (see `managers.camera`). None: the default of
     uc2_cam_py (``~/UC2_recordings``)."""
 
+    camera_debug_window: bool = False
+    """Show every camera's newest image in a window of uc2_cam_py (debugging without the
+    frontend); the cameras then acquire from startup on."""
+
     # UC2 hardware transport (used when use_virtual_microscope is False).
     # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
     # over serial JSON). Both are plug-in replacements behind UC2BusManager.
@@ -264,7 +268,7 @@ def build_detector_manager(
     the device configuration maps a detector to a camera controller (see
     `adapters.cameras`). Without the extra "camera" (uc2_cam_py not importable) the
     virtual detector stands in, with a warning. A camera that cannot be opened is an
-    error: startup fails.
+    error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
     """
     configured_detectors = adapters.detectors(devices) if devices is not None else None
     cameras = None
@@ -287,6 +291,7 @@ def build_detector_manager(
                 cameras=cameras,
                 detectors=configured_detectors,
                 recording_dir=config.camera_recording_dir,
+                debug_window=config.camera_debug_window,
             )
     return VirtualDetectorManager(
         camera_state=camera_state,

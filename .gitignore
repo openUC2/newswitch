@@ -86,9 +86,6 @@ backend/data/
 backend/export/
 backend/media/
 
-# Unpacked private packages, installed as local path dependencies (uc2_cam_py, extra "camera")
-backend/external/
-
 # ---------- Node / frontend ----------
 node_modules/
 dist/

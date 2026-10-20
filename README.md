@@ -97,6 +97,100 @@ The E2E suite currently uses one shared disposable authentication database, so P
 configured for a single worker and serial execution. See `frontend/playwright.config.ts` for the
 complete runtime configuration.
 
+### End-to-end test for camera
+
+Cameras are driven through [uc2_cam_py](https://github.com/openUC2/UC2_cam_py) (extra `camera`).
+This walkthrough tests the whole chain with its simulated camera, from loading the configuration
+to the image in a debug window; no camera hardware and no frontend are needed.
+
+**What happens on the way:**
+
+1. `backend/base_config.yaml` is read. `camera_debug_window: true` asks for a window per camera,
+   and `camera_recording_dir` sets where recordings go.
+2. `NEWSWITCH_CONFIG=configs/camTest.json` overrides two settings:
+   `use_virtual_microscope: false` (cameras are only used on real hardware) and the device file
+   `configs/camTest_config.yaml`.
+3. `config_io` validates that file, and `adapters.cameras()` finds the camera: a detector
+   (`manufacturer: Simulated`) mapped by a `usb3-vision` controller.
+4. `build_detector_manager()` creates the `UC2CamDetectorManager`, which calls
+   `uc2_cam_py.create_camera(..., debug_window=True)`.
+5. The debug window keeps the camera acquiring, so the window shows the live image from startup.
+
+**Prerequisites:**
+
+- Linux with a graphical session (X11, or Wayland with XWayland: `DISPLAY` must be set).
+- The MVS SDK in `/opt/MVS`, or `MVCAM_SDK_PATH` pointing to it. uc2_cam_py needs it to build,
+  also for the simulated camera.
+- Python 3.12.
+- The extra installed: `just install` (it syncs `--all-extras`) or `cd backend && uv sync --extra camera`.
+  Check it with:
+
+  ```bash
+  cd backend && uv run python -c "import uc2_cam_py; print(uc2_cam_py.vendors())"
+  ```
+
+  It should print `['HikRobot', 'Simulated']`.
+
+**Steps** (paths are relative to `backend/`):
+
+1. Validate the device file:
+
+   ```bash
+   uv run python -m newswitch.config_io configs/camTest_config.yaml
+   ```
+
+   It should list the controller and the detector `sim-cam` without errors.
+2. Run the automated camera tests. They use the same simulated camera and never open a window:
+
+   ```bash
+   uv run pytest tests/test_uc2_cam_detector.py tests/test_detector_selection.py tests/config_io/test_adapters.py
+   ```
+
+3. Start the backend with the camera configuration, from the repository root:
+
+   ```bash
+   NEWSWITCH_CONFIG=configs/camTest.json just dev-backend
+   ```
+
+4. A window **"uc2_cam_py debug - Simulated UC2-SIM SN SIM-0001"** opens. It shows a bright
+   Gaussian spot that walks row by row over a 5 × 4 grid of the 640 × 480 sensor, 20 images per
+   second. The terminal also prints `Initializing real hardware microscope managers`, followed
+   by repeated `UC2 serial bus error ... reconnecting` warnings. Those come from stage and
+   illumination looking for a UC2 board that is not there; they do not affect the camera.
+5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
+   browser, next to the debug window.
+6. Optional: record to disk. Set `store_image_data: true` for `sim-cam` in
+   `configs/camTest_config.yaml` and restart. Each acquisition session is written as a `.uc2rb`
+   file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
+   the camera running, this records continuously, about 12 MB/s here.
+7. Stop with Ctrl+C. The window closes and the runtime values are saved to
+   `configs/camTest_config.persistent.yaml`; the main persistent file is not touched.
+
+**A real camera:**
+
+1. Copy the two camTest files and point the controller at the hardware: `protocol: gige-vision` or
+   `usb3-vision`. In the detector, set the vendor as uc2_cam_py names it, e.g.
+   `manufacturer: HikRobot`.
+2. Select the camera with `serial_number` in its mapping entry. List the connected cameras with:
+
+   ```bash
+   uv run python -c "import uc2_cam_py; print(uc2_cam_py.list_devices())"
+   ```
+
+3. Remove the `vendor_options`; they are options of the simulated camera only.
+
+Keys and options are described in `backend/configs/README.md`, section "Cameras".
+
+**Troubleshooting:**
+
+| Symptom | Cause |
+| --- | --- |
+| No window, and an error `debug_window=True: no X11 display available` | No display (headless session, or `DISPLAY` not set). The camera works anyway. |
+| No window, and an error `this build has no X11 support` | uc2_cam_py was built without the X11 headers. Install `libX11-devel` (Fedora) or `libx11-dev` (Debian/Ubuntu), then `uv sync --extra camera --reinstall-package uc2-cam-py`. |
+| Warning `uc2_cam_py cannot be imported`, virtual detector used | The extra is not installed, or the MVS runtime libraries are missing. |
+| No window and no warning | `use_virtual_microscope` is still `true`; check that `NEWSWITCH_CONFIG` reached the backend. |
+| `camera_debug_window` should stay off | Set it to `false` in `backend/base_config.yaml`, e.g. on headless machines. |
+
 ### Commits
 
 Commit messages must be [conventional](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `chore:`,
