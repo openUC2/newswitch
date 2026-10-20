@@ -22,3 +22,7 @@ persistent_config_path: newswitch-config.persistent.yaml
 # false: read (and write back) persistent_config_path; on first start it is created
 #        as a copy of static_config_path
 load_from_static_config_path: true
+
+# Folder the cameras (uc2_cam_py, extra "camera") record into; relative to this file's
+# folder. Recording is switched on per camera (store_image_data in its mapping entry).
+camera_recording_dir: data/recordings

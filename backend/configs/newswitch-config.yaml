@@ -99,7 +99,7 @@ devices:
     connection:
       protocol: usb3-vision
     # Alternative to my-gigE-camera-controll for bigcamera42, e.g.
-    #   bigcamera42: {type: usb3-vision-camera, id: 0, serial_number: 00F12345678, index: 0}
+    #   bigcamera42: {type: usb3-vision-camera, id: 0, serial_number: "00F12345678"}
     mapping: {}
 
   my-gigE-camera-controll:
@@ -109,11 +109,12 @@ devices:
     connection:
       protocol: gige-vision
     mapping:
+      # Cameras: serial_number OR index selects the camera (neither: the first one);
+      # optional buffer_size, store_image_data and vendor_options (see configs/README.md)
       bigcamera42:
         type: gige-vision-camera
         id: 0
         serial_number: abcd1234
-        index: 0
 
   # --- LASERS AND LEDS ---
   my-laser-serial:
@@ -204,7 +205,8 @@ devices:
   bigcamera42:
     type: detector
     name: MV-CA023-10UM
-    manufacturer: HIK ROBOTICS
+    # vendor as the camera library (uc2_cam_py) names it; case does not matter
+    manufacturer: HikRobot
     tags:
       - monochrome
       - global-shutter

@@ -37,13 +37,20 @@ jobs:
       - name: Install frontend deps
         run: yarn --cwd frontend install --frozen-lockfile
 
+      # UV_FROZEN / --no-extra camera: see the note at the top of ci.yml (path dependency
+      # on the git-ignored backend/external/). `uv version` in release.config.cjs still
+      # re-locks and needs that folder; switch uc2_cam_py to a git reference first.
       - name: Install backend deps
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --no-extra camera --dev
         working-directory: backend
+        env:
+          UV_FROZEN: "1"
 
       - name: Backend tests
         run: uv run pytest -k "not integration"
         working-directory: backend
+        env:
+          UV_FROZEN: "1"
 
       # Drives everything: bumps both versions, builds both, commits, tags, uploads.
       - name: Semantic release

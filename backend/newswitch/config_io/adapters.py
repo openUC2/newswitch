@@ -12,6 +12,8 @@ Direction config -> managers (at startup):
     `StageConfig`        limits of `StageState` (directions x/y/z/a of the first
                          stage that is not a wheel, until an axis manager exists)
     `ControllerConfig`   `SerialSettings` for the UC2 serial manager
+    `DetectorConfig` +   `CameraSettings` for the camera manager (detectors
+    camera controller    behind a gige-vision / usb3-vision controller)
     ==================== ===================================================
 
 A **wheel** is an axis whose ``pos`` presets are named after filters or objectives, e.g.
@@ -32,23 +34,27 @@ import glob
 import logging
 import math
 from dataclasses import dataclass
+from typing import Any
 
+from ..protocols.camera import CameraSettings
 from ..protocols.detector import CameraState, Colormap, Detector
 from ..protocols.filter_bank import Filter, FilterBankState
 from ..protocols.illumination import Illumination, IlluminationKind
 from ..protocols.objective import ObjectiveLens, ObjectiveState
 from ..protocols.stage import StageState
-from .connection import SerialTransport, Uc2RestProtocol
+from .connection import GigEVisionProtocol, SerialTransport, Uc2RestProtocol, Usb3VisionProtocol
 from .devices import (
     AxisConfig,
     ControllerConfig,
     DetectorConfig,
     DeviceBase,
     FilterConfig,
+    MappingEntry,
     NewswitchConfig,
     ObjectiveConfig,
     StageConfig,
 )
+from .errors import ConfigError
 from .values import PhysVal
 
 logger = logging.getLogger(__name__)
@@ -354,6 +360,146 @@ def serial_settings(config: NewswitchConfig) -> SerialSettings | None:
             continue
         return SerialSettings(port=port, baudrate=transport.baudrate)
     return None
+
+
+def _value(phys: PhysVal | None) -> float | None:
+    """The configured value of a physical value, None when not set."""
+    return None if phys is None else phys.value
+
+
+def _is_int(value: object) -> bool:
+    """True for an int that is not a bool (YAML ``true`` must not count as 1)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _camera_problems(extras: dict[str, Any], where: str) -> list[str]:
+    """Check the camera keys of a mapping entry (they are extras, so not validated on load).
+
+    Args:
+        extras: Further keys of the mapping entry.
+        where: Location prefix for the messages.
+
+    Returns:
+        One message per invalid key.
+    """
+    problems = []
+    serial = extras.get("serial_number")
+    if serial is not None and (not isinstance(serial, str) or not serial):
+        problems.append(f"{where}.serial_number: must be a non-empty string (quote numbers)")
+    index = extras.get("index")
+    if index is not None and (not _is_int(index) or index < 0):
+        problems.append(f"{where}.index: must be an integer >= 0")
+    buffer_size = extras.get("buffer_size")
+    if buffer_size is not None and (not _is_int(buffer_size) or buffer_size < 2):
+        problems.append(f"{where}.buffer_size: must be an integer >= 2")
+    store = extras.get("store_image_data")
+    if store is not None and not isinstance(store, bool):
+        problems.append(f"{where}.store_image_data: must be true or false")
+    options = extras.get("vendor_options")
+    if options is not None and not isinstance(options, dict):
+        problems.append(f"{where}.vendor_options: must be a mapping")
+    return problems
+
+
+def _camera(
+    slot: int,
+    key: str,
+    device: DetectorConfig,
+    connection: GigEVisionProtocol | Usb3VisionProtocol,
+    entry: MappingEntry,
+) -> CameraSettings:
+    """Build the settings of one camera from its detector, connection and mapping entry.
+
+    Args:
+        slot: Detector slot.
+        key: Key of the detector.
+        device: The detector.
+        connection: Connection of the controller the detector is mapped to.
+        entry: The detector's mapping entry (camera keys already checked).
+
+    Returns:
+        The camera settings.
+    """
+    extras = entry.extras
+    serial = extras.get("serial_number")
+    index = extras.get("index")
+    if serial is None and index is None:  # fall back to the connection's selector
+        serial = connection.serial_number
+        index = connection.index if isinstance(connection, Usb3VisionProtocol) else None
+    return CameraSettings(
+        slot=slot,
+        key=key,
+        name=device.name or key,
+        manufacturer=device.manufacturer,
+        connection_type="GigE" if isinstance(connection, GigEVisionProtocol) else "USB3",
+        serial_number=serial,
+        index=index,
+        buffer_size=extras.get("buffer_size"),
+        store_image_data=extras.get("store_image_data"),
+        exposure_time_ms=_value(device.exposure_time_ms),
+        gain_db=_value(device.gain_db),
+        frame_rate_per_sec=_value(device.framerate_per_sec),
+        binning=device.binning,
+        vendor_options=dict(extras.get("vendor_options") or {}),
+    )
+
+
+def cameras(config: NewswitchConfig) -> list[CameraSettings] | None:
+    """Build the settings for opening the cameras.
+
+    A camera is a detector mapped by a controller whose connection is a camera link
+    (``protocol: gige-vision`` or ``usb3-vision``); the camera library handles the
+    transport. Other detectors are skipped with a warning.
+
+    The vendor is the detector's ``manufacturer``, passed on unchanged: newswitch knows no
+    vendor names, the camera library decides which it supports. The detector's mapping
+    entry may carry these further keys:
+
+    ``serial_number`` / ``index``
+        Which camera to open (not both); without them the connection's selector is used,
+        and without that the first camera.
+    ``buffer_size``, ``store_image_data``
+        Ring-buffer size in images, and whether every image is recorded to disk.
+    ``vendor_options``
+        Mapping of vendor-specific options, passed on unchanged.
+
+    The slot is the detector's position among all detectors (as in `detectors`).
+
+    Args:
+        config: The loaded configuration.
+
+    Returns:
+        One entry per camera, or None when there are none.
+
+    Raises:
+        ConfigError: A mapping entry carries an invalid camera key.
+    """
+    controllers = config.keyed(ControllerConfig)
+    result: list[CameraSettings] = []
+    problems: list[str] = []
+    for index, (key, device) in enumerate(config.keyed(DetectorConfig).items()):
+        found = config.controller_of(key)
+        connection = None if found is None else controllers[found[0]].connection
+        if found is None or not isinstance(connection, GigEVisionProtocol | Usb3VisionProtocol):
+            logger.warning("detector %r is not mapped to a camera controller, skipped", key)
+            continue
+        controller_key, entry = found
+        where = f"devices.{controller_key}.mapping.{key}"
+        invalid = _camera_problems(entry.extras, where)
+        if invalid:
+            problems.extend(invalid)
+            continue
+        camera = _camera(index + 1, key, device, connection, entry)
+        if camera.serial_number is not None and camera.index is not None:
+            problems.append(
+                f"{where}: serial_number and index both select the camera, give only one "
+                f"(here or in the connection of {controller_key!r})"
+            )
+            continue
+        result.append(camera)
+    if problems:
+        raise ConfigError("invalid camera settings", problems)
+    return result or None
 
 
 # ---------------------------------------------------------------------------

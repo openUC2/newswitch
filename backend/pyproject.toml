@@ -43,6 +43,16 @@ uc2 = [
     "uc2-rest @ git+https://github.com/openUC2/UC2-REST.git@60f15bfc543baf41e46996cd149b298419de5eac",
     "uc2canopen>=0.2.0",
 ]
+# Cameras through uc2_cam_py (newswitch.managers.camera). Its C++ extension needs the
+# MVS SDK (/opt/MVS) to build, also for the simulated camera, and Python 3.12. The repo
+# is private, so for now it is a path dependency on the unpacked archive in
+# external/ (git-ignored); switch to a git reference once CI has access.
+camera = [
+    "uc2-cam-py ; sys_platform == 'linux' and python_version == '3.12'",
+]
+
+[tool.uv.sources]
+uc2-cam-py = { path = "external/UC2_cam_py-main" }
 
 [tool.uv]
 dev-dependencies =  [
@@ -90,6 +100,7 @@ exclude = [
     "buck-out",
     "build",
     "dist",
+    "external",
     "node_modules",
     "venv",
 ]

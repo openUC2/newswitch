@@ -1,0 +1,57 @@
+# Test configuration: one simulated camera through uc2_cam_py (no hardware needed).
+#
+# The camera manager is only used on real hardware, so start the backend with
+#   NEWSWITCH_CONFIG=configs/camTest.json
+# (needs the extra "camera": uv sync --extra camera). Stage and illumination then look for
+# a UC2 board and keep retrying without one; the camera works regardless.
+#
+# The "camera" is a USB3 camera of the vendor "Simulated": uc2_cam_py simulates it (a
+# Gaussian spot walking over the sensor). Recordings go to camera_recording_dir of
+# base_config.yaml.
+
+newswitch_version: v1.0.2
+devices:
+
+  sim-camera-controller:
+    type: controller
+    name: Simulated-USB3-Camera-Controller
+    connection:
+      protocol: usb3-vision
+    mapping:
+      sim-cam:
+        type: usb3-vision-camera
+        id: 0
+        buffer_size: 8
+        store_image_data: true
+        # passed to uc2_cam_py unchanged; options of its simulated camera
+        vendor_options:
+          sensor_width: 640
+          sensor_height: 480
+          frame_rate: 20.0
+
+  sim-cam:
+    type: detector
+    name: UC2-SIM
+    manufacturer: Simulated
+    tags:
+      - monochrome
+      - simulated
+    pixelcount: [640, 480]
+    pixelpitch_um: 5.86
+    channels: 1
+    exposure_time_ms:
+      value: 10.0
+      min: 0.01
+      max: 1000.0
+      unit: ms
+    framerate_per_sec:
+      value: 20.0
+      min: 0.1
+      max: 200.0
+      unit: Hz
+    gain_db:
+      value: 0.0
+      min: 0.0
+      max: 24.0
+      unit: dB
+    binning: 1

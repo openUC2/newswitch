@@ -61,6 +61,7 @@ def test_shipped_base_config_loads() -> None:
     assert settings.static_config_path == settings.config_dir / "newswitch-config.yaml"
     assert settings.static_config_path.is_file()
     assert settings.config_file in (settings.static_config_path, settings.persistent_config_path)
+    assert settings.camera_recording_dir == BASE_CONFIG_FILE.parent / "data" / "recordings"
 
 
 def test_values_come_from_the_file(write_base: BaseWriter) -> None:
@@ -112,6 +113,16 @@ def test_explicit_paths_are_kept(write_base: BaseWriter, tmp_path: Path) -> None
     assert settings.config_dir == tmp_path / "abs"
     assert settings.static_config_path == tmp_path / "devices.yaml"
     assert settings.persistent_config_path == Path("sub/persistent.yaml")
+
+
+def test_camera_recording_dir(write_base: BaseWriter, tmp_path: Path) -> None:
+    """The recording folder is optional; relative to the base file, or absolute."""
+    base = write_base()
+    assert ImswitchConfig().camera_recording_dir is None
+    write_base(camera_recording_dir="data/recordings")
+    assert ImswitchConfig().camera_recording_dir == base.parent / "data" / "recordings"
+    write_base(camera_recording_dir=str(tmp_path / "recordings"))
+    assert ImswitchConfig().camera_recording_dir == tmp_path / "recordings"
 
 
 def test_unknown_key_is_an_error(write_base: BaseWriter) -> None:
