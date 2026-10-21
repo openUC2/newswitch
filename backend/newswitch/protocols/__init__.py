@@ -8,7 +8,12 @@ along with the associated state class.
 
 from .stage import StageManager, StageState
 from .illumination import IlluminationManager, IlluminationState
-from .detector import DetectorManager, CameraState
+from .detector import (
+    DetectorManager,
+    CameraState,
+    DetectorFrame,
+    DetectorSessionInfo,
+)
 from .objective import ObjectiveManager, ObjectiveState
 from .filter_bank import FilterBankManager, FilterBankState, Filter
 from .io import IOManager, IOState, FileHandle, FileFormat
@@ -71,6 +76,8 @@ __all__ = [
     # Detector
     "DetectorManager",
     "CameraState",
+    "DetectorFrame",
+    "DetectorSessionInfo",
     "ExpanseManager",
     "ExpanseState",
     "Image",

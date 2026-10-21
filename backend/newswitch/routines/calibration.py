@@ -34,17 +34,17 @@ def calibrate_light_path(
         # Triangle pattern for affine calibration
         stage_manager.move(x=20, y=-20, z=0.0)
         stage_states.append(copy.copy(stage_manager.state))
-        frame = detector_manager.capture_image(slot=detector.slot)
+        frame = detector_manager.capture_image(slot=detector.slot).data
         images.append(frame)
 
         stage_manager.move(x=-40, y=0, z=20)
         stage_states.append(copy.copy(stage_manager.state))
-        frame = detector_manager.capture_image(slot=detector.slot)
+        frame = detector_manager.capture_image(slot=detector.slot).data
         images.append(frame)
 
         stage_manager.move(x=20, y=20, z=-20)
         stage_states.append(copy.copy(stage_manager.state))
-        frame = detector_manager.capture_image(slot=detector.slot)
+        frame = detector_manager.capture_image(slot=detector.slot).data
         images.append(frame)
 
         affine_matrix_x = calculate_3d_affine(images=images, stage_positions=stage_states)

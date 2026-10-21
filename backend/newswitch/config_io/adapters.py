@@ -6,12 +6,15 @@ Direction config -> managers (at startup):
     config               managers
     ==================== ===================================================
     `LightsourceConfig`  `Illumination` (slot = file order among lightsources)
-    `DetectorConfig`     `Detector` (exposure ms -> s)
+    `DetectorConfig`     `Detector` (exposure ms -> s; sensor, pitch, frame rate, binning)
     `ObjectiveConfig`    `ObjectiveLens`, default slot from the objective wheel
     `FilterConfig`       `Filter`, default slot from the filter wheel
     `StageConfig`        limits of `StageState` (directions x/y/z/a of the first
                          stage that is not a wheel, until an axis manager exists)
     `ControllerConfig`   `SerialSettings` for the UC2 serial manager
+    `DetectorConfig` +   `Detector` with its camera fields, plus vendor options, for
+    camera controller    the UC2 detector manager (detectors behind a gige-vision /
+                         usb3-vision controller)
     ==================== ===================================================
 
 A **wheel** is an axis whose ``pos`` presets are named after filters or objectives, e.g.
@@ -32,13 +35,14 @@ import glob
 import logging
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from ..protocols.detector import CameraState, Colormap, Detector
 from ..protocols.filter_bank import Filter, FilterBankState
 from ..protocols.illumination import Illumination, IlluminationKind
 from ..protocols.objective import ObjectiveLens, ObjectiveState
 from ..protocols.stage import StageState
-from .connection import SerialTransport, Uc2RestProtocol
+from .connection import GigEVisionProtocol, SerialTransport, Uc2RestProtocol, Usb3VisionProtocol
 from .devices import (
     AxisConfig,
     ControllerConfig,
@@ -49,6 +53,7 @@ from .devices import (
     ObjectiveConfig,
     StageConfig,
 )
+from .errors import ConfigError
 from .values import PhysVal
 
 logger = logging.getLogger(__name__)
@@ -65,6 +70,11 @@ _COLORMAPS = (Colormap.RED, Colormap.GREEN, Colormap.BLUE)
 def _finite(value: float, fallback: float) -> float:
     """Return `value` if finite, else `fallback` (unset limits are +-inf)."""
     return value if math.isfinite(value) else fallback
+
+
+def _limit(value: float) -> float | None:
+    """Return a limit if it is set (finite), else None."""
+    return value if math.isfinite(value) else None
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +187,8 @@ def illuminations(config: NewswitchConfig) -> list[Illumination] | None:
 def detectors(config: NewswitchConfig) -> list[Detector] | None:
     """Build the detectors; exposure times are converted from ms to s.
 
-    Values the file does not state keep the `Detector` defaults.
+    Values the file does not state keep the `Detector` defaults. The sensor resolution
+    gives the image size as well; the managers replace both with what the device reports.
 
     Args:
         config: The loaded configuration.
@@ -185,16 +196,18 @@ def detectors(config: NewswitchConfig) -> list[Detector] | None:
     Returns:
         One `Detector` per detector, or None when there are none.
     """
-    devices = config.detectors
+    devices = config.keyed(DetectorConfig)
     if not devices:
         return None
     defaults = Detector()
     result = []
-    for index, device in enumerate(devices):
+    for index, (key, device) in enumerate(devices.items()):
         width, height = device.pixelcount or (defaults.width, defaults.height)
         pitch = device.pixelpitch_xy
+        size = device.pixelsize_xy
         exposure = device.exposure_time_ms
         gain = device.gain_db
+        frame_rate = device.framerate_per_sec
         detector = Detector(
             slot=index + 1,
             name=device.name or defaults.name,
@@ -202,7 +215,13 @@ def detectors(config: NewswitchConfig) -> list[Detector] | None:
             height=height,
             is_active=True,
             current_colormap=_COLORMAPS[index % len(_COLORMAPS)],
-            pixel_size_um=defaults.pixel_size_um if pitch is None else pitch[0],
+            pixel_size_um=defaults.pixel_size_um if size is None else size[0],
+            key=key,
+            manufacturer=device.manufacturer,
+            sensor_width=width,
+            sensor_height=height,
+            pixel_pitch_um=None if pitch is None else pitch[0],
+            current_binning=device.binning,
         )
         if exposure is not None:
             if exposure.value is not None:
@@ -217,6 +236,10 @@ def detectors(config: NewswitchConfig) -> list[Detector] | None:
                 detector.current_gain = gain.value
             detector.min_gain = _finite(gain.min, defaults.min_gain)
             detector.max_gain = _finite(gain.max, defaults.max_gain)
+        if frame_rate is not None:
+            detector.current_frame_rate = frame_rate.value
+            detector.min_frame_rate = _limit(frame_rate.min)
+            detector.max_frame_rate = _limit(frame_rate.max)
         result.append(detector)
     return result
 
@@ -354,6 +377,131 @@ def serial_settings(config: NewswitchConfig) -> SerialSettings | None:
             continue
         return SerialSettings(port=port, baudrate=transport.baudrate)
     return None
+
+
+def _is_int(value: object) -> bool:
+    """True for an int that is not a bool (YAML ``true`` must not count as 1)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _camera_problems(extras: dict[str, Any], where: str) -> list[str]:
+    """Check the camera keys of a mapping entry (they are extras, so not validated on load).
+
+    Args:
+        extras: Further keys of the mapping entry.
+        where: Location prefix for the messages.
+
+    Returns:
+        One message per invalid key.
+    """
+    problems = []
+    serial = extras.get("serial_number")
+    if serial is not None and (not isinstance(serial, str) or not serial):
+        problems.append(f"{where}.serial_number: must be a non-empty string (quote numbers)")
+    index = extras.get("index")
+    if index is not None and (not _is_int(index) or index < 0):
+        problems.append(f"{where}.index: must be an integer >= 0")
+    buffer_size = extras.get("buffer_size")
+    if buffer_size is not None and (not _is_int(buffer_size) or buffer_size < 2):
+        problems.append(f"{where}.buffer_size: must be an integer >= 2")
+    store = extras.get("store_image_data")
+    if store is not None and not isinstance(store, bool):
+        problems.append(f"{where}.store_image_data: must be true or false")
+    options = extras.get("vendor_options")
+    if options is not None and not isinstance(options, dict):
+        problems.append(f"{where}.vendor_options: must be a mapping")
+    return problems
+
+
+def _set_camera(
+    detector: Detector,
+    connection: GigEVisionProtocol | Usb3VisionProtocol,
+    extras: dict[str, Any],
+) -> None:
+    """Fill in how to open the camera behind a detector.
+
+    Args:
+        detector: The detector (from `detectors`); modified in place.
+        connection: Connection of the controller the detector is mapped to.
+        extras: Further keys of the detector's mapping entry (already checked).
+    """
+    serial = extras.get("serial_number")
+    index = extras.get("index")
+    if serial is None and index is None:  # fall back to the connection's selector
+        serial = connection.serial_number
+        index = connection.index if isinstance(connection, Usb3VisionProtocol) else None
+    detector.connection_type = "GigE" if isinstance(connection, GigEVisionProtocol) else "USB3"
+    detector.serial_number = serial
+    detector.device_index = index
+    detector.buffer_size = extras.get("buffer_size")
+    detector.store_image_data = extras.get("store_image_data")
+
+
+def cameras(
+    config: NewswitchConfig,
+) -> tuple[list[Detector], dict[int, dict[str, Any]]] | None:
+    """Build the detectors to open as cameras, with their vendor options.
+
+    A camera is a detector mapped by a controller whose connection is a camera link
+    (``protocol: gige-vision`` or ``usb3-vision``); the camera library handles the
+    transport. Other detectors are skipped with a warning.
+
+    The vendor is the detector's ``manufacturer``, passed on unchanged: newswitch knows no
+    vendor names, the camera library decides which it supports. The detector's mapping
+    entry may carry these further keys:
+
+    ``serial_number`` / ``index``
+        Which camera to open (not both); without them the connection's selector is used,
+        and without that the first camera.
+    ``buffer_size``, ``store_image_data``
+        Ring-buffer size in images, and whether every image is recorded to disk.
+    ``vendor_options``
+        Mapping of vendor-specific options, passed on unchanged. They are returned beside
+        the detectors: a detector is shared state, these options are not.
+
+    The slot is the detector's position among all detectors (as in `detectors`).
+
+    Args:
+        config: The loaded configuration.
+
+    Returns:
+        The camera detectors (`detectors` plus the camera fields) and the vendor options
+        per slot, or None when there are no cameras.
+
+    Raises:
+        ConfigError: A mapping entry carries an invalid camera key.
+    """
+    controllers = config.keyed(ControllerConfig)
+    keyed = config.keyed(DetectorConfig)
+    result: list[Detector] = []
+    vendor_options: dict[int, dict[str, Any]] = {}
+    problems: list[str] = []
+    for detector in detectors(config) or []:
+        key = detector.key or ""
+        found = config.controller_of(key)
+        connection = None if found is None else controllers[found[0]].connection
+        if found is None or not isinstance(connection, GigEVisionProtocol | Usb3VisionProtocol):
+            logger.warning("detector %r is not mapped to a camera controller, skipped", key)
+            continue
+        controller_key, entry = found
+        where = f"devices.{controller_key}.mapping.{key}"
+        invalid = _camera_problems(entry.extras, where)
+        if invalid:
+            problems.extend(invalid)
+            continue
+        _set_camera(detector, connection, entry.extras)
+        if detector.serial_number is not None and detector.device_index is not None:
+            problems.append(
+                f"{where}: serial_number and index both select the camera, give only one "
+                f"(here or in the connection of {controller_key!r})"
+            )
+            continue
+        detector.name = keyed[key].name or key
+        result.append(detector)
+        vendor_options[detector.slot] = dict(entry.extras.get("vendor_options") or {})
+    if problems:
+        raise ConfigError("invalid camera settings", problems)
+    return (result, vendor_options) if result else None
 
 
 # ---------------------------------------------------------------------------

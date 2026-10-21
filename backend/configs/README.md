@@ -7,6 +7,7 @@ newswitch reads **one** YAML file describing every device. The code lives in
 | --- | --- |
 | `configs/newswitch-config.yaml` | Static device configuration (example setup); newswitch never writes it |
 | `configs/newswitch-config.persistent.yaml` | Persistent configuration: receives every change (git-ignored) |
+| `configs/camTest_config.yaml`, `configs/camTest.json` | One simulated uc2_cam_py camera and the base-config overrides to boot it (see "Cameras") |
 | `configs/schemas/newswitch-config.schema.yaml` | JSON Schema (Draft 2020-12) as YAML, generated from the dataclasses |
 | `newswitch/config_io/devices.py` | One dataclass per device type — the source of truth |
 | `newswitch/config_io/values.py` | `PhysVal`, `Trigger`, `Firmware` |
@@ -88,6 +89,55 @@ by key and gives their address on the controller:
 - Further keys (e.g. `serial_number`, `index`) are allowed in a mapping entry.
 - CAN controllers speak `canopen`. For tests and development there is
   `protocol: simulated` with `transport: {type: simulated}`, which opens no hardware.
+
+## Cameras
+
+A detector mapped by a controller with `protocol: gige-vision` or `usb3-vision` is a camera.
+On real hardware (`use_virtual_microscope: false` in `base_config.yaml`) newswitch opens it
+through the camera library uc2_cam_py (extra `camera`, `uv sync --extra camera`); the
+virtual microscope keeps its simulated detector.
+
+```yaml
+  my-usb3-camera-controll:
+    type: controller
+    connection: {protocol: usb3-vision}
+    mapping:
+      bigcamera42:
+        type: usb3-vision-camera
+        id: 0
+        serial_number: "00F12345678"   # or index: 0; neither = the first camera
+        buffer_size: 16                # images in the ring buffer
+        store_image_data: true         # record every acquired image
+        vendor_options: {}             # passed to the vendor unchanged
+
+  bigcamera42:
+    type: detector
+    manufacturer: HikRobot             # the vendor, as uc2_cam_py names it
+    exposure_time_ms: {value: 25.0}
+    gain_db: {value: 0.0}
+    framerate_per_sec: {value: 30.0}
+    binning: 1
+```
+
+- The vendor is the detector's `manufacturer`, passed on unchanged (case does not matter);
+  uc2_cam_py rejects one it does not know and lists the ones it has. Without a
+  manufacturer uc2_cam_py's default vendor is used.
+- `serial_number` or `index` select the camera (not both); without them the connection's
+  `serial_number`/`index` are used. Quote numeric serial numbers.
+- `buffer_size`, `store_image_data` and `vendor_options` are optional; unset values keep
+  uc2_cam_py's defaults (recording is on by default). Recordings (`.uc2rb` plus a `.json`
+  sidecar, one file per acquisition session) go to `camera_recording_dir` of
+  `base_config.yaml`.
+- After opening, the binning, exposure and gain are written to the camera, and the frame
+  rate when it has a `value`. An exposure or gain without `value` gets the detector default
+  (0.1 s, gain 1), not the camera's own setting. What the camera reports (model, sensor,
+  limits, current values) then replaces the configured values in the running detector.
+- `camera_debug_window: true` in `base_config.yaml` opens a uc2_cam_py window per camera
+  showing its newest image, and keeps the cameras acquiring from startup (so with
+  `store_image_data: true` they record all the time).
+- `camTest_config.yaml` is a simulated camera (`manufacturer: Simulated`) for trying it
+  out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app`. Walkthrough:
+  "End-to-end test for camera" in the root `README.md`.
 
 ## Stages, axes and wheels
 

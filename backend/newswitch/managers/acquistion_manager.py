@@ -40,7 +40,7 @@ class AcquistionManager:
                 f"Acquiring image from detector slot {detector.slot} with exposure time {detector.current_exposure_time} ms {detector.is_active}"
             )
             if detector.is_active:
-                image_data = self.detector_manager.capture_image(slot=detector.slot)
+                image_data = self.detector_manager.capture_image(slot=detector.slot).data
 
                 light_path = self.light_path_manager.get_light_path_for_detector(
                     detector_slot=detector.slot

@@ -5,6 +5,7 @@ This module provides a FastAPI server with arkitekt_next integration
 for controlling a virtual microscope through registered functions.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Optional, Tuple
@@ -120,6 +121,8 @@ from newswitch.routines.multidimensional_acquisition import (
 )
 from newswitch.managers.python_hook_manager import PythonHookManager
 
+logger = logging.getLogger(__name__)
+
 # ====================
 # Configuration
 # ====================
@@ -165,6 +168,14 @@ class ImswitchConfig(BaseSettings):
     `persistent_config_path` (changes always go into the persistent one, see
     `config_io.open_config`). None keeps the built-in virtual devices."""
 
+    camera_recording_dir: Optional[Path] = None
+    """Folder the cameras record into (see `managers.uc2.uc2_detector`). None: the default of
+    uc2_cam_py (``~/UC2_recordings``)."""
+
+    camera_debug_window: bool = False
+    """Show every camera's newest image in a window of uc2_cam_py (debugging without the
+    frontend); the cameras then acquire from startup on."""
+
     # UC2 hardware transport (used when use_virtual_microscope is False).
     # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
     # over serial JSON). Both are plug-in replacements behind UC2BusManager.
@@ -201,10 +212,12 @@ class ImswitchConfig(BaseSettings):
             return {key: value for key, value in data.items() if not str(key).startswith("_")}
         return data
 
-    @field_validator("config_dir", "schema_dir")
+    @field_validator("config_dir", "schema_dir", "camera_recording_dir")
     @classmethod
-    def _relative_to_base_config(cls, path: Path) -> Path:
-        return path if path.is_absolute() else BASE_CONFIG_FILE.parent / path
+    def _relative_to_base_config(cls, path: Optional[Path]) -> Optional[Path]:
+        if path is None or path.is_absolute():
+            return path
+        return BASE_CONFIG_FILE.parent / path
 
     @field_validator("static_config_path", "persistent_config_path")
     @classmethod
@@ -236,6 +249,59 @@ class ImswitchConfig(BaseSettings):
 # ====================
 # Startup Functions We initialize all microscope managers and states
 # ====================
+
+
+def build_detector_manager(
+    config: ImswitchConfig,
+    devices: Optional[config_io.NewswitchConfig],
+    camera_state: CameraState,
+    stage_state: StageState,
+    objective_state: ObjectiveState,
+    illumination_state: IlluminationState,
+    filter_bank_state: FilterBankState,
+    broadcaster: FrameBroadcaster,
+) -> DetectorManager:
+    """Choose the detector manager: real cameras through uc2_cam_py, else the virtual one.
+
+    Cameras are used on real hardware only (``use_virtual_microscope: false``) and when
+    the device configuration maps a detector to a camera controller (see
+    `adapters.cameras`). Without the extra "camera" (uc2_cam_py not importable) the
+    virtual detector stands in, with a warning. A camera that cannot be opened is an
+    error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
+    """
+    found = None
+    if not config.use_virtual_microscope and devices is not None:
+        found = adapters.cameras(devices)
+    if found:
+        cameras, vendor_options = found
+        try:
+            from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
+        except ImportError as exc:
+            logger.warning(
+                "%d camera(s) configured, but uc2_cam_py cannot be imported (%s); "
+                "using the virtual detector. Install the extra: uv sync --extra camera",
+                len(cameras),
+                exc,
+            )
+        else:
+            return UC2DetectorManager(
+                camera_state=camera_state,
+                broadcaster=broadcaster,
+                cameras=cameras,
+                vendor_options=vendor_options,
+                recording_dir=config.camera_recording_dir,
+                debug_window=config.camera_debug_window,
+            )
+    configured_detectors = adapters.detectors(devices) if devices is not None else None
+    return VirtualDetectorManager(
+        camera_state=camera_state,
+        stage_state=stage_state,
+        illumination_state=illumination_state,
+        broadcaster=broadcaster,
+        objective_state=objective_state,
+        filter_bank_state=filter_bank_state,
+        detectors=configured_detectors,
+    )
 
 
 @startup
@@ -326,7 +392,6 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
             from_static=config.load_from_static_config_path,
         ).config
     led_config = objective_config = filter_bank_config = virtual_stage_config = None
-    configured_detectors = None
     if devices is not None:
         sources = adapters.illuminations(devices)
         if sources is not None:
@@ -337,7 +402,6 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
         filters = adapters.filters(devices)
         if filters is not None:
             filter_bank_config = FilterBankConfig(filters=filters[0], default_slot=filters[1])
-        configured_detectors = adapters.detectors(devices)
         if devices.stages:
             adapters.apply_stage_limits(devices, stage_state)
             virtual_stage_config = VirtualStageConfig(
@@ -420,14 +484,16 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
             config=UC2FilterBankConfig(**filter_kwargs) if filter_kwargs else None,
         )
 
-    detector = VirtualDetectorManager(
+    # Cameras (uc2_cam_py) on real hardware when configured, else the virtual detector
+    detector = build_detector_manager(
+        config,
+        devices,
         camera_state=camera_state,
         stage_state=stage_state,
-        illumination_state=illumination_state,
-        broadcaster=frame_broadcaster,
         objective_state=objective_state,
+        illumination_state=illumination_state,
         filter_bank_state=filter_bank_state,
-        detectors=configured_detectors,
+        broadcaster=frame_broadcaster,
     )
     io_manager = LocalFileIOManager(
         state=io_state,
@@ -550,6 +616,12 @@ def save_device_config(
         print(f"Saved device configuration to {cfg_file.save()}")
     except config_io.ConfigError as exc:
         print(f"Device configuration not saved: {exc}")
+
+
+@shutdown
+def close_detector(detector: DetectorManager) -> None:
+    """Stop and release the detectors, so camera recordings are complete on disk."""
+    detector.close()
 
 
 @background

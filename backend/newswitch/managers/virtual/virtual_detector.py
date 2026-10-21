@@ -3,13 +3,21 @@ Virtual Detector Manager
 
 A virtual camera/detector manager for microscopy simulation.
 Provides synchronized image capture without background threads.
+
+Besides exposure and gain it simulates how a camera reads out its sensor: a region of
+interest is cut out of the rendered frame, binning averages blocks of pixels, the frame
+rate paces the live stream, and every acquisition session (live stream, snapshot outside
+of it) numbers its images.
 """
 
+import threading
+import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 import koil
 import numpy as np
 from rekuest_next import model
+from rekuest_next.state.lock import acquired_locks
 
 from newswitch.managers.helpers.frame import (
     create_sample_image,
@@ -21,7 +29,14 @@ from newswitch.managers.helpers.frame import (
     add_noise,
     zoom_in,
 )
-from newswitch.protocols.detector import CameraState, Detector
+from newswitch.protocols.detector import (
+    CameraState,
+    Detector,
+    DetectorFrame,
+    DetectorSessionInfo,
+    Roi,
+    is_full_sensor,
+)
 from newswitch.protocols.illumination import IlluminationState
 from newswitch.protocols.objective import ObjectiveState
 from newswitch.protocols.stage import StageState
@@ -30,6 +45,32 @@ from newswitch.broadcasters import FrameBroadcaster
 
 
 SampleType = Literal["branching", "cells", "grid", "astigmatism"]
+
+#: Binning factors the virtual detectors offer.
+BINNINGS = [1, 2, 4]
+#: Frame rates the virtual detectors offer (frames per second).
+FRAME_RATE_RANGE = (0.1, 100.0)
+#: Longest pause of the live loop (s): while idle, and between two paced images.
+IDLE_INTERVAL_S = 0.1
+#: Lock that guards the `Detector` state.
+CAMERA_LOCK = "camera_parameters"
+
+
+@dataclass
+class Readout:
+    """The acquisition session of one virtual detector.
+
+    How the sensor is read out (binning, region, frame rate) is in its `Detector`.
+    """
+
+    session: Optional[DetectorSessionInfo] = None
+    """Current or last acquisition session; None before the first acquisition."""
+    sequence: int = 0
+    """Index of the next image within the session."""
+    streaming: bool = False
+    """The live loop streams this detector (its session is the live session)."""
+    next_due_ns: int = 0
+    """When the live loop sends the next image (monotonic ns)."""
 
 
 @dataclass(frozen=True)
@@ -178,16 +219,25 @@ class VirtualDetectorManager:
         # Initialize frame cache
         self._cache = FrameCache()
 
+        # Readout and session per detector slot; the lock serializes them with the live loop
+        self._readouts: dict[int, Readout] = {}
+        self._lock = threading.RLock()
+        self._closed = False
+
         # Initialize detectors
         self._initialize_detectors(detectors)
 
     def _initialize_detectors(self, detectors: Optional[list[Detector]] = None) -> None:
         """Initialize the list of detectors, falling back to the built-in virtual ones."""
-        if detectors is not None:
-            self.state.detectors = list(detectors)
-            return
-        # Create default virtual detectors
-        self.state.detectors = [
+        if detectors is None:
+            detectors = self._default_detectors()
+        for detector in detectors:
+            self._describe(detector)
+        self.state.detectors = list(detectors)
+
+    def _default_detectors(self) -> list[Detector]:
+        """The built-in R/G/B channels."""
+        return [
             Detector(
                 slot=1,
                 name="R Channel",
@@ -235,6 +285,42 @@ class VirtualDetectorManager:
             ),
         ]
 
+    def _describe(self, detector: Detector) -> None:
+        """Fill in what the virtual detector is and can do; keep valid configured values.
+
+        The image size follows the rendered sensor (`DetectorConfig.width`/`height`), the
+        region of interest and the binning.
+        """
+        binning = self._snap_binning(detector.current_binning)
+        roi = None if detector.current_roi is None else self._clamp_roi(detector.current_roi)
+        width, height = self._image_size(binning, roi)
+        frame_rate = detector.current_frame_rate
+        with acquired_locks(CAMERA_LOCK):
+            detector.manufacturer = "virtual"
+            detector.model = "simulated"
+            detector.serial_number = f"virtual-{detector.slot}"
+            detector.connection_type = None
+            detector.device_index = None
+            detector.pixel_format = "Mono16"
+            detector.data_type = "uint16"
+            detector.sensor_width, detector.sensor_height = self.config.width, self.config.height
+            detector.pixel_pitch_um = detector.pixel_size_um
+            detector.width, detector.height = width, height
+            detector.current_binning = binning
+            detector.current_roi = roi
+            detector.current_frame_rate = (
+                None if frame_rate is None else self._clamp(frame_rate, *FRAME_RATE_RANGE)
+            )
+            detector.min_frame_rate, detector.max_frame_rate = FRAME_RATE_RANGE
+            detector.available_binnings = list(BINNINGS)
+            detector.can_set_exposure = True
+            detector.can_set_gain = True
+            detector.can_set_frame_rate = True
+            detector.can_set_binning = True
+            detector.can_set_roi = True
+            detector.is_recording = False
+            detector.recording_file = None
+
     def clear_cache(self) -> None:
         """Clear all cached frame data.
 
@@ -257,6 +343,17 @@ class VirtualDetectorManager:
             if detector.slot == slot:
                 return detector
         return None
+
+    def _require_detector(self, slot: int) -> Detector:
+        """Get a detector by its slot number.
+
+        Raises:
+            ValueError: No detector in this slot.
+        """
+        detector = self._get_detector(slot)
+        if detector is None:
+            raise ValueError(f"No detector found with slot {slot}")
+        return detector
 
     def _get_active_detector(self, slot: int | None = None) -> Optional[Detector]:
         """Get an active detector by slot or take the first active detector."""
@@ -507,6 +604,114 @@ class VirtualDetectorManager:
         """Clamp a value to a range."""
         return max(min_val, min(value, max_val))
 
+    # ------------------------------------------------------------- readout
+
+    def _readout(self, slot: int) -> Readout:
+        """The readout of a detector slot, with the defaults on first use."""
+        return self._readouts.setdefault(slot, Readout())
+
+    @staticmethod
+    def _snap_binning(binning: int) -> int:
+        """The allowed binning factor nearest to `binning`.
+
+        Raises:
+            ValueError: A factor < 1.
+        """
+        if binning < 1:
+            raise ValueError(f"binning must be >= 1, got {binning}")
+        return min(BINNINGS, key=lambda allowed: abs(allowed - binning))
+
+    def _clamp_roi(self, roi: Roi) -> Optional[list[int]]:
+        """Clamp a region to the sensor; None for the complete sensor.
+
+        Raises:
+            ValueError: A negative coordinate or size.
+        """
+        x, y, width, height = (int(value) for value in roi)
+        if min(x, y, width, height) < 0:
+            raise ValueError(f"invalid region {roi}: negative values")
+        if is_full_sensor(roi):
+            return None
+        sensor_width, sensor_height = self.config.width, self.config.height
+        x, y = min(x, sensor_width - 1), min(y, sensor_height - 1)
+        clamped = [x, y, min(width, sensor_width - x), min(height, sensor_height - y)]
+        return None if clamped == [0, 0, sensor_width, sensor_height] else clamped
+
+    def _image_size(self, binning: int, roi: Optional[Roi]) -> tuple[int, int]:
+        """Image (width, height) after cutting out `roi` and binning."""
+        width, height = self.config.width, self.config.height
+        if roi is not None:
+            _, _, width, height = roi
+        return width // binning, height // binning
+
+    @staticmethod
+    def _read_out(frame: np.ndarray, detector: Detector) -> np.ndarray:
+        """Cut the region out of a rendered sensor frame and bin it (block means)."""
+        if detector.current_roi is not None:
+            x, y, width, height = detector.current_roi
+            frame = frame[y : y + height, x : x + width]
+        factor = detector.current_binning
+        if factor > 1:
+            height, width = frame.shape[0] // factor, frame.shape[1] // factor
+            blocks = frame[: height * factor, : width * factor].reshape(
+                height, factor, width, factor
+            )
+            frame = blocks.mean(axis=(1, 3))
+        return np.ascontiguousarray(frame, dtype=np.uint16)
+
+    def _start_session(self, detector: Detector, readout: Readout) -> None:
+        """Begin a new acquisition session of `detector`; its images count from 0 again."""
+        width, height = self._image_size(detector.current_binning, detector.current_roi)
+        readout.session = DetectorSessionInfo(
+            detector_id=f"virtual-{detector.slot}",
+            width=width,
+            height=height,
+            channels=1,
+            dtype="uint16",
+            frame_bytes=width * height * 2,
+            slot_count=1,
+            start_wall_ns=time.time_ns(),
+            start_mono_ns=time.monotonic_ns(),
+            settings={
+                "exposure_time_ms": detector.current_exposure_time * 1000.0,
+                "gain_db": detector.current_gain,
+                "frame_rate_per_sec": detector.current_frame_rate,
+                "binning": detector.current_binning,
+                "roi": detector.current_roi,
+            },
+            recording_file=None,
+        )
+        readout.sequence = 0
+
+    def _next_frame(self, detector: Detector, readout: Readout) -> DetectorFrame:
+        """Render the next image of the detector's current session."""
+        data = self._read_out(self._generate_frame(detector), detector)
+        time_ns = time.monotonic_ns()
+        sequence = readout.sequence
+        readout.sequence += 1
+        session = readout.session
+        return DetectorFrame(
+            slot=detector.slot,
+            data=data,
+            sequence=sequence,
+            time_ns=time_ns,
+            wall_time_ns=None if session is None else session.wall_time_ns(time_ns),
+        )
+
+    def _set_streaming(self, detector: Detector, readout: Readout, streaming: bool) -> None:
+        """Mark whether the live loop streams `detector`; it counts as recording then."""
+        readout.streaming = streaming
+        with acquired_locks(CAMERA_LOCK):
+            detector.is_recording = streaming
+
+    def _end_live_sessions(self) -> None:
+        """Mark every detector as not streaming; its last session stays readable."""
+        with self._lock:
+            for detector in self.state.detectors:
+                readout = self._readout(detector.slot)
+                if readout.streaming:
+                    self._set_streaming(detector, readout, False)
+
     def activate_detector(self, slot: int, raise_on_active: bool = False) -> Detector:
         """
         Activate a detector by its slot number.
@@ -547,35 +752,70 @@ class VirtualDetectorManager:
         detector.is_active = False
 
     def update_detector(
-        self, slot: int, exposure_time: Optional[float] = None, gain: Optional[float] = None
+        self,
+        slot: int,
+        exposure_time: Optional[float] = None,
+        gain: Optional[float] = None,
+        frame_rate: Optional[float] = None,
+        binning: Optional[int] = None,
+        roi: Optional[Roi] = None,
     ) -> Detector:
         """
-        Update detector settings.
+        Update detector settings; None keeps a setting. Values are clamped to the ranges.
+
+        A new binning or region changes the detector's image size and, while streaming,
+        starts a new session (as a camera restarts).
 
         Args:
             slot: Detector slot number.
             exposure_time: New exposure time in seconds (if provided).
             gain: New gain value (if provided).
+            frame_rate: New live frame rate in frames per second (if provided); 0 removes
+                the limit.
+            binning: New binning factor (if provided), snapped to the nearest of `BINNINGS`.
+            roi: New region of interest (if provided) in unbinned sensor pixels, clamped to
+                the sensor; `FULL_SENSOR` selects the complete sensor.
 
         Returns:
-            The updated detector.
+            The updated detector with every value applied.
 
         Raises:
-            ValueError: If the detector slot is not found.
+            ValueError: If the detector slot is not found, or for a frame rate < 0, a
+                binning < 1, or a region with negative values or smaller than the binning.
         """
-        detector = self._get_detector(slot)
-        if detector is None:
-            raise ValueError(f"No detector found with slot {slot}")
+        detector = self._require_detector(slot)
+        if frame_rate is not None and frame_rate < 0:
+            raise ValueError(f"frame rate must be >= 0, got {frame_rate}")
 
-        if exposure_time is not None:
-            clamped = self._clamp(
-                exposure_time, detector.min_exposure_time, detector.max_exposure_time
-            )
-            detector.current_exposure_time = clamped
+        with self._lock:
+            readout = self._readout(slot)
+            if binning is not None or roi is not None:
+                new_binning = (
+                    detector.current_binning if binning is None else self._snap_binning(binning)
+                )
+                new_roi = detector.current_roi if roi is None else self._clamp_roi(roi)
+                width, height = self._image_size(new_binning, new_roi)
+                if width == 0 or height == 0:
+                    raise ValueError(f"region {new_roi} is smaller than the binning {new_binning}")
+                detector.current_binning, detector.current_roi = new_binning, new_roi
+                detector.width, detector.height = width, height
+                if readout.streaming:
+                    self._start_session(detector, readout)
 
-        if gain is not None:
-            clamped = self._clamp(gain, detector.min_gain, detector.max_gain)
-            detector.current_gain = clamped
+            if exposure_time is not None:
+                clamped = self._clamp(
+                    exposure_time, detector.min_exposure_time, detector.max_exposure_time
+                )
+                detector.current_exposure_time = clamped
+
+            if gain is not None:
+                clamped = self._clamp(gain, detector.min_gain, detector.max_gain)
+                detector.current_gain = clamped
+
+            if frame_rate is not None:
+                detector.current_frame_rate = (
+                    None if frame_rate == 0 else self._clamp(frame_rate, *FRAME_RATE_RANGE)
+                )
 
         return detector
 
@@ -590,6 +830,23 @@ class VirtualDetectorManager:
             The detector if found, None otherwise.
         """
         return self._get_detector(slot)
+
+    def get_image_info(self, slot: int) -> Optional[DetectorSessionInfo]:
+        """
+        Return the metadata of the current or last acquisition session.
+
+        Args:
+            slot: Detector slot number.
+
+        Returns:
+            The session metadata, or None before the first acquisition.
+
+        Raises:
+            ValueError: If the detector slot is not found.
+        """
+        self._require_detector(slot)
+        with self._lock:
+            return self._readout(slot).session
 
     def list_available_detectors(self) -> list[Detector]:
         """
@@ -609,15 +866,17 @@ class VirtualDetectorManager:
         """
         return self._get_active_detectors()
 
-    def capture_image(self, slot: int | None = None) -> np.ndarray:
+    def capture_image(self, slot: int | None = None) -> DetectorFrame:
         """
         Capture a single image from a specific detector.
 
+        Outside of the live stream every snapshot is a session of its own.
+
         Args:
-            slot: Detector slot number.
+            slot: Detector slot number; None = the first active detector.
 
         Returns:
-            Captured frame as numpy array.
+            The image (region of interest, binned) with its timing.
 
         Raises:
             ValueError: If the detector slot is not active.
@@ -626,8 +885,11 @@ class VirtualDetectorManager:
         if detector is None:
             raise ValueError(f"No active detector found with slot {slot}")
 
-        frame = self._generate_frame(detector)
-        return frame
+        with self._lock:
+            readout = self._readout(detector.slot)
+            if not readout.streaming:
+                self._start_session(detector, readout)
+            return self._next_frame(detector, readout)
 
     def _compose_rgb_frame(self) -> np.ndarray:
         """
@@ -696,29 +958,68 @@ class VirtualDetectorManager:
 
     def acquire_live(self) -> None:
         """
-        Start continuous acquisition mode (protocol method).
+        Run the live loop until `close` (protocol method).
 
-        Continuously acquires frames from active detectors and broadcasts
-        each detector stream on its own detector slot.
+        While `CameraState.is_acquiring` is set, renders an image of every active detector
+        and broadcasts it on the detector's slot: as fast as frames render, or paced by
+        the detector's frame rate. Each detector streams in a session of its own.
         """
         self.broadcaster.start_broadcasting()
 
-        while True:
-            if self.state.is_acquiring is False:
-                koil.sleep(1)
-            else:
-                # Compose RGB frame from all active detectors
-                active_detectors = self._get_active_detectors()
-                if not active_detectors:
-                    koil.sleep(0.1)
+        while not self._closed:
+            if not self.state.is_acquiring:
+                self._end_live_sessions()
+                koil.sleep(IDLE_INTERVAL_S)
+                continue
+            wait_s = self._stream_due_frames()
+            if wait_s > 0:
+                koil.sleep(wait_s)
+
+    def _stream_due_frames(self) -> float:
+        """Broadcast an image of every active detector that is due.
+
+        Returns:
+            Seconds until the next image is due, at most `IDLE_INTERVAL_S`.
+        """
+        wait_s = IDLE_INTERVAL_S
+        with self._lock:
+            if not self.state.is_acquiring:  # stopped since the loop looked
+                return 0.0
+            for detector in self.state.detectors:
+                readout = self._readout(detector.slot)
+                if not detector.is_active:
+                    if readout.streaming:
+                        self._set_streaming(detector, readout, False)
                     continue
+                if not readout.streaming:
+                    self._set_streaming(detector, readout, True)
+                    readout.next_due_ns = 0
+                    self._start_session(detector, readout)
+                now_ns = time.monotonic_ns()
+                if now_ns >= readout.next_due_ns:
+                    frame = self._next_frame(detector, readout)
+                    self.broadcaster.broadcast_sync(detector.slot, frame.data)
+                    rate = detector.current_frame_rate
+                    period_ns = 0 if rate is None else int(1e9 / rate)
+                    readout.next_due_ns = now_ns + period_ns
+                remaining_s = (readout.next_due_ns - time.monotonic_ns()) / 1e9
+                wait_s = min(wait_s, max(0.0, remaining_s))
+        return wait_s
 
-                for detector in active_detectors:
-                    frame = self._generate_frame(detector)
+    def stop_acquire_live(self) -> None:
+        """
+        Stop the live stream now: clear `CameraState.is_acquiring`, end the live sessions.
 
-                    self.broadcaster.broadcast_sync(detector.slot, frame)
+        `acquire_live` keeps running and streams again once `is_acquiring` is set.
+        """
+        with self._lock:
+            self.state.is_acquiring = False
+            self._end_live_sessions()
 
-                    # Use exposure time from first active detector for frame interval
+    def close(self) -> None:
+        """End `acquire_live`; calling it again does nothing."""
+        self._closed = True
+        self._end_live_sessions()
 
     def background(self) -> None:
         """Background task for the virtual detector manager."""

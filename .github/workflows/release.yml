@@ -37,8 +37,9 @@ jobs:
       - name: Install frontend deps
         run: yarn --cwd frontend install --frozen-lockfile
 
+      # --no-extra camera: building uc2_cam_py needs the MVS SDK (see ci.yml)
       - name: Install backend deps
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --no-extra camera --dev
         working-directory: backend
 
       - name: Backend tests

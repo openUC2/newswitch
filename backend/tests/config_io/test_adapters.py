@@ -8,7 +8,14 @@ from typing import Any, Iterator
 import pytest
 from rekuest_next.state.lock import acquired_locks
 
-from newswitch.config_io import AxisConfig, DetectorConfig, FilterConfig, adapters, load_config
+from newswitch.config_io import (
+    AxisConfig,
+    ConfigError,
+    DetectorConfig,
+    FilterConfig,
+    adapters,
+    load_config,
+)
 from newswitch.config_io import ObjectiveConfig as ObjectiveDevice
 from newswitch.config_io.devices import NewswitchConfig
 from newswitch.managers.virtual import (
@@ -95,6 +102,32 @@ def test_detectors(config: NewswitchConfig) -> None:
     assert cam.preset_exposure_times == pytest.approx([0.001, 0.01])
     assert cam.current_gain == 3.0 and cam.max_gain == 20.0
     assert cam.min_gain == 0.0  # -inf in the file -> Detector default
+    assert (cam.key, cam.sensor_width, cam.sensor_height, cam.pixel_pitch_um) == (
+        "cam",
+        640,
+        480,
+        5.0,
+    )
+    assert (cam.current_frame_rate, cam.min_frame_rate, cam.max_frame_rate) == (None, None, None)
+    assert cam.current_binning == 1
+    assert cam.connection_type is None  # not a camera until `cameras` says so
+
+
+def test_detectors_frame_rate_and_pixel_size(
+    write_doc: DocWriter, minimal_doc: dict[str, Any]
+) -> None:
+    """Frame rate with its limits, binning and the photosensitive pixel size are copied."""
+    cam = minimal_doc["devices"]["cam"]
+    cam["framerate_per_sec"] = {"value": 30.0, "min": 1.0}
+    cam["binning"] = 2
+    cam["pixelsize_um"] = 4.0
+    detectors = adapters.detectors(load_config(write_doc(minimal_doc)).config)
+    assert detectors is not None
+    (detector,) = detectors
+    assert (detector.current_frame_rate, detector.min_frame_rate) == (30.0, 1.0)
+    assert detector.max_frame_rate is None  # unset limit
+    assert detector.current_binning == 2
+    assert (detector.pixel_size_um, detector.pixel_pitch_um) == (4.0, 5.0)
 
 
 def test_detectors_named_presets(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
@@ -229,3 +262,148 @@ def test_sync_skips_out_of_range_values(config: NewswitchConfig) -> None:
     )
     exposure = get_device(config, "cam", DetectorConfig).exposure_time_ms
     assert exposure is not None and exposure.value == 10.0
+
+
+# ---------------------------------------------------------------------------
+# Cameras
+# ---------------------------------------------------------------------------
+
+
+def _camera_doc(
+    doc: dict[str, Any],
+    connection: dict[str, Any],
+    entry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Move the detector "cam" from the mainboard to a camera controller.
+
+    Args:
+        doc: The minimal document; modified in place.
+        connection: Connection of the camera controller.
+        entry: Further keys of the camera's mapping entry.
+
+    Returns:
+        `doc`.
+    """
+    devices = doc["devices"]
+    del devices["mainboard"]["mapping"]["cam"]
+    devices["cam-sdk"] = {
+        "type": "controller",
+        "connection": connection,
+        "mapping": {"cam": {"type": "camera", "id": 0, **(entry or {})}},
+    }
+    devices["cam"]["manufacturer"] = "SomeVendor"
+    return doc
+
+
+def test_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """A detector behind a GigE Vision controller becomes a camera; values pass unchanged."""
+    entry = {
+        "serial_number": "SN-42",
+        "buffer_size": 8,
+        "store_image_data": False,
+        "vendor_options": {"sensor_width": 320, "mode": "fast"},
+    }
+    doc = _camera_doc(minimal_doc, {"protocol": "gige-vision"}, entry)
+    doc["devices"]["cam"]["gain_db"] = {"value": 2.5}
+    doc["devices"]["cam"]["framerate_per_sec"] = {"value": 30.0}
+    doc["devices"]["cam"]["binning"] = 2
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), vendor_options = found
+    assert (camera.slot, camera.key, camera.name) == (1, "cam", "Cam")
+    assert (camera.manufacturer, camera.connection_type) == ("SomeVendor", "GigE")
+    assert (camera.serial_number, camera.device_index) == ("SN-42", None)
+    assert (camera.buffer_size, camera.store_image_data) == (8, False)
+    assert vendor_options == {1: {"sensor_width": 320, "mode": "fast"}}
+    assert camera.current_exposure_time == pytest.approx(0.01)
+    assert (camera.current_gain, camera.current_frame_rate) == (2.5, 30.0)
+    assert camera.current_binning == 2
+    assert (camera.sensor_width, camera.sensor_height) == (640, 480)  # all of `detectors`
+
+
+def test_cameras_defaults(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """Unset camera keys stay None, so the camera library's defaults apply."""
+    doc = _camera_doc(minimal_doc, {"protocol": "usb3-vision"})
+    del doc["devices"]["cam"]["manufacturer"]
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), vendor_options = found
+    assert camera.connection_type == "USB3"
+    assert camera.manufacturer is None
+    assert (camera.serial_number, camera.device_index) == (None, None)
+    assert (camera.buffer_size, camera.store_image_data) == (None, None)
+    assert vendor_options == {1: {}}
+    assert camera.current_frame_rate is None  # not configured: the camera keeps its own
+
+
+@pytest.mark.parametrize(
+    ("entry", "selector"),
+    [
+        (None, (None, 2)),  # the connection's selector
+        ({"serial_number": "SN-1"}, ("SN-1", None)),  # the mapping entry's wins
+        ({"index": 0}, (None, 0)),
+    ],
+)
+def test_camera_selector(
+    write_doc: DocWriter,
+    minimal_doc: dict[str, Any],
+    entry: dict[str, Any] | None,
+    selector: tuple[str | None, int | None],
+) -> None:
+    """serial_number/index come from the mapping entry, else from the connection."""
+    doc = _camera_doc(minimal_doc, {"protocol": "usb3-vision", "index": 2}, entry)
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), _ = found
+    assert (camera.serial_number, camera.device_index) == selector
+
+
+def test_cameras_skip_other_detectors(
+    write_doc: DocWriter, minimal_doc: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Detectors without a camera controller are skipped; slots count all detectors."""
+    doc = _camera_doc(minimal_doc, {"protocol": "gige-vision"})
+    devices = doc["devices"]
+    doc["devices"] = {"diode": {"type": "detector", "name": "Diode"}, **devices}
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    cameras, vendor_options = found
+    assert [(camera.key, camera.slot) for camera in cameras] == [("cam", 2)]
+    assert list(vendor_options) == [2]
+    assert "'diode' is not mapped to a camera controller" in caplog.text
+
+
+def test_no_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
+    """A detector behind a non-camera controller (here: simulated) is no camera."""
+    assert adapters.cameras(load_config(write_doc(minimal_doc)).config) is None
+
+
+@pytest.mark.parametrize(
+    ("connection", "entry", "problem"),
+    [
+        ({}, {"serial_number": 1234}, "serial_number: must be a non-empty string"),
+        ({}, {"serial_number": ""}, "serial_number: must be a non-empty string"),
+        ({}, {"index": -1}, "index: must be an integer >= 0"),
+        ({}, {"index": True}, "index: must be an integer >= 0"),
+        ({}, {"buffer_size": 1}, "buffer_size: must be an integer >= 2"),
+        ({}, {"store_image_data": "yes"}, "store_image_data: must be true or false"),
+        ({}, {"vendor_options": [1, 2]}, "vendor_options: must be a mapping"),
+        ({}, {"serial_number": "SN-1", "index": 0}, "serial_number and index both"),
+        ({"serial_number": "SN-1", "index": 0}, {}, "serial_number and index both"),
+    ],
+)
+def test_invalid_camera_keys(
+    write_doc: DocWriter,
+    minimal_doc: dict[str, Any],
+    connection: dict[str, Any],
+    entry: dict[str, Any],
+    problem: str,
+) -> None:
+    """Invalid camera keys are reported with the path of the mapping entry."""
+    doc = _camera_doc(minimal_doc, {"protocol": "usb3-vision", **connection}, entry)
+    config = load_config(write_doc(doc)).config
+    with pytest.raises(ConfigError) as error:
+        adapters.cameras(config)
+    (reported,) = error.value.problems
+    assert reported.startswith("devices.cam-sdk.mapping.cam")
+    assert problem in reported

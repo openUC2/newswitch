@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The backend syncs leave out the extra "camera": building uc2_cam_py needs the MVS SDK
+# (/opt/MVS), which the runners do not have. Its tests skip without it.
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -47,7 +50,7 @@ jobs:
         with:
           version: "latest"
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --all-extras --dev
+      - run: uv sync --all-extras --no-extra camera --dev
       - run: uv run pytest -k "not integration"
 
   backend-coverage:
@@ -63,7 +66,7 @@ jobs:
         with:
           version: "latest"
           python-version: "3.12"
-      - run: uv sync --all-extras --dev
+      - run: uv sync --all-extras --no-extra camera --dev
 
       # Lint/format only need one platform, so they live here rather than in the OS matrix.
       - run: uv run ruff check .
@@ -127,7 +130,7 @@ jobs:
           cache-dependency-path: frontend/yarn.lock
       - uses: extractions/setup-just@v3
 
-      - run: uv sync --all-extras --dev
+      - run: uv sync --all-extras --no-extra camera --dev
         working-directory: backend
       - run: yarn install --frozen-lockfile
       - run: yarn playwright install --with-deps chromium
@@ -165,7 +168,7 @@ jobs:
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
 
-      - run: uv sync --all-extras --dev
+      - run: uv sync --all-extras --no-extra camera --dev
         working-directory: backend
       - run: yarn install --frozen-lockfile
         working-directory: frontend
