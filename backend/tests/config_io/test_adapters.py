@@ -102,6 +102,32 @@ def test_detectors(config: NewswitchConfig) -> None:
     assert cam.preset_exposure_times == pytest.approx([0.001, 0.01])
     assert cam.current_gain == 3.0 and cam.max_gain == 20.0
     assert cam.min_gain == 0.0  # -inf in the file -> Detector default
+    assert (cam.key, cam.sensor_width, cam.sensor_height, cam.pixel_pitch_um) == (
+        "cam",
+        640,
+        480,
+        5.0,
+    )
+    assert (cam.current_frame_rate, cam.min_frame_rate, cam.max_frame_rate) == (None, None, None)
+    assert cam.current_binning == 1
+    assert cam.connection_type is None  # not a camera until `cameras` says so
+
+
+def test_detectors_frame_rate_and_pixel_size(
+    write_doc: DocWriter, minimal_doc: dict[str, Any]
+) -> None:
+    """Frame rate with its limits, binning and the photosensitive pixel size are copied."""
+    cam = minimal_doc["devices"]["cam"]
+    cam["framerate_per_sec"] = {"value": 30.0, "min": 1.0}
+    cam["binning"] = 2
+    cam["pixelsize_um"] = 4.0
+    detectors = adapters.detectors(load_config(write_doc(minimal_doc)).config)
+    assert detectors is not None
+    (detector,) = detectors
+    assert (detector.current_frame_rate, detector.min_frame_rate) == (30.0, 1.0)
+    assert detector.max_frame_rate is None  # unset limit
+    assert detector.current_binning == 2
+    assert (detector.pixel_size_um, detector.pixel_pitch_um) == (4.0, 5.0)
 
 
 def test_detectors_named_presets(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
@@ -281,38 +307,33 @@ def test_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     doc["devices"]["cam"]["gain_db"] = {"value": 2.5}
     doc["devices"]["cam"]["framerate_per_sec"] = {"value": 30.0}
     doc["devices"]["cam"]["binning"] = 2
-    cameras = adapters.cameras(load_config(write_doc(doc)).config)
-    assert cameras is not None
-    (camera,) = cameras
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), vendor_options = found
     assert (camera.slot, camera.key, camera.name) == (1, "cam", "Cam")
     assert (camera.manufacturer, camera.connection_type) == ("SomeVendor", "GigE")
-    assert (camera.serial_number, camera.index) == ("SN-42", None)
+    assert (camera.serial_number, camera.device_index) == ("SN-42", None)
     assert (camera.buffer_size, camera.store_image_data) == (8, False)
-    assert camera.vendor_options == {"sensor_width": 320, "mode": "fast"}
-    assert (camera.exposure_time_ms, camera.gain_db, camera.frame_rate_per_sec) == (
-        10.0,
-        2.5,
-        30.0,
-    )
-    assert camera.binning == 2
+    assert vendor_options == {1: {"sensor_width": 320, "mode": "fast"}}
+    assert camera.current_exposure_time == pytest.approx(0.01)
+    assert (camera.current_gain, camera.current_frame_rate) == (2.5, 30.0)
+    assert camera.current_binning == 2
+    assert (camera.sensor_width, camera.sensor_height) == (640, 480)  # all of `detectors`
 
 
 def test_cameras_defaults(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
-    """Unset values stay None, so the camera library's defaults apply."""
+    """Unset camera keys stay None, so the camera library's defaults apply."""
     doc = _camera_doc(minimal_doc, {"protocol": "usb3-vision"})
     del doc["devices"]["cam"]["manufacturer"]
-    cameras = adapters.cameras(load_config(write_doc(doc)).config)
-    assert cameras is not None
-    (camera,) = cameras
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), vendor_options = found
     assert camera.connection_type == "USB3"
     assert camera.manufacturer is None
-    assert (camera.serial_number, camera.index) == (None, None)
-    assert (camera.buffer_size, camera.store_image_data, camera.vendor_options) == (
-        None,
-        None,
-        {},
-    )
-    assert (camera.gain_db, camera.frame_rate_per_sec) == (None, None)
+    assert (camera.serial_number, camera.device_index) == (None, None)
+    assert (camera.buffer_size, camera.store_image_data) == (None, None)
+    assert vendor_options == {1: {}}
+    assert camera.current_frame_rate is None  # not configured: the camera keeps its own
 
 
 @pytest.mark.parametrize(
@@ -331,9 +352,10 @@ def test_camera_selector(
 ) -> None:
     """serial_number/index come from the mapping entry, else from the connection."""
     doc = _camera_doc(minimal_doc, {"protocol": "usb3-vision", "index": 2}, entry)
-    cameras = adapters.cameras(load_config(write_doc(doc)).config)
-    assert cameras is not None
-    assert (cameras[0].serial_number, cameras[0].index) == selector
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), _ = found
+    assert (camera.serial_number, camera.device_index) == selector
 
 
 def test_cameras_skip_other_detectors(
@@ -343,9 +365,11 @@ def test_cameras_skip_other_detectors(
     doc = _camera_doc(minimal_doc, {"protocol": "gige-vision"})
     devices = doc["devices"]
     doc["devices"] = {"diode": {"type": "detector", "name": "Diode"}, **devices}
-    cameras = adapters.cameras(load_config(write_doc(doc)).config)
-    assert cameras is not None
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    cameras, vendor_options = found
     assert [(camera.key, camera.slot) for camera in cameras] == [("cam", 2)]
+    assert list(vendor_options) == [2]
     assert "'diode' is not mapped to a camera controller" in caplog.text
 
 

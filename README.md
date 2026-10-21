@@ -112,7 +112,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
    `configs/camTest_config.yaml`.
 3. `config_io` validates that file, and `adapters.cameras()` finds the camera: a detector
    (`manufacturer: Simulated`) mapped by a `usb3-vision` controller.
-4. `build_detector_manager()` creates the `UC2CamDetectorManager`, which calls
+4. `build_detector_manager()` creates the `UC2DetectorManager`, which calls
    `uc2_cam_py.create_camera(..., debug_window=True)`.
 5. The debug window keeps the camera acquiring, so the window shows the live image from startup.
 
@@ -143,7 +143,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 2. Run the automated camera tests. They use the same simulated camera and never open a window:
 
    ```bash
-   uv run pytest tests/test_uc2_cam_detector.py tests/test_detector_selection.py tests/config_io/test_adapters.py
+   uv run pytest tests/test_uc2_detector.py tests/test_detector_selection.py tests/config_io/test_adapters.py
    ```
 
 3. Start the backend with the camera configuration, from the repository root:

@@ -50,7 +50,7 @@ def autofocus_sweep(
     best_value = -np.inf
     for index, z_position in enumerate(z_positions):
         stage.move(z=z_position, is_absolute=True)
-        image = detector.capture_image(slot=detector_slot)
+        image = detector.capture_image(slot=detector_slot).data
         value = compute_focus_metric(image, metric)
         metrics.append(value)
         if value > best_value:

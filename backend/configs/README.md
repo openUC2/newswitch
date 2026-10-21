@@ -128,9 +128,10 @@ virtual microscope keeps its simulated detector.
   uc2_cam_py's defaults (recording is on by default). Recordings (`.uc2rb` plus a `.json`
   sidecar, one file per acquisition session) go to `camera_recording_dir` of
   `base_config.yaml`.
-- After opening, the configured `value`s of exposure, gain and frame rate and the binning are
-  written to the camera. The limits the camera reports replace the configured ones in the
-  running detector.
+- After opening, the binning, exposure and gain are written to the camera, and the frame
+  rate when it has a `value`. An exposure or gain without `value` gets the detector default
+  (0.1 s, gain 1), not the camera's own setting. What the camera reports (model, sensor,
+  limits, current values) then replaces the configured values in the running detector.
 - `camera_debug_window: true` in `base_config.yaml` opens a uc2_cam_py window per camera
   showing its newest image, and keeps the cameras acquiring from startup (so with
   `store_image_data: true` they record all the time).

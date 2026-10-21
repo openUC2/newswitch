@@ -77,7 +77,6 @@ from newswitch.protocols import (
     FilterBankState,
 )
 from newswitch.protocols.calibration import CalibrationState
-from newswitch.protocols.camera import CameraManager
 from newswitch.protocols.detector import Detector
 from newswitch.protocols.io import IOManager, IOState
 from newswitch import protocols
@@ -170,7 +169,7 @@ class ImswitchConfig(BaseSettings):
     `config_io.open_config`). None keeps the built-in virtual devices."""
 
     camera_recording_dir: Optional[Path] = None
-    """Folder the cameras record into (see `managers.camera`). None: the default of
+    """Folder the cameras record into (see `managers.uc2.uc2_detector`). None: the default of
     uc2_cam_py (``~/UC2_recordings``)."""
 
     camera_debug_window: bool = False
@@ -270,13 +269,13 @@ def build_detector_manager(
     virtual detector stands in, with a warning. A camera that cannot be opened is an
     error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
     """
-    configured_detectors = adapters.detectors(devices) if devices is not None else None
-    cameras = None
+    found = None
     if not config.use_virtual_microscope and devices is not None:
-        cameras = adapters.cameras(devices)
-    if cameras:
+        found = adapters.cameras(devices)
+    if found:
+        cameras, vendor_options = found
         try:
-            from newswitch.managers.camera import UC2CamDetectorManager
+            from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
         except ImportError as exc:
             logger.warning(
                 "%d camera(s) configured, but uc2_cam_py cannot be imported (%s); "
@@ -285,14 +284,15 @@ def build_detector_manager(
                 exc,
             )
         else:
-            return UC2CamDetectorManager(
+            return UC2DetectorManager(
                 camera_state=camera_state,
                 broadcaster=broadcaster,
                 cameras=cameras,
-                detectors=configured_detectors,
+                vendor_options=vendor_options,
                 recording_dir=config.camera_recording_dir,
                 debug_window=config.camera_debug_window,
             )
+    configured_detectors = adapters.detectors(devices) if devices is not None else None
     return VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
@@ -619,10 +619,9 @@ def save_device_config(
 
 
 @shutdown
-def close_cameras(detector: DetectorManager) -> None:
-    """Stop and release the cameras, so their recordings are complete on disk."""
-    if isinstance(detector, CameraManager):
-        detector.close()
+def close_detector(detector: DetectorManager) -> None:
+    """Stop and release the detectors, so camera recordings are complete on disk."""
+    detector.close()
 
 
 @background

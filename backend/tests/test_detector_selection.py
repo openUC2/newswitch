@@ -1,4 +1,4 @@
-"""Tests for choosing the detector manager (`build_detector_manager`) and closing cameras.
+"""Tests for choosing the detector manager (`build_detector_manager`) and closing it.
 
 Cameras through uc2_cam_py are used on real hardware only, when the device configuration
 maps a detector to a camera controller. The test with a real (simulated) uc2_cam_py camera
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,6 @@ from newswitch.broadcasters import FrameBroadcaster
 from newswitch.config_io import NewswitchConfig, load_config
 from newswitch.managers.virtual import VirtualDetectorManager
 from newswitch.protocols import (
-    CameraManager,
     CameraState,
     DetectorManager,
     FilterBankState,
@@ -54,8 +54,7 @@ CAMERA_DOC: dict[str, Any] = {
 #: Modules that import uc2_cam_py; removed so a test can make the import fail.
 CAMERA_MODULES = (
     "uc2_cam_py",
-    "newswitch.managers.camera",
-    "newswitch.managers.camera.uc2_cam_detector",
+    "newswitch.managers.uc2.uc2_detector",
 )
 
 
@@ -136,20 +135,20 @@ def test_missing_camera_library_falls_back(
 def test_real_hardware_opens_the_cameras(tmp_path: Path, camera_devices: NewswitchConfig) -> None:
     """On real hardware configured cameras open through uc2_cam_py; shutdown closes them."""
     pytest.importorskip("uc2_cam_py")
-    from newswitch.managers.camera import UC2CamDetectorManager
+    from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
 
     manager = _build(_settings(tmp_path, virtual=False), camera_devices)
     try:
-        assert isinstance(manager, UC2CamDetectorManager)
-        assert isinstance(manager, CameraManager)
+        assert isinstance(manager, UC2DetectorManager)
+        assert isinstance(manager, DetectorManager)
         (detector,) = manager.state.detectors
         assert (detector.slot, detector.name, detector.width, detector.height) == (1, "Sim", 64, 48)
-        assert manager.get_camera_info(1).serial_number == "SIM-0001"
-        assert not manager.get_camera_info(1).is_recording  # no debug window: nobody holds it
+        assert (detector.serial_number, detector.connection_type) == ("SIM-0001", "USB3")
+        assert not detector.is_recording  # no debug window: nobody holds it
     finally:
-        app_module.close_cameras(manager)
+        app_module.close_detector(manager)
     with pytest.raises(RuntimeError, match="closed"):
-        manager.start_acquisition(1)
+        manager.capture_image(1)
 
 
 def test_camera_debug_window_is_passed_on(
@@ -160,19 +159,24 @@ def test_camera_debug_window_is_passed_on(
     Without a display, so uc2_cam_py only logs an error instead of opening the window.
     """
     pytest.importorskip("uc2_cam_py")
-    from newswitch.managers.camera import UC2CamDetectorManager
+    from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
 
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     manager = _build(_settings(tmp_path, virtual=False, debug_window=True), camera_devices)
     try:
-        assert isinstance(manager, UC2CamDetectorManager)
+        assert isinstance(manager, UC2DetectorManager)
         assert manager._cameras[1].camera._debug_window is not None
-        assert manager.get_camera_info(1).is_recording
+        assert manager.state.get_detector_for_slot(1).is_recording
     finally:
-        app_module.close_cameras(manager)
+        app_module.close_detector(manager)
 
 
-def test_close_cameras_ignores_other_detectors(tmp_path: Path) -> None:
-    """The shutdown hook leaves detector managers without cameras alone."""
-    app_module.close_cameras(_build(_settings(tmp_path, virtual=True), None))
+def test_close_detector_ends_the_virtual_live_loop(tmp_path: Path) -> None:
+    """The shutdown hook closes any detector manager; the virtual one ends its live loop."""
+    manager = _build(_settings(tmp_path, virtual=True), None)
+    live = threading.Thread(target=manager.acquire_live, daemon=True)
+    live.start()
+    app_module.close_detector(manager)
+    live.join(timeout=2.0)
+    assert not live.is_alive()
