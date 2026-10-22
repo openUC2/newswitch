@@ -16,7 +16,8 @@
     "e2e:headed": "playwright test --headed",
     "e2e:debug": "playwright test --debug",
     "e2e:report": "playwright show-report",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "catalog:export": "UPDATE_CATALOG=1 vitest run src/lib/blok/microscope/catalogManifest.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

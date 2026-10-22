@@ -416,6 +416,356 @@ export const bloks = {
     key: 'jonda',
     source: null,
   },
+  standard: {
+    args: null,
+    catalog: 'newswitch',
+    components: [
+      {
+        children: [
+          {
+            children: [
+              {
+                children: null,
+                component: 'SettingsPanel',
+                id: 'Resizable/ResizablePanel[0]/SettingsPanel[0]',
+                props: [
+                  {
+                    agentCall: null,
+                    declaresValue: null,
+                    dynamicValue: null,
+                    key: 'className',
+                    staticValue: 'h-full',
+                    utilCall: null,
+                  },
+                ],
+              },
+            ],
+            component: 'ResizablePanel',
+            id: 'Resizable/ResizablePanel[0]',
+            props: [
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'defaultSize',
+                staticValue: '15',
+                utilCall: null,
+              },
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'minSize',
+                staticValue: '10',
+                utilCall: null,
+              },
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'maxSize',
+                staticValue: '30',
+                utilCall: null,
+              },
+            ],
+          },
+          {
+            children: null,
+            component: 'ResizableHandle',
+            id: 'Resizable/ResizableHandle[0]',
+            props: [
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'withHandle',
+                staticValue: 'true',
+                utilCall: null,
+              },
+            ],
+          },
+          {
+            children: [
+              {
+                children: [
+                  {
+                    children: [
+                      {
+                        children: [
+                          {
+                            children: null,
+                            component: 'FrameLightPathLayer',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/FrameLightPathLayer[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'StageAxis',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/StageAxis[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'FramesLayer',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/FramesLayer[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'StagePlane',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/StagePlane[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'LivesLayer',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/LivesLayer[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'LightPathLayer',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/LightPathLayer[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'ImagesLayer',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/ImagesLayer[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'StagePositioner',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/StagePositioner[0]',
+                            props: null,
+                          },
+                          {
+                            children: null,
+                            component: 'RectangleDrawer',
+                            id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]/RectangleDrawer[0]',
+                            props: null,
+                          },
+                        ],
+                        component: 'StageScene',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/StageScene[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'ScanRegionPanel',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/ScanRegionPanel[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'ImageMetadataPanel',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/ImageMetadataPanel[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'KubeStatePanel',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/KubeStatePanel[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'FramePanel',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/FramePanel[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'SceneOverlay',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/SceneOverlay[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'DebugOverlay',
+                        id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]/DebugOverlay[0]',
+                        props: null,
+                      },
+                    ],
+                    component: 'StageView',
+                    id: 'Resizable/ResizablePanel[1]/div[0]/StageView[0]',
+                    props: [
+                      {
+                        agentCall: null,
+                        declaresValue: null,
+                        dynamicValue: null,
+                        key: 'className',
+                        staticValue: 'flex-1',
+                        utilCall: null,
+                      },
+                    ],
+                  },
+                ],
+                component: 'div',
+                id: 'Resizable/ResizablePanel[1]/div[0]',
+                props: [
+                  {
+                    agentCall: null,
+                    declaresValue: null,
+                    dynamicValue: null,
+                    key: 'className',
+                    staticValue:
+                      'flex h-full flex-col overflow-hidden bg-muted/30',
+                    utilCall: null,
+                  },
+                ],
+              },
+            ],
+            component: 'ResizablePanel',
+            id: 'Resizable/ResizablePanel[1]',
+            props: [
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'defaultSize',
+                staticValue: '55',
+                utilCall: null,
+              },
+            ],
+          },
+          {
+            children: null,
+            component: 'ResizableHandle',
+            id: 'Resizable/ResizableHandle[1]',
+            props: [
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'withHandle',
+                staticValue: 'true',
+                utilCall: null,
+              },
+            ],
+          },
+          {
+            children: [
+              {
+                children: [
+                  {
+                    children: [
+                      {
+                        children: null,
+                        component: 'StageControl',
+                        id: 'Resizable/ResizablePanel[2]/ScrollArea[0]/div[0]/StageControl[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'MultidimensionalAcquisitionControl',
+                        id: 'Resizable/ResizablePanel[2]/ScrollArea[0]/div[0]/MultidimensionalAcquisitionControl[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'CalibrateLightPath',
+                        id: 'Resizable/ResizablePanel[2]/ScrollArea[0]/div[0]/CalibrateLightPath[0]',
+                        props: null,
+                      },
+                      {
+                        children: null,
+                        component: 'BloksPanel',
+                        id: 'Resizable/ResizablePanel[2]/ScrollArea[0]/div[0]/BloksPanel[0]',
+                        props: null,
+                      },
+                    ],
+                    component: 'div',
+                    id: 'Resizable/ResizablePanel[2]/ScrollArea[0]/div[0]',
+                    props: [
+                      {
+                        agentCall: null,
+                        declaresValue: null,
+                        dynamicValue: null,
+                        key: 'className',
+                        staticValue: 'flex flex-col gap-4 p-4',
+                        utilCall: null,
+                      },
+                    ],
+                  },
+                ],
+                component: 'ScrollArea',
+                id: 'Resizable/ResizablePanel[2]/ScrollArea[0]',
+                props: [
+                  {
+                    agentCall: null,
+                    declaresValue: null,
+                    dynamicValue: null,
+                    key: 'className',
+                    staticValue: 'h-full',
+                    utilCall: null,
+                  },
+                ],
+              },
+            ],
+            component: 'ResizablePanel',
+            id: 'Resizable/ResizablePanel[2]',
+            props: [
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'defaultSize',
+                staticValue: '30',
+                utilCall: null,
+              },
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'minSize',
+                staticValue: '15',
+                utilCall: null,
+              },
+              {
+                agentCall: null,
+                declaresValue: null,
+                dynamicValue: null,
+                key: 'maxSize',
+                staticValue: '40',
+                utilCall: null,
+              },
+            ],
+          },
+        ],
+        component: 'Resizable',
+        id: 'Resizable',
+        props: [
+          {
+            agentCall: null,
+            declaresValue: null,
+            dynamicValue: null,
+            key: 'direction',
+            staticValue: 'row',
+            utilCall: null,
+          },
+          {
+            agentCall: null,
+            declaresValue: null,
+            dynamicValue: null,
+            key: 'className',
+            staticValue: 'h-full w-full',
+            utilCall: null,
+          },
+        ],
+      },
+    ],
+    context: 'HTML',
+    default: true,
+    demoState: {},
+    dependencies: [],
+    description: 'The default newswitch microscope UI.',
+    forModel: null,
+    forNode: null,
+    key: 'standard',
+    source: null,
+  },
 } as const;
 
-export type BlokKey = 'jonda';
+export type BlokKey = 'jonda' | 'standard';

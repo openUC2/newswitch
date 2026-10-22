@@ -1,0 +1,468 @@
+{
+  "name": "newswitch",
+  "description": "The newswitch microscope components: control panels, the stage view and its scene layers.",
+  "components": [
+    {
+      "name": "BloksPanel",
+      "description": "Lists the other bloks the backend declares and opens one in a dialog.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "CalibrateLightPath",
+      "description": "Calibrate the light path (pixel sizes).",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "CameraControl",
+      "description": "Detectors: switch them on and off, set gain and exposure.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "DebugOverlay",
+      "description": "Debug tools over the scene.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "FilterBankControl",
+      "description": "The filter wheel: switch or toggle the active filter.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "FrameLightPathLayer",
+      "description": "The light path the selected frame was taken with.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "FramePanel",
+      "description": "Details of the selected frame.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "FramesLayer",
+      "description": "The acquired frames, placed where they were taken.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "IlluminationControl",
+      "description": "Illumination channels: switch them on and off, set intensity.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "ImageMetadataPanel",
+      "description": "Metadata of the selected image.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "ImagesLayer",
+      "description": "The captured images, placed where they were taken.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "KubeStatePanel",
+      "description": "Details of the selected light-path component (kube).",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "LatestImage",
+      "description": "The most recently written image.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "LightPathLayer",
+      "description": "The microscope's current light path.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "LivesLayer",
+      "description": "The live streams of the acquiring detectors.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "LiveView",
+      "description": "The live camera stream.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "MultidimensionalAcquisitionControl",
+      "description": "The multidimensional acquisition form: timepoints, positions, stacks and channels; start, pause and resume.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "ObjectiveControl",
+      "description": "The objective turret: switch the active objective.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "RectangleDrawer",
+      "description": "In scan mode (hold D), draw a rectangle to define a scan region.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "ScanRegionPanel",
+      "description": "Edits the selected scan region and starts its scan.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "SceneOverlay",
+      "description": "Toolbar over the scene: 2D/3D, interaction mode, debug, clear.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "SettingsPanel",
+      "description": "The microscope's settings column: live view, capture, and the camera, filter, illumination and objective controls.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "StageAxis",
+      "description": "The stage's axes and travel limits.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "StageControl",
+      "description": "Stage position and moves, with the move's progress.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "StagePlane",
+      "description": "The stage at its current position (hidden in meta mode).",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "StagePositioner",
+      "description": "In move mode (hold M), click the scene to move the stage there.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "StageScene",
+      "description": "The 3D stage scene. Brings its camera (orbit in 3D, map in 2D) and lights; its children are the layers drawn in it.",
+      "acceptsChildren": true,
+      "context": "HTML",
+      "childrenContext": "SCENE",
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "background",
+          "kind": "STRING",
+          "required": false,
+          "description": "Background color of the scene. Defaults to #020617."
+        },
+        {
+          "key": "children",
+          "kind": "LIST",
+          "required": false,
+          "description": "Scene layers: StageAxis, StagePlane, FramesLayer, ImagesLayer, LivesLayer, LightPathLayer, FrameLightPathLayer, StagePositioner, RectangleDrawer."
+        }
+      ]
+    },
+    {
+      "name": "StageView",
+      "description": "The stage view: holds the 3D StageScene and the panels that float over it. Keyboard modes (D/E/M) apply while it is shown.",
+      "acceptsChildren": true,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "children",
+          "kind": "LIST",
+          "required": false,
+          "description": "A StageScene and the panels floating over it."
+        },
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "StatusPanel",
+      "description": "Badges for the camera, stage, illumination and objective state.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    }
+  ],
+  "operations": []
+}

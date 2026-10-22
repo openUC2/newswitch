@@ -23,6 +23,7 @@ import {
   type NewswitchBlokDeclaration,
 } from "@/lib/blok/newswitch";
 import BlokRenderer from "@/lib/blok/renderer/BlokRenderer";
+import { newswitchBlokCatalog } from "@/lib/blok/microscope/catalog";
 import {
   normalizeBlokComponentTree,
   type BlokDispatchActionHandler,
@@ -234,6 +235,8 @@ export function NewswitchBlok({
       // A different blok starts from a fresh runtime: nothing it wrote carries over.
       key={blokKey}
       surfaceId={`newswitch-${blokKey}`}
+      // A superset of the standard catalog: the microscope's components too.
+      catalog={newswitchBlokCatalog}
       {...rendererProps}
       uiComponents={roots}
       initialState={initialState}
