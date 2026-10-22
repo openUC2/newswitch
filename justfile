@@ -28,7 +28,7 @@ install:
 
 # Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
 dev-backend:
-    cd backend && uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload
+    cd backend && uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
 
 # Frontend only -> http://localhost:$FRONTEND_PORT (needs the backend up for fresh codegen)
 # Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
@@ -52,7 +52,7 @@ dev:
     #!/usr/bin/env bash
     set -uo pipefail
     trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload) &
+    (cd backend && exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
     if ! just wait-backend; then
       echo "!! backend unreachable - vite will fall back to the COMMITTED generated hooks" >&2
       echo "!! (see frontend/plugins/generate-app.ts: fetch failures are warnings, not errors)" >&2
