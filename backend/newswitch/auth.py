@@ -35,8 +35,8 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from fastapi.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
-from rekuest_next.contrib.fastapi.auth import AuthenticationError, UserSource
-from rekuest_next.contrib.fastapi.models import WebSocketSubscriptionInit
+from arkitekt_fastapi.auth import AuthenticationError, UserSource
+from arkitekt_fastapi.models import WebSocketSubscriptionInit
 
 from newswitch.users import Role, UserStore
 
@@ -263,7 +263,7 @@ def bearer_token(header: str | None) -> str | None:
 def make_expand_user_from_request(
     authenticator: Authenticator,
 ) -> Callable[[UserSource], Any]:
-    """Build the hook rekuest uses to authenticate both of its transports.
+    """Build the hook arkitekt-fastapi uses to authenticate both of its transports.
 
     The websocket arm reads the token from the init payload rather than a header,
     because browsers cannot set headers on a `WebSocket` handshake.

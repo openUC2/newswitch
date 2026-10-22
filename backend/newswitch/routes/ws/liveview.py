@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 from newswitch.auth import Authenticator
 from newswitch.broadcasters import FrameBroadcaster, ZstdEncoderConfig, H264EncoderConfig
+from newswitch.routes.contexts import context_of_type
 
 
 router = APIRouter()
@@ -72,7 +73,7 @@ def get_broadcaster_from_websocket(websocket: WebSocket) -> FrameBroadcaster:
     if agent is None:
         raise RuntimeError("Agent not available")
 
-    broadcaster = agent.get_context_for_type(FrameBroadcaster)
+    broadcaster = context_of_type(agent, FrameBroadcaster)
     if broadcaster is None:
         raise RuntimeError("FrameBroadcaster not available")
 

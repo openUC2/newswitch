@@ -1,4 +1,4 @@
-import type { ActionDefinition } from '@/lib/rekuest/task';
+import type { ActionDefinition } from '@/lib/arkitekt/task';
 import { AcquireMultidimensionalAcquisitionDefinition } from './acquireMultidimensionalAcquisition';
 import { ActivateDetectorDefinition } from './activateDetector';
 import { CalibrateLightPathDefinition } from './calibrateLightPath';

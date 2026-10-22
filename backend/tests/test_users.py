@@ -257,7 +257,7 @@ def test_authenticator_login_issues_a_working_session(store: UserStore) -> None:
 
 def test_authenticator_rejects_wrong_credentials(store: UserStore) -> None:
     """A wrong password must not issue a session."""
-    from rekuest_next.contrib.fastapi.auth import AuthenticationError
+    from arkitekt_fastapi.auth import AuthenticationError
 
     store.create_user("alice", "hunter2", Role.OPERATOR)
     authenticator = UserStoreAuthenticator(store)
@@ -375,7 +375,7 @@ def test_authenticator_records_login_success(store: UserStore) -> None:
 
 def test_authenticator_records_login_failure(store: UserStore) -> None:
     """A wrong password is recorded too - what an audit trail is for."""
-    from rekuest_next.contrib.fastapi.auth import AuthenticationError
+    from arkitekt_fastapi.auth import AuthenticationError
 
     store.create_user("alice", "hunter2", Role.OPERATOR)
     with pytest.raises(AuthenticationError):

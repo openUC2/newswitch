@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.managers.uc2.rest_bus import UC2RestBusConfig
@@ -127,11 +126,10 @@ def test_apply_uc2_event_updates_states() -> None:
     uc2_state = UC2State()
 
     # StageState requires the stage_position lock for writes (as in dispatch).
-    with acquired_locks("stage_position"):
-        apply_uc2_event(PositionUpdate(axis="X", position=42.0), stage_state, uc2_state)
-        assert stage_state.x == pytest.approx(42.0)
+    apply_uc2_event(PositionUpdate(axis="X", position=42.0), stage_state, uc2_state)
+    assert stage_state.x == pytest.approx(42.0)
 
-        apply_uc2_event(MotionDone(axis="Z", position=-7.5), stage_state, uc2_state)
+    apply_uc2_event(MotionDone(axis="Z", position=-7.5), stage_state, uc2_state)
     assert stage_state.z == pytest.approx(-7.5)
 
     apply_uc2_event(EStopChanged(active=True), stage_state, uc2_state)

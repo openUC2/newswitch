@@ -1,23 +1,26 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 import { createIndexedUnion } from './utils';
+import { validatorAccepts, type UtilCall } from '@/lib/arkitekt/calls';
 
 // --- Shared Models ---
 export const IlluminationSchema = z
   .object({
-    __identifier: z.literal('illumination').default('illumination'),
+    __identifier: z
+      .literal('@newswitch/illumination')
+      .default('@newswitch/illumination'),
     source: z.string(),
     wavelength: z.number(),
     intensity: z.number(),
   })
-  .brand('illumination')
+  .brand('@newswitch/illumination')
   .describe('Represents an illumination channel to acquire.');
 export type Illumination = z.input<typeof IlluminationSchema>;
 export type IlluminationOutput = z.infer<typeof IlluminationSchema>;
 
 export const StreamsSchema = z
   .object({
-    __identifier: z.literal('streams').default('streams'),
+    __identifier: z.literal('@newswitch/streams').default('@newswitch/streams'),
     /** Name or slot of the detector to use for this stream (e.g., 'Camera1' or '1') */
     detector: z
       .string()
@@ -39,12 +42,46 @@ export const StreamsSchema = z
   })
   .superRefine((val, ctx) => {
     {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      type ValidatorFunc = (context: any) => boolean;
-      const validatorFn: ValidatorFunc = (context) => context.self.length > 0;
-      const context = { self: val['illuminations'] };
+      // len(value) > 0
+      const call = {
+        operation: 'gt',
+        arguments: [
+          {
+            key: 'a',
+            valueLiteral: null,
+            valuePath: null,
+            agentCall: null,
+            utilCall: {
+              operation: 'len',
+              arguments: [
+                {
+                  key: 'a',
+                  valueLiteral: null,
+                  valuePath: 'value',
+                  agentCall: null,
+                  utilCall: null,
+                  valueList: null,
+                  valueDict: null,
+                },
+              ],
+            },
+            valueList: null,
+            valueDict: null,
+          },
+          {
+            key: 'b',
+            valueLiteral: 0,
+            valuePath: null,
+            agentCall: null,
+            utilCall: null,
+            valueList: null,
+            valueDict: null,
+          },
+        ],
+      } as UtilCall;
+      const scope = { value: val['illuminations'], dependencies: {} };
 
-      if (!validatorFn(context)) {
+      if (!validatorAccepts(call, scope)) {
         ctx.addIssue({
           code: 'custom',
           message:
@@ -54,7 +91,7 @@ export const StreamsSchema = z
       }
     }
   })
-  .brand('streams')
+  .brand('@newswitch/streams')
   .describe('Represents which channels to acquire at each position.');
 export type Streams = z.input<typeof StreamsSchema>;
 export type StreamsOutput = z.infer<typeof StreamsSchema>;
@@ -62,11 +99,11 @@ export type StreamsOutput = z.infer<typeof StreamsSchema>;
 export const SoftwareAutofocusHookSchema = z
   .object({
     __identifier: z
-      .literal('software_autofocus_hook')
-      .default('software_autofocus_hook'),
+      .literal('@newswitch/software_autofocus_hook')
+      .default('@newswitch/software_autofocus_hook'),
     speed: z.number(),
   })
-  .brand('software_autofocus_hook')
+  .brand('@newswitch/software_autofocus_hook')
   .describe(
     'Data class representing a software autofocus hook to be executed during acquisition.',
   );
@@ -77,10 +114,12 @@ export type SoftwareAutofocusHookOutput = z.infer<
 
 export const ZCalibrationHookSchema = z
   .object({
-    __identifier: z.literal('z_calibration_hook').default('z_calibration_hook'),
+    __identifier: z
+      .literal('@newswitch/z_calibration_hook')
+      .default('@newswitch/z_calibration_hook'),
     calibration_points: z.number(),
   })
-  .brand('z_calibration_hook')
+  .brand('@newswitch/z_calibration_hook')
   .describe(
     'Data class representing a z-calibration hook to be executed during acquisition.',
   );
@@ -98,7 +137,7 @@ export const ZHookUnionSchema = createIndexedUnion([
 
 export const StackSchema = z
   .object({
-    __identifier: z.literal('stack').default('stack'),
+    __identifier: z.literal('@newswitch/stack').default('@newswitch/stack'),
     z_offset: z.number(),
     z_slices: z.array(z.number()),
     z_step: z.number(),
@@ -114,7 +153,7 @@ export const StackSchema = z
         "List of hooks to execute at each z-slice (e.g., 'autofocus', 'z_calibration')",
       ),
   })
-  .brand('stack')
+  .brand('@newswitch/stack')
   .describe('Represents a stack of images at different z-slices.');
 export type Stack = z.input<typeof StackSchema>;
 export type StackOutput = z.infer<typeof StackSchema>;
@@ -130,7 +169,9 @@ export const PHookUnionSchema = createIndexedUnion([
 
 export const PositionSchema = z
   .object({
-    __identifier: z.literal('position').default('position'),
+    __identifier: z
+      .literal('@newswitch/position')
+      .default('@newswitch/position'),
     x: z.number(),
     y: z.number(),
     z: z.number(),
@@ -146,7 +187,7 @@ export const PositionSchema = z
         "List of hooks to execute at each position (e.g., 'autofocus', 'z_calibration')",
       ),
   })
-  .brand('position')
+  .brand('@newswitch/position')
   .describe('Represents a position in 3D space.');
 export type Position = z.input<typeof PositionSchema>;
 export type PositionOutput = z.infer<typeof PositionSchema>;
@@ -162,7 +203,9 @@ export const THookUnionSchema = createIndexedUnion([
 
 export const TimepointSchema = z
   .object({
-    __identifier: z.literal('timepoint').default('timepoint'),
+    __identifier: z
+      .literal('@newswitch/timepoint')
+      .default('@newswitch/timepoint'),
     /** Absolute time to acquire this timepoint (e.g., '2024-01-01T12:00:00') or None to acquire immediately after the previous timepoint */
     time: z
       .any()
@@ -176,11 +219,18 @@ export const TimepointSchema = z
       PositionSchema.describe('Represents a position in 3D space.'),
     ),
     /** Order in which to visit stage positions (e.g., 'sequential', 'random') */
-    position_order: z
-      .string()
-      .describe(
-        "Order in which to visit stage positions (e.g., 'sequential', 'random')",
-      ),
+    position_order: z.union([
+      z
+        .literal('SEQUENTIAL')
+        .describe(
+          'Defines the order in which stage positions are visited during acquisition.',
+        ),
+      z
+        .literal('RANDOM')
+        .describe(
+          'Defines the order in which stage positions are visited during acquisition.',
+        ),
+    ]),
     /** List of hooks to execute at each timepoint (e.g., 'autofocus', 'z_calibration') */
     t_hooks: z
       .array(THookUnionSchema)
@@ -188,7 +238,7 @@ export const TimepointSchema = z
         "List of hooks to execute at each timepoint (e.g., 'autofocus', 'z_calibration')",
       ),
   })
-  .brand('timepoint')
+  .brand('@newswitch/timepoint')
   .describe('Represents a timepoint in a temporal sequence.');
 export type Timepoint = z.input<typeof TimepointSchema>;
 export type TimepointOutput = z.infer<typeof TimepointSchema>;
@@ -205,8 +255,8 @@ export const MHookUnionSchema = createIndexedUnion([
 export const MultidimensionalAcquisitionSchema = z
   .object({
     __identifier: z
-      .literal('multidimensional_acquisition')
-      .default('multidimensional_acquisition'),
+      .literal('@newswitch/multidimensional_acquisition')
+      .default('@newswitch/multidimensional_acquisition'),
     /** List of timepoints to acquire, each with its own stage positions and hooks */
     timepoints: z.array(
       TimepointSchema.describe(
@@ -230,12 +280,46 @@ export const MultidimensionalAcquisitionSchema = z
   })
   .superRefine((val, ctx) => {
     {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      type ValidatorFunc = (context: any) => boolean;
-      const validatorFn: ValidatorFunc = (context) => context.self.length > 0;
-      const context = { self: val['timepoints'] };
+      // len(value) > 0
+      const call = {
+        operation: 'gt',
+        arguments: [
+          {
+            key: 'a',
+            valueLiteral: null,
+            valuePath: null,
+            agentCall: null,
+            utilCall: {
+              operation: 'len',
+              arguments: [
+                {
+                  key: 'a',
+                  valueLiteral: null,
+                  valuePath: 'value',
+                  agentCall: null,
+                  utilCall: null,
+                  valueList: null,
+                  valueDict: null,
+                },
+              ],
+            },
+            valueList: null,
+            valueDict: null,
+          },
+          {
+            key: 'b',
+            valueLiteral: 0,
+            valuePath: null,
+            agentCall: null,
+            utilCall: null,
+            valueList: null,
+            valueDict: null,
+          },
+        ],
+      } as UtilCall;
+      const scope = { value: val['timepoints'], dependencies: {} };
 
-      if (!validatorFn(context)) {
+      if (!validatorAccepts(call, scope)) {
         ctx.addIssue({
           code: 'custom',
           message: 'You need at least one timepoint to perform an acquisition',
@@ -244,7 +328,7 @@ export const MultidimensionalAcquisitionSchema = z
       }
     }
   })
-  .brand('multidimensional_acquisition')
+  .brand('@newswitch/multidimensional_acquisition')
   .describe('Configuration for the acquisition.');
 export type MultidimensionalAcquisition = z.input<
   typeof MultidimensionalAcquisitionSchema
@@ -255,14 +339,14 @@ export type MultidimensionalAcquisitionOutput = z.infer<
 
 export const ScaleSchema = z
   .object({
-    __identifier: z.literal('scale').default('scale'),
+    __identifier: z.literal('@newswitch/scale').default('@newswitch/scale'),
     x: z.number(),
     y: z.number(),
     z: z.number(),
     cached_id: z.string().nullable().optional(),
     affine_matrix: z.array(z.array(z.number())).nullable().optional(),
   })
-  .brand('scale')
+  .brand('@newswitch/scale')
   .describe('Represents a scale factor for a 3D volume.');
 export type Scale = z.input<typeof ScaleSchema>;
 export type ScaleOutput = z.infer<typeof ScaleSchema>;
@@ -270,8 +354,8 @@ export type ScaleOutput = z.infer<typeof ScaleSchema>;
 export const ObjectiveKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('objective_kube_state')
-      .default('objective_kube_state'),
+      .literal('@newswitch/objective_kube_state')
+      .default('@newswitch/objective_kube_state'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -295,7 +379,7 @@ export const ObjectiveKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('objective_kube_state')
+  .brand('@newswitch/objective_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -305,8 +389,8 @@ export type ObjectiveKubeStateOutput = z.infer<typeof ObjectiveKubeStateSchema>;
 export const DetectorKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('detector_kube_state')
-      .default('detector_kube_state'),
+      .literal('@newswitch/detector_kube_state')
+      .default('@newswitch/detector_kube_state'),
     kube_id: z.string(),
     gain: z.number(),
     exposure_time: z.number(),
@@ -327,7 +411,7 @@ export const DetectorKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('detector_kube_state')
+  .brand('@newswitch/detector_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -336,7 +420,9 @@ export type DetectorKubeStateOutput = z.infer<typeof DetectorKubeStateSchema>;
 
 export const FilterKubeStateSchema = z
   .object({
-    __identifier: z.literal('filter_kube_state').default('filter_kube_state'),
+    __identifier: z
+      .literal('@newswitch/filter_kube_state')
+      .default('@newswitch/filter_kube_state'),
     kube_id: z.string(),
     wavelength: z.number(),
     /** Affine transformation matrix of the kube */
@@ -360,7 +446,7 @@ export const FilterKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('filter_kube_state')
+  .brand('@newswitch/filter_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -370,8 +456,8 @@ export type FilterKubeStateOutput = z.infer<typeof FilterKubeStateSchema>;
 export const IlluminationKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('illumination_kube_state')
-      .default('illumination_kube_state'),
+      .literal('@newswitch/illumination_kube_state')
+      .default('@newswitch/illumination_kube_state'),
     kube_id: z.string(),
     slot_id: z.number(),
     intensity: z.number(),
@@ -397,7 +483,7 @@ export const IlluminationKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('illumination_kube_state')
+  .brand('@newswitch/illumination_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -408,7 +494,9 @@ export type IlluminationKubeStateOutput = z.infer<
 
 export const GenericKubeStateSchema = z
   .object({
-    __identifier: z.literal('generic_kube_state').default('generic_kube_state'),
+    __identifier: z
+      .literal('@newswitch/generic_kube_state')
+      .default('@newswitch/generic_kube_state'),
     kube_id: z.string(),
     other_metadata: z.record(z.string(), z.string()),
     /** Affine transformation matrix of the kube */
@@ -428,7 +516,7 @@ export const GenericKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('generic_kube_state')
+  .brand('@newswitch/generic_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -437,7 +525,9 @@ export type GenericKubeStateOutput = z.infer<typeof GenericKubeStateSchema>;
 
 export const StageKubeStateSchema = z
   .object({
-    __identifier: z.literal('stage_kube_state').default('stage_kube_state'),
+    __identifier: z
+      .literal('@newswitch/stage_kube_state')
+      .default('@newswitch/stage_kube_state'),
     kube_id: z.string(),
     /** Affine transformation matrix of the kube */
     affine_matrix: z
@@ -456,7 +546,7 @@ export const StageKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('stage_kube_state')
+  .brand('@newswitch/stage_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -466,8 +556,8 @@ export type StageKubeStateOutput = z.infer<typeof StageKubeStateSchema>;
 export const DichroicKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('dichroic_kube_state')
-      .default('dichroic_kube_state'),
+      .literal('@newswitch/dichroic_kube_state')
+      .default('@newswitch/dichroic_kube_state'),
     kube_id: z.string(),
     /** Affine transformation matrix of the kube */
     affine_matrix: z
@@ -490,7 +580,7 @@ export const DichroicKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('dichroic_kube_state')
+  .brand('@newswitch/dichroic_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -500,8 +590,8 @@ export type DichroicKubeStateOutput = z.infer<typeof DichroicKubeStateSchema>;
 export const FilterBankKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('filter_bank_kube_state')
-      .default('filter_bank_kube_state'),
+      .literal('@newswitch/filter_bank_kube_state')
+      .default('@newswitch/filter_bank_kube_state'),
     kube_id: z.string(),
     slot_id: z.number(),
     center_wavelength: z.number(),
@@ -528,7 +618,7 @@ export const FilterBankKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('filter_bank_kube_state')
+  .brand('@newswitch/filter_bank_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -540,8 +630,8 @@ export type FilterBankKubeStateOutput = z.infer<
 export const ObjectiveTurretKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('objective_turret_kube_state')
-      .default('objective_turret_kube_state'),
+      .literal('@newswitch/objective_turret_kube_state')
+      .default('@newswitch/objective_turret_kube_state'),
     kube_id: z.string(),
     slot: z.number(),
     magnification: z.number(),
@@ -567,7 +657,7 @@ export const ObjectiveTurretKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('objective_turret_kube_state')
+  .brand('@newswitch/objective_turret_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -610,7 +700,9 @@ export const KubeUnionSchema = createIndexedUnion([
 
 export const LightEdgeStateSchema = z
   .object({
-    __identifier: z.literal('light_edge_state').default('light_edge_state'),
+    __identifier: z
+      .literal('@newswitch/light_edge_state')
+      .default('@newswitch/light_edge_state'),
     /** Source identifier (e.g., ID of LED or laser) */
     source: z.string().describe('Source identifier (e.g., ID of LED or laser)'),
     /** Target identifier (e.g., ID of sample or detector) */
@@ -630,7 +722,7 @@ export const LightEdgeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('light_edge_state')
+  .brand('@newswitch/light_edge_state')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
@@ -639,7 +731,9 @@ export type LightEdgeStateOutput = z.infer<typeof LightEdgeStateSchema>;
 
 export const LightPathStateSchema = z
   .object({
-    __identifier: z.literal('light_path_state').default('light_path_state'),
+    __identifier: z
+      .literal('@newswitch/light_path_state')
+      .default('@newswitch/light_path_state'),
     /** Hash of the light path configuration, used to uniquely describe the optical path for this image */
     hash: z
       .string()
@@ -665,7 +759,7 @@ export const LightPathStateSchema = z
         'Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image',
       ),
   })
-  .brand('light_path_state')
+  .brand('@newswitch/light_path_state')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
@@ -674,7 +768,9 @@ export type LightPathStateOutput = z.infer<typeof LightPathStateSchema>;
 
 export const MetadataSchema = z
   .object({
-    __identifier: z.literal('metadata').default('metadata'),
+    __identifier: z
+      .literal('@newswitch/metadata')
+      .default('@newswitch/metadata'),
     affine_matrix: z.array(z.array(z.number())),
     fov_width: z.number(),
     fov_height: z.number(),
@@ -687,7 +783,7 @@ export const MetadataSchema = z
     min_value: z.number().nullable().optional(),
     max_value: z.number().nullable().optional(),
   })
-  .brand('metadata')
+  .brand('@newswitch/metadata')
   .describe(
     'Data class representing metadata for an image, including its ID and affine transformation matrix.',
   );
@@ -696,11 +792,13 @@ export type MetadataOutput = z.infer<typeof MetadataSchema>;
 
 export const ArrayMetadataSchema = z
   .object({
-    __identifier: z.literal('array_metadata').default('array_metadata'),
+    __identifier: z
+      .literal('@newswitch/array_metadata')
+      .default('@newswitch/array_metadata'),
     min_value: z.number(),
     max_value: z.number(),
   })
-  .brand('array_metadata')
+  .brand('@newswitch/array_metadata')
   .describe(
     'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
   );
@@ -709,7 +807,7 @@ export type ArrayMetadataOutput = z.infer<typeof ArrayMetadataSchema>;
 
 export const FrameSchema = z
   .object({
-    __identifier: z.literal('frame').default('frame'),
+    __identifier: z.literal('@newswitch/frame').default('@newswitch/frame'),
     id: z.string(),
     scales: z.array(
       ScaleSchema.describe('Represents a scale factor for a 3D volume.'),
@@ -723,7 +821,7 @@ export const FrameSchema = z
       'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
     ),
   })
-  .brand('frame')
+  .brand('@newswitch/frame')
   .describe('Represents a single 3D volume captured by the detector.');
 export type Frame = z.input<typeof FrameSchema>;
 export type FrameOutput = z.infer<typeof FrameSchema>;

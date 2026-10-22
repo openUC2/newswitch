@@ -14,10 +14,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable, TYPE_CHECKING
 import numpy as np
-from rekuest_next.agents.context import context
-from rekuest_next import model, state
 from enum import Enum
 from newswitch.protocols.base import Manager
+from newswitch.arkitekt_app import nsapp
 
 if TYPE_CHECKING:
     from newswitch.broadcasters import FrameBroadcaster
@@ -47,7 +46,7 @@ class Colormap(str, Enum):
 # fills in what the device reports and keeps the current values up to date. Fields a
 # manager cannot know stay None. The docstring stays one line: it goes into the generated
 # frontend code, and Python 3.12 and 3.13 indent multi-line docstrings differently.
-@model
+@nsapp.model
 @dataclass
 class Detector:
     """Shared state for detector parameters."""
@@ -124,7 +123,7 @@ class Detector:
     """File the current or last session is recorded to; None when not storing."""
 
 
-@state(required_locks=["camera_parameters"])
+@nsapp.state(required_locks=["camera_parameters"])
 class CameraState:
     """Shared state for camera parameters.
 
@@ -205,7 +204,7 @@ class DetectorSessionInfo:
         return self.start_wall_ns + (monotonic_ns - self.start_mono_ns)
 
 
-@context(locks=["camera_parameters"])
+@nsapp.context(locks=["camera_parameters"])
 @runtime_checkable
 class DetectorManager(Manager, Protocol):
     """Protocol defining the interface for detector/camera managers."""

@@ -1,4 +1,4 @@
-"""Acquisition routines exposed as rekuest functions (calibration, region scan, MDA)."""
+"""Acquisition routines exposed as arkitekt actions (calibration, region scan, MDA)."""
 
 from .multidimensional_acquisition import acquire_multidimensional_acquisition
 from .calibration import calibrate_light_path

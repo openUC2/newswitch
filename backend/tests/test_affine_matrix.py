@@ -4,7 +4,6 @@ from typing import Generator
 import useq as us
 import numpy as np
 import pytest
-from rekuest_next.state.lock import acquired_locks
 import copy
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.logic.affine_matrix import calculate_3d_affine, check_calibration
@@ -39,40 +38,39 @@ def affine_stage_detector() -> Generator[DetectorWithState, None, None]:
     Yields:
         A tuple of (VirtualDetectorManager, LocalFileIOManager, IOState, output_dir).
     """
-    with acquired_locks("camera_parameters", "stage_position", "io", "objective"):
-        # Create states
-        camera_state = CameraState()
-        stage_state = StageState()
-        objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-        illumination_state = IlluminationState(
-            illuminations=[
-                Illumination(
-                    slot=1,
-                    intensity=5000.0,
-                    wavelength=488.0,
-                    max_intensity=10000.0,
-                    is_active=True,
-                )
-            ],
-        )
+    # Create states
+    camera_state = CameraState()
+    stage_state = StageState()
+    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
+    illumination_state = IlluminationState(
+        illuminations=[
+            Illumination(
+                slot=1,
+                intensity=5000.0,
+                wavelength=488.0,
+                max_intensity=10000.0,
+                is_active=True,
+            )
+        ],
+    )
 
-        stage_manager = VirtualStageManager(stage=stage_state)
+    stage_manager = VirtualStageManager(stage=stage_state)
 
-        # Create detector with astigmatism sample type for consistent visible frames
-        broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
-            stage_state=stage_state,
-            objective_state=objective_state,
-            illumination_state=illumination_state,
-            broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="astigmatism"),
-        )
-        # Activate and configure detector
-        detector.activate_detector(1)
-        detector.update_detector(slot=1, exposure_time=1.0, gain=10.0)
+    # Create detector with astigmatism sample type for consistent visible frames
+    broadcaster = FrameBroadcaster()
+    detector = VirtualDetectorManager(
+        camera_state=camera_state,
+        stage_state=stage_state,
+        objective_state=objective_state,
+        illumination_state=illumination_state,
+        broadcaster=broadcaster,
+        config=DetectorConfig(sample_type="astigmatism"),
+    )
+    # Activate and configure detector
+    detector.activate_detector(1)
+    detector.update_detector(slot=1, exposure_time=1.0, gain=10.0)
 
-        yield detector, stage_manager
+    yield detector, stage_manager
 
 
 @pytest.mark.skip(

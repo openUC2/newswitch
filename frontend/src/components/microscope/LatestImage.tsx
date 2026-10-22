@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTransport } from "@/lib/rekuest/transport/transport-context";
+import { useTransport } from "@/lib/arkitekt/transport/transport-context";
 import { Download, ImageIcon, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

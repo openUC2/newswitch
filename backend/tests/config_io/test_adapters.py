@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.config_io import (
     AxisConfig,
@@ -36,8 +35,7 @@ from .conftest import DocWriter, get_device
 @pytest.fixture(autouse=True)
 def _locks() -> Iterator[None]:
     """Hold the state locks, as a registered function would, so states can be changed."""
-    with acquired_locks("camera_parameters", "stage_position", "filter_bank", "objective"):
-        yield
+    yield
 
 
 @pytest.fixture

@@ -3,16 +3,12 @@
 from datetime import datetime
 import random
 from enum import Enum
-from rekuest_next import progress
-from rekuest_next import model
 from newswitch import protocols
 from newswitch.protocols.core import Frame
 from newswitch.protocols.hook_manager import Hook
-from rekuest_next.api.schema import ValidatorInput
-from rekuest_next.scalars import ValidatorFunction
-from rekuest_next.structures.model import model_field
 import time
-from rekuest_next import pausepoint
+from arkitekt import Task, model_field, withValidator
+from newswitch.arkitekt_app import nsapp
 
 
 class PositionOrder(str, Enum):
@@ -22,7 +18,7 @@ class PositionOrder(str, Enum):
     RANDOM = "random"
 
 
-@model
+@nsapp.model
 class Illumination:
     """Represents an illumination channel to acquire."""
 
@@ -31,7 +27,7 @@ class Illumination:
     intensity: float  # Intensity of the illumination (0-1)
 
 
-@model
+@nsapp.model
 class Streams:
     """Represents which channels to acquire at each position."""
 
@@ -45,16 +41,16 @@ class Streams:
     illuminations: list[Illumination] = model_field(
         default_factory=list,
         validators=[
-            ValidatorInput(
-                function=ValidatorFunction.validate("(context) => context.self.length > 0"),
-                errorMessage="We need at least one illumination channel to acquire this stream",
+            withValidator(
+                "len(value) > 0",
+                error_message="We need at least one illumination channel to acquire this stream",
             )
         ],
         description="List of illuminations to use for this stream (e.g., [{'source': 'LED1', 'wavelength': 488, 'intensity': 0.8}])",
     )
 
 
-@model
+@nsapp.model
 class Stack:
     """Represents a stack of images at different z-slices."""
 
@@ -68,7 +64,7 @@ class Stack:
     )  # List of hooks to execute at each z-slice (e.g., "autofocus", "z_calibration")
 
 
-@model
+@nsapp.model
 class Position:
     """Represents a position in 3D space."""
 
@@ -82,7 +78,7 @@ class Position:
     )
 
 
-@model
+@nsapp.model
 class Timepoint:
     """Represents a timepoint in a temporal sequence."""
 
@@ -104,7 +100,7 @@ class Timepoint:
     )
 
 
-@model
+@nsapp.model
 class MultidimensionalAcquisition:
     """Configuration for a multidimensional acquisition."""
 
@@ -112,9 +108,9 @@ class MultidimensionalAcquisition:
         default_factory=list,
         description="List of timepoints to acquire, each with its own stage positions and hooks",
         validators=[
-            ValidatorInput(
-                function=ValidatorFunction.validate("(context) => context.self.length > 0"),
-                errorMessage="You need at least one timepoint to perform an acquisition",
+            withValidator(
+                "len(value) > 0",
+                error_message="You need at least one timepoint to perform an acquisition",
             )
         ],
     )
@@ -143,6 +139,7 @@ def acquire_multidimensional_acquisition(
     expanse_manager: protocols.ExpanseManager,
     metadata_manager: protocols.MetadataManager,
     hook_manager: protocols.HookManager,
+    task: Task,
 ) -> list[Frame]:
     """Simulate the acquisition of a multidimensional dataset based on the provided configuration.
 
@@ -170,7 +167,7 @@ def acquire_multidimensional_acquisition(
 
     current_image = 0
 
-    progress(0, message=f"Starting acquisition: {total_images} images to capture")
+    task.progress(0, message=f"Starting acquisition: {total_images} images to capture")
 
     for time_index, timepoint in enumerate(config.timepoints):
         if timepoint.time and timepoint.time > datetime.now():
@@ -191,7 +188,7 @@ def acquire_multidimensional_acquisition(
         for position_index, position in enumerate(positions):
             hook_manager.execute_all(position.p_hooks or [])
 
-            progress(
+            task.progress(
                 int((current_image / total_images * 100)) if total_images > 0 else 0,
                 message=f"T{time_index + 1}/{len(config.timepoints)} | Position {position_index + 1}/{len(positions)} | Moving to ({position.x:.1f}, {position.y:.1f}, {position.z:.1f})",
             )
@@ -205,6 +202,7 @@ def acquire_multidimensional_acquisition(
                         y=position.y,
                         z=z_pos,
                         is_absolute=True,
+                        task=task,
                     )
 
                     hook_manager.execute_all(stack.z_hooks or [])
@@ -227,13 +225,13 @@ def acquire_multidimensional_acquisition(
                             detector_manager.activate_detector(slot)
 
                         current_image += 1
-                        pausepoint()
+                        task.pausepoint()
                         images = acquisition_manager.acquire()
 
                         acquired.extend(images)
 
                         # Update progress
-                        progress(
+                        task.progress(
                             int(((current_image) / total_images * 100)) if total_images > 0 else 0,
                             f"Acquired image {current_image}/{total_images} (T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}, Stream{stream_index + 1})",
                         )
@@ -242,7 +240,7 @@ def acquire_multidimensional_acquisition(
                         for channel in channels_to_disable:
                             illumination_manager.turn_off_channel(channel)
 
-    progress(100, message=f"Acquisition complete: {len(acquired)} images captured")
+    task.progress(100, message=f"Acquisition complete: {len(acquired)} images captured")
     return acquired
 
 

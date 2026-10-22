@@ -5,12 +5,14 @@ Defines the protocol for stage/positioner control and associated state.
 """
 
 from typing import Optional, Protocol, runtime_checkable
-from rekuest_next.agents.context import context
-from rekuest_next import model_field, state
+from arkitekt import Task
+
 from newswitch.protocols.base import Manager
+from arkitekt import model_field
+from newswitch.arkitekt_app import nsapp
 
 
-@state(required_locks=["stage_position"])
+@nsapp.state(required_locks=["stage_position"])
 class StageState:
     """Shared state for stage position."""
 
@@ -69,7 +71,7 @@ class StageState:
         ]
 
 
-@context(locks=["stage_position"])
+@nsapp.context(locks=["stage_position"])
 @runtime_checkable
 class StageManager(Manager, Protocol):
     """Protocol defining the interface for stage managers."""
@@ -84,8 +86,12 @@ class StageManager(Manager, Protocol):
         a: Optional[float] = None,
         step_size: Optional[float] = None,
         is_absolute: bool = False,
+        task: Optional[Task] = None,
     ) -> None:
-        """Move the stage to a new position."""
+        """Move the stage to a new position.
+
+        ``task`` is the action's, for progress and pause points while the stage travels.
+        """
         ...
 
     def move_home(self) -> None:

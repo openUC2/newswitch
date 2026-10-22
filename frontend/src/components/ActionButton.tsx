@@ -5,9 +5,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAction } from "@/lib/rekuest/task";
-import { type ActionDefinition } from "@/lib/rekuest/task/types";
-import { type AssignOptions } from "@/lib/rekuest/transport/types";
+import { useAction } from "@/lib/arkitekt/task";
+import { type ActionDefinition } from "@/lib/arkitekt/task/types";
+import { type AssignOptions } from "@/lib/arkitekt/transport/types";
 import { cn } from "@/lib/utils";
 import { type VariantProps } from "class-variance-authority";
 import React, { type ButtonHTMLAttributes } from "react";

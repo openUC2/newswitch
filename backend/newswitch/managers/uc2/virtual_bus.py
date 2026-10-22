@@ -11,7 +11,6 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Optional
 
-from rekuest_next import model
 
 from newswitch.managers.uc2.event_broker import UC2EventBroker
 from newswitch.protocols.uc2 import (
@@ -22,9 +21,10 @@ from newswitch.protocols.uc2 import (
     UC2Event,
     UC2State,
 )
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class VirtualUC2BusConfig:
     """Configuration for the simulated UC2 bus."""

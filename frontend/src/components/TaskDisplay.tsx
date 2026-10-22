@@ -4,7 +4,7 @@ import { useCancelTask } from "@/apps/default/hooks/useCancelTask";
 import { useResumeTask } from "@/apps/default/hooks/useResumeTask";
 import { usePauseTask } from "@/apps/default/hooks/usePauseTask";
 import { useTaskStore } from "@/apps/default/hooks/useTaskStore";
-import { selectTask } from "@/lib/rekuest/task/store";
+import { selectTask } from "@/lib/arkitekt/task/store";
 import { useTranslation } from "react-i18next";
 
 export const ProgressDisplay = (props: {

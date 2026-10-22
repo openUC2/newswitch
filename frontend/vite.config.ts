@@ -35,8 +35,8 @@ export default defineConfig(({ mode }) => {
                 },
               ],
               baseDir: path.resolve(__dirname, "src/apps"),
-              rekuestImportPath:
-                env.VITE_REKUEST_IMPORT_PATH || "@/lib/rekuest",
+              arkitektImportPath:
+                env.VITE_ARKITEKT_IMPORT_PATH || "@/lib/arkitekt",
             }),
           ]),
       tailwindcss(),

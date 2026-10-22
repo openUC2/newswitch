@@ -6,14 +6,12 @@ Defines the protocol for objective lens control and associated state.
 
 from typing import Protocol, runtime_checkable
 from dataclasses import dataclass, field
-from rekuest_next.agents.context import context
-from rekuest_next import state
-from rekuest_next import model
 
 from newswitch.protocols.base import Manager
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class ObjectiveLens:
     """Configuration for a single objective lens."""
@@ -26,7 +24,7 @@ class ObjectiveLens:
     binning_factor: int = 1
 
 
-@state(required_locks=["objective"])
+@nsapp.state(required_locks=["objective"])
 @dataclass
 class ObjectiveState:
     """Shared state for objective."""
@@ -51,7 +49,7 @@ class ObjectiveState:
         raise ValueError(f"No objective lens found for slot {slot}")
 
 
-@context
+@nsapp.context
 @runtime_checkable
 class ObjectiveManager(Manager, Protocol):
     """Protocol defining the interface for objective managers."""

@@ -6,13 +6,12 @@ Defines the protocol for stage/positioner control and associated state. # TODO: 
 
 from typing import Protocol, runtime_checkable
 from dataclasses import field
-from rekuest_next.agents.context import context
-from rekuest_next import state
 from newswitch.protocols.base import Manager
 from newswitch.protocols.core import Image, Frame
+from newswitch.arkitekt_app import nsapp
 
 
-@state(required_locks=["expanse_state"])
+@nsapp.state(required_locks=["expanse_state"])
 class ExpanseState:
     """Shared state for stage position."""
 
@@ -21,7 +20,7 @@ class ExpanseState:
     current_frames: list[Frame] = field(default_factory=lambda: [])
 
 
-@context(locks=["expanse_state"])
+@nsapp.context(locks=["expanse_state"])
 @runtime_checkable
 class ExpanseManager(Manager, Protocol):
     """Protocol defining the interface for expanse managers."""

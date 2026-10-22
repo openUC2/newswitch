@@ -3,14 +3,13 @@
 This is the §6.4 path: telemetry that belongs to no task (live positions,
 e-stop, buttons, node discovery) is mirrored into ``@state`` objects so the
 frontend updates via JSON-patch without any polling. The apply function is
-pure enough to unit-test without a rekuest agent.
+pure enough to unit-test without an arkitekt agent.
 """
 
 from __future__ import annotations
 
 import logging
 
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.protocols.stage import StageState
 from newswitch.protocols.uc2 import (
@@ -54,13 +53,12 @@ async def dispatch_uc2_events(
 ) -> None:
     """Consume the bus event stream forever, mirroring it into states.
 
-    ``StageState`` declares ``required_locks=["stage_position"]``; the
-    dispatcher holds that lock for its telemetry writes (same pattern the
-    previous serial-manager state pump used).
+    It writes ``StageState`` while a move may hold ``stage_position``: a lock keeps
+    two actions from commanding the stage at once, it does not guard the state,
+    so the reported position streams in alongside a running move.
     """
-    with acquired_locks("stage_position"):
-        async for event in bus.subscribe():
-            try:
-                apply_uc2_event(event, stage_state, uc2_state)
-            except Exception:
-                logger.exception("Failed to apply UC2 event %r", event)
+    async for event in bus.subscribe():
+        try:
+            apply_uc2_event(event, stage_state, uc2_state)
+        except Exception:
+            logger.exception("Failed to apply UC2 event %r", event)

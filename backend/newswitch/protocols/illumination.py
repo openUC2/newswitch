@@ -5,12 +5,11 @@ Defines the protocol for illumination/LED control and associated state.
 """
 
 from typing import Optional, Protocol, runtime_checkable
-from rekuest_next.agents.context import context
-from rekuest_next import model_field, state
-from rekuest_next import model
 from dataclasses import dataclass, field
 from newswitch.protocols.base import Manager
 from enum import Enum
+from arkitekt import model_field
+from newswitch.arkitekt_app import nsapp
 
 
 class IlluminationKind(str, Enum):
@@ -21,7 +20,7 @@ class IlluminationKind(str, Enum):
     HALOGEN = "HALOGEN"
 
 
-@model
+@nsapp.model
 class Illumination:
     """Shared state for illumination parameters.
 
@@ -41,7 +40,7 @@ class Illumination:
     intensity: float = 10000.0
 
 
-@state(required_locks=["illumination"])
+@nsapp.state(required_locks=["illumination"])
 @dataclass
 class IlluminationState:
     """Shared state for illumination parameters.
@@ -60,7 +59,7 @@ class IlluminationState:
         raise ValueError(f"No illumination found for slot {slot}")
 
 
-@context(locks=["illumination"])
+@nsapp.context(locks=["illumination"])
 @runtime_checkable
 class IlluminationManager(Manager, Protocol):
     """Protocol defining the interface for illumination managers."""

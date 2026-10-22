@@ -1,5 +1,5 @@
 // src/hooks/useStatePath.ts
-import { selectPath, useGlobalStateStore } from "@/lib/rekuest/state/store";
+import { selectPath, useGlobalStateStore } from "@/lib/arkitekt/state/store";
 
 /**
  * Subscribe to a specific path within the global state store.

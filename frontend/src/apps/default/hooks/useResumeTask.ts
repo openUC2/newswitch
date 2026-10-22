@@ -1,3 +1,3 @@
-import { useResumeAppTask } from '@/lib/rekuest/task';
+import { useResumeAppTask } from '@/lib/arkitekt/task';
 
 export const useResumeTask = () => useResumeAppTask('default');

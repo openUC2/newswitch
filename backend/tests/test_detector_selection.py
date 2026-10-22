@@ -15,7 +15,6 @@ from typing import Any
 
 import pytest
 import yaml
-from rekuest_next.state.lock import acquired_locks
 
 import newswitch.app as app_module
 from newswitch.app import ImswitchConfig, build_detector_manager
@@ -75,17 +74,16 @@ def camera_devices(tmp_path: Path) -> NewswitchConfig:
 
 def _build(config: ImswitchConfig, devices: NewswitchConfig | None) -> DetectorManager:
     """Call `build_detector_manager` with fresh states, holding the camera lock."""
-    with acquired_locks("camera_parameters"):
-        return build_detector_manager(
-            config,
-            devices,
-            camera_state=CameraState(),
-            stage_state=StageState(),
-            objective_state=ObjectiveState(),
-            illumination_state=IlluminationState(),
-            filter_bank_state=FilterBankState(),
-            broadcaster=FrameBroadcaster(),
-        )
+    return build_detector_manager(
+        config,
+        devices,
+        camera_state=CameraState(),
+        stage_state=StageState(),
+        objective_state=ObjectiveState(),
+        illumination_state=IlluminationState(),
+        filter_bank_state=FilterBankState(),
+        broadcaster=FrameBroadcaster(),
+    )
 
 
 def _settings(tmp_path: Path, *, virtual: bool, debug_window: bool = False) -> ImswitchConfig:

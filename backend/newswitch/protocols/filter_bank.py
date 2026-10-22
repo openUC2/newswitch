@@ -7,13 +7,11 @@ Filters affect how light at different wavelengths passes through to the detector
 
 from typing import Protocol, runtime_checkable, Optional
 from dataclasses import dataclass, field
-from rekuest_next.agents.context import context
-from rekuest_next import state
-from rekuest_next import model
 from newswitch.protocols.base import Manager
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class Filter:
     """Configuration for a single optical filter.
@@ -35,7 +33,7 @@ class Filter:
     is_active: bool = False
 
 
-@state(required_locks=["filter_bank"])
+@nsapp.state(required_locks=["filter_bank"])
 @dataclass
 class FilterBankState:
     """Shared state for filter bank parameters.
@@ -56,7 +54,7 @@ class FilterBankState:
         raise ValueError(f"No filter found for slot {self.current_slot}")
 
 
-@context(locks=["filter_bank"])
+@nsapp.context(locks=["filter_bank"])
 @runtime_checkable
 class FilterBankManager(Manager, Protocol):
     """Protocol defining the interface for filter bank managers."""

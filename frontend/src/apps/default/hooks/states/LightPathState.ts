@@ -1,11 +1,13 @@
 import { z } from 'zod';
-import { buildUseState, type StateDefinition } from '@/lib/rekuest/state';
+import { buildUseState, type StateDefinition } from '@/lib/arkitekt/state';
 import { createIndexedUnion } from './utils';
 
 // --- Sub-Schemas ---
 export const ObjectiveKubeSchema = z
   .object({
-    __identifier: z.literal('objective_kube').default('objective_kube'),
+    __identifier: z
+      .literal('@newswitch/objective_kube')
+      .default('@newswitch/objective_kube'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -29,7 +31,7 @@ export const ObjectiveKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('objective_kube')
+  .brand('@newswitch/objective_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -38,7 +40,9 @@ export type ObjectiveKubeOutput = z.infer<typeof ObjectiveKubeSchema>;
 
 export const DetectorKubeSchema = z
   .object({
-    __identifier: z.literal('detector_kube').default('detector_kube'),
+    __identifier: z
+      .literal('@newswitch/detector_kube')
+      .default('@newswitch/detector_kube'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -60,7 +64,7 @@ export const DetectorKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('detector_kube')
+  .brand('@newswitch/detector_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -69,7 +73,9 @@ export type DetectorKubeOutput = z.infer<typeof DetectorKubeSchema>;
 
 export const FilterKubeSchema = z
   .object({
-    __identifier: z.literal('filter_kube').default('filter_kube'),
+    __identifier: z
+      .literal('@newswitch/filter_kube')
+      .default('@newswitch/filter_kube'),
     kube_id: z.string(),
     wavelength: z.number(),
     /** Affine transformation matrix of the kube */
@@ -91,7 +97,7 @@ export const FilterKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('filter_kube')
+  .brand('@newswitch/filter_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -100,7 +106,9 @@ export type FilterKubeOutput = z.infer<typeof FilterKubeSchema>;
 
 export const IlluminationKubeSchema = z
   .object({
-    __identifier: z.literal('illumination_kube').default('illumination_kube'),
+    __identifier: z
+      .literal('@newswitch/illumination_kube')
+      .default('@newswitch/illumination_kube'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -124,7 +132,7 @@ export const IlluminationKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('illumination_kube')
+  .brand('@newswitch/illumination_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -133,7 +141,9 @@ export type IlluminationKubeOutput = z.infer<typeof IlluminationKubeSchema>;
 
 export const GenericKubeSchema = z
   .object({
-    __identifier: z.literal('generic_kube').default('generic_kube'),
+    __identifier: z
+      .literal('@newswitch/generic_kube')
+      .default('@newswitch/generic_kube'),
     kube_id: z.string(),
     other_metadata: z.record(z.string(), z.string()),
     /** Affine transformation matrix of the kube */
@@ -165,7 +175,7 @@ export const GenericKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('generic_kube')
+  .brand('@newswitch/generic_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -174,7 +184,9 @@ export type GenericKubeOutput = z.infer<typeof GenericKubeSchema>;
 
 export const StageKubeSchema = z
   .object({
-    __identifier: z.literal('stage_kube').default('stage_kube'),
+    __identifier: z
+      .literal('@newswitch/stage_kube')
+      .default('@newswitch/stage_kube'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -198,7 +210,7 @@ export const StageKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('stage_kube')
+  .brand('@newswitch/stage_kube')
   .describe(
     'Data class repesentating the stage, including its ID and affine transformation matrix.',
   );
@@ -207,7 +219,9 @@ export type StageKubeOutput = z.infer<typeof StageKubeSchema>;
 
 export const DichroicKubeSchema = z
   .object({
-    __identifier: z.literal('dichroic_kube').default('dichroic_kube'),
+    __identifier: z
+      .literal('@newswitch/dichroic_kube')
+      .default('@newswitch/dichroic_kube'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -231,7 +245,7 @@ export const DichroicKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('dichroic_kube')
+  .brand('@newswitch/dichroic_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -240,7 +254,9 @@ export type DichroicKubeOutput = z.infer<typeof DichroicKubeSchema>;
 
 export const FilterBankKubeSchema = z
   .object({
-    __identifier: z.literal('filter_bank_kube').default('filter_bank_kube'),
+    __identifier: z
+      .literal('@newswitch/filter_bank_kube')
+      .default('@newswitch/filter_bank_kube'),
     kube_id: z.string(),
     /** Affine transformation matrix of the kube */
     affine_matrix: z
@@ -263,7 +279,7 @@ export const FilterBankKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('filter_bank_kube')
+  .brand('@newswitch/filter_bank_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -273,8 +289,8 @@ export type FilterBankKubeOutput = z.infer<typeof FilterBankKubeSchema>;
 export const ObjectiveTurretKubeSchema = z
   .object({
     __identifier: z
-      .literal('objective_turret_kube')
-      .default('objective_turret_kube'),
+      .literal('@newswitch/objective_turret_kube')
+      .default('@newswitch/objective_turret_kube'),
     kube_id: z.string(),
     /** Affine transformation matrix of the kube */
     affine_matrix: z
@@ -297,7 +313,7 @@ export const ObjectiveTurretKubeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('objective_turret_kube')
+  .brand('@newswitch/objective_turret_kube')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -338,7 +354,9 @@ export const KubeUnionSchema = createIndexedUnion([
 
 export const LightEdgeSchema = z
   .object({
-    __identifier: z.literal('light_edge').default('light_edge'),
+    __identifier: z
+      .literal('@newswitch/light_edge')
+      .default('@newswitch/light_edge'),
     /** Source identifier (e.g., ID of LED or laser) */
     source: z.string().describe('Source identifier (e.g., ID of LED or laser)'),
     /** Target identifier (e.g., ID of sample or detector) */
@@ -352,7 +370,7 @@ export const LightEdgeSchema = z
       .nullable()
       .optional(),
   })
-  .brand('light_edge')
+  .brand('@newswitch/light_edge')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
@@ -361,7 +379,9 @@ export type LightEdgeOutput = z.infer<typeof LightEdgeSchema>;
 
 export const LightPathSchema = z
   .object({
-    __identifier: z.literal('light_path').default('light_path'),
+    __identifier: z
+      .literal('@newswitch/light_path')
+      .default('@newswitch/light_path'),
     /** Slot number of the detector in the current light path configuration, used to determine which detector's metadata to include in the light path state */
     detector: z
       .number()
@@ -381,7 +401,7 @@ export const LightPathSchema = z
       ),
     ),
   })
-  .brand('light_path')
+  .brand('@newswitch/light_path')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );

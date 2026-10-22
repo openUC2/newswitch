@@ -13,15 +13,15 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional
 
+from arkitekt import Task
 from koil import unkoil
-from rekuest_next import model
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.protocols.stage import StageState
 from newswitch.protocols.uc2 import UC2BusManager
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class UC2StageConfig:
     """Configuration for the UC2 stage manager."""
@@ -55,8 +55,7 @@ class UC2StageManager:
             step <= 0 for step in self.config.registered_step_sizes
         ):
             raise ValueError("registered_step_sizes must contain positive values")
-        with acquired_locks("stage_position"):
-            self.stage_state.registered_step_sizes = list(self.config.registered_step_sizes)
+        self.stage_state.registered_step_sizes = list(self.config.registered_step_sizes)
 
     def move(
         self,
@@ -66,6 +65,7 @@ class UC2StageManager:
         a: Optional[float] = None,
         step_size: Optional[float] = None,
         is_absolute: bool = False,
+        task: Optional[Task] = None,
     ) -> None:
         """Move the stage; blocks until all requested axes finished moving.
 

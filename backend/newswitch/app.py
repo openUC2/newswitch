@@ -1,38 +1,21 @@
 """
 FastAPI-based Virtual Microscope Controller
 
-This module provides a FastAPI server with arkitekt_next integration
+This module provides a FastAPI server with arkitekt integration
 for controlling a virtual microscope through registered functions.
 """
 
 import logging
 import os
-from pathlib import Path
 from typing import Any, Optional, Tuple
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import Field, ValidationInfo, field_validator, model_validator
-from pydantic_settings import (
-    BaseSettings,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-    YamlConfigSettingsSource,
-)
 from newswitch.hooks.software_autofocus import software_autofocus_hook
-from rekuest_next import pausepoint, progress
-from rekuest_next.agents.base import app_context
-from rekuest_next.api.schema import OptimisticInput
-from rekuest_next.app import get_default_app_registry
-from rekuest_next.contrib.fastapi import (
-    configure_fastapi,
-)
-from rekuest_next import jsx
+from arkitekt import OptimisticInput, Task, bsx
+from arkitekt_fastapi import configure_fastapi
 import koil
-from rekuest_next.register import register
-from rekuest_next.agents.hooks.startup import startup
-from rekuest_next.agents.hooks.shutdown import shutdown
-from rekuest_next.agents.hooks.background import background
+from newswitch.arkitekt_app import nsapp
 
 
 # Import protocol contexts and states
@@ -128,122 +111,7 @@ logger = logging.getLogger(__name__)
 # ====================
 
 
-#: The base settings file; see the comments in it. Relative folders in it are taken
-#: relative to its own folder, so the working directory does not matter.
-BASE_CONFIG_FILE = Path(__file__).parent.parent / "base_config.yaml"
-
-
-@app_context
-class ImswitchConfig(BaseSettings):
-    """Configuration for imswitch application, read from `BASE_CONFIG_FILE`.
-
-    Keyword arguments override the file, e.g. ``ImswitchConfig(config_file=None)``.
-    Host and port are not part of it; they come from BACKEND_HOST / BACKEND_PORT.
-    """
-
-    # extra="forbid": a misspelled key in base_config.yaml is an error, not ignored
-    model_config = SettingsConfigDict(extra="forbid")
-
-    use_virtual_microscope: bool
-    db_path: str
-    available_cubes: list[str]
-
-    config_dir: Path
-    """Folder of the device configuration files."""
-    schema_dir: Path
-    """Folder of the generated schema files."""
-
-    static_config_path: Path
-    persistent_config_path: Path
-    load_from_static_config_path: bool
-
-    config_file: Optional[Path] = Field(
-        default_factory=lambda data: (
-            data["static_config_path"]
-            if data["load_from_static_config_path"]
-            else data["persistent_config_path"]
-        )
-    )
-    """Device configuration read at startup: `static_config_path` or
-    `persistent_config_path` (changes always go into the persistent one, see
-    `config_io.open_config`). None keeps the built-in virtual devices."""
-
-    camera_recording_dir: Optional[Path] = None
-    """Folder the cameras record into (see `managers.uc2.uc2_detector`). None: the default of
-    uc2_cam_py (``~/UC2_recordings``)."""
-
-    camera_debug_window: bool = False
-    """Show every camera's newest image in a window of uc2_cam_py (debugging without the
-    frontend); the cameras then acquire from startup on."""
-
-    # UC2 hardware transport (used when use_virtual_microscope is False).
-    # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
-    # over serial JSON). Both are plug-in replacements behind UC2BusManager.
-    uc2_transport: str = "rest"  # "canopen"
-    uc2_can_interface: Optional[str] = None  # "socketcan" | "waveshare" | None (auto)
-    uc2_can_channel: Optional[str] = "can0"
-    uc2_can_port: Optional[str] = None  # Waveshare USB-CAN-A serial port
-    uc2_serial_port: Optional[str] = None  # None = autodetect
-    uc2_baudrate: int = 962100
-    # Detailed per-component overrides, keyed like the corresponding config
-    # dataclasses (UC2CanBusConfig / UC2RestBusConfig / UC2StageConfig /
-    # UC2IlluminationConfig). Nested values win over the flat fields above.
-    # See backend/configs/*.json for complete examples.
-    uc2_can: dict[str, Any] = {}
-    uc2_rest: dict[str, Any] = {}
-    uc2_stage: dict[str, Any] = {}
-    uc2_illumination: dict[str, Any] = {}
-    uc2_objective: dict[str, Any] = {}
-    uc2_filter_bank: dict[str, Any] = {}
-
-    def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
-        """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
-
-        Declared explicitly so type checkers do not demand every field as an argument:
-        the values normally come from the file, which they cannot see.
-        """
-        super().__init__(**values)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _drop_comment_keys(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
-        # JSON has no comments, so the files in backend/configs/ carry them as "_comment"
-        if isinstance(data, dict):
-            return {key: value for key, value in data.items() if not str(key).startswith("_")}
-        return data
-
-    @field_validator("config_dir", "schema_dir", "camera_recording_dir")
-    @classmethod
-    def _relative_to_base_config(cls, path: Optional[Path]) -> Optional[Path]:
-        if path is None or path.is_absolute():
-            return path
-        return BASE_CONFIG_FILE.parent / path
-
-    @field_validator("static_config_path", "persistent_config_path")
-    @classmethod
-    def _bare_name_in_config_dir(cls, path: Path, info: ValidationInfo) -> Path:
-        # an explicit path (absolute, or with a directory part) is taken as given
-        if path.is_absolute() or path.parent != Path("."):
-            return path
-        return info.data["config_dir"] / path
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Read keyword arguments, then `BASE_CONFIG_FILE`; never the environment.
-
-        Raises:
-            FileNotFoundError: `BASE_CONFIG_FILE` does not exist.
-        """
-        if not BASE_CONFIG_FILE.is_file():
-            raise FileNotFoundError(f"{BASE_CONFIG_FILE} is missing; newswitch needs it to start")
-        return (init_settings, YamlConfigSettingsSource(settings_cls, yaml_file=BASE_CONFIG_FILE))
+from newswitch.config import BASE_CONFIG_FILE, ImswitchConfig  # noqa: F401,E402  (re-exported)
 
 
 # ====================
@@ -304,7 +172,7 @@ def build_detector_manager(
     )
 
 
-@startup
+@nsapp.startup
 async def provide_managers(  # TODO: can we make this adaptive so that we read this list from a config like in ImSwitch?
     app_context: ImswitchConfig,
 ) -> Tuple[
@@ -588,7 +456,7 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
     )
 
 
-@shutdown
+@nsapp.shutdown
 def save_device_config(
     app_context: ImswitchConfig,
     camera_state: CameraState,
@@ -618,13 +486,13 @@ def save_device_config(
         print(f"Device configuration not saved: {exc}")
 
 
-@shutdown
+@nsapp.shutdown
 def close_detector(detector: DetectorManager) -> None:
     """Stop and release the detectors, so camera recordings are complete on disk."""
     detector.close()
 
 
-@background
+@nsapp.background
 def run_detector_loop(
     detector: DetectorManager,
 ) -> None:
@@ -633,13 +501,13 @@ def run_detector_loop(
     detector.acquire_live()
 
 
-@background
+@nsapp.background
 async def run_uc2_bus(uc2_bus: UC2BusManager) -> None:
     """Connect the UC2 hardware bus and pump its transport until shutdown."""
     await uc2_bus.abackground()
 
 
-@background
+@nsapp.background
 async def run_uc2_event_dispatch(
     uc2_bus: UC2BusManager,
     stage_state: StageState,
@@ -652,13 +520,13 @@ async def run_uc2_event_dispatch(
 # ====================
 # Registered Functions - Illumination
 # ====================
-@register
+@nsapp.action
 def clear_expanse(expanse_manager: protocols.ExpanseManager) -> None:
     """Clear the expanse state, removing all current images."""
     expanse_manager.reset_expanse()
 
 
-@register
+@nsapp.action
 def set_illumination_intensity(  # TODO: Why is this function here?!
     illumination: IlluminationManager,
     intensity: float,
@@ -678,17 +546,17 @@ def set_illumination_intensity(  # TODO: Why is this function here?!
     return result
 
 
-@register
-def long_stuff_running() -> None:
+@nsapp.action
+def long_stuff_running(task: Task) -> None:
     """A long-running function to test optimistic updates and progress."""
 
     for i in range(10):
-        progress(i * 10, f"Long task progress: {i * 10}%")
-        pausepoint()  # Await for a breakpoint to allow for testing of progress updates
+        task.progress(i * 10, f"Long task progress: {i * 10}%")
+        task.pausepoint()  # Await for a breakpoint to allow for testing of progress updates
         koil.sleep(0.5)
 
 
-@register
+@nsapp.action
 def turn_on_illumination(  # TODO: Why is this function here?!
     illumination: IlluminationManager,
     state: IlluminationState,
@@ -709,7 +577,7 @@ def turn_on_illumination(  # TODO: Why is this function here?!
     return result
 
 
-@register
+@nsapp.action
 def turn_off_illumination_channel(
     illumination: IlluminationManager,
     state: IlluminationState,
@@ -735,7 +603,7 @@ def turn_off_illumination_channel(
 
 # Here we use the locks explicitly, when setting them like this we are ourselves responsible
 # for ensuring that the locks are properly set for this execution context
-@register(locks=["stage_position"])
+@nsapp.action(locks=["stage_position"])
 def failing_camera(camera: CameraState, intensity: int) -> str:
     """A function that always fails to test lock release."""
     camera.detectors[0].current_gain += intensity  # type: igThis is just to have some side effect that we can check in the test, but the function will still fail
@@ -746,17 +614,15 @@ def failing_camera(camera: CameraState, intensity: int) -> str:
 # It allows for the function to define how the state should be updated optimistically at the moment the function runs
 # This is useful for setters like this move function, where we want the UI to reflect the new position immediately,
 # without waiting for the function to complete
-@register(
+@nsapp.action(
     optimistics=[
-        OptimisticInput(
-            state=StageState.__name__,
-            path="",
-            accessor="({...state, x: args.x, y: args.y, z: args.z, a: args.a})",
-        )
+        OptimisticInput(state=StageState.__name__, path=f"/{axis}", accessor=f"/{axis}")
+        for axis in ("x", "y", "z", "a")
     ],
 )
 def move_stage(  # TODO: Why is this function here?!
     stage: StageManager,
+    task: Task,
     x: Optional[float] = None,
     y: Optional[float] = None,
     z: Optional[float] = None,
@@ -776,17 +642,17 @@ def move_stage(  # TODO: Why is this function here?!
         step_size: Step size in micrometers for movement simulation (default: 1.0)
     """
     # Read current position from state
-    stage.move(x=x, y=y, z=z, a=a, step_size=step_size, is_absolute=is_absolute)
+    stage.move(x=x, y=y, z=z, a=a, step_size=step_size, is_absolute=is_absolute, task=task)
 
 
-@register
+@nsapp.action
 def move_home(stage: StageManager, state: StageState) -> None:
     """Move stage to home position."""  # TODO: Why is this function here?!
     pos = stage.move_home()
     return pos
 
 
-@register(
+@nsapp.action(
     description="Move the stage to a specified position with a long execution time to test optimistic updates."
 )
 def kill_benedict(stage: StageManager, kill_hard: str, die_young: bool) -> None:
@@ -797,10 +663,11 @@ def kill_benedict(stage: StageManager, kill_hard: str, die_young: bool) -> None:
 # TODO: Why was this function defined?
 
 
-@register
+@nsapp.action
 def move_to_stage_position(
     stage: StageManager,
     state: StageState,
+    task: Task,
     position_x: int,
     position_y: int,
     position_z: int,
@@ -816,6 +683,7 @@ def move_to_stage_position(
         y=position_y,
         z=position_z,
         is_absolute=True,
+        task=task,
     )
 
 
@@ -824,7 +692,7 @@ def move_to_stage_position(
 # ====================
 
 
-@register
+@nsapp.action
 def capture_image(
     detector: DetectorManager,
     acquisition_manager: protocols.AcquistionManager,
@@ -845,7 +713,7 @@ def capture_image(
     return files
 
 
-@register
+@nsapp.action
 def dump_states_to_stdin(
     stage_state: StageState,
     illumination_state: IlluminationState,
@@ -859,7 +727,7 @@ def dump_states_to_stdin(
     print(len(expanse_state.current_frames))
 
 
-@register
+@nsapp.action
 def start_live_view(camera_state: CameraState) -> str:
     """
     Start broadcasting frames to the video WebSocket endpoint.
@@ -872,7 +740,7 @@ def start_live_view(camera_state: CameraState) -> str:
     return "Broadcasting started. Frames will now be sent to video clients."
 
 
-@register
+@nsapp.action
 def stop_live_view(camera_state: CameraState) -> str:
     """
     Stop broadcasting frames to the video WebSocket endpoint.
@@ -884,7 +752,7 @@ def stop_live_view(camera_state: CameraState) -> str:
     return "Broadcasting stopped. No frames will be sent to video clients."
 
 
-@register
+@nsapp.action
 def activate_detector(detector: DetectorManager, slot: int) -> None:
     """
     Activate a detector by its slot number.
@@ -897,7 +765,7 @@ def activate_detector(detector: DetectorManager, slot: int) -> None:
     return None
 
 
-@register
+@nsapp.action
 def deactivate_detector(detector: DetectorManager, slot: int) -> str:
     """
     Deactivate a detector by its slot number.
@@ -909,7 +777,7 @@ def deactivate_detector(detector: DetectorManager, slot: int) -> str:
     return f"Detector slot {slot} deactivated"
 
 
-@register
+@nsapp.action
 def update_detector(
     detector: DetectorManager,
     slot: int,
@@ -932,13 +800,13 @@ def update_detector(
 # ====================
 
 
-@register
+@nsapp.action
 def never_ending_function() -> None:
     """A function that never ends to test how the system handles long-running functions."""
     pass
 
 
-@register
+@nsapp.action
 def switch_objective(objective: ObjectiveManager, state: ObjectiveState, slot: int) -> None:
     """
     Switch to a specific objective slot.
@@ -949,7 +817,7 @@ def switch_objective(objective: ObjectiveManager, state: ObjectiveState, slot: i
     objective.switch_objective(slot)
 
 
-@register
+@nsapp.action
 def toggle_objective(objective: ObjectiveManager, state: ObjectiveState) -> None:
     """Toggle to the next objective in the turret."""
     objective.toggle_objective()
@@ -960,7 +828,7 @@ def toggle_objective(objective: ObjectiveManager, state: ObjectiveState) -> None
 # ====================
 
 
-@register
+@nsapp.action
 def switch_filter(
     filter_bank: FilterBankManager, state: FilterBankState, slot: int
 ) -> protocols.Filter:
@@ -976,7 +844,7 @@ def switch_filter(
     return filter_bank.switch_filter(slot)
 
 
-@register
+@nsapp.action
 def toggle_filter(filter_bank: FilterBankManager, state: FilterBankState) -> protocols.Filter:
     """Toggle to the next filter in the wheel.
 
@@ -991,13 +859,12 @@ def toggle_filter(filter_bank: FilterBankManager, state: FilterBankState) -> pro
 # ====================
 
 
-default_app_registry = get_default_app_registry()
-default_app_registry.register(acquire_multidimensional_acquisition)
-default_app_registry.register(calibrate_light_path)
-default_app_registry.register(scan_region)
-default_app_registry.register_blok(
+nsapp.register_action(acquire_multidimensional_acquisition)
+nsapp.register_action(calibrate_light_path)
+nsapp.register_action(scan_region)
+nsapp.blok(
     "jonda",
-    jsx("""
+    bsx("""
             <Card id="opentrons-controller" className="w-[380px] border-blue-200 shadow-md">
                 <CardHeader>
                     <CardTitle text="Newswitch Handler" />
@@ -1038,7 +905,7 @@ def create_app(
 
     app = FastAPI(
         title="Virtual Microscope API",  # TODO: should we load this from config?
-        description="Integrated virtual microscope controller with protocol-based managers based on rekuest-next",
+        description="Integrated virtual microscope controller with protocol-based managers based on arkitekt",
         version="2.0.0",
     )
 
@@ -1064,16 +931,10 @@ def create_app(
         allow_headers=["*"],
     )
 
-    # Configure rekuest_next app registry
-    # We use the default app registry that is being used
-    # for @register calls, we could of course just use this
-    # pattern here
-    # default_app_registry.startup(provide_managers) # We use the @startup decorator for this, so no need to register it here
-
-    # Configure all agent routes and OpenAPI
+    # Serve everything declared on nsapp (actions, states, contexts, hooks, bloks)
     configure_fastapi(
         app=app,
-        app_registry=default_app_registry,
+        app_registry=nsapp.registry,
         expand_user_from_request=make_expand_user_from_request(authenticator),
         app_context=config,
         db_file=config.db_path,

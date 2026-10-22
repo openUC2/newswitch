@@ -1,3 +1,3 @@
-import { useStepAppTask } from '@/lib/rekuest/task';
+import { useStepAppTask } from '@/lib/arkitekt/task';
 
 export const useStepTask = () => useStepAppTask('default');

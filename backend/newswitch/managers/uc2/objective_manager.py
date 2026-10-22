@@ -12,13 +12,13 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from koil import unkoil
-from rekuest_next import model
 
 from newswitch.protocols.objective import ObjectiveLens, ObjectiveState
 from newswitch.protocols.uc2 import UC2BusManager
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class UC2ObjectiveConfig:
     """Configuration for the UC2 objective manager."""

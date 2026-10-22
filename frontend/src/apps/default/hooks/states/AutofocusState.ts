@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { buildUseState, type StateDefinition } from '@/lib/rekuest/state';
+import { buildUseState, type StateDefinition } from '@/lib/arkitekt/state';
 
 // --- Sub-Schemas ---
 

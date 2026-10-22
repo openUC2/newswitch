@@ -10,16 +10,14 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from rekuest_next.contrib.fastapi import AsyncAgentTestClient
-from rekuest_next.contrib.fastapi.testing import BufferedEvent
+from arkitekt_fastapi.testing import AsyncAgentTestClient
+from arkitekt_fastapi.testing import BufferedEvent
 
 from newswitch.app import ImswitchConfig, create_app
 from newswitch.auth import AllowAllAuthenticator
 
-# rekuest_next==2.1.1's AsyncAgentTestClient.collect_until_done()/BufferedEvent.is_done()
-# still check for a "DONE" event type, but the agent's wire protocol emits "COMPLETED"
-# (and "FAILED" instead of "ERROR") for terminal task events, so those helpers never
-# match and always run out the clock. Poll for the actual terminal event types instead.
+# AsyncAgentTestClient.collect_until_done() stops at "COMPLETED" only, so a task that
+# fails would run out the clock. Poll for every terminal event type instead.
 TERMINAL_EVENT_TYPES = {"COMPLETED", "FAILED", "CRITICAL", "CANCELLED"}
 
 

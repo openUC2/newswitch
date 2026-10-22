@@ -12,7 +12,7 @@ ENV UV_LINK_MODE=copy \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
-# Run as uid 1000, not root. The app writes agent_data.db (and cache files) into its CWD,
+# Run as uid 1000, not root. The app writes arkitekt_agent.db (and cache files) into its CWD,
 # which compose bind-mounts from the host - as root those land root-owned and the host user
 # can no longer delete them. uid 1000 matches a typical Linux host user.
 RUN useradd --uid 1000 --create-home app

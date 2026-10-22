@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Shared Models ---
 
@@ -56,15 +56,14 @@ export const useMoveStage = () => {
 
 /** Optimistic state hooks for move_stage */
 
+/** Optimistic writes into StageState: each sets `path` (a JSON pointer into the state) to the
+ * args at `accessor` (a JSON pointer; null: the whole args). */
 export const OptimisticStageState = {
   key: 'StageState',
-  selector: (state: never) => state,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  accessor: (state: any, args: any) => ({
-    ...state,
-    x: args.x,
-    y: args.y,
-    z: args.z,
-    a: args.a,
-  }),
-};
+  writes: [
+    { path: '/x', pathCall: null, accessor: '/x' },
+    { path: '/y', pathCall: null, accessor: '/y' },
+    { path: '/z', pathCall: null, accessor: '/z' },
+    { path: '/a', pathCall: null, accessor: '/a' },
+  ],
+} as const;

@@ -12,7 +12,6 @@ Optimized for minimal latency with:
 from typing import Optional
 import asyncio
 import threading
-from rekuest_next.agents.context import context
 import numpy as np
 from newswitch.broadcasters.encoders.base import EncoderProtocol
 from newswitch.broadcasters.encoders.zstd_encoder import (
@@ -22,9 +21,10 @@ from newswitch.broadcasters.encoders.zstd_encoder import (
 from newswitch.broadcasters.encoders.h264_encoder import H264EncoderConfig, H264Encoder
 from newswitch.broadcasters.encoders.config import EncoderConfig
 from newswitch.broadcasters.encoders.base import EncoderSubscriptionProtocol
+from newswitch.arkitekt_app import nsapp
 
 
-@context
+@nsapp.context
 class FrameBroadcaster:
     """
     High-performance frame broadcaster with shared Zstd and H.264 encoding.

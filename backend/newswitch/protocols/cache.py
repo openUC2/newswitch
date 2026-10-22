@@ -6,14 +6,14 @@ Defines the protocol for file I/O operations and associated state.
 
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
-from rekuest_next.agents.context import context
 
 import numpy as np
 from newswitch.protocols.base import Manager
 from newswitch.protocols.core import Metadata
+from newswitch.arkitekt_app import nsapp
 
 
-@context(locks=["cache"])
+@nsapp.context(locks=["cache"])
 @runtime_checkable
 class CacheManager(Manager, Protocol):
     """Protocol defining the interface for Cache managers."""

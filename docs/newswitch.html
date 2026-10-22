@@ -340,7 +340,7 @@
             <text class="sv-s" x="316" y="86">src/apps/default · zod</text>
             <rect class="sv-box-accent" x="560" y="44" width="220" height="56"></rect>
             <text class="sv-t" x="576" y="68">Transport + stores</text>
-            <text class="sv-s" x="576" y="86">src/lib/rekuest · zustand</text>
+            <text class="sv-s" x="576" y="86">src/lib/arkitekt · zustand</text>
             <path class="sv-line" d="M 260 72 L 296 72" marker-end="url(#ah)"></path>
             <path class="sv-line" d="M 520 72 L 556 72" marker-end="url(#ah)"></path>
 
@@ -681,7 +681,7 @@ default_app_registry.register(scan_region)</code></pre>
             <p>At build time the Vite plugin already fetched <code>/schemas/*</code> and generated typed
               hooks. At runtime the browser opens <code>/ws</code>, checks out current state snapshots
               with their revisions, and subscribes to patches, task events and locks.</p>
-            <span class="where">frontend/plugins/generate-app.ts · frontend/src/lib/rekuest/transport/</span>
+            <span class="where">frontend/plugins/generate-app.ts · frontend/src/lib/arkitekt/transport/</span>
           </div>
         </li>
       </ol>
@@ -826,7 +826,7 @@ default_app_registry.register(scan_region)</code></pre>
         <code>src/apps/default/hooks/{actions,states,locks}/*.ts</code>: zod schemas plus typed hooks such as
         <code>useMoveStage</code> and <code>useStageState</code>. These files are committed, and
         <code>just drift-check</code> fails CI if they diverge from the backend. The hand-written runtime in
-        <code>src/lib/rekuest/</code> manages the <code>/ws</code> connection, task assignment, patch
+        <code>src/lib/arkitekt/</code> manages the <code>/ws</code> connection, task assignment, patch
         application and locks. Components in <code>src/components/microscope/</code> consume only the
         generated hooks.</p>
       <div class="note">

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from newswitch.protocols.io import FileHandle, IOManager
+from newswitch.routes.contexts import context_of_type
 
 
 router = APIRouter(tags=["Files"])
@@ -24,7 +25,7 @@ def get_io_manager(request: Request) -> IOManager:
     if agent is None:
         raise HTTPException(status_code=500, detail="Agent not available")
 
-    io_manager = agent.get_context_for_type(IOManager)
+    io_manager = context_of_type(agent, IOManager)
     if io_manager is None:
         raise HTTPException(status_code=500, detail="IO manager not available")
 

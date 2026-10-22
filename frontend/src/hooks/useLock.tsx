@@ -1,6 +1,6 @@
-export { getScopedLockKey, scopeLockKeys, useLock } from "@/lib/rekuest/locks";
+export { getScopedLockKey, scopeLockKeys, useLock } from "@/lib/arkitekt/locks";
 export type {
   LockDefinition,
   UseLockOptions,
   UseLockResult,
-} from "@/lib/rekuest/locks";
+} from "@/lib/arkitekt/locks";

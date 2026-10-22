@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Generator, cast
 
 import pytest
-from rekuest_next.state.lock import acquired_locks
+from arkitekt import Task
 
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.managers.acquistion_manager import AcquistionManager
@@ -78,140 +78,131 @@ def acquisition_setup(
     Yields:
         A tuple of managers needed for acquisition testing.
     """
-    with acquired_locks(
-        "camera_parameters",
-        "stage_position",
-        "io",
-        "expanse_state",
-        "filter_bank",
-        "objective",
-        "illumination",
-    ):
-        # Create states
-        camera_state = CameraState()
-        stage_state = StageState()
-        stage_state.x = 0.0
-        stage_state.y = 0.0
-        stage_state.z = 0.0
-        stage_state.a = 0.0
-        objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-        illumination_state = IlluminationState(
-            illuminations=[
-                IlluminationProto(
-                    slot=1,
-                    intensity=1000.0,
-                    wavelength=488.0,
-                    max_intensity=10000.0,
-                    is_active=False,
-                )
-            ],
-        )
-        io_state = IOState()
-        filter_bank_state = FilterBankState()
-        broadcaster = FrameBroadcaster()
-
-        # Create managers
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
-            stage_state=stage_state,
-            objective_state=objective_state,
-            illumination_state=illumination_state,
-            broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="cells", width=256, height=256),
-        )
-        detector.deactivate_detector(2)
-        detector.deactivate_detector(3)
-
-        stage = VirtualStageManager(
-            stage=stage_state,
-        )
-
-        led = VirtualLEDManager(
-            illumination_state=illumination_state,
-        )
-        # Constructed for its side effect: __init__ populates `filter_bank_state` with the
-        # default filters and activates the default slot, which the light path and metadata
-        # managers below depend on. The manager itself is not otherwise used by the tests.
-        _filter_bank = VirtualFilterBankManager(filter_bank_state=filter_bank_state)
-
-        objective = VirtualObjectiveManager(
-            objective_state=objective_state,
-        )
-
-        io_manager = LocalFileIOManager(
-            state=io_state,
-            config=LocalFileConfig(base_path=str(tmp_path)),
-        )
-
-        hook_manager = PythonHookManager(
-            context=HookContext(
-                stage_manager=stage,
-                detector_manager=detector,
-                illumination_manager=led,
-                objective_manager=objective,
-                io_manager=io_manager,
+    # Create states
+    camera_state = CameraState()
+    stage_state = StageState()
+    stage_state.x = 0.0
+    stage_state.y = 0.0
+    stage_state.z = 0.0
+    stage_state.a = 0.0
+    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
+    illumination_state = IlluminationState(
+        illuminations=[
+            IlluminationProto(
+                slot=1,
+                intensity=1000.0,
+                wavelength=488.0,
+                max_intensity=10000.0,
+                is_active=False,
             )
-        )
+        ],
+    )
+    io_state = IOState()
+    filter_bank_state = FilterBankState()
+    broadcaster = FrameBroadcaster()
 
-        expanse_manager = ExpanseManager(expanse=ExpanseState())
-        calibration_manager = CalibrationManager(calibration_state=CalibrationState())
-        light_path_manager = LightPathManager(
-            light_path_state=LightPathState(),
-            objective_state=objective_state,
-            illumination_state=illumination_state,
-            camera_state=camera_state,
-            filter_bank_state=filter_bank_state,
-        )
-        light_path_manager.calculate_possible_light_paths()
+    # Create managers
+    detector = VirtualDetectorManager(
+        camera_state=camera_state,
+        stage_state=stage_state,
+        objective_state=objective_state,
+        illumination_state=illumination_state,
+        broadcaster=broadcaster,
+        config=DetectorConfig(sample_type="cells", width=256, height=256),
+    )
+    detector.deactivate_detector(2)
+    detector.deactivate_detector(3)
 
-        metadata_manager = MetadataManager(
-            objective_state=objective_state,
-            stage_state=stage_state,
-            filter_bank_state=filter_bank_state,
-            illumination_state=illumination_state,
-            camera_state=camera_state,
-            calibration_state=calibration_manager.state,
-        )
+    stage = VirtualStageManager(
+        stage=stage_state,
+    )
 
-        current_light_path_state = metadata_manager.get_current_state_for_light_path(
-            light_path_manager.get_light_path_for_detector(1)
-        )
-        calibration_manager.set_calibrated_state(
-            CalibratedLightPath(
-                light_path_state_hash=current_light_path_state.hash,
-                affine_matrix=[
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-                fov_width=10.0,
-                fov_height=10.0,
-            )
-        )
+    led = VirtualLEDManager(
+        illumination_state=illumination_state,
+    )
+    # Constructed for its side effect: __init__ populates `filter_bank_state` with the
+    # default filters and activates the default slot, which the light path and metadata
+    # managers below depend on. The manager itself is not otherwise used by the tests.
+    _filter_bank = VirtualFilterBankManager(filter_bank_state=filter_bank_state)
 
-        acquisition_manager = AcquistionManager(
-            expanse_manager=expanse_manager,
+    objective = VirtualObjectiveManager(
+        objective_state=objective_state,
+    )
+
+    io_manager = LocalFileIOManager(
+        state=io_state,
+        config=LocalFileConfig(base_path=str(tmp_path)),
+    )
+
+    hook_manager = PythonHookManager(
+        context=HookContext(
+            stage_manager=stage,
             detector_manager=detector,
-            metadata_manager=metadata_manager,
-            light_path_manager=light_path_manager,
-            cache_manager=cast(
-                Any,
-                LocalCacheManager(config=LocalCacheConfig(base_path=str(tmp_path / "cache"))),
-            ),
+            illumination_manager=led,
+            objective_manager=objective,
+            io_manager=io_manager,
         )
+    )
 
-        yield (
-            detector,
-            stage,
-            led,
-            io_manager,
-            hook_manager,
-            acquisition_manager,
-            light_path_manager,
-            expanse_manager,
-            metadata_manager,
+    expanse_manager = ExpanseManager(expanse=ExpanseState())
+    calibration_manager = CalibrationManager(calibration_state=CalibrationState())
+    light_path_manager = LightPathManager(
+        light_path_state=LightPathState(),
+        objective_state=objective_state,
+        illumination_state=illumination_state,
+        camera_state=camera_state,
+        filter_bank_state=filter_bank_state,
+    )
+    light_path_manager.calculate_possible_light_paths()
+
+    metadata_manager = MetadataManager(
+        objective_state=objective_state,
+        stage_state=stage_state,
+        filter_bank_state=filter_bank_state,
+        illumination_state=illumination_state,
+        camera_state=camera_state,
+        calibration_state=calibration_manager.state,
+    )
+
+    current_light_path_state = metadata_manager.get_current_state_for_light_path(
+        light_path_manager.get_light_path_for_detector(1)
+    )
+    calibration_manager.set_calibrated_state(
+        CalibratedLightPath(
+            light_path_state_hash=current_light_path_state.hash,
+            affine_matrix=[
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            fov_width=10.0,
+            fov_height=10.0,
         )
+    )
+
+    acquisition_manager = AcquistionManager(
+        expanse_manager=expanse_manager,
+        detector_manager=detector,
+        metadata_manager=metadata_manager,
+        light_path_manager=light_path_manager,
+        cache_manager=cast(
+            Any,
+            LocalCacheManager(config=LocalCacheConfig(base_path=str(tmp_path / "cache"))),
+        ),
+    )
+
+    yield (
+        detector,
+        stage,
+        led,
+        io_manager,
+        hook_manager,
+        acquisition_manager,
+        light_path_manager,
+        expanse_manager,
+        metadata_manager,
+    )
 
 
 def test_small_timeseries_acquisition(
@@ -350,6 +341,7 @@ def test_small_timeseries_acquisition(
     # Run the acquisition directly
     acquired_frames = acquire_multidimensional_acquisition(
         config=config,
+        task=Task.local(),
         acquisition_manager=acquisition_manager,
         io_manager=io_manager,
         light_path_manager=light_path_manager,

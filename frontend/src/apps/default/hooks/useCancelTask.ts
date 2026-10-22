@@ -1,3 +1,3 @@
-import { useCancelAppTask } from '@/lib/rekuest/task';
+import { useCancelAppTask } from '@/lib/arkitekt/task';
 
 export const useCancelTask = () => useCancelAppTask('default');

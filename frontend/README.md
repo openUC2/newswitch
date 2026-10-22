@@ -56,7 +56,7 @@ That provider stack is responsible for:
 - switching between live updates and replay checkout
 - validating incoming snapshots against generated schemas
 
-The core orchestration is in [src/lib/rekuest/BundleProvider.tsx](src/lib/rekuest/BundleProvider.tsx).
+The core orchestration is in [src/lib/arkitekt/BundleProvider.tsx](src/lib/arkitekt/BundleProvider.tsx).
 
 ### Generated app definitions
 
@@ -99,7 +99,7 @@ This keeps the UI aligned with backend contracts while reducing manual maintenan
 - [src/pages](src/pages) – route-level pages for live and replay modes
 - [src/components/microscope](src/components/microscope) – microscope UI and workflows
 - [src/components/navigation](src/components/navigation) – app chrome and replay timeline UI
-- [src/lib/rekuest](src/lib/rekuest) – runtime integration and synchronization logic
+- [src/lib/arkitekt](src/lib/arkitekt) – runtime integration and synchronization logic
 - [src/store](src/store) – local shared stores
 - [src/apps](src/apps) – generated app bindings used by the runtime
 - [plugins/generate-app.ts](plugins/generate-app.ts) – schema-driven code generation

@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import { buildUseState, type StateDefinition } from '@/lib/rekuest/state';
+import { buildUseState, type StateDefinition } from '@/lib/arkitekt/state';
 
 // --- Sub-Schemas ---
 export const ObjectiveLensSchema = z
   .object({
-    __identifier: z.literal('objective_lens').default('objective_lens'),
+    __identifier: z
+      .literal('@newswitch/objective_lens')
+      .default('@newswitch/objective_lens'),
     slot: z.number(),
     name: z.string(),
     magnification: z.number(),
@@ -12,7 +14,7 @@ export const ObjectiveLensSchema = z
     working_distance: z.number(),
     binning_factor: z.number(),
   })
-  .brand('objective_lens')
+  .brand('@newswitch/objective_lens')
   .describe('Configuration for a single objective lens.');
 export type ObjectiveLens = z.input<typeof ObjectiveLensSchema>;
 export type ObjectiveLensOutput = z.infer<typeof ObjectiveLensSchema>;

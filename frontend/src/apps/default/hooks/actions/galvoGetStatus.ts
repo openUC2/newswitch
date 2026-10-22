@@ -1,17 +1,19 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Shared Models ---
 export const GalvoStatusSchema = z
   .object({
-    __identifier: z.literal('galvo_status').default('galvo_status'),
+    __identifier: z
+      .literal('@newswitch/galvo_status')
+      .default('@newswitch/galvo_status'),
     raw: z.number(),
     moving: z.boolean(),
     scan_active: z.boolean(),
     scan_complete: z.boolean(),
     error: z.boolean(),
   })
-  .brand('galvo_status')
+  .brand('@newswitch/galvo_status')
   .describe('Decoded galvo scanner status flags.');
 export type GalvoStatus = z.input<typeof GalvoStatusSchema>;
 export type GalvoStatusOutput = z.infer<typeof GalvoStatusSchema>;

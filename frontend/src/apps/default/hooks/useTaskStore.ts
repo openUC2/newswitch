@@ -1,7 +1,7 @@
 import {
   useTaskStore as useBaseTaskStore,
   type TaskStore,
-} from '@/lib/rekuest/task';
+} from '@/lib/arkitekt/task';
 
 export const useTaskStore = <TSelected>(
   selector: (state: TaskStore) => TSelected,

@@ -10,10 +10,11 @@ from typing import Optional
 
 import koil
 from newswitch.protocols.stage import StageState
-from rekuest_next import model, progress, pausepoint
+from arkitekt import Task
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class StageConfig:
     """Configuration for the virtual stage."""
@@ -68,6 +69,7 @@ class VirtualStageManager:
         a: Optional[float] = None,
         step_size: Optional[float] = None,
         is_absolute: bool = False,
+        task: Optional[Task] = None,
     ) -> None:
         """Move the stage to an absolute or relative target position.
 
@@ -106,7 +108,8 @@ class VirtualStageManager:
 
         # 3. Simulate gradual movement
         for step in range(num_steps):
-            pausepoint()
+            if task is not None:
+                task.pausepoint()
             koil.sleep(self.config.simulated_pos_sleep_per_micrometer)
 
             # Move and Clamp
@@ -127,7 +130,8 @@ class VirtualStageManager:
                     self.state.a + step_a, self.config.min_a, self.config.max_a
                 )
 
-            progress(int((step + 1) / num_steps * 100))
+            if task is not None:
+                task.progress(int((step + 1) / num_steps * 100))
 
         return None
 

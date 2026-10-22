@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from koil import unkoil
-from rekuest_next import model
 
 from newswitch.protocols.uc2 import UC2BusManager
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class UC2GalvoConfig:
     """Configuration for the UC2 galvo scanner."""

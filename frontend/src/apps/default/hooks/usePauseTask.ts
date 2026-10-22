@@ -1,3 +1,3 @@
-import { usePauseAppTask } from '@/lib/rekuest/task';
+import { usePauseAppTask } from '@/lib/arkitekt/task';
 
 export const usePauseTask = () => usePauseAppTask('default');

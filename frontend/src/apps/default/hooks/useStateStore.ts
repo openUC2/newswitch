@@ -1,7 +1,7 @@
 import {
   useGlobalStateStore as useBaseStateStore,
   type GlobalStateStore,
-} from '@/lib/rekuest/state';
+} from '@/lib/arkitekt/state';
 
 export const useStateStore = <TSelected>(
   selector: (state: GlobalStateStore) => TSelected,

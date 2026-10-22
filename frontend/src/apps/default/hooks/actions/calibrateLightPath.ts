@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Shared Models ---
 export const CalibratedLightPathSchema = z
   .object({
     __identifier: z
-      .literal('calibrated_light_path')
-      .default('calibrated_light_path'),
+      .literal('@newswitch/calibrated_light_path')
+      .default('@newswitch/calibrated_light_path'),
     /** 4x4 affine transformation matrix for mapping between coordinate systems */
     affine_matrix: z
       .array(z.array(z.number()))
@@ -24,7 +24,7 @@ export const CalibratedLightPathSchema = z
         'Hash of the light path configuration this affine matrix corresponds to',
       ),
   })
-  .brand('calibrated_light_path')
+  .brand('@newswitch/calibrated_light_path')
   .describe('Shared state for affine transformation parameters.');
 export type CalibratedLightPath = z.input<typeof CalibratedLightPathSchema>;
 export type CalibratedLightPathOutput = z.infer<

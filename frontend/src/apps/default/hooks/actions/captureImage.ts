@@ -1,18 +1,18 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 import { createIndexedUnion } from './utils';
 
 // --- Shared Models ---
 export const ScaleSchema = z
   .object({
-    __identifier: z.literal('scale').default('scale'),
+    __identifier: z.literal('@newswitch/scale').default('@newswitch/scale'),
     x: z.number(),
     y: z.number(),
     z: z.number(),
     cached_id: z.string().nullable().optional(),
     affine_matrix: z.array(z.array(z.number())).nullable().optional(),
   })
-  .brand('scale')
+  .brand('@newswitch/scale')
   .describe('Represents a scale factor for a 3D volume.');
 export type Scale = z.input<typeof ScaleSchema>;
 export type ScaleOutput = z.infer<typeof ScaleSchema>;
@@ -20,8 +20,8 @@ export type ScaleOutput = z.infer<typeof ScaleSchema>;
 export const ObjectiveKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('objective_kube_state')
-      .default('objective_kube_state'),
+      .literal('@newswitch/objective_kube_state')
+      .default('@newswitch/objective_kube_state'),
     kube_id: z.string(),
     slot_id: z.number(),
     /** Affine transformation matrix of the kube */
@@ -45,7 +45,7 @@ export const ObjectiveKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('objective_kube_state')
+  .brand('@newswitch/objective_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -55,8 +55,8 @@ export type ObjectiveKubeStateOutput = z.infer<typeof ObjectiveKubeStateSchema>;
 export const DetectorKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('detector_kube_state')
-      .default('detector_kube_state'),
+      .literal('@newswitch/detector_kube_state')
+      .default('@newswitch/detector_kube_state'),
     kube_id: z.string(),
     gain: z.number(),
     exposure_time: z.number(),
@@ -77,7 +77,7 @@ export const DetectorKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('detector_kube_state')
+  .brand('@newswitch/detector_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -86,7 +86,9 @@ export type DetectorKubeStateOutput = z.infer<typeof DetectorKubeStateSchema>;
 
 export const FilterKubeStateSchema = z
   .object({
-    __identifier: z.literal('filter_kube_state').default('filter_kube_state'),
+    __identifier: z
+      .literal('@newswitch/filter_kube_state')
+      .default('@newswitch/filter_kube_state'),
     kube_id: z.string(),
     wavelength: z.number(),
     /** Affine transformation matrix of the kube */
@@ -110,7 +112,7 @@ export const FilterKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('filter_kube_state')
+  .brand('@newswitch/filter_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -120,8 +122,8 @@ export type FilterKubeStateOutput = z.infer<typeof FilterKubeStateSchema>;
 export const IlluminationKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('illumination_kube_state')
-      .default('illumination_kube_state'),
+      .literal('@newswitch/illumination_kube_state')
+      .default('@newswitch/illumination_kube_state'),
     kube_id: z.string(),
     slot_id: z.number(),
     intensity: z.number(),
@@ -147,7 +149,7 @@ export const IlluminationKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('illumination_kube_state')
+  .brand('@newswitch/illumination_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -158,7 +160,9 @@ export type IlluminationKubeStateOutput = z.infer<
 
 export const GenericKubeStateSchema = z
   .object({
-    __identifier: z.literal('generic_kube_state').default('generic_kube_state'),
+    __identifier: z
+      .literal('@newswitch/generic_kube_state')
+      .default('@newswitch/generic_kube_state'),
     kube_id: z.string(),
     other_metadata: z.record(z.string(), z.string()),
     /** Affine transformation matrix of the kube */
@@ -178,7 +182,7 @@ export const GenericKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('generic_kube_state')
+  .brand('@newswitch/generic_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -187,7 +191,9 @@ export type GenericKubeStateOutput = z.infer<typeof GenericKubeStateSchema>;
 
 export const StageKubeStateSchema = z
   .object({
-    __identifier: z.literal('stage_kube_state').default('stage_kube_state'),
+    __identifier: z
+      .literal('@newswitch/stage_kube_state')
+      .default('@newswitch/stage_kube_state'),
     kube_id: z.string(),
     /** Affine transformation matrix of the kube */
     affine_matrix: z
@@ -206,7 +212,7 @@ export const StageKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('stage_kube_state')
+  .brand('@newswitch/stage_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -216,8 +222,8 @@ export type StageKubeStateOutput = z.infer<typeof StageKubeStateSchema>;
 export const DichroicKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('dichroic_kube_state')
-      .default('dichroic_kube_state'),
+      .literal('@newswitch/dichroic_kube_state')
+      .default('@newswitch/dichroic_kube_state'),
     kube_id: z.string(),
     /** Affine transformation matrix of the kube */
     affine_matrix: z
@@ -240,7 +246,7 @@ export const DichroicKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('dichroic_kube_state')
+  .brand('@newswitch/dichroic_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -250,8 +256,8 @@ export type DichroicKubeStateOutput = z.infer<typeof DichroicKubeStateSchema>;
 export const FilterBankKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('filter_bank_kube_state')
-      .default('filter_bank_kube_state'),
+      .literal('@newswitch/filter_bank_kube_state')
+      .default('@newswitch/filter_bank_kube_state'),
     kube_id: z.string(),
     slot_id: z.number(),
     center_wavelength: z.number(),
@@ -278,7 +284,7 @@ export const FilterBankKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('filter_bank_kube_state')
+  .brand('@newswitch/filter_bank_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -290,8 +296,8 @@ export type FilterBankKubeStateOutput = z.infer<
 export const ObjectiveTurretKubeStateSchema = z
   .object({
     __identifier: z
-      .literal('objective_turret_kube_state')
-      .default('objective_turret_kube_state'),
+      .literal('@newswitch/objective_turret_kube_state')
+      .default('@newswitch/objective_turret_kube_state'),
     kube_id: z.string(),
     slot: z.number(),
     magnification: z.number(),
@@ -317,7 +323,7 @@ export const ObjectiveTurretKubeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('objective_turret_kube_state')
+  .brand('@newswitch/objective_turret_kube_state')
   .describe(
     'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
   );
@@ -360,7 +366,9 @@ export const KubeUnionSchema = createIndexedUnion([
 
 export const LightEdgeStateSchema = z
   .object({
-    __identifier: z.literal('light_edge_state').default('light_edge_state'),
+    __identifier: z
+      .literal('@newswitch/light_edge_state')
+      .default('@newswitch/light_edge_state'),
     /** Source identifier (e.g., ID of LED or laser) */
     source: z.string().describe('Source identifier (e.g., ID of LED or laser)'),
     /** Target identifier (e.g., ID of sample or detector) */
@@ -380,7 +388,7 @@ export const LightEdgeStateSchema = z
       .nullable()
       .optional(),
   })
-  .brand('light_edge_state')
+  .brand('@newswitch/light_edge_state')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
@@ -389,7 +397,9 @@ export type LightEdgeStateOutput = z.infer<typeof LightEdgeStateSchema>;
 
 export const LightPathStateSchema = z
   .object({
-    __identifier: z.literal('light_path_state').default('light_path_state'),
+    __identifier: z
+      .literal('@newswitch/light_path_state')
+      .default('@newswitch/light_path_state'),
     /** Hash of the light path configuration, used to uniquely describe the optical path for this image */
     hash: z
       .string()
@@ -415,7 +425,7 @@ export const LightPathStateSchema = z
         'Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image',
       ),
   })
-  .brand('light_path_state')
+  .brand('@newswitch/light_path_state')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
@@ -424,7 +434,9 @@ export type LightPathStateOutput = z.infer<typeof LightPathStateSchema>;
 
 export const MetadataSchema = z
   .object({
-    __identifier: z.literal('metadata').default('metadata'),
+    __identifier: z
+      .literal('@newswitch/metadata')
+      .default('@newswitch/metadata'),
     affine_matrix: z.array(z.array(z.number())),
     fov_width: z.number(),
     fov_height: z.number(),
@@ -437,7 +449,7 @@ export const MetadataSchema = z
     min_value: z.number().nullable().optional(),
     max_value: z.number().nullable().optional(),
   })
-  .brand('metadata')
+  .brand('@newswitch/metadata')
   .describe(
     'Data class representing metadata for an image, including its ID and affine transformation matrix.',
   );
@@ -446,11 +458,13 @@ export type MetadataOutput = z.infer<typeof MetadataSchema>;
 
 export const ArrayMetadataSchema = z
   .object({
-    __identifier: z.literal('array_metadata').default('array_metadata'),
+    __identifier: z
+      .literal('@newswitch/array_metadata')
+      .default('@newswitch/array_metadata'),
     min_value: z.number(),
     max_value: z.number(),
   })
-  .brand('array_metadata')
+  .brand('@newswitch/array_metadata')
   .describe(
     'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
   );
@@ -459,7 +473,7 @@ export type ArrayMetadataOutput = z.infer<typeof ArrayMetadataSchema>;
 
 export const FrameSchema = z
   .object({
-    __identifier: z.literal('frame').default('frame'),
+    __identifier: z.literal('@newswitch/frame').default('@newswitch/frame'),
     id: z.string(),
     scales: z.array(
       ScaleSchema.describe('Represents a scale factor for a 3D volume.'),
@@ -473,7 +487,7 @@ export const FrameSchema = z
       'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
     ),
   })
-  .brand('frame')
+  .brand('@newswitch/frame')
   .describe('Represents a single 3D volume captured by the detector.');
 export type Frame = z.input<typeof FrameSchema>;
 export type FrameOutput = z.infer<typeof FrameSchema>;

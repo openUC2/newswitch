@@ -1,11 +1,10 @@
 """Autofocus state shared between the autofocus routine and the frontend."""
 
 from dataclasses import dataclass, field
+from newswitch.arkitekt_app import nsapp
 
-from rekuest_next import state
 
-
-@state
+@nsapp.state
 @dataclass
 class AutofocusState:
     """Live view of the last/ongoing autofocus run."""

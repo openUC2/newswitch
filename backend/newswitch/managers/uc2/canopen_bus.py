@@ -18,7 +18,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-from rekuest_next import model
 
 from newswitch.managers.uc2.event_broker import UC2EventBroker
 from newswitch.protocols.uc2 import (
@@ -30,6 +29,7 @@ from newswitch.protocols.uc2 import (
     UC2Event,
     UC2State,
 )
+from newswitch.arkitekt_app import nsapp
 
 if TYPE_CHECKING:  # pragma: no cover
     from uc2canopen.aio import AsyncUC2Client
@@ -37,7 +37,7 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
-@model
+@nsapp.model
 @dataclass
 class UC2CanBusConfig:
     """Configuration for the CANopen transport (node map, scaling, link)."""

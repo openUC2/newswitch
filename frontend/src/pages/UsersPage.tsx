@@ -1,6 +1,6 @@
 /**
  * Admin-only account management: create, change role, enable/disable, reset
- * password, delete. Talks straight to the `/auth/users` API - no rekuest scope
+ * password, delete. Talks straight to the `/auth/users` API - no arkitekt scope
  * involved, so this page (and the guard in front of it) works even if the
  * microscope backend connection is otherwise unhealthy.
  */

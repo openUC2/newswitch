@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Shared Models ---
 export const DetectorSchema = z
   .object({
-    __identifier: z.literal('detector').default('detector'),
+    __identifier: z
+      .literal('@newswitch/detector')
+      .default('@newswitch/detector'),
     slot: z.number(),
     name: z.string(),
     width: z.number(),
@@ -12,7 +14,12 @@ export const DetectorSchema = z
     is_active: z.boolean(),
     current_exposure_time: z.number(),
     current_gain: z.number(),
-    current_colormap: z.string(),
+    /** Enumeration of colormap options. */
+    current_colormap: z.union([
+      z.literal('RED').describe('Enumeration of colormap options.'),
+      z.literal('GREEN').describe('Enumeration of colormap options.'),
+      z.literal('BLUE').describe('Enumeration of colormap options.'),
+    ]),
     pixel_size_um: z.number(),
     preset_exposure_times: z.array(z.number()),
     max_exposure_time: z.number(),
@@ -47,7 +54,7 @@ export const DetectorSchema = z
     is_recording: z.boolean(),
     recording_file: z.string().nullable().optional(),
   })
-  .brand('detector')
+  .brand('@newswitch/detector')
   .describe('Shared state for detector parameters.');
 export type Detector = z.input<typeof DetectorSchema>;
 export type DetectorOutput = z.infer<typeof DetectorSchema>;

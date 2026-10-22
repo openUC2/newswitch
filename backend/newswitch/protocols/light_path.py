@@ -5,13 +5,13 @@ Defines the protocol for stage/positioner control and associated state.
 """
 
 from typing import Optional, Protocol, runtime_checkable, List
-from rekuest_next.agents.context import context
-from rekuest_next import state, model_field
 from newswitch.protocols.base import Manager
 from newswitch.protocols.core import LightPath
+from arkitekt import model_field
+from newswitch.arkitekt_app import nsapp
 
 
-@state
+@nsapp.state
 class LightPathState:
     """State class for the LightPathManager, holding the current light path information."""
 
@@ -19,7 +19,7 @@ class LightPathState:
     current_light_path: Optional[LightPath] = None
 
 
-@context
+@nsapp.context
 @runtime_checkable
 class LightPathManager(Manager, Protocol):
     """Protocol defining the interface for light path managers."""

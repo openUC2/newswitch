@@ -1,1 +1,1 @@
-export { createScopedStoreHooks } from "@/lib/rekuest/createScopedStore";
+export { createScopedStoreHooks } from "@/lib/arkitekt/createScopedStore";

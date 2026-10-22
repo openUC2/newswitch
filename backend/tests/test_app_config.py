@@ -13,8 +13,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-import newswitch.app as app_module
-from newswitch.app import BASE_CONFIG_FILE, ImswitchConfig
+import newswitch.config as config_module
+from newswitch.config import BASE_CONFIG_FILE, ImswitchConfig
 
 BASE: dict[str, Any] = {
     "use_virtual_microscope": True,
@@ -47,7 +47,7 @@ def write_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BaseWriter:
         path = tmp_path / "base" / "base_config.yaml"
         path.parent.mkdir(exist_ok=True)
         path.write_text(yaml.safe_dump({**BASE, **changes}), encoding="utf-8")
-        monkeypatch.setattr(app_module, "BASE_CONFIG_FILE", path)
+        monkeypatch.setattr(config_module, "BASE_CONFIG_FILE", path)
         return path
 
     return _write
@@ -153,7 +153,7 @@ def test_missing_key_is_an_error(write_base: BaseWriter) -> None:
 
 def test_missing_base_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without the base config newswitch refuses to start."""
-    monkeypatch.setattr(app_module, "BASE_CONFIG_FILE", tmp_path / "base_config.yaml")
+    monkeypatch.setattr(config_module, "BASE_CONFIG_FILE", tmp_path / "base_config.yaml")
     with pytest.raises(FileNotFoundError, match="base_config.yaml"):
         ImswitchConfig()
 

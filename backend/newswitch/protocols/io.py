@@ -7,10 +7,9 @@ Defines the protocol for file I/O operations and associated state.
 from enum import Enum
 from typing import Optional, Protocol, runtime_checkable
 from dataclasses import dataclass
-from rekuest_next.agents.context import context
-from rekuest_next import state
 import numpy as np
 from newswitch.protocols.base import Manager
+from newswitch.arkitekt_app import nsapp
 
 
 @dataclass
@@ -24,7 +23,7 @@ class FileHandle:
         return self.file_path
 
 
-@state(required_locks=["io"])
+@nsapp.state(required_locks=["io"])
 @dataclass
 class IOState:
     """Shared state for IO operations."""
@@ -40,7 +39,7 @@ class FileFormat(str, Enum):
     PNG = "png"
 
 
-@context(locks=["io"])
+@nsapp.context(locks=["io"])
 @runtime_checkable
 class IOManager(Manager, Protocol):
     """Protocol defining the interface for IO managers."""

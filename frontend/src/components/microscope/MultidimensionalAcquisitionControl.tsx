@@ -121,7 +121,7 @@ function makeDefaultPosition(
 function makeDefaultTimepoint(positions?: Position[]): Timepoint {
   return {
     time: undefined,
-    position_order: "sequential",
+    position_order: "SEQUENTIAL",
     positions: positions ?? [makeDefaultPosition()],
     t_hooks: [],
   };

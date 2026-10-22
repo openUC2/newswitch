@@ -19,14 +19,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AccountMenu } from "./AccountMenu";
-import { useAppStateContext } from "@/lib/rekuest/app-state/app-state-context";
+import { useAppStateContext } from "@/lib/arkitekt/app-state/app-state-context";
 import {
   selectLatestPatches,
   useGlobalStateStore,
-} from "@/lib/rekuest/state/store";
-import { useStateContext } from "@/lib/rekuest/state";
-import { useTransport } from "@/lib/rekuest/transport";
-import type { AppKey } from "@/lib/rekuest/types";
+} from "@/lib/arkitekt/state/store";
+import { useStateContext } from "@/lib/arkitekt/state";
+import { useTransport } from "@/lib/arkitekt/transport";
+import type { AppKey } from "@/lib/arkitekt/types";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 

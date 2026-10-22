@@ -11,7 +11,6 @@ from typing import Callable, Generator
 
 import numpy as np
 import pytest
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.managers.virtual import VirtualDetectorManager
@@ -34,23 +33,22 @@ def detector_states() -> Generator[
     Yields:
         A tuple of (CameraState, StageState, ObjectiveState, IlluminationState) for detector tests.
     """
-    with acquired_locks("camera_parameters", "stage_position", "objective", "illumination"):
-        camera_state = CameraState()
-        stage_state = StageState()
-        stage_state.x = 0.0
-        stage_state.y = 0.0
-        stage_state.z = 0.0
-        stage_state.a = 0.0
-        objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-        # Create illumination state with active illumination for testing
-        illumination_state = IlluminationState(
-            illuminations=[
-                Illumination(
-                    slot=1, intensity=500.0, wavelength=488.0, max_intensity=1000.0, is_active=True
-                )
-            ],
-        )
-        yield camera_state, stage_state, objective_state, illumination_state
+    camera_state = CameraState()
+    stage_state = StageState()
+    stage_state.x = 0.0
+    stage_state.y = 0.0
+    stage_state.z = 0.0
+    stage_state.a = 0.0
+    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
+    # Create illumination state with active illumination for testing
+    illumination_state = IlluminationState(
+        illuminations=[
+            Illumination(
+                slot=1, intensity=500.0, wavelength=488.0, max_intensity=1000.0, is_active=True
+            )
+        ],
+    )
+    yield camera_state, stage_state, objective_state, illumination_state
 
 
 @pytest.fixture

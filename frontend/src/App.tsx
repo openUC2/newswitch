@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import { AppNavigationChrome } from "./components/navigation/AppNavigationChrome";
-import { createScopedProvider } from "./lib/rekuest";
+import { createScopedProvider } from "./lib/arkitekt";
 import { AuthProvider } from "./lib/auth/AuthProvider";
 import { RequireAuth } from "./lib/auth/RequireAuth";
 import { RequireAdmin } from "./lib/auth/RequireAdmin";

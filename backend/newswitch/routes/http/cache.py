@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from newswitch.protocols.cache import CacheManager
+from newswitch.routes.contexts import context_of_type
 
 
 router = APIRouter(tags=["Cache"])
@@ -25,7 +26,7 @@ def get_cache_manager(request: Request) -> CacheManager:
     if agent is None:
         raise HTTPException(status_code=500, detail="Agent not available")
 
-    cache_manager = agent.get_context_for_type(CacheManager)
+    cache_manager = context_of_type(agent, CacheManager)
     if cache_manager is None:
         raise HTTPException(status_code=500, detail="Cache manager not available")
 

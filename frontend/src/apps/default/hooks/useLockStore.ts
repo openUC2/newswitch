@@ -1,7 +1,7 @@
 import {
   useLockStore as useBaseLockStore,
   type LockStore,
-} from '@/lib/rekuest/locks';
+} from '@/lib/arkitekt/locks';
 
 export const useLockStore = <TSelected>(
   selector: (state: LockStore) => TSelected,

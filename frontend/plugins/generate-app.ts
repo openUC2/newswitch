@@ -10,7 +10,7 @@ const BLOK_PATH = path.resolve(ROOT_DIR, 'blok.json');
 const PACKAGE_JSON_PATH = path.resolve(ROOT_DIR, 'package.json');
 
 const DEFAULT_APP_KEY = 'default';
-const DEFAULT_REKUEST_IMPORT_PATH = '@/lib/rekuest';
+const DEFAULT_ARKITEKT_IMPORT_PATH = '@/lib/arkitekt';
 
 const SHARED_UTILS_CODE = `
 import { z } from 'zod';
@@ -75,10 +75,13 @@ type ExportEntry = {
   name: string;
 };
 
+/** A validator: a pure blok UtilCall over the port's `value` and its `dependencies`. */
 type ValidatorSchema = {
-  function: string;
-  dependencies: string;
-  errorMessage: string;
+  call: unknown;
+  dependencies?: string[] | null;
+  errorMessage?: string | null;
+  label?: string | null;
+  source?: string | null;
 };
 
 type ChoiceInput = {
@@ -100,10 +103,12 @@ type SchemaPort = {
   validators?: ValidatorSchema[];
 };
 
+/** An optimistic: set `path` (JSON pointer into the state) to `accessor` (into the args). */
 type Optimistic = {
   state: string;
-  path: string;
-  accessor: string;
+  path?: string | null;
+  pathCall?: unknown;
+  accessor?: string | null;
 };
 
 type HookImplementation = {
@@ -183,7 +188,7 @@ export interface GenerateAppPluginOptions {
 export interface GenerateAppsPluginOptions {
   apps: GenerateAppPluginOptions[];
   baseDir?: string;
-  rekuestImportPath?: string;
+  arkitektImportPath?: string;
 }
 
 interface NormalizedGenerateAppPluginOptions extends GenerateAppPluginOptions {
@@ -196,7 +201,8 @@ const toCamel = (value: string) =>
   value.replace(/_([a-z])/g, (match) => match[1].toUpperCase());
 
 const toPascal = (value: string) => {
-  const camel = toCamel(value)
+  // A structure identifier is `@package/key`; its symbols are named after the key.
+  const camel = toCamel(value.slice(value.lastIndexOf('/') + 1))
     .replace(/(^\w|[-_\s](\w))/g, (_, first: string, next?: string) =>
       (next ?? first).toUpperCase(),
     )
@@ -245,7 +251,7 @@ const sortKeysDeep = (value: unknown): unknown => {
   return value;
 };
 
-// Rekuest derives these fields through Python sets, so their wire order changes with
+// The backend derives these fields through Python sets, so their wire order changes with
 // Python's per-process hash seed. Their order has no meaning; normalize it before the
 // schema snapshot reaches blok.json so a fresh CI process cannot create false drift.
 const sortSetLikeSchemaArrays = (value: unknown): unknown => {
@@ -477,28 +483,18 @@ const appendValidators = (baseSchemaCode: string, fields: SchemaPort[]) => {
 
       return field.validators
         ?.map((validator) => {
-          const dependencies = validator.dependencies
-            ? validator.dependencies
-                .split(',')
-                .map((entry) => entry.trim())
-                .filter(Boolean)
-            : [];
-
-          const contextProperties = [
-            `self: val['${fieldName}']`,
-            ...dependencies.map(
-              (dependency) => `${dependency}: val['${dependency}']`,
-            ),
-          ].join(', ');
+          const dependencies = (validator.dependencies ?? []).map(
+            (dependency) =>
+              `${JSON.stringify(dependency)}: val[${JSON.stringify(dependency)}]`,
+          );
 
           return `
         {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          type ValidatorFunc = (context: any) => boolean;
-          const validatorFn: ValidatorFunc = ${validator.function};
-          const context = { ${contextProperties} };
+          ${validator.source ? `// ${validator.source.replace(/\n/g, ' ')}` : ''}
+          const call = ${JSON.stringify(validator.call)} as UtilCall;
+          const scope = { value: val['${fieldName}'], dependencies: { ${dependencies.join(', ')} } };
 
-          if (!validatorFn(context)) {
+          if (!validatorAccepts(call, scope)) {
             ctx.addIssue({
               code: 'custom',
               message: ${JSON.stringify(validator.errorMessage || 'Validation failed')},
@@ -771,16 +767,29 @@ export type ${modelTypeName}Output = z.infer<typeof ${modelName}>;${
   return base;
 }
 
-const generateOptimisticState = (optimistic: Optimistic) => {
-  const optimisticName = `Optimistic${toCamel(optimistic.state)}`;
+/** The import of the call evaluator, for generated code whose schemas run validators. */
+const callsImport = (code: string[], siblingImportPath: string) =>
+  code.some((part) => part.includes('validatorAccepts('))
+    ? `import { validatorAccepts, type UtilCall } from '${siblingImportPath.replace(/\/[^/]+$/, '/calls')}';`
+    : '';
+
+const generateOptimisticState = (state: string, optimistics: Optimistic[]) => {
+  const optimisticName = `Optimistic${toCamel(state)}`;
+  const entries = optimistics.map((optimistic) =>
+    JSON.stringify({
+      path: optimistic.path ?? null,
+      pathCall: optimistic.pathCall ?? null,
+      accessor: optimistic.accessor ?? null,
+    }),
+  );
 
   return `
+/** Optimistic writes into ${state}: each sets \`path\` (a JSON pointer into the state) to the
+ * args at \`accessor\` (a JSON pointer; null: the whole args). */
 export const ${optimisticName} = {
-  key: '${optimistic.state}',
-  selector: (state: never) => ${optimistic.path.split('.').reduce((accumulator, part) => (part ? `${accumulator}.${part}` : accumulator), 'state')},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  accessor: (state: any, args: any) => ${optimistic.accessor},
-};`;
+  key: '${state}',
+  writes: [${entries.join(', ')}],
+} as const;`;
 };
 
 const generateActionContent = (
@@ -829,14 +838,24 @@ export type ${baseName}Return = ${returnTypeName};`
 export const ${baseName}Definition = ${definitionName};`
     : '';
 
-  const optimisticExports = (implementation.optimistics ?? []).map(
-    (optimistic) => {
-      const optimisticName = `Optimistic${toCamel(optimistic.state)}`;
+  const optimisticsByState = new Map<string, Optimistic[]>();
+  for (const optimistic of implementation.optimistics ?? []) {
+    optimisticsByState.set(optimistic.state, [
+      ...(optimisticsByState.get(optimistic.state) ?? []),
+      optimistic,
+    ]);
+  }
+  const optimisticExports = Array.from(optimisticsByState.entries()).map(
+    ([state, optimistics]) => {
+      const optimisticName = `Optimistic${toCamel(state)}`;
       const generatedOptimisticName = withSymbolPrefix(
         optimisticName,
         symbolPrefix,
       );
-      const optimisticExport = generateOptimisticState(optimistic).replace(
+      const optimisticExport = generateOptimisticState(
+        state,
+        optimistics,
+      ).replace(
         `export const ${optimisticName}`,
         `export const ${generatedOptimisticName}`,
       );
@@ -853,6 +872,7 @@ export const ${baseName}Definition = ${definitionName};`
 import { z } from 'zod';
 import { useAction, type ActionDefinition } from '${importPathToUseAction}';
 ${includesUnion ? "import { createIndexedUnion } from './utils';" : ''}
+${callsImport([subSchemasCode, argsSchemaCode, returnsSchemaCode], importPathToUseAction)}
 
 // --- Shared Models ---
 ${subSchemasCode}
@@ -937,6 +957,7 @@ export const ${baseName}Definition = ${definitionName};`
 import { z } from 'zod';
 import { buildUseState, type StateDefinition } from '${importPathToSync}';
 ${includesUnion ? "import { createIndexedUnion } from './utils';" : ''}
+${callsImport([subSchemasCode, fields], importPathToSync)}
 
 // --- Sub-Schemas ---
 ${subSchemasCode}
@@ -1293,7 +1314,7 @@ const buildTaskHookContent = (
   appKey: string,
   symbolPrefix: string | undefined,
   hookName: 'Cancel' | 'Pause' | 'Resume' | 'Step',
-  rekuestImportPath: string,
+  arkitektImportPath: string,
 ) => {
   const qualifiedHookName = `use${symbolPrefix ?? ''}${hookName}Task`;
   const baseHookName = `use${hookName}AppTask`;
@@ -1303,7 +1324,7 @@ const buildTaskHookContent = (
     : '';
 
   return `
-import { ${baseHookName} } from '${rekuestImportPath}/task';
+import { ${baseHookName} } from '${arkitektImportPath}/task';
 
 export const ${qualifiedHookName} = () => ${baseHookName}('${appKey}');${aliasExport}`;
 };
@@ -1311,7 +1332,7 @@ export const ${qualifiedHookName} = () => ${baseHookName}('${appKey}');${aliasEx
 const buildTaskStoreHookContent = (
   appKey: string,
   symbolPrefix: string | undefined,
-  rekuestImportPath: string,
+  arkitektImportPath: string,
 ) => {
   const qualifiedHookName = `use${symbolPrefix ?? ''}TaskStore`;
 
@@ -1320,7 +1341,7 @@ const buildTaskStoreHookContent = (
     : '';
 
   return `
-import { useTaskStore as useBaseTaskStore, type TaskStore } from '${rekuestImportPath}/task';
+import { useTaskStore as useBaseTaskStore, type TaskStore } from '${arkitektImportPath}/task';
 
 export const ${qualifiedHookName} = <TSelected>(
   selector: (state: TaskStore) => TSelected,
@@ -1330,7 +1351,7 @@ export const ${qualifiedHookName} = <TSelected>(
 const buildStateStoreHookContent = (
   appKey: string,
   symbolPrefix: string | undefined,
-  rekuestImportPath: string,
+  arkitektImportPath: string,
 ) => {
   const qualifiedHookName = `use${symbolPrefix ?? ''}StateStore`;
 
@@ -1339,7 +1360,7 @@ const buildStateStoreHookContent = (
     : '';
 
   return `
-import { useGlobalStateStore as useBaseStateStore, type GlobalStateStore } from '${rekuestImportPath}/state';
+import { useGlobalStateStore as useBaseStateStore, type GlobalStateStore } from '${arkitektImportPath}/state';
 
 export const ${qualifiedHookName} = <TSelected>(
   selector: (state: GlobalStateStore) => TSelected,
@@ -1349,7 +1370,7 @@ export const ${qualifiedHookName} = <TSelected>(
 const buildLockStoreHookContent = (
   appKey: string,
   symbolPrefix: string | undefined,
-  rekuestImportPath: string,
+  arkitektImportPath: string,
 ) => {
   const qualifiedHookName = `use${symbolPrefix ?? ''}LockStore`;
 
@@ -1358,7 +1379,7 @@ const buildLockStoreHookContent = (
     : '';
 
   return `
-import { useLockStore as useBaseLockStore, type LockStore } from '${rekuestImportPath}/locks';
+import { useLockStore as useBaseLockStore, type LockStore } from '${arkitektImportPath}/locks';
 
 export const ${qualifiedHookName} = <TSelected>(
   selector: (state: LockStore) => TSelected,
@@ -1389,8 +1410,8 @@ export default function generateAppsPlugin(
   const appsDir = options.baseDir
     ? path.resolve(options.baseDir)
     : DEFAULT_APPS_DIR;
-  const rekuestImportPath =
-    options.rekuestImportPath ?? DEFAULT_REKUEST_IMPORT_PATH;
+  const arkitektImportPath =
+    options.arkitektImportPath ?? DEFAULT_ARKITEKT_IMPORT_PATH;
 
   // buildStart fires on `vite build` AND on every dev-server (re)start. Without this the
   // whole pipeline - three fetches plus a full rewrite - re-runs on each restart.
@@ -1471,8 +1492,8 @@ export default function generateAppsPlugin(
         await generateActionsDirectory({
           schema: hooksSchemaJson,
           outputDir: appActionsDir,
-          importPathToUseAction: `${rekuestImportPath}/task`,
-          indexImportPathToUseAction: `${rekuestImportPath}/task`,
+          importPathToUseAction: `${arkitektImportPath}/task`,
+          indexImportPathToUseAction: `${arkitektImportPath}/task`,
           appKey: app.key,
           symbolPrefix: app.symbolPrefix,
           whitelist: app.hooksWhitelist,
@@ -1484,7 +1505,7 @@ export default function generateAppsPlugin(
         await generateStatesDirectory({
           schema: statesSchemaJson,
           outputDir: appStatesDir,
-          importPathToSync: `${rekuestImportPath}/state`,
+          importPathToSync: `${arkitektImportPath}/state`,
           appKey: app.key,
           symbolPrefix: app.symbolPrefix,
           whitelist: app.statesWhitelist,
@@ -1496,7 +1517,7 @@ export default function generateAppsPlugin(
         await generateLocksDirectory({
           schema: locksSchemaJson,
           outputDir: appLocksDir,
-          importPathToSync: `${rekuestImportPath}/locks`,
+          importPathToSync: `${arkitektImportPath}/locks`,
           appKey: app.key,
           symbolPrefix: app.symbolPrefix,
           whitelist: app.locksWhitelist,
@@ -1510,7 +1531,7 @@ export default function generateAppsPlugin(
           app.key,
           app.symbolPrefix,
           'Cancel',
-          rekuestImportPath,
+          arkitektImportPath,
         ),
       );
 
@@ -1520,7 +1541,7 @@ export default function generateAppsPlugin(
           app.key,
           app.symbolPrefix,
           'Pause',
-          rekuestImportPath,
+          arkitektImportPath,
         ),
       );
 
@@ -1530,7 +1551,7 @@ export default function generateAppsPlugin(
           app.key,
           app.symbolPrefix,
           'Resume',
-          rekuestImportPath,
+          arkitektImportPath,
         ),
       );
 
@@ -1540,13 +1561,17 @@ export default function generateAppsPlugin(
           app.key,
           app.symbolPrefix,
           'Step',
-          rekuestImportPath,
+          arkitektImportPath,
         ),
       );
 
       await formatAndWrite(
         path.resolve(appHooksDir, 'useTaskStore.ts'),
-        buildTaskStoreHookContent(app.key, app.symbolPrefix, rekuestImportPath),
+        buildTaskStoreHookContent(
+          app.key,
+          app.symbolPrefix,
+          arkitektImportPath,
+        ),
       );
 
       await formatAndWrite(
@@ -1554,13 +1579,17 @@ export default function generateAppsPlugin(
         buildStateStoreHookContent(
           app.key,
           app.symbolPrefix,
-          rekuestImportPath,
+          arkitektImportPath,
         ),
       );
 
       await formatAndWrite(
         path.resolve(appHooksDir, 'useLockStore.ts'),
-        buildLockStoreHookContent(app.key, app.symbolPrefix, rekuestImportPath),
+        buildLockStoreHookContent(
+          app.key,
+          app.symbolPrefix,
+          arkitektImportPath,
+        ),
       );
 
       const hasAppDefinitionFiles = [

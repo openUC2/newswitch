@@ -1,4 +1,4 @@
-import type { LockDefinition } from '@/lib/rekuest/locks';
+import type { LockDefinition } from '@/lib/arkitekt/locks';
 import { CameraParametersDefinition } from './CameraParameters';
 import { ExpanseStateDefinition } from './ExpanseState';
 import { FilterBankDefinition } from './FilterBank';

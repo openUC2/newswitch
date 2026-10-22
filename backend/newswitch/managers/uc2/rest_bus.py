@@ -16,7 +16,6 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-from rekuest_next import model
 
 from newswitch.managers.uc2.event_broker import UC2EventBroker
 from newswitch.protocols.uc2 import (
@@ -29,6 +28,7 @@ from newswitch.protocols.uc2 import (
     UC2Event,
     UC2State,
 )
+from newswitch.arkitekt_app import nsapp
 
 if TYPE_CHECKING:  # pragma: no cover
     from uc2rest.aio import AsyncUC2Client
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 STEPPER_ID_TO_AXIS = {0: "A", 1: "X", 2: "Y", 3: "Z"}
 
 
-@model
+@nsapp.model
 @dataclass
 class UC2RestBusConfig:
     """Configuration for the serial (uc2rest) transport."""

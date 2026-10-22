@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 import koil
 import numpy as np
-from rekuest_next import model
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.managers.helpers.frame import (
     create_sample_image,
@@ -42,6 +40,7 @@ from newswitch.protocols.objective import ObjectiveState
 from newswitch.protocols.stage import StageState
 from newswitch.protocols.filter_bank import FilterBankState
 from newswitch.broadcasters import FrameBroadcaster
+from newswitch.arkitekt_app import nsapp
 
 
 SampleType = Literal["branching", "cells", "grid", "astigmatism"]
@@ -125,7 +124,7 @@ class FrameCache:
     illumination_value: Optional[float] = None
 
 
-@model
+@nsapp.model
 @dataclass
 class DetectorConfig:
     """Configuration for the virtual detector."""
@@ -295,31 +294,30 @@ class VirtualDetectorManager:
         roi = None if detector.current_roi is None else self._clamp_roi(detector.current_roi)
         width, height = self._image_size(binning, roi)
         frame_rate = detector.current_frame_rate
-        with acquired_locks(CAMERA_LOCK):
-            detector.manufacturer = "virtual"
-            detector.model = "simulated"
-            detector.serial_number = f"virtual-{detector.slot}"
-            detector.connection_type = None
-            detector.device_index = None
-            detector.pixel_format = "Mono16"
-            detector.data_type = "uint16"
-            detector.sensor_width, detector.sensor_height = self.config.width, self.config.height
-            detector.pixel_pitch_um = detector.pixel_size_um
-            detector.width, detector.height = width, height
-            detector.current_binning = binning
-            detector.current_roi = roi
-            detector.current_frame_rate = (
-                None if frame_rate is None else self._clamp(frame_rate, *FRAME_RATE_RANGE)
-            )
-            detector.min_frame_rate, detector.max_frame_rate = FRAME_RATE_RANGE
-            detector.available_binnings = list(BINNINGS)
-            detector.can_set_exposure = True
-            detector.can_set_gain = True
-            detector.can_set_frame_rate = True
-            detector.can_set_binning = True
-            detector.can_set_roi = True
-            detector.is_recording = False
-            detector.recording_file = None
+        detector.manufacturer = "virtual"
+        detector.model = "simulated"
+        detector.serial_number = f"virtual-{detector.slot}"
+        detector.connection_type = None
+        detector.device_index = None
+        detector.pixel_format = "Mono16"
+        detector.data_type = "uint16"
+        detector.sensor_width, detector.sensor_height = self.config.width, self.config.height
+        detector.pixel_pitch_um = detector.pixel_size_um
+        detector.width, detector.height = width, height
+        detector.current_binning = binning
+        detector.current_roi = roi
+        detector.current_frame_rate = (
+            None if frame_rate is None else self._clamp(frame_rate, *FRAME_RATE_RANGE)
+        )
+        detector.min_frame_rate, detector.max_frame_rate = FRAME_RATE_RANGE
+        detector.available_binnings = list(BINNINGS)
+        detector.can_set_exposure = True
+        detector.can_set_gain = True
+        detector.can_set_frame_rate = True
+        detector.can_set_binning = True
+        detector.can_set_roi = True
+        detector.is_recording = False
+        detector.recording_file = None
 
     def clear_cache(self) -> None:
         """Clear all cached frame data.
@@ -701,8 +699,7 @@ class VirtualDetectorManager:
     def _set_streaming(self, detector: Detector, readout: Readout, streaming: bool) -> None:
         """Mark whether the live loop streams `detector`; it counts as recording then."""
         readout.streaming = streaming
-        with acquired_locks(CAMERA_LOCK):
-            detector.is_recording = streaming
+        detector.is_recording = streaming
 
     def _end_live_sessions(self) -> None:
         """Mark every detector as not streaming; its last session stays readable."""

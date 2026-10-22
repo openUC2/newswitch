@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi import FastAPI
-from rekuest_next.contrib.fastapi import AsyncAgentTestClient
+from arkitekt_fastapi.testing import AsyncAgentTestClient
 
 from tests.conftest import collect_until_completed
 

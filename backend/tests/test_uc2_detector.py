@@ -15,7 +15,6 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 import pytest
-from rekuest_next.state.lock import acquired_locks
 
 uc2_cam_py = pytest.importorskip("uc2_cam_py")
 
@@ -117,8 +116,7 @@ def make_manager(recording_dir: Path) -> Iterator[ManagerFactory]:
         made.append(manager)
         return manager
 
-    with acquired_locks("camera_parameters"):
-        yield _make
+    yield _make
     for manager in made:
         manager.close()
 

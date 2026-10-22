@@ -1,7 +1,7 @@
 /**
  * The floating account control: change password, admin shortcuts, log out.
  *
- * Deliberately independent of the microscope's rekuest scope (unlike
+ * Deliberately independent of the microscope's arkitekt scope (unlike
  * `AppNavigationChrome`, which it lives inside) so the same menu also works standalone
  * on the admin pages, which do not connect to the microscope backend at all.
  */

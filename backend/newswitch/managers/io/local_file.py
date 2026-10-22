@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from rekuest_next import model
 
 from newswitch.protocols.io import FileFormat, IOState
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class LocalFileConfig:
     """Configuration for the local file IO manager."""

@@ -12,7 +12,6 @@ from typing import Generator
 import numpy as np
 import pytest
 from PIL import Image
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.managers.virtual import VirtualDetectorManager
@@ -64,55 +63,48 @@ def illuminated_detector_with_io(
     Yields:
         A tuple of (VirtualDetectorManager, LocalFileIOManager, IOState, output_dir).
     """
-    with acquired_locks(
-        "camera_parameters",
-        "stage_position",
-        "io",
-        "objective",
-        "illumination",
-    ):
-        # Create states
-        camera_state = CameraState()
-        stage_state = StageState()
-        objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-        illumination_state = IlluminationState(
-            illuminations=[
-                Illumination(
-                    slot=1,
-                    intensity=5000.0,
-                    wavelength=488.0,
-                    max_intensity=10000.0,
-                    is_active=True,
-                )
-            ],
-        )
-        io_state = IOState()
+    # Create states
+    camera_state = CameraState()
+    stage_state = StageState()
+    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
+    illumination_state = IlluminationState(
+        illuminations=[
+            Illumination(
+                slot=1,
+                intensity=5000.0,
+                wavelength=488.0,
+                max_intensity=10000.0,
+                is_active=True,
+            )
+        ],
+    )
+    io_state = IOState()
 
-        # Create detector with astigmatism sample type for consistent visible frames
-        broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
-            stage_state=stage_state,
-            objective_state=objective_state,
-            illumination_state=illumination_state,
-            broadcaster=broadcaster,
-            config=DetectorConfig(sample_type="astigmatism"),
-        )
-        # Activate and configure detector
-        detector.activate_detector(1)
-        detector.update_detector(slot=1, exposure_time=1.0, gain=10.0)
+    # Create detector with astigmatism sample type for consistent visible frames
+    broadcaster = FrameBroadcaster()
+    detector = VirtualDetectorManager(
+        camera_state=camera_state,
+        stage_state=stage_state,
+        objective_state=objective_state,
+        illumination_state=illumination_state,
+        broadcaster=broadcaster,
+        config=DetectorConfig(sample_type="astigmatism"),
+    )
+    # Activate and configure detector
+    detector.activate_detector(1)
+    detector.update_detector(slot=1, exposure_time=1.0, gain=10.0)
 
-        # Create IO manager
-        output_dir = tmp_path / "test_output"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        io_config = LocalFileConfig(
-            base_path=str(output_dir),
-            create_dirs=True,
-            default_format=FileFormat.PNG,
-        )
-        io_manager = LocalFileIOManager(state=io_state, config=io_config)
+    # Create IO manager
+    output_dir = tmp_path / "test_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    io_config = LocalFileConfig(
+        base_path=str(output_dir),
+        create_dirs=True,
+        default_format=FileFormat.PNG,
+    )
+    io_manager = LocalFileIOManager(state=io_state, config=io_config)
 
-        yield detector, io_manager, io_state, output_dir
+    yield detector, io_manager, io_state, output_dir
 
 
 @pytest.fixture
@@ -130,40 +122,33 @@ def default_illumination_detector_with_io(
     Yields:
         A tuple of (VirtualDetectorManager, LocalFileIOManager, IOState, output_dir).
     """
-    with acquired_locks(
-        "camera_parameters",
-        "stage_position",
-        "io",
-        "objective",
-        "illumination",
-    ):
-        camera_state = CameraState()
-        stage_state = StageState()
-        objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-        illumination_state = IlluminationState()  # Default: empty sources
-        io_state = IOState()
+    camera_state = CameraState()
+    stage_state = StageState()
+    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
+    illumination_state = IlluminationState()  # Default: empty sources
+    io_state = IOState()
 
-        broadcaster = FrameBroadcaster()
-        detector = VirtualDetectorManager(
-            camera_state=camera_state,
-            stage_state=stage_state,
-            objective_state=objective_state,
-            illumination_state=illumination_state,
-            broadcaster=broadcaster,
-        )
-        # Activate detector
-        detector.activate_detector(1)
+    broadcaster = FrameBroadcaster()
+    detector = VirtualDetectorManager(
+        camera_state=camera_state,
+        stage_state=stage_state,
+        objective_state=objective_state,
+        illumination_state=illumination_state,
+        broadcaster=broadcaster,
+    )
+    # Activate detector
+    detector.activate_detector(1)
 
-        output_dir = tmp_path / "test_output"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        io_config = LocalFileConfig(
-            base_path=str(output_dir),
-            create_dirs=True,
-            default_format=FileFormat.PNG,
-        )
-        io_manager = LocalFileIOManager(state=io_state, config=io_config)
+    output_dir = tmp_path / "test_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    io_config = LocalFileConfig(
+        base_path=str(output_dir),
+        create_dirs=True,
+        default_format=FileFormat.PNG,
+    )
+    io_manager = LocalFileIOManager(state=io_state, config=io_config)
 
-        yield detector, io_manager, io_state, output_dir
+    yield detector, io_manager, io_state, output_dir
 
 
 class TestCaptureImagePNGOutput:

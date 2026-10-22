@@ -83,21 +83,21 @@ export const KubeStatePanel = () => {
 
   const panel = (() => {
     switch (selectedKubeState.__identifier) {
-      case "objective_kube_state":
+      case "@newswitch/objective_kube_state":
         return <ObjectiveKubePanel data={selectedKubeState} />;
-      case "detector_kube_state":
+      case "@newswitch/detector_kube_state":
         return <DetectorKubePanel data={selectedKubeState} />;
-      case "filter_kube_state":
+      case "@newswitch/filter_kube_state":
         return <FilterKubePanel data={selectedKubeState} />;
-      case "illumination_kube_state":
+      case "@newswitch/illumination_kube_state":
         return <IlluminationKubePanel data={selectedKubeState} />;
-      case "stage_kube_state":
+      case "@newswitch/stage_kube_state":
         return <StageKubePanel data={selectedKubeState} />;
-      case "dichroic_kube_state":
+      case "@newswitch/dichroic_kube_state":
         return <DichroicKubePanel data={selectedKubeState} />;
-      case "filter_bank_kube_state":
+      case "@newswitch/filter_bank_kube_state":
         return <FilterBankKubePanel data={selectedKubeState} />;
-      case "generic_kube_state":
+      case "@newswitch/generic_kube_state":
         return <GenericKubePanel data={selectedKubeState} />;
       default:
         return null;

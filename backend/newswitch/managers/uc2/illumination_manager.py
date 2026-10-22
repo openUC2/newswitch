@@ -11,13 +11,13 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from koil import unkoil
-from rekuest_next import model
 
 from newswitch.protocols.illumination import Illumination, IlluminationState
 from newswitch.protocols.uc2 import UC2BusManager
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class UC2IlluminationConfig:
     """Configuration for the UC2 illumination manager."""

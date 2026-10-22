@@ -6,12 +6,11 @@ Defines the protocol for stage/positioner control and associated state.
 
 from typing import Optional, Protocol, runtime_checkable
 from dataclasses import field
-from rekuest_next.agents.context import context
-from rekuest_next import state
 from newswitch.protocols.base import Manager
+from newswitch.arkitekt_app import nsapp
 
 
-@state(required_locks=["z_range"])
+@nsapp.state(required_locks=["z_range"])
 class ZRangeState:
     """Shared state for Z focussing"""
 
@@ -23,7 +22,7 @@ class ZRangeState:
     registered_step_sizes: list[float] = field(default_factory=lambda: [0.1, 1.0, 10.0, 100.0])
 
 
-@context(locks=["z_range"])
+@nsapp.context(locks=["z_range"])
 @runtime_checkable
 class ZRangeManager(Manager, Protocol):
     """Protocol defining the interface for Z range managers."""

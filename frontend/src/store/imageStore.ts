@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { immer } from "zustand/middleware/immer";
-import { createScopedStoreHooks } from "@/lib/rekuest/createScopedStore";
+import { createScopedStoreHooks } from "@/lib/arkitekt/createScopedStore";
 
 export interface SelectionState {
   selectedImageId: string | null;

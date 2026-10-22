@@ -5,8 +5,9 @@
 # repository's root .env (deployment via docker is still an open point).
 
 use_virtual_microscope: true
-# SQLite file of the rekuest agent (state history); relative to the working directory
-db_path: agent_data.db
+# SQLite file of the arkitekt agent (state history, journal); relative to the working
+# directory. Not the old agent_data.db: the store of rekuest_next cannot be read.
+db_path: arkitekt_agent.db
 available_cubes: [cube1, cube2, cube3]
 
 # Folders; relative paths are taken relative to this file's folder (backend/)

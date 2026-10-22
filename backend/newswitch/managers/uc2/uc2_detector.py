@@ -36,7 +36,6 @@ from typing import TYPE_CHECKING, Any
 
 import koil
 import uc2_cam_py
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.protocols.detector import (
     CameraState,
@@ -102,23 +101,21 @@ def _mirror(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     exposure = camera.exposure_time_ms
     gain = camera.gain_db
     roi = camera.roi
-    with acquired_locks(CAMERA_LOCK):
-        detector.width, detector.height = width, height
-        if exposure is not None:
-            detector.current_exposure_time = exposure / 1000.0
-        if gain is not None:
-            detector.current_gain = gain
-        detector.current_frame_rate = camera.frame_rate_per_sec
-        detector.current_binning = camera.binning
-        detector.current_roi = None if roi is None else list(roi)
+    detector.width, detector.height = width, height
+    if exposure is not None:
+        detector.current_exposure_time = exposure / 1000.0
+    if gain is not None:
+        detector.current_gain = gain
+    detector.current_frame_rate = camera.frame_rate_per_sec
+    detector.current_binning = camera.binning
+    detector.current_roi = None if roi is None else list(roi)
     _mirror_recording(detector, camera)
 
 
 def _mirror_recording(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     """Copy whether the camera acquires, and into which file, into its detector."""
-    with acquired_locks(CAMERA_LOCK):
-        detector.is_recording = camera.is_recording
-        detector.recording_file = camera.recording_file
+    detector.is_recording = camera.is_recording
+    detector.recording_file = camera.recording_file
 
 
 def _describe(detector: Detector, camera: uc2_cam_py.Camera) -> None:
@@ -128,31 +125,30 @@ def _describe(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     frame_rate_range = camera.range_frame_rate_per_sec
     pitch = camera.pixel_pitch_um
     size = camera.pixel_size_um
-    with acquired_locks(CAMERA_LOCK):
-        detector.manufacturer = camera.vendor
-        detector.model = camera.model
-        detector.serial_number = camera.serial
-        detector.connection_type = camera.connection_type
-        detector.device_index = camera.index
-        detector.buffer_size = camera.buffer_size
-        detector.pixel_format = camera.pixel_format
-        detector.data_type = _sample_type(camera.pixel_format)
-        detector.sensor_width, detector.sensor_height = camera.pixel_count
-        detector.pixel_pitch_um = None if pitch is None else pitch[0]
-        if size is not None:
-            detector.pixel_size_um = size[0]
-        if exposure_range is not None:
-            detector.min_exposure_time = exposure_range[0] / 1000.0
-            detector.max_exposure_time = exposure_range[1] / 1000.0
-        if gain_range is not None:
-            detector.min_gain, detector.max_gain = gain_range
-        detector.min_frame_rate, detector.max_frame_rate = frame_rate_range or (None, None)
-        detector.available_binnings = list(camera.range_binning)
-        detector.can_set_exposure = camera.can_set_exposure
-        detector.can_set_gain = camera.can_set_gain
-        detector.can_set_frame_rate = camera.can_set_frame_rate
-        detector.can_set_binning = camera.can_set_binning
-        detector.can_set_roi = camera.can_set_roi
+    detector.manufacturer = camera.vendor
+    detector.model = camera.model
+    detector.serial_number = camera.serial
+    detector.connection_type = camera.connection_type
+    detector.device_index = camera.index
+    detector.buffer_size = camera.buffer_size
+    detector.pixel_format = camera.pixel_format
+    detector.data_type = _sample_type(camera.pixel_format)
+    detector.sensor_width, detector.sensor_height = camera.pixel_count
+    detector.pixel_pitch_um = None if pitch is None else pitch[0]
+    if size is not None:
+        detector.pixel_size_um = size[0]
+    if exposure_range is not None:
+        detector.min_exposure_time = exposure_range[0] / 1000.0
+        detector.max_exposure_time = exposure_range[1] / 1000.0
+    if gain_range is not None:
+        detector.min_gain, detector.max_gain = gain_range
+    detector.min_frame_rate, detector.max_frame_rate = frame_rate_range or (None, None)
+    detector.available_binnings = list(camera.range_binning)
+    detector.can_set_exposure = camera.can_set_exposure
+    detector.can_set_gain = camera.can_set_gain
+    detector.can_set_frame_rate = camera.can_set_frame_rate
+    detector.can_set_binning = camera.can_set_binning
+    detector.can_set_roi = camera.can_set_roi
     _mirror(detector, camera)
 
 
@@ -600,5 +596,4 @@ class UC2DetectorManager:
             with cam.lock:
                 cam.holders.clear()
                 cam.camera.close()
-            with acquired_locks(CAMERA_LOCK):
-                cam.detector.is_recording = False
+            cam.detector.is_recording = False

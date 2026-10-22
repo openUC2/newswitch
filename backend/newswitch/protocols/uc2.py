@@ -23,10 +23,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional, Protocol, Union, runtime_checkable
 
-from rekuest_next import state
-from rekuest_next.agents.context import context
 
 from newswitch.protocols.base import BackgroundManager
+from newswitch.arkitekt_app import nsapp
 
 STAGE_AXES = ("X", "Y", "Z", "A")
 
@@ -106,7 +105,7 @@ UC2Event = Union[
 # ---------------------------------------------------------------------------
 
 
-@state
+@nsapp.state
 @dataclass
 class UC2State:
     """Connection, identity, and safety state of the UC2 hardware bus."""
@@ -124,7 +123,7 @@ class UC2State:
 # ---------------------------------------------------------------------------
 
 
-@context
+@nsapp.context
 @runtime_checkable
 class UC2BusManager(BackgroundManager, Protocol):
     """Protocol for transport backends driving openUC2 hardware.

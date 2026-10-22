@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { useAction, type ActionDefinition } from '@/lib/rekuest/task';
+import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Shared Models ---
 export const FilterSchema = z
   .object({
-    __identifier: z.literal('filter').default('filter'),
+    __identifier: z.literal('@newswitch/filter').default('@newswitch/filter'),
     slot: z.number(),
     name: z.string(),
     center_wavelength: z.number(),
@@ -12,7 +12,7 @@ export const FilterSchema = z
     transmission: z.number(),
     is_active: z.boolean(),
   })
-  .brand('filter')
+  .brand('@newswitch/filter')
   .describe('The newly active filter.');
 export type Filter = z.input<typeof FilterSchema>;
 export type FilterOutput = z.infer<typeof FilterSchema>;

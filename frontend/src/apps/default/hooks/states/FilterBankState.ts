@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { buildUseState, type StateDefinition } from '@/lib/rekuest/state';
+import { buildUseState, type StateDefinition } from '@/lib/arkitekt/state';
 
 // --- Sub-Schemas ---
 export const FilterSchema = z
   .object({
-    __identifier: z.literal('filter').default('filter'),
+    __identifier: z.literal('@newswitch/filter').default('@newswitch/filter'),
     slot: z.number(),
     name: z.string(),
     center_wavelength: z.number(),
@@ -12,7 +12,7 @@ export const FilterSchema = z
     transmission: z.number(),
     is_active: z.boolean(),
   })
-  .brand('filter')
+  .brand('@newswitch/filter')
   .describe(
     'Configuration for a single optical filter.\n\n    Attributes:\n        slot: Filter wheel slot number.\n        name: Human-readable filter name.\n        center_wavelength: Center wavelength of the filter passband (nm).\n        bandwidth: Full width at half maximum of the passband (nm).\n        transmission: Peak transmission efficiency (0.0 to 1.0).\n        is_active: Whether this filter is currently in the light path.\n    ',
   );

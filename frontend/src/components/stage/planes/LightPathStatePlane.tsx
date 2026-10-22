@@ -105,19 +105,19 @@ export const LightPathStatePlane = ({ path }: { path: LightPathState }) => {
               <InvertedHullOutline enabled={isSelected}>
                 {(() => {
                   switch (kube.__identifier) {
-                    case "objective_kube_state":
+                    case "@newswitch/objective_kube_state":
                       return <ObjectiveKubePlane data={kube} />;
-                    case "detector_kube_state":
+                    case "@newswitch/detector_kube_state":
                       return <DetectorKubePlane data={kube} />;
-                    case "filter_kube_state":
+                    case "@newswitch/filter_kube_state":
                       return <FilterKubePlane data={kube} />;
-                    case "illumination_kube_state":
+                    case "@newswitch/illumination_kube_state":
                       return <IlluminationKubePlane data={kube} />;
-                    case "stage_kube_state":
+                    case "@newswitch/stage_kube_state":
                       return <StageKubePlane data={kube} />;
-                    case "dichroic_kube_state":
+                    case "@newswitch/dichroic_kube_state":
                       return <DichroicKubePlane data={kube} />;
-                    case "generic_kube_state":
+                    case "@newswitch/generic_kube_state":
                       return null;
                     default:
                       return null;

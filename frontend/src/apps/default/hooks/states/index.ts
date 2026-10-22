@@ -1,4 +1,4 @@
-import type { StateDefinition } from '@/lib/rekuest/state';
+import type { StateDefinition } from '@/lib/arkitekt/state';
 import { AutofocusStateDefinition } from './AutofocusState';
 import { CalibrationStateDefinition } from './CalibrationState';
 import { CameraStateDefinition } from './CameraState';

@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 from newswitch.protocols.z_range import ZRangeState
-from rekuest_next import model
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class ZStageConfig:
     """Configuration for the virtual stage."""

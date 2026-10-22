@@ -8,7 +8,6 @@ and homing functionality.
 from typing import Generator
 
 import pytest
-from rekuest_next.state.lock import acquired_locks
 
 from newswitch.managers.virtual import VirtualStageManager
 from newswitch.protocols import StageState
@@ -19,15 +18,14 @@ def virtual_stage_manager() -> Generator[VirtualStageManager, None, None]:
     """Create a VirtualStageManager instance for testing.
 
     Creates a stage manager with state initialized at the origin (0, 0, 0, 0).
-    Uses acquired_locks context to ensure proper state management.
+    States are plain until an agent adopts them, so tests write them freely.
 
     Yields:
         VirtualStageManager: A configured stage manager ready for testing.
     """
-    with acquired_locks("stage_position"):
-        stage_state = StageState(x=0.0, y=0.0, z=0.0, a=0.0)
-        manager = VirtualStageManager(stage=stage_state)
-        yield manager
+    stage_state = StageState(x=0.0, y=0.0, z=0.0, a=0.0)
+    manager = VirtualStageManager(stage=stage_state)
+    yield manager
 
 
 def test_stage_protocol_compliance(virtual_stage_manager: VirtualStageManager) -> None:

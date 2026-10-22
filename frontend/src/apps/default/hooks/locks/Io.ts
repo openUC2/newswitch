@@ -2,7 +2,7 @@ import {
   useLock,
   type LockDefinition,
   type UseLockOptions,
-} from '@/lib/rekuest/locks';
+} from '@/lib/arkitekt/locks';
 
 // --- Definition ---
 export const IoDefinition: LockDefinition<'io'> = {

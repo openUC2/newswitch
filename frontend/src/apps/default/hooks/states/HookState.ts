@@ -1,13 +1,15 @@
 import { z } from 'zod';
-import { buildUseState, type StateDefinition } from '@/lib/rekuest/state';
+import { buildUseState, type StateDefinition } from '@/lib/arkitekt/state';
 
 // --- Sub-Schemas ---
 export const RegisteredHookSchema = z
   .object({
-    __identifier: z.literal('registered_hook').default('registered_hook'),
+    __identifier: z
+      .literal('@newswitch/registered_hook')
+      .default('@newswitch/registered_hook'),
     type: z.string(),
   })
-  .brand('registered_hook')
+  .brand('@newswitch/registered_hook')
   .describe(
     'Data class representing a hook to be executed during acquisition.',
   );

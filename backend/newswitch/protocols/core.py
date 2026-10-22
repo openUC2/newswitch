@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 from typing import Protocol
-from rekuest_next import model, model_field
+from arkitekt import model_field
+from newswitch.arkitekt_app import nsapp
 
 
 AffineMatrix = list[list[float]]
@@ -30,7 +31,7 @@ class StatefulKube(Protocol):
     pass
 
 
-@model
+@nsapp.model
 class ObjectiveKube(BaseKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -49,7 +50,7 @@ class ObjectiveKube(BaseKube):
     )
 
 
-@model
+@nsapp.model
 class ObjectiveTurretKube(BaseKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -67,7 +68,7 @@ class ObjectiveTurretKube(BaseKube):
     )
 
 
-@model
+@nsapp.model
 class DetectorKube(BaseKube, StatefulKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -86,7 +87,7 @@ class DetectorKube(BaseKube, StatefulKube):
     )
 
 
-@model
+@nsapp.model
 class IlluminationKube(BaseKube, StatefulKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -105,7 +106,7 @@ class IlluminationKube(BaseKube, StatefulKube):
     )
 
 
-@model
+@nsapp.model
 class DichroicKube(BaseKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -124,7 +125,7 @@ class DichroicKube(BaseKube):
     )
 
 
-@model
+@nsapp.model
 class StageKube(BaseKube, StatefulKube):
     """Data class repesentating the stage, including its ID and affine transformation matrix."""
 
@@ -143,7 +144,7 @@ class StageKube(BaseKube, StatefulKube):
     )
 
 
-@model
+@nsapp.model
 class FilterKube(BaseKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -162,7 +163,7 @@ class FilterKube(BaseKube):
     )
 
 
-@model
+@nsapp.model
 class FilterBankKube(BaseKube, StatefulKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -181,7 +182,7 @@ class FilterBankKube(BaseKube, StatefulKube):
     )
 
 
-@model
+@nsapp.model
 class GenericKube(BaseKube):
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -217,7 +218,7 @@ Kube = (
 )
 
 
-@model
+@nsapp.model
 @dataclass
 class LightEdge:
     """Data class representing the light path used for an image, including illumination settings."""
@@ -233,7 +234,7 @@ class LightEdge:
     )
 
 
-@model
+@nsapp.model
 @dataclass
 class LightPath:
     """Data class representing the light path used for an image, including illumination settings."""
@@ -279,7 +280,7 @@ class LightPath:
         return start_hash
 
 
-@model
+@nsapp.model
 class ObjectiveKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -298,7 +299,7 @@ class ObjectiveKubeState:
     )
 
 
-@model
+@nsapp.model
 class DichroicKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -316,7 +317,7 @@ class DichroicKubeState:
     )
 
 
-@model
+@nsapp.model
 class DetectorKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -336,7 +337,7 @@ class DetectorKubeState:
     )
 
 
-@model
+@nsapp.model
 class IlluminationKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -357,7 +358,7 @@ class IlluminationKubeState:
     )
 
 
-@model
+@nsapp.model
 class FilterKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -376,7 +377,7 @@ class FilterKubeState:
     )
 
 
-@model
+@nsapp.model
 class FilterBankKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -398,7 +399,7 @@ class FilterBankKubeState:
     )
 
 
-@model
+@nsapp.model
 class ObjectiveTurretKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -419,7 +420,7 @@ class ObjectiveTurretKubeState:
     )
 
 
-@model
+@nsapp.model
 class StageKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -437,7 +438,7 @@ class StageKubeState:
     )
 
 
-@model
+@nsapp.model
 class GenericKubeState:
     """Data class representing metadata for a kube, including its ID and affine transformation matrix."""
 
@@ -469,7 +470,7 @@ KubeState = (
 )
 
 
-@model
+@nsapp.model
 @dataclass
 class LightEdgeState:
     """Data class representing the light path used for an image, including illumination settings."""
@@ -488,7 +489,7 @@ class LightEdgeState:
     )
 
 
-@model
+@nsapp.model
 @dataclass
 class LightPathState:
     """Data class representing the light path used for an image, including illumination settings."""
@@ -511,7 +512,7 @@ class LightPathState:
     )
 
 
-@model
+@nsapp.model
 @dataclass
 class Metadata:
     """Data class representing metadata for an image, including its ID and affine transformation matrix."""
@@ -530,7 +531,7 @@ class Metadata:
     )
 
 
-@model
+@nsapp.model
 class Image:
     """Represents a single image captured by the detector."""
 
@@ -538,7 +539,7 @@ class Image:
     metadata: Metadata
 
 
-@model
+@nsapp.model
 class Scale:
     """Represents a scale factor for a 3D volume."""
 
@@ -551,7 +552,7 @@ class Scale:
     )
 
 
-@model
+@nsapp.model
 class ArrayMetadata:
     """Metadata for a raw array before it is saved as an image, including the light path and acquisition settings."""
 
@@ -559,7 +560,7 @@ class ArrayMetadata:
     max_value: float
 
 
-@model
+@nsapp.model
 class Frame:
     """Represents a single 3D volume captured by the detector."""
 

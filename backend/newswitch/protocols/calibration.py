@@ -5,15 +5,14 @@ Defines the protocol for illumination/LED control and associated state.
 """
 
 from typing import Protocol, runtime_checkable
-from rekuest_next.agents.context import context
-from rekuest_next import model_field, state
-from rekuest_next import model
 from dataclasses import dataclass, field
 from newswitch.protocols.base import Manager
 from newswitch.protocols.core import AffineMatrix, LightPathState
+from arkitekt import model_field
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class CalibratedLightPath:
     """Shared state for affine transformation parameters."""
@@ -35,7 +34,7 @@ class CalibratedLightPath:
     )
 
 
-@state
+@nsapp.state
 @dataclass
 class CalibrationState:
     """Active illumination source configuration."""
@@ -52,7 +51,7 @@ class CalibrationState:
         )
 
 
-@context
+@nsapp.context
 @runtime_checkable
 class CalibrationManager(Manager, Protocol):
     """Protocol defining the interface for illumination managers."""

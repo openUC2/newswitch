@@ -2,7 +2,7 @@ import { useTaskStore } from "@/apps/default/hooks/useTaskStore";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLock } from "@/hooks/useLock";
-import { selectTask } from "@/lib/rekuest/task/store";
+import { selectTask } from "@/lib/arkitekt/task/store";
 import { Bug } from "lucide-react";
 
 interface SyncKeyDebugProps {

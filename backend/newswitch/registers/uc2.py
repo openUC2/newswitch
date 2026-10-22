@@ -2,8 +2,8 @@
 
 Complements the core stage/illumination actions in ``newswitch.app`` with
 per-axis homing/stopping, LED-matrix control, CAN node discovery, objective
-homing, and the galvo scanner. Importing this module registers everything on
-the default app registry.
+homing, and the galvo scanner. Importing this module declares everything on
+``nsapp``.
 """
 
 from __future__ import annotations
@@ -11,14 +11,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from arkitekt import Task
 from koil import unkoil
-from rekuest_next import model, progress
-from rekuest_next.register import register
 
 from newswitch.protocols.uc2 import STAGE_AXES, UC2BusManager, UC2State
+from newswitch.arkitekt_app import nsapp
 
 
-@model
+@nsapp.model
 @dataclass
 class GalvoStatus:
     """Decoded galvo scanner status flags."""
@@ -30,8 +30,8 @@ class GalvoStatus:
     error: bool = False
 
 
-@register(locks=["stage_position"])
-def home_stage(uc2_bus: UC2BusManager, axes: Optional[list[str]] = None) -> None:
+@nsapp.action(locks=["stage_position"])
+def home_stage(uc2_bus: UC2BusManager, task: Task, axes: Optional[list[str]] = None) -> None:
     """Home stage axes sequentially in a mechanically safe order (Z first).
 
     Args:
@@ -41,12 +41,12 @@ def home_stage(uc2_bus: UC2BusManager, axes: Optional[list[str]] = None) -> None
     for index, axis in enumerate(order):
         if axis not in STAGE_AXES:
             raise ValueError(f"Unknown axis {axis!r}; expected one of {STAGE_AXES}")
-        progress(int(index / len(order) * 100), f"homing {axis}")
+        task.progress(int(index / len(order) * 100), f"homing {axis}")
         unkoil(uc2_bus.ahome_axis, axis)
-    progress(100, "homed")
+    task.progress(100, "homed")
 
 
-@register
+@nsapp.action
 def stop_stage(uc2_bus: UC2BusManager, axis: Optional[str] = None) -> None:
     """Immediately stop one stage axis (or all axes when none is given).
 
@@ -57,37 +57,37 @@ def stop_stage(uc2_bus: UC2BusManager, axis: Optional[str] = None) -> None:
         unkoil(uc2_bus.astop_axis, target)
 
 
-@register(locks=["illumination"])
+@nsapp.action(locks=["illumination"])
 def led_matrix_fill(uc2_bus: UC2BusManager, r: int = 255, g: int = 255, b: int = 255) -> None:
     """Fill the LED matrix with a uniform colour (0-255 per channel)."""
     unkoil(uc2_bus.aled_fill, r, g, b)
 
 
-@register(locks=["illumination"])
+@nsapp.action(locks=["illumination"])
 def led_matrix_off(uc2_bus: UC2BusManager) -> None:
     """Turn the LED matrix off."""
     unkoil(uc2_bus.aled_off)
 
 
-@register
+@nsapp.action
 def uc2_scan_nodes(uc2_bus: UC2BusManager, uc2_state: UC2State, timeout: float = 3.0) -> list[int]:
     """Discover reachable UC2 bus nodes; the result also lands in UC2State."""
     return unkoil(uc2_bus.ascan_nodes, timeout)
 
 
-@register(locks=["objective"])
+@nsapp.action(locks=["objective"])
 def home_objective(uc2_bus: UC2BusManager) -> None:
     """Home the objective changer."""
     unkoil(uc2_bus.aobjective_home)
 
 
-@register(locks=["galvo"])
+@nsapp.action(locks=["galvo"])
 def galvo_set_position(uc2_bus: UC2BusManager, x: int, y: int) -> None:
     """Move the galvo mirror to an absolute XY position (DAC counts)."""
     unkoil(uc2_bus.agalvo_goto, x, y)
 
 
-@register(locks=["galvo"])
+@nsapp.action(locks=["galvo"])
 def galvo_raster_scan(
     uc2_bus: UC2BusManager,
     x_min: int = 500,
@@ -115,13 +115,13 @@ def galvo_raster_scan(
     )
 
 
-@register
+@nsapp.action
 def galvo_stop(uc2_bus: UC2BusManager) -> None:
     """Stop any active galvo scan (lock-free so it works mid-scan)."""
     unkoil(uc2_bus.agalvo_stop)
 
 
-@register
+@nsapp.action
 def galvo_get_status(uc2_bus: UC2BusManager) -> GalvoStatus:
     """Read decoded galvo status flags (moving, scan_active, error, ...)."""
     status = unkoil(uc2_bus.agalvo_status)

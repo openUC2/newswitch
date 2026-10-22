@@ -112,9 +112,8 @@ def test_objective_manager_switches_and_toggles() -> None:
     """UC2ObjectiveManager drives the bus and mirrors slot metadata into state."""
     import koil
     from koil import unkoil
-    from rekuest_next.state.lock import acquired_locks
 
-    with koil.Koil(), acquired_locks("objective"):
+    with koil.Koil():
         bus = make_virtual_bus()
         state = ObjectiveState()
         manager = UC2ObjectiveManager(objective_state=state, bus=bus)
@@ -135,9 +134,8 @@ def test_filter_bank_manager_moves_wheel_axis() -> None:
     """UC2FilterBankManager positions the wheel axis and tracks the active filter."""
     import koil
     from koil import unkoil
-    from rekuest_next.state.lock import acquired_locks
 
-    with koil.Koil(), acquired_locks("filter_bank"):
+    with koil.Koil():
         bus = make_virtual_bus()
         state = FilterBankState()
         manager = UC2FilterBankManager(filter_bank_state=state, bus=bus)

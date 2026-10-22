@@ -24,7 +24,7 @@ REST endpoints for microscope features by hand — instead:
 flowchart LR
     subgraph Browser
         UI[React components] --> Hooks[generated hooks<br/>src/apps/default]
-        Hooks --> TP[transport layer<br/>src/lib/rekuest]
+        Hooks --> TP[transport layer<br/>src/lib/arkitekt]
     end
     TP -- "REST: /assign /cancel /pause" --> API
     TP <-- "WS /ws: task events,<br/>state patches, locks" --> API
@@ -375,7 +375,7 @@ fetches `/schemas/implementations|states|locks` from the running backend and
 emits `src/apps/default/hooks/{actions,states,locks}/*.ts` — zod schemas +
 typed hooks (`useMoveStage`, `useStageState`, …). These files are committed;
 `just drift-check` fails CI if they diverge from the backend. The hand-written
-runtime (`src/lib/rekuest/`) manages the `/ws` connection, task assignment,
+runtime (`src/lib/arkitekt/`) manages the `/ws` connection, task assignment,
 patch application and locks. Components (`src/components/microscope/*`)
 consume only the generated hooks. If you add/rename a backend action or state:
 run the backend, `cd frontend && yarn build`, commit the regenerated files.

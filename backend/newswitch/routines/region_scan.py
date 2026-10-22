@@ -3,11 +3,9 @@
 import math
 from enum import Enum
 from typing import Annotated
-from rekuest_next import pausepoint, progress
-from rekuest_next.annotations import Description
-
 from newswitch import protocols
 from newswitch.protocols.core import Image
+from arkitekt import Description, Task
 
 
 class ScanOrder(str, Enum):
@@ -25,6 +23,7 @@ def scan_region(
     metadata_manager: protocols.MetadataManager,
     detector_manager: protocols.DetectorManager,
     stage_manager: protocols.StageManager,
+    task: Task,
     scan_order: ScanOrder,
     start_x: float,
     start_y: float,
@@ -135,9 +134,9 @@ def scan_region(
     # 5. Execute Moves and Acquisitions
     for i, (tgt_x, tgt_y) in enumerate(path_points):
         print(f"Moving to position {i + 1}/{len(path_points)} -> X: {tgt_x:.2f}, Y: {tgt_y:.2f}")
-        pausepoint()
+        task.pausepoint()
 
-        progress(int((i / total_len) * 100), f"Moving to point {i + 1}/{total_len}")
+        task.progress(int((i / total_len) * 100), f"Moving to point {i + 1}/{total_len}")
 
         # Move Stage
         stage_manager.move(x=tgt_x, y=tgt_y, is_absolute=True)
@@ -147,7 +146,7 @@ def scan_region(
         acquired_images.extend(images)
 
         # Update progress
-        progress(
+        task.progress(
             int(((i + 1) / len(path_points)) * 100), f"Acquired point {i + 1}/{len(path_points)}"
         )
 

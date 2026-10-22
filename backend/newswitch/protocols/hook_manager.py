@@ -7,8 +7,6 @@ Defines the protocol for detector/camera control and associated state.
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, Type, runtime_checkable
 
-from rekuest_next import model, state
-from rekuest_next.agents.context import context
 
 from newswitch.protocols.stage import StageManager
 from newswitch.protocols.base import Manager
@@ -17,19 +15,20 @@ from .detector import DetectorManager
 from .illumination import IlluminationManager
 from .io import IOManager
 from .objective import ObjectiveManager
+from newswitch.arkitekt_app import nsapp
 
 if TYPE_CHECKING:
     pass
 
 
-@model
+@nsapp.model
 class SoftwareAutofocusHook:
     """Data class representing a software autofocus hook to be executed during acquisition."""
 
     speed: float = 1.0  # Speed of autofocus movement (arbitrary units)
 
 
-@model
+@nsapp.model
 class ZCalibrationHook:
     """Data class representing a z-calibration hook to be executed during acquisition."""
 
@@ -39,7 +38,7 @@ class ZCalibrationHook:
 Hook = SoftwareAutofocusHook | ZCalibrationHook
 
 
-@model
+@nsapp.model
 @dataclass
 class RegisteredHook:
     """Data class representing a hook to be executed during acquisition."""
@@ -47,7 +46,7 @@ class RegisteredHook:
     type: str  # HookType as string for serialization
 
 
-@state(required_locks=["hook_registry"])
+@nsapp.state(required_locks=["hook_registry"])
 class HookState:
     """Shared state for camera parameters.
 
@@ -78,7 +77,7 @@ class HookHandler(Protocol):
         ...
 
 
-@context(locks=["hook_registry"])
+@nsapp.context(locks=["hook_registry"])
 @runtime_checkable
 class HookManager(Manager, Protocol):
     """Protocol defining the interface for detector/camera managers."""
