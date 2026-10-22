@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import BlokDebugState from "./BlokDebugState";
+import { BlokSceneFillProvider } from "./bloks/scene/host";
 import { defaultBlokCatalog } from "./catalog";
 import {
   BlokNode,
@@ -159,52 +160,55 @@ export default function BlokRenderer({
     <BlokRuntimeProvider store={runtimeStore}>
       <BlokTreeProvider tree={tree}>
         {children}
-        <div className={containerClassName}>
-          {debug && <BlokDebugState surfaceId={surfaceId} />}
+        <BlokSceneFillProvider value={chrome === "none"}>
+          <div className={containerClassName}>
+            {debug && <BlokDebugState surfaceId={surfaceId} />}
 
-          {documentErrors.length > 0 && (
-            <div
-              className={cn(
-                "rounded-xl border border-destructive/30 bg-background/80 p-4",
-                chrome === "default" ? "mb-4" : "mb-2",
-              )}
-            >
-              <h3 className="text-sm font-semibold text-destructive">
-                Blok payload could not be parsed
-              </h3>
-              <ul className="mt-2 space-y-1">
-                {documentErrors.map((error, index) => (
-                  <li key={`${error.path}-${index}`} className="text-sm">
-                    <span className="font-mono text-xs text-destructive">
-                      {error.path}
-                    </span>
-                    <span className="ml-2 text-foreground">
-                      {error.message}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            {documentErrors.length > 0 && (
+              <div
+                className={cn(
+                  "rounded-xl border border-destructive/30 bg-background/80 p-4",
+                  chrome === "default" ? "mb-4" : "mb-2",
+                )}
+              >
+                <h3 className="text-sm font-semibold text-destructive">
+                  Blok payload could not be parsed
+                </h3>
+                <ul className="mt-2 space-y-1">
+                  {documentErrors.map((error, index) => (
+                    <li key={`${error.path}-${index}`} className="text-sm">
+                      <span className="font-mono text-xs text-destructive">
+                        {error.path}
+                      </span>
+                      <span className="ml-2 text-foreground">
+                        {error.message}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-          {renderableRootIds.length === 0 && documentErrors.length === 0 && (
-            <div className="flex min-h-48 items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/30 px-6 text-sm text-muted-foreground">
-              No blok components available for this preview yet.
-            </div>
-          )}
+            {renderableRootIds.length === 0 && documentErrors.length === 0 && (
+              <div className="flex min-h-48 items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/30 px-6 text-sm text-muted-foreground">
+                No blok components available for this preview yet.
+              </div>
+            )}
 
-          {/* A lone root may fill the surface; several roots stack at their own heights. */}
-          {renderableRootIds.map((rootId) => (
-            <div
-              key={rootId}
-              className={
-                renderableRootIds.length === 1 ? "h-full min-w-0" : "min-w-0"
-              }
-            >
-              <BlokNode id={rootId} />
-            </div>
-          ))}
-        </div>
+            {/* A lone root may fill the surface (a 3D scene sized "100%" needs a
+              parent with a height); several roots stack at their own heights. */}
+            {renderableRootIds.map((rootId) => (
+              <div
+                key={rootId}
+                className={
+                  renderableRootIds.length === 1 ? "h-full min-w-0" : "min-w-0"
+                }
+              >
+                <BlokNode id={rootId} />
+              </div>
+            ))}
+          </div>
+        </BlokSceneFillProvider>
       </BlokTreeProvider>
     </BlokRuntimeProvider>
   );

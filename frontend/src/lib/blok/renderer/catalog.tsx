@@ -1,5 +1,6 @@
 import { RawInspector } from "./bloks/inspector/Inspector";
 import { logoBlokComponents } from "./bloks/logo";
+import { sceneBlokComponents } from "./bloks/scene";
 import { shadcnComposableComponents } from "./bloks";
 import { standardBlokFunctions } from "./functions";
 import {
@@ -18,7 +19,12 @@ import {
  */
 export const defaultBlokCatalog: BlokCatalog = createBlokCatalog(
   "https://arkitekt.live/catalogs/v1.json",
-  [...shadcnComposableComponents, ...logoBlokComponents, RawInspector],
+  [
+    ...shadcnComposableComponents,
+    ...sceneBlokComponents,
+    ...logoBlokComponents,
+    RawInspector,
+  ],
   standardBlokFunctions,
 );
 
