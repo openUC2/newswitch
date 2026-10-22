@@ -23,7 +23,18 @@ import { cn } from "@/lib/utils";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { LanguageMenu } from "./LanguageMenu";
 
-export function AccountMenu({ className }: { className?: string }) {
+/**
+ * The account menu and the language menu. `corner` (the default) floats them in the
+ * top-right corner; `inline` places them in a bar (the microscope's bottom bar).
+ */
+export function AccountMenu({
+  className,
+  placement = "corner",
+}: {
+  className?: string;
+  placement?: "corner" | "inline";
+}) {
+  const inline = placement === "inline";
   const { username, role, logout } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -39,14 +50,16 @@ export function AccountMenu({ className }: { className?: string }) {
             size="icon"
             aria-label={t("auth.accountMenu")}
             className={cn(
-              "fixed right-3 top-3 z-50 h-8 w-8 bg-background/70 backdrop-blur hover:bg-background",
+              inline
+                ? "h-8 w-8"
+                : "fixed right-3 top-3 z-50 h-8 w-8 bg-background/70 backdrop-blur hover:bg-background",
               className,
             )}
           >
             <ShieldUser className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" side={inline ? "top" : "bottom"}>
           {username && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
               {username} · {role ? t(`roles.${role}`) : ""}
@@ -76,7 +89,13 @@ export function AccountMenu({ className }: { className?: string }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <LanguageMenu className="fixed right-12 top-3 z-50 hover:bg-background" />
+      <LanguageMenu
+        className={
+          inline
+            ? "order-first"
+            : "fixed right-12 top-3 z-50 hover:bg-background"
+        }
+      />
       <ChangePasswordDialog
         open={passwordDialogOpen}
         onOpenChange={setPasswordDialogOpen}

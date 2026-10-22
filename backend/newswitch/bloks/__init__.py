@@ -1,9 +1,11 @@
 """The UI the backend declares: the newswitch blok catalog and the bloks built in it.
 
-`declare_ui` declares the catalog, the bloks every setup has (``jonda``), and the one UI
-`ImswitchConfig.ui` chooses as the default blok: ``standard``, ``minimal`` or ``design``
-(a microscope described by an optikit design, see `newswitch.bloks.design`). Only that one
-is declared.
+`declare_ui` declares the catalog, the bloks every setup has (``jonda``), and the views
+the frontend's bottom bar switches between (bloks keyed ``view-…``, whose description
+starts with their tab's label). `ImswitchConfig.ui` chooses the set and the view shown
+first: ``standard`` (Standard, Minimal), ``minimal`` (Minimal, Standard) or ``design``
+(3D, Stage, Minimal: a microscope described by an optikit design, see
+`newswitch.bloks.design`).
 
 `nsapp` is one per process, so the UI is declared once: `create_app` calls this before
 serving, and a second call with the same choice does nothing.
@@ -33,20 +35,18 @@ def declare_ui(config: ImswitchConfig) -> None:
         return
 
     declare_catalog()
-    from newswitch.bloks import jonda  # noqa: F401  (declaration side effect)
+    from newswitch.bloks import jonda, minimal, standard, stage_view  # noqa: F401
 
-    if config.ui == "standard":
-        from newswitch.bloks import standard
-
-        standard.declare()
-    elif config.ui == "minimal":
-        from newswitch.bloks import minimal
-
-        minimal.declare()
-    else:
+    # The views the bottom bar switches between; `ui` chooses the one shown first.
+    if config.ui == "design":
         from newswitch.bloks import design
         from newswitch.design.config import design_config
 
         assert config.design is not None  # ImswitchConfig refuses ui=design without one
         design.declare(config.design, design_config(config.design), CATALOG_NAME)
+        stage_view.declare(default=False)
+        minimal.declare(default=False)
+    else:
+        standard.declare(default=config.ui == "standard")
+        minimal.declare(default=config.ui == "minimal")
     _declared = choice

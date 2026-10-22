@@ -13,15 +13,17 @@ declare_ui(ImswitchConfig(config_file=None))
 
 
 def test_the_standard_blok_is_the_default_ui_in_the_newswitch_catalog() -> None:
-    """The frontend shows `standard`: the one default HTML blok, in the newswitch catalog."""
+    """The frontend shows `view-standard` first: the one default HTML blok, in the newswitch catalog."""
     bloks = nsapp.registry.get_declared_bloks()
 
-    standard = bloks["standard"]
+    standard = bloks["view-standard"]
     assert standard.catalog == CATALOG_NAME
     assert standard.context == "HTML"
     assert standard.default is True
     defaults = [key for key, blok in bloks.items() if blok.default and blok.context == "HTML"]
-    assert defaults == ["standard"]
+    assert defaults == ["view-standard"]
+    # The views the bottom bar switches between.
+    assert {"view-standard", "view-minimal"} <= set(bloks)
 
 
 @pytest.mark.parametrize(

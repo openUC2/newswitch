@@ -4,6 +4,7 @@ import type { TransportSocketConnectionState } from "@/lib/arkitekt/transport/ty
 import {
   BackendUiProvider,
   defaultBlokOf,
+  viewsOf,
   useBackendUi,
   type BackendBlok,
 } from "./backendUi";
@@ -121,5 +122,18 @@ describe("backend UI", () => {
       })?.key,
     ).toBe("design");
     expect(defaultBlokOf({ jonda: blok("jonda") })).toBeUndefined();
+  });
+
+  it("lists the views, labelled by their description", () => {
+    const views = viewsOf({
+      "view-3d": blok("view-3d", { description: "3D: the microscope" }),
+      jonda: blok("jonda"),
+      "view-minimal": blok("view-minimal", { description: "No colon here" }),
+      "view-logo": blok("view-logo", { context: "LOGO" }),
+    });
+    expect(views.map((view) => [view.key, view.label])).toEqual([
+      ["view-3d", "3D"],
+      ["view-minimal", "Minimal"],
+    ]);
   });
 });

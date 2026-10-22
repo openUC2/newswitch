@@ -149,11 +149,11 @@ def declared_bloks(**config: str) -> dict:
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
-def test_the_minimal_ui_is_the_only_default() -> None:
-    """ui=minimal declares the minimal UI and not the standard one."""
+def test_ui_minimal_shows_the_minimal_view_first() -> None:
+    """ui=minimal: the minimal view is the default, the standard one a tab beside it."""
     bloks = declared_bloks(ui="minimal")
-    assert bloks["minimal"] == ["newswitch", True]
-    assert "standard" not in bloks
+    assert bloks["view-minimal"] == ["newswitch", True]
+    assert bloks["view-standard"] == ["newswitch", False]
 
 
 @needs_design
@@ -161,6 +161,8 @@ def test_the_design_ui_shows_the_designs_devices() -> None:
     """ui=design declares the design's UI and a card per device it has."""
     pytest.importorskip("pyvista")
     bloks = declared_bloks(ui="design", design=str(FLUORESCENCE))
-    assert bloks["design"] == ["newswitch", True]
+    assert bloks["view-3d"] == ["newswitch", True]
+    assert bloks["view-stage"] == ["newswitch", False]
+    assert bloks["view-minimal"] == ["newswitch", False]
     assert {"design-camera", "design-laser", "design-stage"} <= set(bloks)
-    assert "standard" not in bloks and "minimal" not in bloks
+    assert "view-standard" not in bloks

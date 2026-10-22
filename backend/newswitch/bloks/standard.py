@@ -55,14 +55,14 @@ STANDARD_UI = """
 """
 
 
-def declare() -> None:
-    """Declare the standard UI as the default blok."""
+def declare(default: bool) -> None:
+    """Declare the standard view."""
     nsapp.blok(
-        "standard",
+        "view-standard",
         bsx(STANDARD_UI),
-        description="The default newswitch microscope UI.",
+        description="Standard: settings, the stage view with its images, acquisition.",
         catalog=CATALOG_NAME,
         context="html",
-        default=True,
+        default=default,
         mode="strict",
     )

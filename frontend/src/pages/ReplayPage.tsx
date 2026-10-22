@@ -10,7 +10,7 @@ import { CurrentLightPathPlane } from "@/components/stage/planes/lightpath/Light
 
 export function ReplayPage() {
   return (
-    <div className="h-screen bg-background text-foreground dark w-screen overflow-hidden">
+    <div className="h-full bg-background text-foreground dark w-full overflow-hidden">
       <PanelProvider>
         <KeyboardModeController />
         <SceneWrapper>

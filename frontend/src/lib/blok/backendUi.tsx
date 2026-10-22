@@ -118,3 +118,29 @@ export const defaultBlokOf = (
   Object.values(bloks).find(
     (blok) => blok.default === true && (blok.context ?? "HTML") === "HTML",
   );
+
+/** A view the bottom bar switches between: a blok keyed `view-…`, labelled by its description. */
+export type BackendView = { key: string; label: string; blok: BackendBlok };
+
+/**
+ * The backend's views, in the order it declares them. A view's label is what its
+ * description says before the first colon ("3D: the microscope …"), else its key.
+ */
+export const viewsOf = (bloks: Record<string, BackendBlok>): BackendView[] =>
+  Object.values(bloks)
+    .filter(
+      (blok) =>
+        blok.key.startsWith("view-") && (blok.context ?? "HTML") === "HTML",
+    )
+    .map((blok) => {
+      const fromDescription = blok.description?.split(":")[0]?.trim();
+      const fallback = blok.key.slice("view-".length);
+      return {
+        key: blok.key,
+        label:
+          fromDescription && fromDescription !== blok.description
+            ? fromDescription
+            : fallback.charAt(0).toUpperCase() + fallback.slice(1),
+        blok,
+      };
+    });

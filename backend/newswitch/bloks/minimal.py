@@ -1,7 +1,7 @@
-"""The minimal microscope UI: just a camera and a stage.
+"""The minimal view: just the live image and the stage.
 
-The camera's controls on the left, the stage view in the middle (the stage, its axes, the
-live image and the frames taken), the stage's controls on the right.
+The live view fills the screen, with buttons to start and stop it; the stage's controls
+sit beside it. For moving around a sample by eye.
 """
 
 from arkitekt import bsx
@@ -11,44 +11,37 @@ from newswitch.bloks.catalog import CATALOG_NAME
 
 MINIMAL_UI = """
 <Resizable direction="row" className="h-full w-full">
-    <ResizablePanel defaultSize="22" minSize="15" maxSize="35">
-        <ScrollArea className="h-full">
-            <div className="p-4 past:opacity-70 past:grayscale"><CameraControl className="locked:opacity-60" /></div>
-        </ScrollArea>
-    </ResizablePanel>
-    <ResizableHandle withHandle="true" />
-    <ResizablePanel defaultSize="53">
-        <div className="flex h-full flex-col overflow-hidden bg-muted/30">
-            <StageView className="flex-1">
-                <StageScene>
-                    <StageAxis />
-                    <StagePlane />
-                    <LivesLayer />
-                    <FramesLayer />
-                    <StagePositioner />
-                </StageScene>
-                <SceneOverlay />
-            </StageView>
+    <ResizablePanel defaultSize="70">
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex gap-2 past:hidden">
+                <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
+                <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
+                <LiveView className="h-full" />
+            </div>
         </div>
     </ResizablePanel>
     <ResizableHandle withHandle="true" />
-    <ResizablePanel defaultSize="25" minSize="15" maxSize="40">
+    <ResizablePanel defaultSize="30" minSize="20" maxSize="45">
         <ScrollArea className="h-full">
-            <div className="p-4 past:opacity-70 past:grayscale"><StageControl className="locked:opacity-60" /></div>
+            <div className="p-4 past:opacity-70 past:grayscale">
+                <StageControl className="locked:opacity-60" />
+            </div>
         </ScrollArea>
     </ResizablePanel>
 </Resizable>
 """
 
 
-def declare() -> None:
-    """Declare the minimal UI as the default blok."""
+def declare(default: bool) -> None:
+    """Declare the minimal view."""
     nsapp.blok(
-        "minimal",
+        "view-minimal",
         bsx(MINIMAL_UI),
-        description="A minimal microscope: just a camera and a stage.",
+        description="Minimal: the live image and the stage, nothing else.",
         catalog=CATALOG_NAME,
         context="html",
-        default=True,
+        default=default,
         mode="strict",
     )

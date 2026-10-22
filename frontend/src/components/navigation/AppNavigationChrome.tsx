@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AccountMenu } from "./AccountMenu";
+import { BottomBarSlotContext } from "./bottomBar";
 import { useAppStateContext } from "@/lib/arkitekt/app-state/app-state-context";
 import {
   selectLatestPatches,
@@ -492,97 +493,87 @@ function TimelineFloater() {
         ) : null}
       </AnimatePresence>
 
-      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-end">
-        <motion.div
-          layout
-          transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className={cn(
-            "dark pointer-events-auto flex items-center gap-3 overflow-hidden border bg-background/90 p-1.5 shadow-2xl backdrop-blur-xl",
-            mode === "timeline"
-              ? "w-full max-w-4xl rounded-2xl border-amber-400/40"
-              : "rounded-full border-border/60",
-          )}
-        >
-          <AnimatePresence initial={false}>
-            {mode === "timeline" && timelineBounds && selectedMs != null ? (
-              <motion.div
-                key="timeline-expanded"
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "100%" }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 30 }}
-                className="min-w-0 flex-1"
-              >
-                <div className="flex min-w-0 flex-col gap-2 py-1.5 pl-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="flex items-center gap-1.5 rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-                        <History className="size-3" />
-                        {t("navigation.viewingPast")}
-                      </span>
-                      <span className="truncate text-sm font-medium tabular-nums text-foreground">
-                        {formatTimelineLabel(selectedMs, i18n.resolvedLanguage)}
-                      </span>
-                      {isCheckingOut ? (
-                        <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                      {selectedRevisions.map(({ appKey, revision }) => (
-                        <span
-                          key={`${appKey}:${revision}`}
-                          className="rounded-md border border-border/60 px-1.5 py-0.5 font-mono"
-                          title={appKey}
-                        >
-                          {t("navigation.revision")} {revision}
-                        </span>
-                      ))}
-                    </div>
+      {/* The timeline floats just above the bottom bar while replaying. */}
+      <div className="pointer-events-none fixed inset-x-4 bottom-16 z-50 flex justify-end">
+        <AnimatePresence initial={false}>
+          {mode === "timeline" && timelineBounds && selectedMs != null ? (
+            <motion.div
+              key="timeline-expanded"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="dark pointer-events-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-amber-400/40 bg-background/90 shadow-2xl backdrop-blur-xl"
+            >
+              <div className="flex min-w-0 flex-col gap-2 px-4 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex items-center gap-1.5 rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                      <History className="size-3" />
+                      {t("navigation.viewingPast")}
+                    </span>
+                    <span className="truncate text-sm font-medium tabular-nums text-foreground">
+                      {formatTimelineLabel(selectedMs, i18n.resolvedLanguage)}
+                    </span>
+                    {isCheckingOut ? (
+                      <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+                    ) : null}
                   </div>
-
-                  <Slider
-                    value={sliderValue}
-                    onValueChange={onSliderChange}
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    className="w-full [&_[data-slot=slider-range]]:bg-amber-400 [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:border-amber-400 [&_[data-slot=slider-track]]:h-1.5"
-                    aria-label={t("navigation.timelinePosition")}
-                  />
-
-                  <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                    <span>
-                      {t("navigation.sessionStart")} ·{" "}
-                      {formatTimelineLabel(
-                        timelineBounds.startMs,
-                        i18n.resolvedLanguage,
-                      )}
-                    </span>
-                    <span>{t("navigation.pastPaused")}</span>
-                    <span>
-                      {formatTimelineLabel(
-                        timelineBounds.endMs,
-                        i18n.resolvedLanguage,
-                      )}
-                    </span>
+                  <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                    {selectedRevisions.map(({ appKey, revision }) => (
+                      <span
+                        key={`${appKey}:${revision}`}
+                        className="rounded-md border border-border/60 px-1.5 py-0.5 font-mono"
+                        title={appKey}
+                      >
+                        {t("navigation.revision")} {revision}
+                      </span>
+                    ))}
                   </div>
                 </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
 
-          <ModeSwitch
-            mode={mode}
-            busy={isPreparingTimeline || isReturningToLive}
-            onLive={() => {
-              if (mode === "timeline") void returnToLive();
-            }}
-            onReplay={() => {
-              if (mode !== "timeline") void loadTimeline();
-            }}
-          />
-        </motion.div>
+                <Slider
+                  value={sliderValue}
+                  onValueChange={onSliderChange}
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  className="w-full [&_[data-slot=slider-range]]:bg-amber-400 [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:border-amber-400 [&_[data-slot=slider-track]]:h-1.5"
+                  aria-label={t("navigation.timelinePosition")}
+                />
+
+                <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
+                  <span>
+                    {t("navigation.sessionStart")} ·{" "}
+                    {formatTimelineLabel(
+                      timelineBounds.startMs,
+                      i18n.resolvedLanguage,
+                    )}
+                  </span>
+                  <span>{t("navigation.pastPaused")}</span>
+                  <span>
+                    {formatTimelineLabel(
+                      timelineBounds.endMs,
+                      i18n.resolvedLanguage,
+                    )}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
+
+      <ModeSwitch
+        mode={mode}
+        busy={isPreparingTimeline || isReturningToLive}
+        onLive={() => {
+          if (mode === "timeline") void returnToLive();
+        }}
+        onReplay={() => {
+          if (mode !== "timeline") void loadTimeline();
+        }}
+      />
     </>
   );
 }
@@ -688,12 +679,29 @@ function ModeSwitch({
   );
 }
 
+/**
+ * The microscope pages: the page above, one bar at the bottom. The bar holds what the
+ * page puts in it (its views), the live/replay switch, the language and the account.
+ */
 export function AppNavigationChrome({ children }: { children: ReactNode }) {
+  const [slot, setSlot] = useState<ReactNode | null>(null);
+
   return (
-    <>
-      <TimelineFloater />
-      <AccountMenu />
-      {children}
-    </>
+    <BottomBarSlotContext.Provider value={setSlot}>
+      <div className="dark flex h-screen flex-col bg-background text-foreground">
+        <div className="relative min-h-0 flex-1">{children}</div>
+        <nav
+          aria-label="Bottom bar"
+          className="flex h-14 shrink-0 items-center gap-2 border-t border-border/60 bg-background/95 px-3 backdrop-blur"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {slot}
+          </div>
+          <TimelineFloater />
+          <div className="h-6 w-px bg-border/60" />
+          <AccountMenu placement="inline" />
+        </nav>
+      </div>
+    </BottomBarSlotContext.Provider>
   );
 }

@@ -2,8 +2,8 @@
 
 The design's 3D model is the main stage: its stage parts move with `StageState`, its
 laser glows while on, its camera glows while acquiring (with the live view popping out),
-and a click on a device opens its controls. Beside it are the controls of the devices the
-design has, and only those.
+and a click on a device opens its controls (cards for the devices the design has, and only
+those). Nothing else is on screen; the bottom bar switches to the other views.
 
 A design may bring its own UI: a ``newswitch-ui.bsx`` in its folder is the default blok
 then (checked against the newswitch catalog like any other), and the design is the source
@@ -105,37 +105,15 @@ def scene_tree(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
     )
 
 
-def controls(config: NewswitchConfig) -> list[str]:
-    """The control panels of the devices the configuration has, camera first."""
-    panels = []
-    if adapters.detectors(config) is not None:
-        panels.append('<CameraControl className="locked:opacity-60" />')
-        panels.append(LIVE_BUTTONS)
-    if adapters.illuminations(config) is not None:
-        panels.append('<IlluminationControl className="locked:opacity-60" />')
-    if adapters.motion_stage(config) is not None:
-        panels.append('<StageControl className="locked:opacity-60" />')
-    return panels
-
-
 def design_ui(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
-    """The generated UI: the 3D microscope on the main stage, its controls beside it."""
-    panels = "\n                ".join(controls(config))
+    """The generated UI: the 3D microscope, nothing else on screen.
+
+    A device's controls open where it is clicked (its card: `CAMERA_CARD`, `LASER_CARD`,
+    `STAGE_CARD`), and the live view floats at the camera while it acquires.
+    """
     return f"""
-<Resizable direction="row" className="h-full w-full">
-    <ResizablePanel defaultSize="70">
-        <div className="h-full w-full bg-muted/30">{scene_tree(dsn, model, config)}
-        </div>
-    </ResizablePanel>
-    <ResizableHandle withHandle="true" />
-    <ResizablePanel defaultSize="30" minSize="20" maxSize="45">
-        <ScrollArea className="h-full">
-            <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
-                {panels}
-            </div>
-        </ScrollArea>
-    </ResizablePanel>
-</Resizable>
+<div className="h-full w-full overflow-hidden bg-muted/30">{scene_tree(dsn, model, config)}
+</div>
 """
 
 
@@ -147,18 +125,30 @@ def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
 
     cards = {
         CAMERA_CARD: (
-            "<div className='flex flex-col gap-4'><CameraControl /><div className='aspect-video w-[360px]'><LiveView /></div></div>",
+            f"""<div className="flex w-[380px] flex-col gap-3 past:opacity-80 past:grayscale">
+                <CameraControl className="locked:opacity-60" />
+                {LIVE_BUTTONS}
+                <div className="aspect-video w-full overflow-hidden rounded-md past:hidden"><LiveView /></div>
+            </div>""",
             adapters.detectors(config),
         ),
-        LASER_CARD: ("<IlluminationControl />", adapters.illuminations(config)),
-        STAGE_CARD: ("<StageControl />", adapters.motion_stage(config)),
+        LASER_CARD: (
+            '<div className="w-[340px] past:opacity-80 past:grayscale">'
+            '<IlluminationControl className="locked:opacity-60" /></div>',
+            adapters.illuminations(config),
+        ),
+        STAGE_CARD: (
+            '<div className="w-[400px] past:opacity-80 past:grayscale">'
+            '<StageControl className="locked:opacity-60" /></div>',
+            adapters.motion_stage(config),
+        ),
     }
     for name, (tree, present) in cards.items():
         if present is not None:
             nsapp.blok(
                 name,
                 bsx(tree),
-                description=f"The design's {name.removeprefix('design-')}.",
+                description=f"The design's {name.removeprefix('design-')}: opens where it is clicked.",
                 catalog=catalog,
                 mode="strict",
             )
@@ -166,9 +156,9 @@ def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
     own = dsn / DESIGN_UI_FILE
     tree = own.read_text(encoding="utf-8") if own.is_file() else design_ui(dsn, model, config)
     nsapp.blok(
-        "design",
+        "view-3d",
         bsx(tree),
-        description=f"The microscope of the design {dsn.name}: in 3D, with its controls.",
+        description=f"3D: the microscope of the design {dsn.name}; click a device for its controls.",
         catalog=catalog,
         context="html",
         default=True,
