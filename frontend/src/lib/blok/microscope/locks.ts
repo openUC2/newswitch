@@ -8,6 +8,7 @@
  */
 import { useMemo } from "react";
 import { appDefinition } from "@/apps/default/app";
+import { selectAppIsLive, useAppStateStore } from "@/lib/arkitekt/app-state";
 import { getBlockingLock, useLockStore } from "@/lib/arkitekt/locks/store";
 
 const APP_KEY = appDefinition.key;
@@ -33,3 +34,11 @@ export function usePanelLocked(actions: readonly string[]): string | undefined {
     return lockKey ? `${lockKey} is held by task ${lockingTaskId}` : undefined;
   });
 }
+
+/** Whether the app shows the live microscope (not the replay timeline's past). */
+export const useIsLive = (): boolean =>
+  useAppStateStore(APP_KEY, selectAppIsLive);
+
+/** Why a control cannot be used in the past: what replay shows already happened. */
+export const PAST_REASON =
+  "Replay: this shows the past, nothing can be changed";

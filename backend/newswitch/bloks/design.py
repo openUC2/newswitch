@@ -33,7 +33,7 @@ LASER_CARD = "design-laser"
 
 #: Starting and stopping the live view: the camera glows while it streams, and the stream
 #: floats at it.
-LIVE_BUTTONS = """<div className="flex gap-2">
+LIVE_BUTTONS = """<div className="flex gap-2 past:hidden">
                     <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
                     <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
                 </div>"""

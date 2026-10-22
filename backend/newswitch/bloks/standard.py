@@ -45,8 +45,8 @@ STANDARD_UI = """
         <ScrollArea className="h-full">
             <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
-                <MultidimensionalAcquisitionControl className="locked:opacity-60" />
-                <CalibrateLightPath className="locked:opacity-60" />
+                <MultidimensionalAcquisitionControl className="locked:opacity-60 past:hidden" />
+                <CalibrateLightPath className="locked:opacity-60 past:hidden" />
                 <BloksPanel />
             </div>
         </ScrollArea>

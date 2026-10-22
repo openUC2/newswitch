@@ -34,6 +34,7 @@ import {
   classNameSchema,
 } from "@/lib/blok/renderer/bloks/shared/schemas";
 import { cn } from "@/lib/utils";
+import { useIsLive } from "./locks";
 
 export const StageView = createBlokComponent(
   {
@@ -119,11 +120,16 @@ export const StageScene = createBlokComponent(
   },
 );
 
-/** A panel floating over the scene; it places itself, so it takes no props. */
+/**
+ * A panel floating over the scene; it places itself, so it takes no props. An
+ * `interactive` one changes the microscope (starts a scan): it is not shown in the
+ * past (replay), where nothing can be changed.
+ */
 const floaterBlok = (
   name: string,
   description: string,
   Floater: React.ComponentType,
+  interactive = false,
 ): BlokComponentDefinition =>
   createBlokComponent(
     {
@@ -131,7 +137,10 @@ const floaterBlok = (
       placement: { downstreamOf: ["StageView"] },
       schema: z.object({}).describe(description),
     },
-    () => <Floater />,
+    () => {
+      const live = useIsLive();
+      return interactive && !live ? null : <Floater />;
+    },
   );
 
 export const stageBlokComponents: BlokComponentDefinition[] = [
@@ -141,6 +150,7 @@ export const stageBlokComponents: BlokComponentDefinition[] = [
     "ScanRegionPanel",
     "Edits the selected scan region and starts its scan.",
     ScanRegionPanel,
+    true,
   ),
   floaterBlok(
     "ImageMetadataPanel",

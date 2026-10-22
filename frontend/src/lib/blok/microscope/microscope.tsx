@@ -27,12 +27,14 @@ import {
   type BlokComponentDefinition,
 } from "@/lib/blok/renderer/runtime";
 import { classNameSchema } from "@/lib/blok/renderer/bloks/shared/schemas";
-import { usePanelLocked } from "./locks";
+import { PAST_REASON, useIsLive, usePanelLocked } from "./locks";
 
 /**
  * A blok placing `Panel` in a `div` that takes the blok's `className`. `actions` are
  * the backend actions the panel runs: while a lock one of them takes is held, the div
- * is marked `data-locked` (the `locked:` variant).
+ * is marked `data-locked` (the `locked:` variant). A panel that runs actions cannot be
+ * used in the past (replay): it is made `inert` then, so neither a click nor the
+ * keyboard reaches its controls.
  */
 const panelBlok = (
   name: string,
@@ -49,11 +51,13 @@ const panelBlok = (
       const blok = useBlok(component, schema);
       const className = useValue(blok.className);
       const locked = usePanelLocked(actions);
+      const past = !useIsLive() && actions.length > 0;
       return (
         <div
           className={className}
           data-locked={locked ? "" : undefined}
-          title={locked}
+          inert={past}
+          title={past ? PAST_REASON : locked}
         >
           <Panel />
         </div>

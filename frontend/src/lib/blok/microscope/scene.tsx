@@ -17,11 +17,18 @@ import {
   createBlokComponent,
   type BlokComponentDefinition,
 } from "@/lib/blok/renderer/runtime";
+import { useIsLive } from "./locks";
 
+/**
+ * A layer of the stage scene. An `interactive` one changes the microscope (moves the
+ * stage, draws a scan region): it is not drawn in the past (replay), where nothing can
+ * be changed.
+ */
 const layerBlok = (
   name: string,
   description: string,
   Layer: React.ComponentType,
+  interactive = false,
 ): BlokComponentDefinition =>
   createBlokComponent(
     {
@@ -29,7 +36,10 @@ const layerBlok = (
       placement: { context: "scene", downstreamOf: ["StageScene"] },
       schema: z.object({}).describe(description),
     },
-    () => <Layer />,
+    () => {
+      const live = useIsLive();
+      return interactive && !live ? null : <Layer />;
+    },
   );
 
 export const sceneBlokComponents: BlokComponentDefinition[] = [
@@ -68,10 +78,12 @@ export const sceneBlokComponents: BlokComponentDefinition[] = [
     "StagePositioner",
     "In move mode (hold M), click the scene to move the stage there.",
     StagePositioner,
+    true,
   ),
   layerBlok(
     "RectangleDrawer",
     "In scan mode (hold D), draw a rectangle to define a scan region.",
     RectangleDrawer,
+    true,
   ),
 ];
