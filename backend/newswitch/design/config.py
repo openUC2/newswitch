@@ -78,20 +78,39 @@ def _laser(config: dict[str, Any]) -> dict[str, Any]:
     return source
 
 
-def _stage(key: str, config: dict[str, Any], bindings: dict[str, str]) -> dict[str, dict[str, Any]]:
-    """A v0.1 stage: one ``axis`` device per axis, and the ``stage`` naming them."""
+def _input_reach_um(inputs: dict[str, Any], name: str | None) -> float | None:
+    """How far a design input reaches, in um (its ``max`` in its ``units``), if it says."""
+    declared = inputs.get(name or "") or {}
+    unit = optikit.LENGTH_UNITS.get(str(declared.get("units") or "mm"))
+    if declared.get("max") is None or unit is None:
+        return None
+    return float(declared["max"]) * unit * 1000.0  # LENGTH_UNITS are mm per unit
+
+
+def _stage(
+    key: str, config: dict[str, Any], bindings: dict[str, str], inputs: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """A v0.1 stage: one ``axis`` device per axis, and the ``stage`` naming them.
+
+    An axis reaches as far as the device travels and the design's input allows, whichever
+    is less: the model only shows the stage within the design's range.
+    """
     devices: dict[str, dict[str, Any]] = {}
     axes: dict[str, str] = {}
     speed = config.get("max_speed_um_per_sec")
     for axis in config.get("axes") or []:
         label = str(axis["label"])
         axis_key = f"{key}-{label}"
+        travel = float(axis.get("travel_um") or 0.0)
+        reach = _input_reach_um(inputs, bindings.get(label))
+        if reach is not None:
+            travel = min(travel, reach) if travel else reach
         device: dict[str, Any] = {
             "type": "axis",
             "steps_per_um": axis.get("steps_per_um"),
             "inverted": bool(axis.get("inverted", False)),
             "homing_required": bool(config.get("homing_required", False)),
-            "pos": {"min": 0.0, "max": float(axis.get("travel_um") or 0.0), "unit": "um"},
+            "pos": {"min": 0.0, "max": travel, "unit": "um"},
         }
         if speed:
             device["vel"] = {"value": float(speed), "unit": "um/s"}
@@ -130,8 +149,14 @@ def _controller(config: dict[str, Any]) -> dict[str, Any]:
     return controller
 
 
-def device_tree(design_devices: list[optikit.Device]) -> dict[str, Any]:
-    """The newswitch configuration document for a design's devices."""
+def device_tree(
+    design_devices: list[optikit.Device], inputs: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The newswitch configuration document for a design's devices.
+
+    ``inputs`` are the design's input declarations (their ranges limit the stage axes).
+    """
+    inputs = inputs or {}
     devices: dict[str, Any] = {}
     for device in design_devices:
         config = dict(device.config)
@@ -144,7 +169,7 @@ def device_tree(design_devices: list[optikit.Device]) -> dict[str, Any]:
         elif device.type == "laser":
             devices[device.id] = _laser(config)
         elif device.type == "stage":
-            devices.update(_stage(device.id, config, device.bindings))
+            devices.update(_stage(device.id, config, device.bindings, inputs))
         elif device.type == "controller":
             devices[device.id] = _controller(config)
         else:
@@ -163,4 +188,5 @@ def design_config(dsn: str | Path) -> config_io.NewswitchConfig:
         config_io.ConfigError: The result does not validate.
     """
     dsn = Path(dsn)
-    return config_io.parse_tree(device_tree(optikit.devices(dsn)), name=f"design {dsn.name}")
+    tree = device_tree(optikit.devices(dsn), optikit.load_design(dsn).inputs)
+    return config_io.parse_tree(tree, name=f"design {dsn.name}")
