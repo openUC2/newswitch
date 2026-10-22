@@ -1,3 +1,4 @@
+import { BloksPanel } from "../components/bloks/BloksPanel";
 import {
   MultidimensionalAcquisitionControl,
   SettingsPanel,
@@ -34,6 +35,7 @@ export function IndexPage() {
             <StageControl />
             <MultidimensionalAcquisitionControl />
             <CalibrateLightPath />
+            <BloksPanel />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
