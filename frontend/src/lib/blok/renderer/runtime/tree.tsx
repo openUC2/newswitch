@@ -24,12 +24,18 @@ const EMPTY_TRAIL: ReadonlyArray<string> = Object.freeze([]);
 const BlokTrailContext =
   React.createContext<ReadonlyArray<string>>(EMPTY_TRAIL);
 
+/**
+ * A tree's nodes. A tree rendered inside another (a blok opened from a scene) starts
+ * its own trail: its ids are its own, and may repeat the outer tree's.
+ */
 export const BlokTreeProvider = (props: {
   tree: BlokTree;
   children: React.ReactNode;
 }) => (
   <BlokTreeContext.Provider value={props.tree}>
-    {props.children}
+    <BlokTrailContext.Provider value={EMPTY_TRAIL}>
+      {props.children}
+    </BlokTrailContext.Provider>
   </BlokTreeContext.Provider>
 );
 

@@ -37,6 +37,7 @@ STAGE_UI = """
         <ScrollArea className="h-full">
             <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
+                <div className="past:hidden"><Button label="Acquire image" icon="camera" className="w-full" onClick="@self.capture_image()" /></div>
                 <CameraControl className="locked:opacity-60" />
             </div>
         </ScrollArea>

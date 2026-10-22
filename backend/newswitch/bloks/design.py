@@ -38,6 +38,11 @@ LIVE_BUTTONS = """<div className="flex gap-2 past:hidden">
                     <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
                 </div>"""
 
+#: Taking an image where the stage is: below the stage's controls.
+ACQUIRE_BUTTON = """<div className="past:hidden">
+                    <Button label="Acquire image" icon="camera" className="w-full" onClick="@self.capture_image()" />
+                </div>"""
+
 #: The live view floating at the camera while it acquires.
 LIVE_POPOUT = """
 <Popout node="{node}" open="@self.CameraState.is_acquiring">
@@ -138,8 +143,10 @@ def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
             adapters.illuminations(config),
         ),
         STAGE_CARD: (
-            '<div className="w-[400px] past:opacity-80 past:grayscale">'
-            '<StageControl className="locked:opacity-60" /></div>',
+            f"""<div className="flex w-[400px] flex-col gap-3 past:opacity-80 past:grayscale">
+                <StageControl className="locked:opacity-60" />
+                {ACQUIRE_BUTTON}
+            </div>""",
             adapters.motion_stage(config),
         ),
     }

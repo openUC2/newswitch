@@ -27,6 +27,7 @@ MINIMAL_UI = """
         <ScrollArea className="h-full">
             <div className="p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
+                <div className="past:hidden"><Button label="Acquire image" icon="camera" className="w-full" onClick="@self.capture_image()" /></div>
             </div>
         </ScrollArea>
     </ResizablePanel>

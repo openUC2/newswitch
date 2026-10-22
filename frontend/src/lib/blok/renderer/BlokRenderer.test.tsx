@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import * as z from "zod";
 import BlokRenderer from "./BlokRenderer";
+import { defaultBlokCatalog } from "./catalog";
+import { createBlokCatalog } from "./runtime/functions";
+import { createBlokComponent } from "./runtime";
 
 afterEach(cleanup);
 
@@ -35,5 +39,41 @@ describe("BlokRenderer", () => {
     expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+
+  it("renders a blok opened inside another, whose ids repeat the outer one's", () => {
+    // A card opened from a scene is its own blok: its root `div` is not the outer `div`.
+    const card = [
+      {
+        id: "div",
+        component: "Text",
+        props: [{ key: "text", static_value: "card" }],
+      },
+    ];
+    const Opened = createBlokComponent(
+      { name: "Opened", schema: z.object({}) },
+      () => <BlokRenderer uiComponents={card} chrome="none" />,
+    );
+    const catalog = createBlokCatalog(
+      "test",
+      [...defaultBlokCatalog.components.values(), Opened],
+      defaultBlokCatalog.functionDefinitions,
+    );
+    render(
+      <BlokRenderer
+        catalog={catalog}
+        chrome="none"
+        uiComponents={[
+          {
+            id: "div",
+            component: "div",
+            props: [],
+            children: [{ id: "opened", component: "Opened", props: [] }],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText(/Recursive child reference/)).toBeNull();
+    expect(screen.getByText("card")).toBeTruthy();
   });
 });
