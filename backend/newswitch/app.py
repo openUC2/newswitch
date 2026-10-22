@@ -287,6 +287,8 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
                 min_a=stage_state.min_a,
                 max_a=stage_state.max_a,
             )
+            # The simulated stage travels at the slowest configured axis speed.
+            virtual_stage_config.speed_um_per_s = adapters.stage_speed(devices)
 
     # Which devices this microscope has: without a design all of them (each with its
     # built-in defaults when the device configuration lacks it); with a design only what it

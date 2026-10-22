@@ -14,6 +14,10 @@ from arkitekt import Task
 from newswitch.arkitekt_app import nsapp
 
 
+#: The most steps (state updates) a move at a configured speed takes.
+MAX_STEPS = 100
+
+
 @nsapp.model
 @dataclass
 class StageConfig:
@@ -30,6 +34,10 @@ class StageConfig:
     simulated_pos_sleep_per_micrometer: float = (
         0.1  # Sleep time to simulate movement delay (seconds)
     )
+    speed_um_per_s: float | None = None
+    """The speed of the simulated stage, when the device configuration gives one (an axis'
+    ``vel``): a move then takes as long as it would on the real stage, in at most
+    `MAX_STEPS` steps. None: every step takes `simulated_pos_sleep_per_micrometer`."""
     # PSF computation dimensions (height, width)
     psf_a_dimension: int = 128
     psf_b_dimension: int = 128
@@ -99,6 +107,12 @@ class VirtualStageManager:
             return
 
         num_steps = max(1, int(total_distance / step_size))
+        sleep_per_step = self.config.simulated_pos_sleep_per_micrometer
+        if self.config.speed_um_per_s:
+            # At a real stage's speed: few steps (state updates), so a long move does not
+            # flood the clients, each taking its share of the travel time.
+            num_steps = min(num_steps, MAX_STEPS)
+            sleep_per_step = total_distance / num_steps / self.config.speed_um_per_s
 
         # Calculate step increments
         step_x = dx / num_steps
@@ -110,7 +124,7 @@ class VirtualStageManager:
         for step in range(num_steps):
             if task is not None:
                 task.pausepoint()
-            koil.sleep(self.config.simulated_pos_sleep_per_micrometer)
+            koil.sleep(sleep_per_step)
 
             # Move and Clamp
             if x is not None:

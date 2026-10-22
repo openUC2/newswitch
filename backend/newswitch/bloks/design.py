@@ -31,10 +31,17 @@ CAMERA_CARD = "design-camera"
 STAGE_CARD = "design-stage"
 LASER_CARD = "design-laser"
 
+#: Starting and stopping the live view: the camera glows while it streams, and the stream
+#: floats at it.
+LIVE_BUTTONS = """<div className="flex gap-2">
+                    <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
+                    <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
+                </div>"""
+
 #: The live view floating at the camera while it acquires.
 LIVE_POPOUT = """
 <Popout node="{node}" open="@self.CameraState.is_acquiring">
-    <div className="w-[360px] overflow-hidden rounded-md"><LiveView /></div>
+    <div className="aspect-video w-[360px] overflow-hidden rounded-md"><LiveView /></div>
 </Popout>"""
 
 
@@ -103,6 +110,7 @@ def controls(config: NewswitchConfig) -> list[str]:
     panels = []
     if adapters.detectors(config) is not None:
         panels.append("<CameraControl />")
+        panels.append(LIVE_BUTTONS)
     if adapters.illuminations(config) is not None:
         panels.append("<IlluminationControl />")
     if adapters.motion_stage(config) is not None:
@@ -139,7 +147,7 @@ def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
 
     cards = {
         CAMERA_CARD: (
-            "<div className='flex flex-col gap-4'><CameraControl /><LiveView /></div>",
+            "<div className='flex flex-col gap-4'><CameraControl /><div className='aspect-video w-[360px]'><LiveView /></div></div>",
             adapters.detectors(config),
         ),
         LASER_CARD: ("<IlluminationControl />", adapters.illuminations(config)),

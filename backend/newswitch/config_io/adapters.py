@@ -349,6 +349,22 @@ class SerialSettings:
     baudrate: int
 
 
+def stage_speed(config: NewswitchConfig) -> float | None:
+    """The motion stage's speed in um/s: the slowest of its axes' ``vel``, or None.
+
+    What the virtual stage travels at, so a simulated move takes as long as a real one.
+    """
+    found = motion_stage(config)
+    if found is None:
+        return None
+    speeds = [
+        axis.vel.value
+        for axis in config.stage_axes(found[1]).values()
+        if axis.vel is not None and axis.vel.value
+    ]
+    return min(speeds) if speeds else None
+
+
 def serial_settings(config: NewswitchConfig) -> SerialSettings | None:
     """Serial settings of the first controller speaking uc2-rest over a serial port.
 
