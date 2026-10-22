@@ -27,6 +27,7 @@ import {
 import { useStateContext } from "@/lib/arkitekt/state";
 import { useTransport } from "@/lib/arkitekt/transport";
 import type { AppKey } from "@/lib/arkitekt/types";
+import type { JournalBounds } from "@/lib/arkitekt/transport/types";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
@@ -35,13 +36,13 @@ const TIMELINE_CHANGE_LIMIT = 8;
 
 type OverlayMode = "live" | "timeline";
 
+/** The span of an app's current journal session. */
 type AppTimelineBoundary = {
   appKey: AppKey;
   sessionId: string;
   startMs: number;
   endMs: number;
-  startRevision: number;
-  endRevision: number;
+  endPos: number;
 };
 
 const navigationItems = [
@@ -161,43 +162,20 @@ const fromPercent = (percent: number, min: number, max: number) => {
   return min + ((max - min) * percent) / 100;
 };
 
-const toRevisionAtTime = (boundary: AppTimelineBoundary, targetMs: number) => {
-  const clampedMs = clamp(targetMs, boundary.startMs, boundary.endMs);
-
-  if (boundary.endMs <= boundary.startMs) {
-    return boundary.endRevision;
-  }
-
-  const progress =
-    (clampedMs - boundary.startMs) / (boundary.endMs - boundary.startMs);
-
-  return Math.round(
-    boundary.startRevision +
-      progress * (boundary.endRevision - boundary.startRevision),
-  );
-};
-
 async function fetchTimelineBoundaries(
   appKeys: AppKey[],
-  fetchActiveSessionBoundaries: (appKey: AppKey) => Promise<{
-    sessionId: string;
-    sessionStart: Date;
-    sessionEnd: Date;
-    startRevision: number;
-    endRevision: number;
-  }>,
+  fetchJournalBounds: (appKey: AppKey) => Promise<JournalBounds>,
 ): Promise<AppTimelineBoundary[]> {
   return Promise.all(
     appKeys.map(async (appKey) => {
-      const session = await fetchActiveSessionBoundaries(appKey);
+      const bounds = await fetchJournalBounds(appKey);
 
       return {
         appKey,
-        sessionId: session.sessionId,
-        startMs: session.sessionStart.getTime(),
-        endMs: session.sessionEnd.getTime(),
-        startRevision: session.startRevision,
-        endRevision: session.endRevision,
+        sessionId: bounds.sessionId,
+        startMs: bounds.start.getTime(),
+        endMs: bounds.end.getTime(),
+        endPos: bounds.endPos,
       } satisfies AppTimelineBoundary;
     }),
   );
@@ -208,9 +186,11 @@ function resetTimelineState(
   setBoundaries: (boundaries: AppTimelineBoundary[]) => void,
   setSelectedMs: (value: number | null) => void,
   setDebouncedSelectedMs: (value: number | null) => void,
-  lastCheckoutRevisionRef: MutableRefObject<Partial<Record<AppKey, number>>>,
+  lastCheckoutMsRef: MutableRefObject<number | null>,
+  setShownPositions: (positions: Partial<Record<AppKey, number>>) => void,
 ) {
-  lastCheckoutRevisionRef.current = {};
+  lastCheckoutMsRef.current = null;
+  setShownPositions({});
   setMode("live");
   setBoundaries([]);
   setSelectedMs(null);
@@ -259,7 +239,7 @@ function TimelineFloater() {
   const appStateContext = useAppStateContext();
   const transport = useTransport();
   const stateContext = useStateContext();
-  const { fetchActiveSessionBoundaries } = transport;
+  const { fetchJournalBounds } = transport;
 
   const appKeys = useMemo(
     () => Object.keys(transport.apps) as AppKey[],
@@ -275,14 +255,17 @@ function TimelineFloater() {
   const [isPreparingTimeline, setIsPreparingTimeline] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isReturningToLive, setIsReturningToLive] = useState(false);
-  const lastCheckoutRevisionRef = useRef<Partial<Record<AppKey, number>>>({});
-  const checkoutRef = useRef(stateContext.checkout);
+  const lastCheckoutMsRef = useRef<number | null>(null);
+  const [shownPositions, setShownPositions] = useState<
+    Partial<Record<AppKey, number>>
+  >({});
+  const checkoutRef = useRef(stateContext.checkoutAt);
   const previousIsReplayRouteRef = useRef(false);
   const isReplayRoute = location.pathname === "/replay";
 
   useEffect(() => {
-    checkoutRef.current = stateContext.checkout;
-  }, [stateContext.checkout]);
+    checkoutRef.current = stateContext.checkoutAt;
+  }, [stateContext.checkoutAt]);
 
   const goLiveAll = useCallback(async () => {
     await Promise.all(
@@ -322,15 +305,15 @@ function TimelineFloater() {
   }, [selectedMs, timelineBounds]);
 
   const selectedRevisions = useMemo(() => {
-    if (mode !== "timeline" || selectedMs == null) {
+    if (mode !== "timeline") {
       return [] as Array<{ appKey: AppKey; revision: number }>;
     }
 
-    return boundaries.map((boundary) => ({
-      appKey: boundary.appKey,
-      revision: toRevisionAtTime(boundary, selectedMs),
-    }));
-  }, [boundaries, mode, selectedMs]);
+    return boundaries.flatMap((boundary) => {
+      const pos = shownPositions[boundary.appKey];
+      return pos == null ? [] : [{ appKey: boundary.appKey, revision: pos }];
+    });
+  }, [boundaries, mode, shownPositions]);
 
   useEffect(() => {
     if (appKeys.length === 0) {
@@ -364,7 +347,7 @@ function TimelineFloater() {
 
       const nextBoundaries = await fetchTimelineBoundaries(
         appKeys,
-        fetchActiveSessionBoundaries,
+        fetchJournalBounds,
       );
 
       if (nextBoundaries.length === 0) {
@@ -375,7 +358,8 @@ function TimelineFloater() {
         ...nextBoundaries.map((boundary) => boundary.endMs),
       );
 
-      lastCheckoutRevisionRef.current = {};
+      lastCheckoutMsRef.current = null;
+      setShownPositions({});
       setBoundaries(nextBoundaries);
       setSelectedMs(timelineEndMs);
       setDebouncedSelectedMs(timelineEndMs);
@@ -389,7 +373,7 @@ function TimelineFloater() {
     } finally {
       setIsPreparingTimeline(false);
     }
-  }, [appKeys, fetchActiveSessionBoundaries, goLiveAll, stopLiveAll, t]);
+  }, [appKeys, fetchJournalBounds, goLiveAll, stopLiveAll, t]);
 
   useEffect(() => {
     const wasReplayRoute = previousIsReplayRouteRef.current;
@@ -411,7 +395,8 @@ function TimelineFloater() {
         setBoundaries,
         setSelectedMs,
         setDebouncedSelectedMs,
-        lastCheckoutRevisionRef,
+        lastCheckoutMsRef,
+        setShownPositions,
       );
       await goLiveAll();
     } catch (error) {
@@ -438,26 +423,23 @@ function TimelineFloater() {
       setIsCheckingOut(true);
 
       try {
-        await Promise.all(
+        if (lastCheckoutMsRef.current === debouncedSelectedMs) {
+          return;
+        }
+        lastCheckoutMsRef.current = debouncedSelectedMs;
+
+        const positions = await Promise.all(
           boundaries.map(async (boundary) => {
-            const nextRevision = toRevisionAtTime(
-              boundary,
-              debouncedSelectedMs,
+            const at = new Date(
+              clamp(debouncedSelectedMs, boundary.startMs, boundary.endMs),
             );
-
-            if (
-              lastCheckoutRevisionRef.current[boundary.appKey] === nextRevision
-            ) {
-              return;
-            }
-
-            lastCheckoutRevisionRef.current[boundary.appKey] = nextRevision;
-
-            await checkoutRef.current(boundary.appKey, nextRevision, {
-              appKey: boundary.appKey,
-            });
+            const pos = await checkoutRef.current(boundary.appKey, at);
+            return [boundary.appKey, pos] as const;
           }),
         );
+        if (!cancelled) {
+          setShownPositions(Object.fromEntries(positions));
+        }
       } catch (error) {
         const message =
           error instanceof Error

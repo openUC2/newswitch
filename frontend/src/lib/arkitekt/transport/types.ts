@@ -12,7 +12,9 @@ export type TaskStatus =
   | "failed"
   | "cancelled"
   | "paused"
-  | "interrupted";
+  | "interrupted"
+  /** Waiting for a person to decide (`HELD`); `progressMessage` says why. */
+  | "held";
 
 export interface Task<TArgs = unknown, TReturn = unknown> {
   id: string;
@@ -210,6 +212,12 @@ export const TaskEventType = {
   APP_CANCELLED: "APP_CANCELLED",
   INTERRUPTED: "INTERRUPTED",
   HEARTBEAT_ANSWER: "HEARTBEAT_ANSWER",
+  /** A task was assigned (journal subscribers only), by any client. */
+  ASSIGN: "ASSIGN",
+  /** A task waits for a person to decide. */
+  HELD: "HELD",
+  /** A task recorded a value it took from outside itself. */
+  EFFECT: "EFFECT",
 } as const;
 
 export type TaskEventType = (typeof TaskEventType)[keyof typeof TaskEventType];
@@ -228,6 +236,68 @@ export const LockEventType = {
 } as const;
 
 export type LockEventType = (typeof LockEventType)[keyof typeof LockEventType];
+
+/** Frames only a journal subscriber gets, or that belong to no task. */
+export const JournalEventType = {
+  /** The baseline of a (new) agent session: every state's value. */
+  SESSION_INIT: "SESSION_INIT",
+  /** Every state's value at a revision. */
+  STATE_SNAPSHOT: "STATE_SNAPSHOT",
+  /** A value put away for later collection (memory structures). */
+  SHELVE: "SHELVE",
+  UNSHELVE: "UNSHELVE",
+} as const;
+
+export type JournalEventType =
+  (typeof JournalEventType)[keyof typeof JournalEventType];
+
+/** Where a frame stands in the agent's journal: on every frame after a journal INIT. */
+export interface JournalFrameFields {
+  pos?: number;
+  journal_session?: string;
+}
+
+/** A task as the journal folds it. */
+export interface JournalTaskView {
+  task: string;
+  action_key: string | null;
+  interface: string | null;
+  reference: string | null;
+  status: string;
+  done: boolean;
+  progress: number | null;
+  message: string | null;
+  error: string | null;
+}
+
+/** The world at a journal position: what `/journal/{session}/at/...` and a journal INIT carry. */
+export interface JournalWorld {
+  session_id: string | null;
+  pos: number;
+  global_rev: number;
+  states?: Record<string, unknown>;
+  tasks?: Record<string, JournalTaskView>;
+  locks?: Record<string, string>;
+}
+
+/** The `journal` object of a journal INIT. */
+export interface JournalInit extends JournalWorld {
+  /** The position asked to resume after is unknown here (a restart): start over from this INIT. */
+  resync: boolean;
+}
+
+/** `/journal/{session}/at/...`: the world, and when it was. */
+export interface JournalWorldAt extends JournalWorld {
+  timepoint: string;
+}
+
+/** The span of the current journal session, for a timeline. */
+export interface JournalBounds {
+  sessionId: string;
+  start: Date;
+  end: Date;
+  endPos: number;
+}
 
 export const FromAgentMessageType = TaskEventType;
 export type FromAgentMessageType = TaskEventType;
@@ -315,6 +385,13 @@ export interface WebSocketInitMessage extends BaseMessage {
   tasks: TaskCollectionResponse;
   states: StateCollectionResponse;
   locks: LockCollectionResponse;
+  journal?: JournalInit;
+  /**
+   * Set by the transport, not the server: this INIT continues an earlier connection
+   * (`resume_after` was accepted), and the frames it missed follow. Local state is
+   * kept as it is, not replaced by this INIT's.
+   */
+  resumed?: boolean;
 }
 
 export interface StateUpdateEvent {
@@ -360,6 +437,8 @@ export interface LockEvent {
 export interface UnlockEvent {
   type: typeof LockEventType.UNLOCK;
   key: string;
+  /** The task that held it. */
+  task?: string;
 }
 
 export type TaskEvent =
@@ -380,15 +459,70 @@ export type TaskEvent =
   | HeartbeatAnswerEvent
   | RegisterMessage;
 
+export interface AssignEvent extends BaseMessage {
+  type: typeof TaskEventType.ASSIGN;
+  task: string;
+  interface: string;
+  action: string;
+  reference?: string | null;
+  args?: Record<string, unknown>;
+  user?: string;
+}
+
+export interface HeldEvent extends BaseMessage {
+  type: typeof TaskEventType.HELD;
+  task: string;
+  message?: string | null;
+  prompt?: unknown;
+  details?: Record<string, unknown> | null;
+}
+
+export interface EffectEvent extends BaseMessage {
+  type: typeof TaskEventType.EFFECT;
+  task: string;
+  effect: string;
+  value: unknown;
+  key?: string | null;
+}
+
+export interface SessionInitEvent extends BaseMessage {
+  type: typeof JournalEventType.SESSION_INIT;
+  session_id: string;
+  states: Record<string, unknown>;
+}
+
+export interface StateSnapshotEvent extends BaseMessage {
+  type: typeof JournalEventType.STATE_SNAPSHOT;
+  session_id: string;
+  global_rev: number;
+  snapshots: Record<string, unknown>;
+}
+
+export interface ShelveEvent extends BaseMessage {
+  type: typeof JournalEventType.SHELVE | typeof JournalEventType.UNSHELVE;
+  ref: string;
+}
+
+export type JournalEvent =
+  | AssignEvent
+  | HeldEvent
+  | EffectEvent
+  | SessionInitEvent
+  | StateSnapshotEvent
+  | ShelveEvent;
+
 export type StateEvent = StateUpdateEvent | StatePatchEvent;
 export type LockEventMessage = LockEvent | UnlockEvent;
 
-export type FromAgentMessage =
+export type FromAgentMessage = (
   | TaskEvent
   | StateEvent
   | LockEventMessage
   | StateUpdateEvent
-  | StatePatchEvent;
+  | StatePatchEvent
+  | JournalEvent
+) &
+  JournalFrameFields;
 
 export interface WebSocketSubscriptionInit {
   type?: string | null;
@@ -398,6 +532,11 @@ export interface WebSocketSubscriptionInit {
   state_keys?: string[] | null;
   lock_keys?: string[] | null;
   state_update_intervals?: Record<string, number> | null;
+  /** Opt into the journal: frames carry `pos`, and a reconnect can resume. */
+  journal?: boolean;
+  /** Resume after this position of `session_id`: the frames missed come first. */
+  resume_after?: number | null;
+  session_id?: string | null;
 }
 
 export type StateTransportMessage = StateEvent;
@@ -472,6 +611,10 @@ export interface TransportContextValue {
     sessionId: string,
   ) => Promise<SessionBoundaries>;
   fetchActiveSessionBoundaries: (appKey: AppKey) => Promise<SessionBoundaries>;
+  /** The span of the current journal session. */
+  fetchJournalBounds: (appKey: AppKey) => Promise<JournalBounds>;
+  /** The world (states, tasks, locks) as of the last journal entry at or before `at`. */
+  fetchJournalWorldAt: (appKey: AppKey, at: Date) => Promise<JournalWorldAt>;
   cancelTaskRequest: (appKey: AppKey, taskId: string) => Promise<void>;
   pauseTaskRequest: (appKey: AppKey, taskId: string) => Promise<void>;
   unpauseTaskRequest: (appKey: AppKey, taskId: string) => Promise<void>;

@@ -12,6 +12,8 @@ import type {
   AssignInput,
   AssignOptions,
   AssignResponse,
+  JournalBounds,
+  JournalWorldAt,
   LockCollectionResponse,
   RetrieverSessionBoundaryResponse,
   SessionBoundaries,
@@ -511,6 +513,72 @@ export function TransportProvider({
     [getEndpoints],
   );
 
+  const fetchJournalJson = useCallback(
+    async <T,>(appKey: AppKey, path: string): Promise<T> => {
+      const { apiEndpoint } = getEndpoints(appKey);
+      const response = await authFetch(
+        `${apiEndpoint.replace(/\/$/, "")}/journal${path}`,
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to read the journal: ${response.status} ${errorText}`,
+        );
+      }
+
+      return (await response.json()) as T;
+    },
+    [getEndpoints],
+  );
+
+  const fetchJournalBounds = useCallback(
+    async (appKey: AppKey): Promise<JournalBounds> => {
+      const watermark = await fetchJournalJson<{
+        session_id: string | null;
+        pos: number;
+      }>(appKey, "");
+
+      if (!watermark.session_id || watermark.pos < 1) {
+        throw new Error("The agent has not recorded anything yet");
+      }
+
+      type Entries = { entries: Array<{ timepoint: string }> };
+      const session = encodeURIComponent(watermark.session_id);
+      // SESSION_INIT is the first entry; the watermark the last one so far.
+      const [first, last] = await Promise.all([
+        fetchJournalJson<Entries>(appKey, `/${session}?limit=1`),
+        fetchJournalJson<Entries>(
+          appKey,
+          `/${session}?after=${watermark.pos - 1}&limit=1`,
+        ),
+      ]);
+      const start = first.entries[0]?.timepoint;
+      const end = last.entries[0]?.timepoint ?? start;
+
+      if (!start || !end) {
+        throw new Error("The journal session has no entries");
+      }
+
+      return {
+        sessionId: watermark.session_id,
+        start: new Date(start),
+        end: new Date(end),
+        endPos: watermark.pos,
+      };
+    },
+    [fetchJournalJson],
+  );
+
+  const fetchJournalWorldAt = useCallback(
+    (appKey: AppKey, at: Date): Promise<JournalWorldAt> =>
+      fetchJournalJson<JournalWorldAt>(
+        appKey,
+        `/current/at?timestamp=${at.getTime()}`,
+      ),
+    [fetchJournalJson],
+  );
+
   const fetchSessionBoundaries = useCallback(
     async (appKey: AppKey, sessionId: string): Promise<SessionBoundaries> => {
       const { apiEndpoint } = getEndpoints(appKey);
@@ -588,6 +656,8 @@ export function TransportProvider({
       fetchLocks,
       fetchSessionBoundaries,
       fetchActiveSessionBoundaries,
+      fetchJournalBounds,
+      fetchJournalWorldAt,
       cancelTaskRequest: createTaskMutation("cancel"),
       pauseTaskRequest: createTaskMutation("pause"),
       unpauseTaskRequest: createTaskMutation("resume"),
@@ -605,6 +675,8 @@ export function TransportProvider({
       createTaskMutation,
       disconnectSocket,
       fetchActiveSessionBoundaries,
+      fetchJournalBounds,
+      fetchJournalWorldAt,
       fetchLocks,
       fetchSessionBoundaries,
       fetchState,

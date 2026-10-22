@@ -66,6 +66,7 @@ import type {
   WebSocketInitMessage,
 } from "@/lib/arkitekt/transport/types";
 import {
+  JournalEventType,
   LockEventType,
   StateEventType,
   TaskEventType,
@@ -199,6 +200,32 @@ function toSnapshotMapFromCollection(
   }
 
   return snapshotMap;
+}
+
+/** A journal's `{state: value}` map in the shape of the `/states` collection. */
+function toStateCollection(
+  values: Record<string, unknown>,
+  revision: number,
+  session: string | null,
+): StateCollectionResponse {
+  return {
+    current_session: session,
+    current_global_revision: revision,
+    count: Object.keys(values).length,
+    states: Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        key,
+        {
+          interface: key,
+          name: key,
+          initialized: true,
+          local_revision: revision,
+          value,
+        },
+      ]),
+    ),
+    recent_patches: [],
+  };
 }
 
 function normalizeTaskView(appKey: AppKey, taskView: TaskView): Task {
@@ -370,10 +397,33 @@ export function BundleProvider({ children }: BundleProviderProps) {
               switch (message.type) {
                 case "INIT": {
                   const initMessage = message as WebSocketInitMessage;
+
+                  // A resumed connection keeps what it has: the frames it missed
+                  // come next, in order, and bring it up to the server's state.
+                  if (initMessage.resumed) {
+                    appStateKeys.forEach((stateKey) => {
+                      stateStore.setLoading(stateKey, false);
+                    });
+                    return;
+                  }
+
+                  // A journal INIT's world is exactly as of the position the
+                  // following frames continue from, so it is the one to start at.
+                  const journal = initMessage.journal;
+                  const stateCollection: StateCollectionResponse =
+                    journal?.states
+                      ? toStateCollection(
+                          journal.states,
+                          journal.global_rev,
+                          journal.session_id,
+                        )
+                      : initMessage.states;
+                  const revision =
+                    stateCollection.current_global_revision ?? "current";
                   const { snapshotMap, errors } = validateSnapshotsPartial(
                     appKey,
-                    initMessage.states.current_global_revision ?? "current",
-                    toSnapshotMapFromCollection(initMessage.states),
+                    revision,
+                    toSnapshotMapFromCollection(stateCollection),
                     definitions,
                   );
 
@@ -386,14 +436,14 @@ export function BundleProvider({ children }: BundleProviderProps) {
 
                   stateStore.setStateSnapshots(
                     snapshotMap,
-                    initMessage.states.current_global_revision,
+                    stateCollection.current_global_revision,
                   );
-                  if (initMessage.states.current_global_revision != null) {
+                  if (stateCollection.current_global_revision != null) {
                     stateStore.setGlobalRevision(
-                      initMessage.states.current_global_revision,
+                      stateCollection.current_global_revision,
                     );
                     stateStore.cacheSnapshot(
-                      initMessage.states.current_global_revision,
+                      stateCollection.current_global_revision,
                       snapshotMap,
                     );
                   }
@@ -404,13 +454,69 @@ export function BundleProvider({ children }: BundleProviderProps) {
                   });
 
                   lockStore.replaceLocks(
-                    normalizeLockCollection(initMessage.locks),
+                    journal?.locks
+                      ? { ...journal.locks }
+                      : normalizeLockCollection(initMessage.locks),
                   );
                   taskStore.upsertTasks(
                     normalizeTaskCollection(appKey, initMessage.tasks),
                   );
                   return;
                 }
+                case JournalEventType.SESSION_INIT:
+                case JournalEventType.STATE_SNAPSHOT: {
+                  // A new agent session's baseline, or every state at a revision:
+                  // either way the values to hold from here on.
+                  const values =
+                    message.type === JournalEventType.SESSION_INIT
+                      ? message.states
+                      : message.snapshots;
+                  const revision =
+                    message.type === JournalEventType.STATE_SNAPSHOT
+                      ? message.global_rev
+                      : 0;
+                  const { snapshotMap } = validateSnapshotsPartial(
+                    appKey,
+                    revision,
+                    toSnapshotMapFromCollection(
+                      toStateCollection(values, revision, message.session_id),
+                      appStateKeys.filter((key) => key in values),
+                    ),
+                    definitions,
+                  );
+                  stateStore.setStateSnapshots(snapshotMap, revision);
+                  stateStore.setGlobalRevision(revision);
+                  return;
+                }
+                case TaskEventType.ASSIGN:
+                  // Tasks other clients start; one this client assigned is known.
+                  if (!taskStore.getTask(message.task)) {
+                    const now = new Date();
+                    taskStore.upsertTasks([
+                      {
+                        id: message.task,
+                        appKey,
+                        action: message.interface ?? message.action,
+                        args: message.args ?? {},
+                        reference: message.reference ?? message.task,
+                        status: "submitted",
+                        createdAt: now,
+                        updatedAt: now,
+                      },
+                    ]);
+                  }
+                  return;
+                case TaskEventType.HELD:
+                  taskStore.updateTask(message.task, {
+                    status: "held",
+                    progressMessage: message.message ?? undefined,
+                  });
+                  return;
+                case TaskEventType.EFFECT:
+                case JournalEventType.SHELVE:
+                case JournalEventType.UNSHELVE:
+                  // Recorded for replay and workflow resumption; nothing to show.
+                  return;
                 case StateEventType.STATE_UPDATE:
                   stateStore.setState(message.state, message.value);
                   return;
@@ -923,6 +1029,50 @@ export function BundleProvider({ children }: BundleProviderProps) {
     [globalStateStoreRegistry, refetchState],
   );
 
+  const checkoutAt = useCallback<StateContextValue["checkoutAt"]>(
+    async (appKey, at) => {
+      const storeApi = globalStateStoreRegistry.getStoreApi(appKey);
+      const stateKeys = getAppStateKeys(definitions, appKey);
+
+      await stopAllLiveSync(appKey);
+      stateKeys.forEach((key) => storeApi.getState().setLoading(key, true));
+
+      try {
+        const world = await transport.fetchJournalWorldAt(appKey, at);
+        const values = world.states ?? {};
+        const { snapshotMap, errors } = validateSnapshotsPartial(
+          appKey,
+          world.global_rev,
+          toSnapshotMapFromCollection(
+            toStateCollection(values, world.global_rev, world.session_id),
+          ),
+          definitions,
+        );
+        const stateStore = storeApi.getState();
+        Object.entries(errors).forEach(([stateKey, error]) => {
+          stateStore.setError(stateKey, normalizeError(error, stateKey));
+        });
+        stateStore.replaceStateSnapshots(snapshotMap, world.global_rev);
+        stateStore.setGlobalRevision(world.global_rev);
+        stateStore.replaceLatestPatches([]);
+        lockStoreRegistry
+          .getStoreApi(appKey)
+          .getState()
+          .replaceLocks({ ...(world.locks ?? {}) });
+        return world.pos;
+      } finally {
+        stateKeys.forEach((key) => storeApi.getState().setLoading(key, false));
+      }
+    },
+    [
+      definitions,
+      globalStateStoreRegistry,
+      lockStoreRegistry,
+      stopAllLiveSync,
+      transport,
+    ],
+  );
+
   const checkout = useCallback<StateContextValue["checkout"]>(
     async (appKey, globalRevisionId, options) => {
       const availableDefinitions = Object.values(definitions).filter(
@@ -1284,8 +1434,9 @@ export function BundleProvider({ children }: BundleProviderProps) {
       refetchState,
       refetchAll,
       checkout,
+      checkoutAt,
     }),
-    [checkout, definitions, ensureState, refetchAll, refetchState],
+    [checkout, checkoutAt, definitions, ensureState, refetchAll, refetchState],
   );
 
   const taskValue = useMemo<TaskContextValue>(

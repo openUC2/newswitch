@@ -37,6 +37,12 @@ export interface StateContextValue {
     globalRevisionId: string | number,
     options: CheckoutStateOptions,
   ) => Promise<RevisedStatesSnapshotMap>;
+  /**
+   * Show the app as it was at `at`: states and locks from the agent's journal, as
+   * of its last entry at or before that time. Stops live sync, like `checkout`.
+   * Resolves with the journal position shown.
+   */
+  checkoutAt: (appKey: string, at: Date) => Promise<number>;
 }
 
 export const StateContext = createContext<StateContextValue | null>(null);

@@ -6,6 +6,7 @@ import type {
   TransportConfig,
   TransportMessageSubscription,
   TransportSocketConnectionState,
+  WebSocketInitMessage,
   WebSocketSubscriptionInit,
 } from "@/lib/arkitekt/transport/types";
 
@@ -16,12 +17,18 @@ export type TransportManagerEndpoints = {
 type SocketState = TransportSocketConnectionState;
 type ReconnectConfig = Required<NonNullable<TransportConfig["reconnect"]>>;
 
+/** The last journal position applied: where a reconnect resumes. */
+type JournalCursor = { sessionId: string; pos: number };
+
 type AppChannelState = {
   ws: WebSocket | null;
   listeners: Set<(message: FromAgentMessage) => void>;
   connectionState: SocketState;
   reconnectTimeoutId: ReturnType<typeof setTimeout> | null;
   shouldReconnect: boolean;
+  journal: JournalCursor | null;
+  /** The open socket asked to resume after `journal` and awaits its INIT. */
+  resuming: boolean;
 };
 
 export interface TransportSubscriptionManagerOptions {
@@ -180,6 +187,41 @@ export class TransportSubscriptionManager {
     this.pingIntervals.clear();
   };
 
+  /**
+   * Keep the channel's journal cursor, and drop a frame it already applied.
+   *
+   * A journal INIT on a fresh (or resynced) connection is the world at its
+   * watermark: the cursor moves there. One that continues a connection
+   * (`resume_after` accepted) leaves the cursor where it was, and is marked
+   * `resumed`: the frames missed come next and carry it forward.
+   */
+  private trackJournal(
+    state: AppChannelState,
+    message: FromAgentMessage,
+  ): FromAgentMessage | null {
+    if (message.type === "INIT") {
+      const init = message as WebSocketInitMessage;
+      const journal = init.journal;
+      const resumed = state.resuming && journal != null && !journal.resync;
+      state.resuming = false;
+      if (journal?.session_id && !resumed) {
+        state.journal = { sessionId: journal.session_id, pos: journal.pos };
+      }
+      return { ...init, resumed };
+    }
+
+    const { pos, journal_session: session } = message;
+    if (pos == null || session == null) {
+      return message;
+    }
+    const cursor = state.journal;
+    if (cursor && cursor.sessionId === session && pos <= cursor.pos) {
+      return null;
+    }
+    state.journal = { sessionId: session, pos };
+    return message;
+  }
+
   private ensureChannelState(appKey: AppKey): AppChannelState {
     const existingState = this.channelStates.get(appKey);
     if (existingState) {
@@ -192,6 +234,8 @@ export class TransportSubscriptionManager {
       connectionState: createInitialConnectionState(),
       reconnectTimeoutId: null,
       shouldReconnect: true,
+      journal: null,
+      resuming: false,
     };
 
     this.channelStates.set(appKey, nextState);
@@ -311,7 +355,19 @@ export class TransportSubscriptionManager {
         reconnectAttempt: 0,
       };
 
-      ws.send(JSON.stringify(this.getSubscriptionInit(appKey)));
+      // Journal subscription: every frame carries its position, and a reconnect
+      // resumes after the last one applied instead of starting over.
+      const cursor = state.journal;
+      state.resuming = cursor !== null;
+      ws.send(
+        JSON.stringify({
+          ...this.getSubscriptionInit(appKey),
+          journal: true,
+          ...(cursor
+            ? { resume_after: cursor.pos, session_id: cursor.sessionId }
+            : {}),
+        } satisfies WebSocketSubscriptionInit),
+      );
       this.notifyConnectionListeners(appKey);
       this.stopPing(appKey);
       this.pingIntervals.set(
@@ -325,8 +381,14 @@ export class TransportSubscriptionManager {
     };
 
     ws.onmessage = (event) => {
-      const message = JSON.parse(event.data) as FromAgentMessage;
-      console.log(
+      const message = this.trackJournal(
+        state,
+        JSON.parse(event.data) as FromAgentMessage,
+      );
+      if (message === null) {
+        return;
+      }
+      console.debug(
         `[TransportSubscriptionManager] Received message for ${appKey}:`,
         message,
       );

@@ -26,8 +26,9 @@ export const navigation = {
   replay: "Wiedergabe",
   latestChanges: "Letzte Änderungen",
   timelinePosition: "Position auf der Zeitachse",
-  revision: "Rev.",
-  noTimeline: "Es sind keine aktiven Sitzungszeiträume verfügbar.",
+  revision: "Pos.",
+  noTimeline:
+    "Der Agent hat noch nichts aufgezeichnet, das sich abspielen lässt.",
   timelineFailed: "Die Zeitachse konnte nicht vorbereitet werden",
   liveFailed: "Die Live-Ansicht konnte nicht wiederhergestellt werden",
   checkoutFailed: "Der Zustand der Zeitachse konnte nicht geladen werden",
