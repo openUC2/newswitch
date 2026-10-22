@@ -8,10 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, History, Loader2, PlaySquare, Radio } from "lucide-react";
+import { Activity, History, Loader2, PlaySquare } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { buttonVariants, Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
   Tooltip,
@@ -478,46 +478,31 @@ function TimelineFloater() {
   );
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-4  z-50 flex justify-end">
-      <motion.div
-        layout
-        transition={{ type: "spring", stiffness: 220, damping: 26 }}
-        className={cn(
-          "pointer-events-auto overflow-hidden border border-border/60 bg-background/90 shadow-2xl backdrop-blur-xl dark flex-row-reverse flex items-center gap-4 p-3 rounded-full",
-          mode === "timeline" ? "w-full rounded-3xl" : "w-auto rounded-full",
-        )}
-      >
-        <div className="flex items-center gap-2 p-2 w-full">
-          <Button
-            size="icon"
-            variant={mode === "live" ? "default" : "outline"}
-            onClick={() => {
-              if (mode === "timeline") {
-                void returnToLive();
-              }
-            }}
-            disabled={mode === "live" || isReturningToLive}
-          >
-            <Radio className="mr-2 size-4" />
-          </Button>
+    <>
+      {/* The past is unmistakable: an amber frame around the whole screen. */}
+      <AnimatePresence>
+        {mode === "timeline" ? (
+          <motion.div
+            key="past-frame"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none fixed inset-0 z-40 rounded-[inherit] ring-2 ring-inset ring-amber-400/50"
+          />
+        ) : null}
+      </AnimatePresence>
 
-          <Button
-            size="icon"
-            variant={mode === "timeline" ? "default" : "outline"}
-            onClick={() => {
-              if (mode !== "timeline") {
-                void loadTimeline();
-              }
-            }}
-            disabled={mode === "timeline" || isPreparingTimeline}
-          >
-            {isPreparingTimeline ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <History className="mr-2 size-4" />
-            )}
-          </Button>
-
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-end">
+        <motion.div
+          layout
+          transition={{ type: "spring", stiffness: 260, damping: 30 }}
+          className={cn(
+            "dark pointer-events-auto flex items-center gap-3 overflow-hidden border bg-background/90 p-1.5 shadow-2xl backdrop-blur-xl",
+            mode === "timeline"
+              ? "w-full max-w-4xl rounded-2xl border-amber-400/40"
+              : "rounded-full border-border/60",
+          )}
+        >
           <AnimatePresence initial={false}>
             {mode === "timeline" && timelineBounds && selectedMs != null ? (
               <motion.div
@@ -525,48 +510,34 @@ function TimelineFloater() {
                 initial={{ opacity: 0, width: 0 }}
                 animate={{ opacity: 1, width: "100%" }}
                 exit={{ opacity: 0, width: 0 }}
-                transition={{ type: "spring", stiffness: 220, damping: 28 }}
-                className="@container min-w-0 flex-1"
+                transition={{ type: "spring", stiffness: 260, damping: 30 }}
+                className="min-w-0 flex-1"
               >
-                <div className="flex min-w-0 flex-col gap-3 px-3 py-2">
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <div className="font-medium">
-                      {formatTimelineLabel(
-                        timelineBounds.startMs,
-                        i18n.resolvedLanguage,
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-foreground">
-                      {isCheckingOut ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : null}
-                      <span>
+                <div className="flex min-w-0 flex-col gap-2 py-1.5 pl-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex items-center gap-1.5 rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                        <History className="size-3" />
+                        {t("navigation.viewingPast")}
+                      </span>
+                      <span className="truncate text-sm font-medium tabular-nums text-foreground">
                         {formatTimelineLabel(selectedMs, i18n.resolvedLanguage)}
                       </span>
+                      {isCheckingOut ? (
+                        <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+                      ) : null}
                     </div>
-                    <div className="font-medium">
-                      {formatTimelineLabel(
-                        timelineBounds.endMs,
-                        i18n.resolvedLanguage,
-                      )}
+                    <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                      {selectedRevisions.map(({ appKey, revision }) => (
+                        <span
+                          key={`${appKey}:${revision}`}
+                          className="rounded-md border border-border/60 px-1.5 py-0.5 font-mono"
+                          title={appKey}
+                        >
+                          {t("navigation.revision")} {revision}
+                        </span>
+                      ))}
                     </div>
-                  </div>
-
-                  <div className="flex flex-wrap justify-center gap-2 text-[11px] text-muted-foreground">
-                    {selectedRevisions.map(({ appKey, revision }) => (
-                      <div
-                        key={`${appKey}:${revision}`}
-                        className="rounded-full border border-border/50 bg-muted/30 px-2.5 py-1"
-                      >
-                        <span className="font-semibold text-foreground">
-                          {appKey}
-                        </span>
-                        <span className="mx-1">{t("navigation.revision")}</span>
-                        <span className="font-mono text-foreground">
-                          {revision}
-                        </span>
-                      </div>
-                    ))}
                   </div>
 
                   <Slider
@@ -575,42 +546,144 @@ function TimelineFloater() {
                     min={0}
                     max={100}
                     step={0.1}
-                    className="w-full [&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-track]]:h-2"
+                    className="w-full [&_[data-slot=slider-range]]:bg-amber-400 [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:border-amber-400 [&_[data-slot=slider-track]]:h-1.5"
                     aria-label={t("navigation.timelinePosition")}
                   />
 
-                  <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                    {boundaries.map((boundary) => (
-                      <div
-                        key={`${boundary.appKey}:${boundary.sessionId}`}
-                        className="rounded-full border border-border/50 bg-muted/40 px-2.5 py-1"
-                      >
-                        <span className="font-semibold text-foreground">
-                          {boundary.appKey}
-                        </span>
-                        <span className="mx-1">•</span>
-                        <span>
-                          {formatTimelineLabel(
-                            boundary.startMs,
-                            i18n.resolvedLanguage,
-                          )}
-                        </span>
-                        <span className="mx-1">→</span>
-                        <span>
-                          {formatTimelineLabel(
-                            boundary.endMs,
-                            i18n.resolvedLanguage,
-                          )}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
+                    <span>
+                      {t("navigation.sessionStart")} ·{" "}
+                      {formatTimelineLabel(
+                        timelineBounds.startMs,
+                        i18n.resolvedLanguage,
+                      )}
+                    </span>
+                    <span>{t("navigation.pastPaused")}</span>
+                    <span>
+                      {formatTimelineLabel(
+                        timelineBounds.endMs,
+                        i18n.resolvedLanguage,
+                      )}
+                    </span>
                   </div>
                 </div>
               </motion.div>
             ) : null}
           </AnimatePresence>
-        </div>
-      </motion.div>
+
+          <ModeSwitch
+            mode={mode}
+            busy={isPreparingTimeline || isReturningToLive}
+            onLive={() => {
+              if (mode === "timeline") void returnToLive();
+            }}
+            onReplay={() => {
+              if (mode !== "timeline") void loadTimeline();
+            }}
+          />
+        </motion.div>
+      </div>
+    </>
+  );
+}
+
+/** Live or replay: a two-way switch whose highlight slides to the active side. */
+function ModeSwitch({
+  mode,
+  busy,
+  onLive,
+  onReplay,
+}: {
+  mode: OverlayMode;
+  busy: boolean;
+  onLive: () => void;
+  onReplay: () => void;
+}) {
+  const { t } = useTranslation();
+  const segments = [
+    {
+      key: "live" as const,
+      label: t("navigation.live"),
+      hint: t("navigation.liveHint"),
+      onClick: onLive,
+      icon: (
+        <span className="relative flex size-2">
+          {mode === "live" ? (
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          ) : null}
+          <span
+            className={cn(
+              "relative inline-flex size-2 rounded-full",
+              mode === "live" ? "bg-emerald-400" : "bg-muted-foreground/60",
+            )}
+          />
+        </span>
+      ),
+    },
+    {
+      key: "timeline" as const,
+      label: t("navigation.replay"),
+      hint: t("navigation.replayHint"),
+      onClick: onReplay,
+      icon:
+        busy && mode === "live" ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <History className="size-3.5" />
+        ),
+    },
+  ];
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t("navigation.timelinePosition")}
+      className="relative flex shrink-0 items-center rounded-full bg-muted/50 p-0.5"
+    >
+      {segments.map((segment) => {
+        const active = mode === segment.key;
+        return (
+          <Tooltip key={segment.key}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={busy || active}
+                onClick={segment.onClick}
+                className={cn(
+                  "relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default",
+                  active
+                    ? segment.key === "live"
+                      ? "text-emerald-50"
+                      : "text-amber-50"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {active ? (
+                  <motion.span
+                    layoutId="mode-switch-highlight"
+                    transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                    className={cn(
+                      "absolute inset-0 rounded-full",
+                      segment.key === "live"
+                        ? "bg-emerald-600/80"
+                        : "bg-amber-600/80",
+                    )}
+                  />
+                ) : null}
+                <span className="relative flex items-center gap-1.5">
+                  {segment.icon}
+                  {segment.label}
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={8}>
+              {segment.hint}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
