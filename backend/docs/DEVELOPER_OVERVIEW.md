@@ -4,8 +4,8 @@ This document gives a high-level description of how this project is used, how th
 
 ## High-level usage
 
-- This project provides a **virtual microscope** stack with a FastAPI server and arkitekt/rekuest integration.
-- Core functionality is exposed through **registered functions** (rekuest) that operate on shared **state objects** (camera, stage, illumination, objective, IO).
+- This project provides a **virtual microscope** stack with a FastAPI server and an embedded arkitekt agent (`arkitekt`, `arkitekt-runtime`, `arkitekt-spec`, `arkitekt-fastapi`, pinned in `pyproject.toml`).
+- Core functionality is exposed through **actions** declared on the app object `nsapp` (`newswitch/arkitekt_app.py`) that operate on shared **state objects** (camera, stage, illumination, objective, IO).
 - The application can stream live video frames via WebSocket and serves captured image files via HTTP.
 
 ## app.py: states, controllers, and wiring
@@ -14,7 +14,9 @@ File: newswitch/app.py
 
 ### What it does
 
-- Bootstraps the FastAPI app and the rekuest agent wiring.
+- Bootstraps the FastAPI app and serves `nsapp` through arkitekt-fastapi:
+  `configure_fastapi(app=..., app_registry=nsapp.registry, app_context=config, db_file=config.db_path, ...)`.
+  The agent's journal and task history go into `arkitekt_agent.db` (`db_path` in `base_config.yaml`).
 - Creates and shares **state objects** that represent the microscope’s current state.
 - Instantiates **manager implementations** that operate on those states.
 - Returns everything as a dependency-injection tuple used by registered functions.
@@ -29,15 +31,15 @@ File: newswitch/app.py
   - `VirtualObjectiveManager`
   - `LocalFileIOManager`
 - **FrameBroadcaster** is created to serve live video encoders and share video streams.
-- **Startup hook** (`provide_managers`) returns all managers and states to the agent.
-- **Shutdown hooks**: `save_device_config` writes runtime values back into the device config,
+- **Startup hook** (`@nsapp.startup provide_managers`) returns all managers and states to the agent.
+- **Shutdown hooks** (`@nsapp.shutdown`): `save_device_config` writes runtime values back into the device config,
   `close_detector` closes the detector manager (stops and releases the cameras, which
   completes their recordings).
-- **Background hook** (`run_detector_loop`) keeps acquisition running for live view.
+- **Background hooks** (`@nsapp.background`): `run_detector_loop` keeps acquisition running for live view; `run_uc2_bus` and `run_uc2_event_dispatch` keep the UC2 bus connected and mirror its events into the states.
 
 ### Device configuration (`newswitch/config_io/`)
 
-`ImswitchConfig` reads `backend/base_config.yaml` (no environment variables, unknown keys are
+`ImswitchConfig` (`newswitch/config.py`, the app context declared on `nsapp`) reads `backend/base_config.yaml` (no environment variables, unknown keys are
 errors). The device configuration is read from `static_config_path`
 (`configs/newswitch-config.yaml`) or, with `load_from_static_config_path: false`, from
 `persistent_config_path`, which is created as a copy of the static file on first start;
@@ -54,14 +56,14 @@ are written back; comments stay intact. Details: `backend/configs/README.md`.
 
 ### Registered functions
 
-`app.py` registers multiple callable functions (e.g., illumination control, detector settings, capture) that receive **managers + state** injected by the agent. These functions are the primary API surface for automation or external systems.
+`app.py` declares multiple actions with `@nsapp.action` (e.g., illumination control, detector settings, capture) that receive **managers + state** injected by the agent; routines and `registers/` add more, the former via `nsapp.register_action(fn)`. These actions are the primary API surface for automation or external systems. Long-running actions take an injected `task: Task` and call `task.progress(...)` / `task.pausepoint()`, passing the task down to managers that report progress (e.g. `StageManager.move(..., task=task)`); tests calling an action directly pass `Task.local()`.
 
-## Locking mechanism (state safety)
+## Locking mechanism (action locks)
 
-- State classes are decorated with `@state(required_locks=[...])` in the protocol definitions.
-- Mutations of shared state must occur while holding the required locks.
-- In tests, you’ll see `acquired_locks("camera_parameters", "stage_position", "objective", ...)` used to guard state initialization and mutation.
-- At runtime, this ensures multi-threaded access to camera/stage/illumination/objective state is safe and consistent.
+- Locks belong to actions: explicit `locks=[...]` on `@nsapp.action`, or inferred from the contexts/states the action takes (`@nsapp.state(required_locks=[...])` and `@nsapp.context(locks=[...])` name the locks every action taking them holds).
+- An action waits until no other running action holds the same lock, so two actions never command the same device at once, for the whole multi-step operation. The UI is told (LOCK/UNLOCK frames) so it can disable conflicting actions.
+- State writes are not checked against locks: managers, background loops (the UC2 event dispatch) and shutdown hooks write states freely, and tests set up states without holding anything.
+- Thread safety of a state write is the state's own RLock. Writes made inside an action through the injected state are attributed to the task (the patch carries its `task_id`) and are refused after the task ended; writes made by managers/hooks directly carry no task id.
 
 ## Managers: what they do
 
@@ -120,7 +122,7 @@ Managers are used in two places:
 File: newswitch/routes/http/files.py
 
 - **HTTP file routes** serve or download captured images.
-- The route uses dependency injection to fetch the `IOManager` from the app’s agent context.
+- The route fetches the `IOManager` from the running agent with `context_of_type(agent, IOManager)` (`newswitch/routes/contexts.py`; the agent keeps contexts by name).
 - Endpoint examples:
   - `GET /files/{file_path}`: serve the file
   - `GET /files/download/{file_path}`: force download
@@ -128,11 +130,12 @@ File: newswitch/routes/http/files.py
 File: newswitch/routes/ws/liveview.py
 
 - **WebSocket live view** is a streaming endpoint (`/video`) that delivers H.264 chunks.
-- The endpoint gets the `FrameBroadcaster` from the app’s agent context.
+- The endpoint gets the `FrameBroadcaster` from the running agent with `context_of_type`.
 - Clients subscribe to a shared encoder so multiple viewers can share a single encoding pipeline.
 
 ## Where to look next
 
+- The app object and settings: newswitch/arkitekt_app.py, newswitch/config.py
 - Protocols and state definitions: newswitch/protocols/
 - Device configuration: newswitch/config_io/ and backend/configs/README.md
 - Manager implementations: newswitch/managers/
