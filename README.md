@@ -21,8 +21,8 @@ Run `just` on its own to see every recipe. Both ports come from the committed ro
 ## The one rule: the backend comes up first
 
 The frontend is **generated from the backend**. On every `vite dev` and `vite build`, the plugin at
-`frontend/plugins/generate-app.ts` fetches three schema endpoints from a *running* backend —
-`/schemas/implementations`, `/schemas/states`, `/schemas/locks` — and regenerates the typed hooks in
+`frontend/plugins/generate-app.ts` fetches four schema endpoints from a *running* backend —
+`/schemas/implementations`, `/schemas/states`, `/schemas/locks`, `/schemas/bloks` — and regenerates the typed hooks and bloks in
 `frontend/src/apps/default/**` along with `frontend/blok.json`.
 
 If the backend is **not** reachable, the codegen does **not** fail. It warns and silently falls back to
@@ -311,6 +311,7 @@ VITE_WEBSOCKET_URL=ws://my-lab-box:${BACKEND_PORT:-8099}/ws
 VITE_SCHEMA_IMPLEMENTATION_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/implementations
 VITE_SCHEMA_STATES_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/states
 VITE_SCHEMA_LOCKS_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/locks
+VITE_SCHEMA_BLOKS_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/bloks
 ```
 
 Apart from `BACKEND_HOST` / `BACKEND_PORT`, the backend reads no `.env` — the rest is configured in
