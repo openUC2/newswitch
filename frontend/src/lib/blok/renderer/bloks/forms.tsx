@@ -514,10 +514,18 @@ export const Slider = createBlokComponent(
       fallback: min ?? 0,
       parse: asNumber,
     });
+    // While dragged, the thumb follows the pointer: a `value` read from the app's state
+    // only changes once the action ran, and would hold the thumb where it was. After
+    // the commit it stays there until the value arrives (or, should the action not
+    // change it, for a moment).
+    const [dragged, setDragged] = React.useState<number | null>(null);
+    React.useEffect(() => setDragged(null), [controlled.value]);
+    const release = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+    React.useEffect(() => () => clearTimeout(release.current), []);
 
     return (
       <ShadSlider
-        value={[controlled.value]}
+        value={[dragged ?? controlled.value]}
         min={min ?? 0}
         max={max ?? 100}
         step={step}
@@ -527,12 +535,16 @@ export const Slider = createBlokComponent(
         className={cn("min-w-40 self-stretch", className)}
         onValueChange={(next) => {
           const nextValue = next[0] ?? 0;
+          clearTimeout(release.current);
+          setDragged(nextValue);
           controlled.setValue(nextValue);
           sendChange(nextValue);
         }}
         onValueCommit={(next) => {
           // Where the drag stopped is sent before the commit, never after it.
           sendChange.flush();
+          clearTimeout(release.current);
+          release.current = setTimeout(() => setDragged(null), 2000);
           onCommit?.(next[0] ?? 0);
         }}
       />
