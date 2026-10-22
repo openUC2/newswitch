@@ -7,9 +7,10 @@ sit beside it. For moving around a sample by eye.
 from arkitekt import bsx
 
 from newswitch.arkitekt_app import nsapp
+from newswitch.bloks.fluorescence import ACQUIRE_OR_CALIBRATE
 from newswitch.bloks.catalog import CATALOG_NAME
 
-MINIMAL_UI = """
+MINIMAL_UI = f"""
 <Resizable direction="row" className="h-full w-full">
     <ResizablePanel defaultSize="70">
         <div className="flex h-full flex-col gap-3 p-4">
@@ -27,7 +28,7 @@ MINIMAL_UI = """
         <ScrollArea className="h-full">
             <div className="p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
-                <div className="past:hidden"><Button label="Acquire image" icon="camera" className="w-full" onClick="@self.capture_image()" /></div>
+                {ACQUIRE_OR_CALIBRATE}
             </div>
         </ScrollArea>
     </ResizablePanel>

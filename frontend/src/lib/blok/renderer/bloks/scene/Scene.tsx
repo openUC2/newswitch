@@ -547,7 +547,7 @@ const PopoutCard = ({
             // Fits its content until the viewer sizes it.
             size
               ? "max-w-none"
-              : "w-max min-w-52 max-w-80 [&>div:nth-last-child(2)]:max-h-80",
+              : "w-max min-w-52 max-w-[min(28rem,90vw)] [&>div:nth-last-child(2)]:max-h-[min(36rem,70vh)]",
             detached && "shadow-lg ring-foreground/20",
           )}
           style={size ? { width: size.width, height: size.height } : undefined}

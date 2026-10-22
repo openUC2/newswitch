@@ -12,6 +12,7 @@ serving, and a second call with the same choice does nothing.
 """
 
 from newswitch.bloks.catalog import CATALOG_FILE, CATALOG_NAME, declare_catalog
+from newswitch.config_io import adapters
 from newswitch.config import ImswitchConfig
 
 __all__ = ["CATALOG_FILE", "CATALOG_NAME", "declare_ui"]
@@ -35,7 +36,7 @@ def declare_ui(config: ImswitchConfig) -> None:
         return
 
     declare_catalog()
-    from newswitch.bloks import jonda, minimal, standard, stage_view  # noqa: F401
+    from newswitch.bloks import fluorescence, jonda, minimal, standard, stage_view  # noqa: F401
 
     # The views the bottom bar switches between; `ui` chooses the one shown first.
     if config.ui == "design":
@@ -43,7 +44,9 @@ def declare_ui(config: ImswitchConfig) -> None:
         from newswitch.design.config import design_config
 
         assert config.design is not None  # ImswitchConfig refuses ui=design without one
-        design.declare(config.design, design_config(config.design), CATALOG_NAME)
+        devices = design_config(config.design)
+        design.declare(config.design, devices, CATALOG_NAME)
+        fluorescence.declare(CATALOG_NAME, has_filters=adapters.filters(devices) is not None)
         stage_view.declare(default=False)
         minimal.declare(default=False)
     else:

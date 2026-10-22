@@ -6,6 +6,7 @@ its tests fail when the file is stale), so a blok declared with ``catalog="newsw
 checked against exactly what the frontend renders.
 """
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -22,9 +23,17 @@ def declare_catalog() -> None:
     """Declare the newswitch catalog: the standard components and operations, plus ours."""
     base = load_standard_catalog()
     microscope = parse_ui_catalog(json.loads(CATALOG_FILE.read_text(encoding="utf-8")))
+    # `if` renders one of its children (`then` and `else` name them by id); the standard
+    # catalog lists it without children, which would refuse every `if` with branches.
+    standard = [
+        dataclasses.replace(component, accepts_children=True)
+        if component.name == "if"
+        else component
+        for component in base.components
+    ]
     nsapp.ui_catalog(
         CATALOG_NAME,
-        components=[*base.components, *microscope.components],
+        components=[*standard, *microscope.components],
         operations=list(base.operations),
         description=microscope.description,
     )

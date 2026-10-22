@@ -17,6 +17,7 @@ from arkitekt import bsx
 
 from newswitch import arkitekt_app
 from newswitch.arkitekt_app import nsapp
+from newswitch.bloks import fluorescence
 from newswitch.config_io import NewswitchConfig, adapters
 from newswitch.config_io.devices import LightsourceConfig
 from newswitch.optikit import dsn as optikit
@@ -36,11 +37,6 @@ LASER_CARD = "design-laser"
 LIVE_BUTTONS = """<div className="flex gap-2 past:hidden">
                     <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
                     <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
-                </div>"""
-
-#: Taking an image where the stage is: below the stage's controls.
-ACQUIRE_BUTTON = """<div className="past:hidden">
-                    <Button label="Acquire image" icon="camera" className="w-full" onClick="@self.capture_image()" />
                 </div>"""
 
 #: The live view floating at the camera while it acquires.
@@ -131,21 +127,20 @@ def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
     cards = {
         CAMERA_CARD: (
             f"""<div className="flex w-[380px] flex-col gap-3 past:opacity-80 past:grayscale">
-                <CameraControl className="locked:opacity-60" />
+                {fluorescence.DETECTION}
                 {LIVE_BUTTONS}
                 <div className="aspect-video w-full overflow-hidden rounded-md past:hidden"><LiveView /></div>
             </div>""",
             adapters.detectors(config),
         ),
         LASER_CARD: (
-            '<div className="w-[340px] past:opacity-80 past:grayscale">'
-            '<IlluminationControl className="locked:opacity-60" /></div>',
+            f"""<div className="w-[360px] past:opacity-80">{fluorescence.EXCITATION}</div>""",
             adapters.illuminations(config),
         ),
         STAGE_CARD: (
             f"""<div className="flex w-[400px] flex-col gap-3 past:opacity-80 past:grayscale">
+                {fluorescence.ACQUIRE_OR_CALIBRATE}
                 <StageControl className="locked:opacity-60" />
-                {ACQUIRE_BUTTON}
             </div>""",
             adapters.motion_stage(config),
         ),

@@ -164,5 +164,25 @@ def test_the_design_ui_shows_the_designs_devices() -> None:
     assert bloks["view-3d"] == ["newswitch", True]
     assert bloks["view-stage"] == ["newswitch", False]
     assert bloks["view-minimal"] == ["newswitch", False]
+    assert bloks["view-fluorescence"] == ["newswitch", False]
     assert {"design-camera", "design-laser", "design-stage"} <= set(bloks)
     assert "view-standard" not in bloks
+
+
+def test_the_fluorescence_fragments_are_bloks() -> None:
+    """Every fragment compiles on its own, and calibrating stands in for acquiring."""
+    from arkitekt import bsx
+
+    from newswitch.bloks import fluorescence
+
+    for fragment in (
+        fluorescence.ACQUIRE_OR_CALIBRATE,
+        fluorescence.EXCITATION,
+        fluorescence.EMISSION,
+        fluorescence.DETECTION,
+        fluorescence.READINESS,
+    ):
+        assert bsx(fragment)
+    choice = json.dumps(bsx(fluorescence.ACQUIRE_OR_CALIBRATE), default=str)
+    assert "calibrate_light_path" in choice and "capture_image" in choice
+    assert "list.isEmpty" in choice

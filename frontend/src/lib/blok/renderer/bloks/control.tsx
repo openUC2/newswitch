@@ -130,6 +130,8 @@ export const If = createBlokComponent(
   {
     name: "if",
     placement: { inheritsContext: true },
+    // The branches are its children; `then` and `else` name the one to render.
+    acceptsChildren: true,
     schema: z
       .object({
         when: BlokPropSchemas.DynamicBoolean.optional().describe(

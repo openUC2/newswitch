@@ -8,9 +8,10 @@ stage's and the camera's controls are beside it.
 from arkitekt import bsx
 
 from newswitch.arkitekt_app import nsapp
+from newswitch.bloks.fluorescence import ACQUIRE_OR_CALIBRATE
 from newswitch.bloks.catalog import CATALOG_NAME
 
-STAGE_UI = """
+STAGE_UI = f"""
 <Resizable direction="row" className="h-full w-full">
     <ResizablePanel defaultSize="70">
         <div className="flex h-full flex-col overflow-hidden bg-muted/30">
@@ -37,7 +38,7 @@ STAGE_UI = """
         <ScrollArea className="h-full">
             <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
-                <div className="past:hidden"><Button label="Acquire image" icon="camera" className="w-full" onClick="@self.capture_image()" /></div>
+                {ACQUIRE_OR_CALIBRATE}
                 <CameraControl className="locked:opacity-60" />
             </div>
         </ScrollArea>
