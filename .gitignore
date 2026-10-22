@@ -118,3 +118,6 @@ backend/configs/*.local.json
 backend/configs/*.persistent.yaml
 frontend/playwright-report/
 frontend/test-results/
+
+# Built from the configured optikit design at startup (newswitch.design.model)
+backend/newswitch/assets/design/

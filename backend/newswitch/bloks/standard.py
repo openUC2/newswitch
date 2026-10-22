@@ -9,7 +9,7 @@ not know fails at import, not in the browser.
 from arkitekt import bsx
 
 from newswitch.arkitekt_app import nsapp
-from newswitch.bloks import CATALOG_NAME
+from newswitch.bloks.catalog import CATALOG_NAME
 
 STANDARD_UI = """
 <Resizable direction="row" className="h-full w-full">
@@ -54,12 +54,15 @@ STANDARD_UI = """
 </Resizable>
 """
 
-nsapp.blok(
-    "standard",
-    bsx(STANDARD_UI),
-    description="The default newswitch microscope UI.",
-    catalog=CATALOG_NAME,
-    context="html",
-    default=True,
-    mode="strict",
-)
+
+def declare() -> None:
+    """Declare the standard UI as the default blok."""
+    nsapp.blok(
+        "standard",
+        bsx(STANDARD_UI),
+        description="The default newswitch microscope UI.",
+        catalog=CATALOG_NAME,
+        context="html",
+        default=True,
+        mode="strict",
+    )

@@ -5,7 +5,7 @@ module declaring actions, states and contexts imports that.
 """
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import (
@@ -63,6 +63,16 @@ class ImswitchConfig(BaseSettings):
     """Show every camera's newest image in a window of uc2_cam_py (debugging without the
     frontend); the cameras then acquire from startup on."""
 
+    design: Optional[Path] = None
+    """An optikit design (a ``.dsn`` folder) describing the microscope. When set, the device
+    configuration is generated from it (`newswitch.design`) instead of read from
+    `config_file`, only the devices it has are started, and its 3D model is served."""
+
+    ui: Literal["standard", "minimal", "design"] = "standard"
+    """The UI the backend declares as its default blok: `standard` (settings, stage view,
+    acquisition), `minimal` (just a camera and a stage) or `design` (the design's microscope
+    in 3D, with the controls of its devices; needs `design`)."""
+
     # UC2 hardware transport (used when use_virtual_microscope is False).
     # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
     # over serial JSON). Both are plug-in replacements behind UC2BusManager.
@@ -99,12 +109,18 @@ class ImswitchConfig(BaseSettings):
             return {key: value for key, value in data.items() if not str(key).startswith("_")}
         return data
 
-    @field_validator("config_dir", "schema_dir", "camera_recording_dir")
+    @field_validator("config_dir", "schema_dir", "camera_recording_dir", "design")
     @classmethod
     def _relative_to_base_config(cls, path: Optional[Path]) -> Optional[Path]:
         if path is None or path.is_absolute():
             return path
         return BASE_CONFIG_FILE.parent / path
+
+    @model_validator(mode="after")
+    def _design_ui_needs_a_design(self) -> "ImswitchConfig":
+        if self.ui == "design" and self.design is None:
+            raise ValueError("ui 'design' needs a design (the path of a .dsn folder)")
+        return self
 
     @field_validator("static_config_path", "persistent_config_path")
     @classmethod

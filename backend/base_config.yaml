@@ -24,6 +24,14 @@ persistent_config_path: newswitch-config.persistent.yaml
 #        as a copy of static_config_path
 load_from_static_config_path: true
 
+# An optikit design (.dsn folder) describing the microscope; relative to this file's folder.
+# When set, the device configuration is generated from it (static_config_path is not read),
+# only the devices it has are started, and its 3D model is served. Unset: no design.
+# design: ../../testing/testdata/optikit/examples/designs/microscopes/fluorescence.dsn
+
+# The UI declared as the default blok: standard | minimal | design (design needs `design`).
+ui: standard
+
 # Folder the cameras (uc2_cam_py, extra "camera") record into; relative to this file's
 # folder. Recording is switched on per camera (store_image_data in its mapping entry).
 camera_recording_dir: data/recordings

@@ -65,6 +65,7 @@ from newswitch.protocols.io import IOManager, IOState
 from newswitch import protocols
 from newswitch import config_io
 from newswitch.config_io import adapters
+from newswitch.design.config import design_config
 
 # Import concrete implementations
 from newswitch.managers.virtual import (
@@ -253,7 +254,11 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
     # base_config.yaml); every manager whose device kind is missing from it (or when no
     # file is configured) keeps its built-in defaults.
     devices = None
-    if config.config_file is not None:
+    if config.design is not None:
+        # The design describes the microscope: its devices are the configuration.
+        devices = design_config(config.design)
+        print(f"Devices from the design {config.design}: {', '.join(devices.devices)}")
+    elif config.config_file is not None:
         devices = config_io.open_config(
             config.static_config_path,
             config.persistent_config_path,
@@ -282,6 +287,17 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
                 min_a=stage_state.min_a,
                 max_a=stage_state.max_a,
             )
+
+    # Which devices this microscope has: without a design all of them (each with its
+    # built-in defaults when the device configuration lacks it); with a design only what it
+    # describes. A device it lacks gets no manager (its context is not provided: actions
+    # needing it fail when called), and its state stays empty.
+    described = devices if config.design is not None else None
+    has_stage = described is None or adapters.motion_stage(described) is not None
+    has_light = described is None or adapters.illuminations(described) is not None
+    has_detector = described is None or adapters.detectors(described) is not None
+    has_objective = described is None or adapters.objective_lenses(described) is not None
+    has_filter_bank = described is None or adapters.filters(described) is not None
 
     if config.use_virtual_microscope:
         uc2_bus: UC2BusManager = VirtualUC2Bus(state=uc2_state)
@@ -352,16 +368,25 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
             config=UC2FilterBankConfig(**filter_kwargs) if filter_kwargs else None,
         )
 
+    stage = stage if has_stage else None
+    led = led if has_light else None
+    objective = objective if has_objective else None
+    filter_bank = filter_bank if has_filter_bank else None
+
     # Cameras (uc2_cam_py) on real hardware when configured, else the virtual detector
-    detector = build_detector_manager(
-        config,
-        devices,
-        camera_state=camera_state,
-        stage_state=stage_state,
-        objective_state=objective_state,
-        illumination_state=illumination_state,
-        filter_bank_state=filter_bank_state,
-        broadcaster=frame_broadcaster,
+    detector = (
+        None
+        if not has_detector
+        else build_detector_manager(
+            config,
+            devices,
+            camera_state=camera_state,
+            stage_state=stage_state,
+            objective_state=objective_state,
+            illumination_state=illumination_state,
+            filter_bank_state=filter_bank_state,
+            broadcaster=frame_broadcaster,
+        )
     )
     io_manager = LocalFileIOManager(
         state=io_state,
@@ -372,20 +397,23 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
 
     hook_state = protocols.HookState()
 
-    hook_manager = PythonHookManager(
-        protocols.HookContext(
-            stage_manager=stage,
-            detector_manager=detector,
-            illumination_manager=led,
-            objective_manager=objective,
-            io_manager=io_manager,
+    # Hooks drive the stage, detector, illumination and objective: only with all of them.
+    hook_manager = None
+    if stage and detector and led and objective:
+        hook_manager = PythonHookManager(
+            protocols.HookContext(
+                stage_manager=stage,
+                detector_manager=detector,
+                illumination_manager=led,
+                objective_manager=objective,
+                io_manager=io_manager,
+            )
         )
-    )
-    hook_manager.register_hook(protocols.SoftwareAutofocusHook, software_autofocus_hook)
-    hook_manager.register_hook(
-        protocols.ZCalibrationHook,
-        lambda hook, context: print("Z-calibration hook executed"),
-    )
+        hook_manager.register_hook(protocols.SoftwareAutofocusHook, software_autofocus_hook)
+        hook_manager.register_hook(
+            protocols.ZCalibrationHook,
+            lambda hook, context: print("Z-calibration hook executed"),
+        )
 
     expanse_state = protocols.ExpanseState()
     light_path_state = protocols.LightPathState()
@@ -417,12 +445,16 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
 
     autofocus_state = AutofocusState()
 
-    acquistion_manager = AcquistionManager(
-        expanse_manager=expanse_manager,
-        detector_manager=detector,
-        metadata_manager=metadata_manager,
-        light_path_manager=light_path_manager,
-        cache_manager=cache_manager,
+    acquistion_manager = (
+        AcquistionManager(
+            expanse_manager=expanse_manager,
+            detector_manager=detector,
+            metadata_manager=metadata_manager,
+            light_path_manager=light_path_manager,
+            cache_manager=cache_manager,
+        )
+        if detector is not None
+        else None
     )
 
     return (
@@ -470,7 +502,8 @@ def save_device_config(
     file is re-read rather than kept from startup, so edits made while newswitch was
     running are preserved; only the runtime values are merged in.
     """
-    if not app_context.config_file:
+    if not app_context.config_file or app_context.design is not None:
+        # A design is the static source of the devices: there is no file to write back.
         return
     try:
         cfg_file = config_io.open_config(
@@ -862,8 +895,7 @@ def toggle_filter(filter_bank: FilterBankManager, state: FilterBankState) -> pro
 nsapp.register_action(acquire_multidimensional_acquisition)
 nsapp.register_action(calibrate_light_path)
 nsapp.register_action(scan_region)
-# The UI declared on the backend: the newswitch blok catalog and its bloks.
-import newswitch.bloks  # noqa: E402, F401  (declaration side effects)
+from newswitch.bloks import declare_ui  # noqa: E402
 
 
 def create_app(
@@ -907,6 +939,9 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # The UI the config chooses (declared once per process, before serving)
+    declare_ui(config)
 
     # Serve everything declared on nsapp (actions, states, contexts, hooks, bloks)
     configure_fastapi(

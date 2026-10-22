@@ -1,39 +1,52 @@
 """The UI the backend declares: the newswitch blok catalog and the bloks built in it.
 
-The frontend's newswitch catalog is the standard one plus the microscope's own
-components (control panels, the stage view and its scene layers). Those are
-published in ``newswitch-catalog.json``, which the frontend writes
-(``yarn catalog:export``; its tests fail when the file is stale), so a blok
-declared with ``catalog="newswitch"`` is checked against exactly what the
-frontend renders.
+`declare_ui` declares the catalog, the bloks every setup has (``jonda``), and the one UI
+`ImswitchConfig.ui` chooses as the default blok: ``standard``, ``minimal`` or ``design``
+(a microscope described by an optikit design, see `newswitch.bloks.design`). Only that one
+is declared.
 
-Imported by ``newswitch.app`` after the actions and states, which bloks reference.
+`nsapp` is one per process, so the UI is declared once: `create_app` calls this before
+serving, and a second call with the same choice does nothing.
 """
 
-import json
-from pathlib import Path
+from newswitch.bloks.catalog import CATALOG_FILE, CATALOG_NAME, declare_catalog
+from newswitch.config import ImswitchConfig
 
-from arkitekt_spec.declare.catalogs import load_standard_catalog, parse_ui_catalog
+__all__ = ["CATALOG_FILE", "CATALOG_NAME", "declare_ui"]
 
-from newswitch.arkitekt_app import nsapp
-
-#: Written by the frontend: ``cd frontend && yarn catalog:export``.
-CATALOG_FILE = Path(__file__).parent / "newswitch-catalog.json"
-CATALOG_NAME = "newswitch"
+_declared: tuple[str, str | None] | None = None
 
 
-def declare_catalog() -> None:
-    """Declare the newswitch catalog: the standard components and operations, plus ours."""
-    base = load_standard_catalog()
-    microscope = parse_ui_catalog(json.loads(CATALOG_FILE.read_text(encoding="utf-8")))
-    nsapp.ui_catalog(
-        CATALOG_NAME,
-        components=[*base.components, *microscope.components],
-        operations=list(base.operations),
-        description=microscope.description,
-    )
+def declare_ui(config: ImswitchConfig) -> None:
+    """Declare the catalog and the UI `config` chooses.
 
+    Raises:
+        RuntimeError: A different UI was already declared in this process.
+    """
+    global _declared
+    choice = (config.ui, str(config.design) if config.ui == "design" else None)
+    if _declared is not None:
+        if _declared != choice:
+            raise RuntimeError(
+                f"the UI {_declared[0]!r} is declared already; a process serves one UI"
+            )
+        return
 
-declare_catalog()
+    declare_catalog()
+    from newswitch.bloks import jonda  # noqa: F401  (declaration side effect)
 
-from newswitch.bloks import jonda, standard  # noqa: E402, F401  (declaration side effects)
+    if config.ui == "standard":
+        from newswitch.bloks import standard
+
+        standard.declare()
+    elif config.ui == "minimal":
+        from newswitch.bloks import minimal
+
+        minimal.declare()
+    else:
+        from newswitch.bloks import design
+        from newswitch.design.config import design_config
+
+        assert config.design is not None  # ImswitchConfig refuses ui=design without one
+        design.declare(config.design, design_config(config.design), CATALOG_NAME)
+    _declared = choice

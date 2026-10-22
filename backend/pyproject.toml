@@ -21,7 +21,7 @@ dependencies = [
     "pystackreg>=0.2.8",
     "arkitekt==8.0.0",
     "arkitekt-fastapi==2.1.0",
-    "arkitekt-runtime==5.0.0",
+    "arkitekt-runtime==5.1.0",
     "arkitekt-spec==3.18.0",
     "koil>=3.3.6",
     "pyyaml>=6",
@@ -54,6 +54,11 @@ uc2 = [
 # to update, enter the new SHA and run `uv lock`. Its C++ extension needs the MVS SDK
 # (/opt/MVS) to build, also for the simulated camera, and Python 3.12 - hence the markers,
 # and CI leaves this extra out.
+# A microscope described by an optikit design (`design` in base_config.yaml): pyvista cuts
+# the design's CAD meshes down to a model a browser can show (newswitch.design.model).
+design = [
+    "pyvista>=0.48.4",
+]
 camera = [
     "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@ccfb0e9dd00930d959e918a6a7dd6635c31ef142 ; sys_platform == 'linux' and python_version == '3.12'",
 ]
@@ -108,6 +113,8 @@ exclude = [
 
 # Same as Black.
 line-length = 100
+# Vendored optikit code (see its header), kept in its own style.
+extend-exclude = ["newswitch/optikit/dsn.py"]
 
 [tool.hatch.build.targets.sdist]
 include = ["newswitch"]
