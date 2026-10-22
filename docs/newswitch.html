@@ -568,9 +568,11 @@ nsapp.register_action(scan_region)</code></pre>
         types — that is how a new “app” (in the ImSwitch sense) gets its backend surface. When the server
         starts, the agent serves a validated, frozen snapshot of the registry.</p>
       <p><code>nsapp.blok(name, bsx(…))</code> is different: it ships a <strong>server-defined UI
-        fragment</strong> written in a JSX-like markup. Bloks are served at <code>/schemas/bloks</code>,
-        generated into <code>src/apps/default/bloks.ts</code> by the frontend codegen, and rendered by the
-        frontend’s blok renderer. Bloks can bind to states
+        fragment</strong> written in a JSX-like markup. Bloks are served at <code>/schemas/bloks</code> and
+        read by the frontend <strong>at run time</strong>, nothing about the UI is built in, then rendered by the
+        frontend’s blok renderer. The backend declares one default UI, chosen by <code>ui</code> in
+        <code>base_config.yaml</code>: <code>standard</code>, <code>minimal</code> or <code>design</code> (an optikit
+        design’s microscope in 3D). Bloks can bind to states
         (<code>@self.ObjectiveState.mounted_lenses</code>), loop (<code>&lt;foreach&gt;</code>) and invoke
         actions (<code>onClick="@self.switch_objective(lens.slot)"</code>). Use them for small panels that
         should not require a frontend build.</p>
@@ -865,10 +867,9 @@ nsapp.register_action(scan_region)</code></pre>
     <section id="frontend">
       <div class="h2row"><span class="num">10</span><h2>Frontend in one paragraph</h2></div>
       <p><code>frontend/plugins/generate-app.ts</code> — a Vite plugin run on every dev and build — fetches
-        <code>/schemas/implementations|states|locks|bloks</code> from the running backend
-        (<code>VITE_SCHEMA_BLOKS_URL</code> for the last) and emits
+        <code>/schemas/implementations|states|locks</code> from the running backend and emits
         <code>src/apps/default/hooks/{actions,states,locks}/*.ts</code> — zod schemas plus typed hooks such as
-        <code>useMoveStage</code> and <code>useStageState</code> — and <code>src/apps/default/bloks.ts</code>.
+        <code>useMoveStage</code> and <code>useStageState</code>. Bloks are read at run time instead.
         These files are committed, and <code>just drift-check</code> fails CI if they diverge from the
         backend. The hand-written runtime in <code>src/lib/arkitekt/</code> (formerly
         <code>src/lib/rekuest</code>) manages the <code>/ws</code> connection, task assignment, patch

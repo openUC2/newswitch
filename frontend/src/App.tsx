@@ -16,6 +16,7 @@ import {
 } from "./pages";
 import { appsDefinition } from "./apps";
 import { LocalStoreProvider } from "./store";
+import { BackendUiProvider } from "@/lib/blok/backendUi";
 
 // The backend API URL is either injected into the global scope by the
 // electron app or taken from environment variables, allowing for flexibility in different deployment scenarios.
@@ -44,9 +45,11 @@ function ScopedRoute({
 }) {
   return (
     <ScopedAppsProvider scope={scope}>
-      <LocalStoreProvider scope={scope}>
-        <AppNavigationChrome>{children}</AppNavigationChrome>
-      </LocalStoreProvider>
+      <BackendUiProvider>
+        <LocalStoreProvider scope={scope}>
+          <AppNavigationChrome>{children}</AppNavigationChrome>
+        </LocalStoreProvider>
+      </BackendUiProvider>
     </ScopedAppsProvider>
   );
 }

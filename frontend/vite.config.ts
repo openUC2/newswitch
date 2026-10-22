@@ -32,7 +32,6 @@ export default defineConfig(({ mode }) => {
                   hooksSchemaUrl: env.VITE_SCHEMA_IMPLEMENTATION_URL,
                   statesSchemaUrl: env.VITE_SCHEMA_STATES_URL,
                   locksSchemaUrl: env.VITE_SCHEMA_LOCKS_URL,
-                  bloksSchemaUrl: env.VITE_SCHEMA_BLOKS_URL,
                 },
               ],
               baseDir: path.resolve(__dirname, "src/apps"),

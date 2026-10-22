@@ -3,7 +3,14 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useShallow } from "zustand/react/shallow";
 import { appDefinition } from "@/apps/default/app";
-import { bloks, type BlokKey } from "@/apps/default/bloks";
+import { authFetch } from "@/lib/auth/authFetch";
+import { useBackendUi } from "@/lib/blok/backendUi";
+import type { BlokAsset, BlokAssetHost } from "@/lib/blok/renderer/assets";
+import { BlokAssetHostProvider } from "@/lib/blok/renderer/assets";
+import {
+  BlokSceneHostProvider,
+  type BlokSceneHost,
+} from "@/lib/blok/renderer/bloks/scene";
 import { selectAppIsLive, useAppStateStore } from "@/lib/arkitekt/app-state";
 import { getBlockingLock, useLockStoreApi } from "@/lib/arkitekt/locks/store";
 import type { StateDefinition } from "@/lib/arkitekt/state";
@@ -68,7 +75,8 @@ type NewswitchBlokProps = Omit<
   | "unavailableDependencies"
   | "children"
 > & {
-  blokKey: BlokKey;
+  /** The blok, as the backend serves it (`useBackendUi`). */
+  blok: NewswitchBlokDeclaration;
 };
 
 /**
@@ -80,11 +88,8 @@ type NewswitchBlokProps = Omit<
  *   positional arguments are named by the blok's demand on the action.
  * - Pure function calls go through the standard blok function catalog.
  */
-export function NewswitchBlok({
-  blokKey,
-  ...rendererProps
-}: NewswitchBlokProps) {
-  const blok: NewswitchBlokDeclaration = bloks[blokKey];
+export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
+  const blokKey = blok.key;
 
   const roots = useMemo(
     () => normalizeBlokComponentTree(blok.components).roots,
@@ -231,18 +236,96 @@ export function NewswitchBlok({
   );
 
   return (
-    <BlokRenderer
-      // A different blok starts from a fresh runtime: nothing it wrote carries over.
-      key={blokKey}
-      surfaceId={`newswitch-${blokKey}`}
-      // A superset of the standard catalog: the microscope's components too.
-      catalog={newswitchBlokCatalog}
-      {...rendererProps}
-      uiComponents={roots}
-      initialState={initialState}
-      dispatchAction={dispatchAction}
-      refuseAction={refuseAction}
-      unavailableDependencies={unavailableDependencies}
-    />
+    <NewswitchHosts>
+      <BlokRenderer
+        // A different blok starts from a fresh runtime: nothing it wrote carries over.
+        key={blokKey}
+        surfaceId={`newswitch-${blokKey}`}
+        // A superset of the standard catalog: the microscope's components too.
+        catalog={newswitchBlokCatalog}
+        {...rendererProps}
+        uiComponents={roots}
+        initialState={initialState}
+        dispatchAction={dispatchAction}
+        refuseAction={refuseAction}
+        unavailableDependencies={unavailableDependencies}
+      />
+    </NewswitchHosts>
+  );
+}
+
+const loadingAsset: BlokAsset = { status: "loading" };
+
+/**
+ * The backend's assets, for a blok's `@self.assets.<name>`: listed by `/schemas/assets`
+ * (with the hash a model is checked against) and served at `/assets/<name>`.
+ */
+const assetHost: BlokAssetHost = {
+  useAsset: (dependency, name) => {
+    const ui = useBackendUi();
+    const asset = ui.status === "ready" ? ui.assets[name] : undefined;
+    const apiEndpoint = ui.status === "ready" ? ui.apiEndpoint : "";
+    return useMemo<BlokAsset>(() => {
+      if (dependency !== SELF_DEPENDENCY) {
+        return {
+          status: "unknown",
+          reason: `"${dependency}" is not served here: newswitch only has its own (self) assets`,
+        };
+      }
+      if (ui.status === "loading") return loadingAsset;
+      if (!asset) {
+        return {
+          status: "unknown",
+          reason: `The backend has no asset "${name}"`,
+        };
+      }
+      return {
+        status: "ready",
+        ref: asset.ref,
+        kind: asset.kind,
+        load: async () => {
+          // Behind newswitch's auth, like every route but the schemas.
+          const response = await authFetch(
+            `${apiEndpoint}/assets/${encodeURIComponent(name)}`,
+          );
+          if (!response.ok) {
+            throw new Error(`Asset "${name}": ${response.status}`);
+          }
+          return new Uint8Array(await response.arrayBuffer());
+        },
+      };
+    }, [apiEndpoint, asset, dependency, name, ui.status]);
+  },
+};
+
+/** Opens another of the backend's bloks by name, for a scene's `OnClick open=`. */
+function useSceneHost(): BlokSceneHost {
+  const ui = useBackendUi();
+  return useMemo<BlokSceneHost>(
+    () => ({
+      useModelDecorations: () => [],
+      renderBlok: (name) => {
+        const blok = ui.status === "ready" ? ui.bloks[name] : undefined;
+        return blok ? (
+          <NewswitchBlok blok={blok} chrome="minimal" sizing="intrinsic" />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            The backend has no blok "{name}".
+          </p>
+        );
+      },
+    }),
+    [ui],
+  );
+}
+
+function NewswitchHosts({ children }: { children: React.ReactNode }) {
+  const sceneHost = useSceneHost();
+  return (
+    <BlokAssetHostProvider value={assetHost}>
+      <BlokSceneHostProvider value={sceneHost}>
+        {children}
+      </BlokSceneHostProvider>
+    </BlokAssetHostProvider>
   );
 }

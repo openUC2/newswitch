@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { useCameraState, useStageState } from "@/apps/default/hooks/states";
 import { Camera } from "lucide-react";
+import { H264_STREAM_PATH } from "@/constants";
 import { StreamingView } from "../liveview/StreamingView";
 
 export function LiveView() {
@@ -9,6 +10,9 @@ export function LiveView() {
 
   // Use camera state to determine if live view is active
   const isLive = cameraState?.is_acquiring ?? false;
+  // The H.264 stream of the first active detector (the backend's /stream/h264/<slot>).
+  const slot =
+    cameraState?.detectors.find((detector) => detector.is_active)?.slot ?? 1;
 
   return (
     <div className="flex flex-col h-full bg-black rounded-lg overflow-hidden">
@@ -17,7 +21,7 @@ export function LiveView() {
         {/* StreamingView or placeholder */}
         {isLive ? (
           <div className="absolute inset-0">
-            <StreamingView />
+            <StreamingView url={`${H264_STREAM_PATH}/${slot}`} />
           </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">

@@ -204,8 +204,11 @@ backend surface. When the server starts, the agent serves a validated, frozen
 
 `nsapp.blok(name, bsx(...))` is different: it ships a **server-defined UI
 fragment** written in a JSX-like markup. Bloks are served at
-`/schemas/bloks`, generated into `frontend/src/apps/default/bloks.ts` by the
-codegen, and rendered by the frontend's blok renderer. Bloks can bind to states
+`/schemas/bloks` and read by the frontend **at run time** (nothing about the UI is
+built in): it fetches them when it connects, and again on reconnect, and renders
+them with its blok renderer. The backend declares one default UI, chosen by
+`ui` in `base_config.yaml` (`standard`, `minimal`, or `design`: the microscope of
+an optikit design in 3D, see `newswitch.design`). Bloks can bind to states
 (`@self.ObjectiveState.mounted_lenses`), loop (`<foreach>`), and invoke actions
 (`onClick="@self.switch_objective(lens.slot)"`). Use them for small panels that
 shouldn't require a frontend build.
@@ -424,10 +427,11 @@ StageMap: a persistent, transform-correct mosaic of acquired FOVs.
 ## 10. Frontend in one paragraph
 
 `frontend/plugins/generate-app.ts` (a Vite plugin, run on every dev/build)
-fetches `/schemas/implementations|states|locks|bloks` from the running backend
-(`VITE_SCHEMA_IMPLEMENTATION_URL`, `…_STATES_URL`, `…_LOCKS_URL`, `VITE_SCHEMA_BLOKS_URL`) and emits
+fetches `/schemas/implementations|states|locks` from the running backend
+(`VITE_SCHEMA_IMPLEMENTATION_URL`, `…_STATES_URL`, `…_LOCKS_URL`) and emits
 `src/apps/default/hooks/{actions,states,locks}/*.ts` — zod schemas + typed
-hooks (`useMoveStage`, `useStageState`, …) — plus `src/apps/default/bloks.ts`.
+hooks (`useMoveStage`, `useStageState`, …). Bloks are not generated: they are
+read at run time (`src/lib/blok/backendUi.tsx`).
 These files are committed; `just drift-check` fails CI if they diverge from
 the backend. The hand-written runtime (`src/lib/arkitekt/`, formerly
 `src/lib/rekuest`) manages the `/ws` connection, task assignment, patch

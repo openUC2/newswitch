@@ -177,8 +177,6 @@ export interface GenerateAppPluginOptions {
   hooksSchemaUrl?: string;
   statesSchemaUrl?: string;
   locksSchemaUrl?: string;
-  /** `/schemas/bloks`: the UI component trees the backend declares. */
-  bloksSchemaUrl?: string;
   hooksWhitelist?: string[];
   hooksBlacklist?: string[];
   statesWhitelist?: string[];
@@ -774,19 +772,6 @@ const callsImport = (code: string[], siblingImportPath: string) =>
   code.some((part) => part.includes('validatorAccepts('))
     ? `import { validatorAccepts, type UtilCall } from '${siblingImportPath.replace(/\/[^/]+$/, '/calls')}';`
     : '';
-
-/** The bloks module of an app: each blok's component tree and the actions and states it uses,
- * as `/schemas/bloks` serves them, for the blok renderer. */
-const buildBloksContent = (bloks: Record<string, unknown>) => {
-  const keys = Object.keys(bloks).sort();
-  return `// Generated from /schemas/bloks. Do not edit.
-
-/** The bloks the backend declares, by key. */
-export const bloks = ${JSON.stringify(sortKeysDeep(bloks))} as const;
-
-export type BlokKey = ${keys.length ? keys.map((key) => JSON.stringify(key)).join(' | ') : 'never'};
-`;
-};
 
 const generateOptimisticState = (state: string, optimistics: Optimistic[]) => {
   const optimisticName = `Optimistic${toCamel(state)}`;
@@ -1464,17 +1449,12 @@ export default function generateAppsPlugin(
       ensureDir(appRootDir);
       ensureDir(appHooksDir);
 
-      const [
-        hooksSchemaJson,
-        statesSchemaJson,
-        locksSchemaJson,
-        bloksSchemaJson,
-      ] = await Promise.all([
-        fetchSchemaJson(app.hooksSchemaUrl, `${app.key} task schema`),
-        fetchSchemaJson(app.statesSchemaUrl, `${app.key} state schema`),
-        fetchSchemaJson(app.locksSchemaUrl, `${app.key} lock schema`),
-        fetchSchemaJson(app.bloksSchemaUrl, `${app.key} blok schema`),
-      ]);
+      const [hooksSchemaJson, statesSchemaJson, locksSchemaJson] =
+        await Promise.all([
+          fetchSchemaJson(app.hooksSchemaUrl, `${app.key} task schema`),
+          fetchSchemaJson(app.statesSchemaUrl, `${app.key} state schema`),
+          fetchSchemaJson(app.locksSchemaUrl, `${app.key} lock schema`),
+        ]);
 
       const previousAppEntry = previousApps[app.key] ?? {};
       const previousAppSchemas = (previousAppEntry.schemas ?? {}) as Record<
@@ -1499,24 +1479,14 @@ export default function generateAppsPlugin(
           (locksSchemaJson?.locks as Record<string, unknown> | undefined) ??
           (previousAppEntry.locks as Record<string, unknown> | undefined) ??
           {},
-        bloks:
-          (bloksSchemaJson?.bloks as Record<string, unknown> | undefined) ??
-          (previousAppEntry.bloks as Record<string, unknown> | undefined) ??
-          {},
         // Fall back to the recorded URLs: these come from env (VITE_SCHEMA_*), so a build
         // with those vars unset would otherwise overwrite good values with null.
         schemas: {
           tasks: app.hooksSchemaUrl ?? previousAppSchemas.tasks ?? null,
           states: app.statesSchemaUrl ?? previousAppSchemas.states ?? null,
           locks: app.locksSchemaUrl ?? previousAppSchemas.locks ?? null,
-          bloks: app.bloksSchemaUrl ?? previousAppSchemas.bloks ?? null,
         },
       };
-
-      await formatAndWrite(
-        path.resolve(appRootDir, 'bloks.ts'),
-        buildBloksContent(blokApps[app.key].bloks as Record<string, unknown>),
-      );
 
       if (isHooksSchema(hooksSchemaJson)) {
         await generateActionsDirectory({

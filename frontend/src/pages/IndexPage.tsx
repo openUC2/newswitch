@@ -1,4 +1,5 @@
-import { bloks, type BlokKey } from "@/apps/default/bloks";
+import { Loader2 } from "lucide-react";
+import { defaultBlokOf, useBackendUi } from "@/lib/blok/backendUi";
 import { BloksPanel } from "../components/bloks/BloksPanel";
 import { NewswitchBlok } from "../components/bloks/NewswitchBlok";
 import {
@@ -14,19 +15,29 @@ import {
   ResizablePanelGroup,
 } from "../components/ui/resizable";
 
-/** The panel the backend declares as its default UI (`nsapp.blok(..., default=True)`). */
-const defaultBlokKey = (Object.keys(bloks) as BlokKey[]).find((key) => {
-  const blok = bloks[key] as { default?: boolean; context?: string };
-  return blok.default === true && blok.context === "HTML";
-});
-
+/** The UI the backend declares as its default blok, read when the page connects. */
 export function IndexPage() {
+  const ui = useBackendUi();
+  const blok = ui.status === "ready" ? defaultBlokOf(ui.bloks) : undefined;
+
   return (
     <div className="h-screen flex flex-col bg-background text-foreground dark">
-      {defaultBlokKey ? (
-        <NewswitchBlok blokKey={defaultBlokKey} chrome="none" sizing="fill" />
+      {ui.status === "loading" ? (
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <Loader2 className="size-6 animate-spin" />
+        </div>
+      ) : blok ? (
+        <NewswitchBlok blok={blok} chrome="none" sizing="fill" />
       ) : (
-        <LegacyIndexLayout />
+        <>
+          {ui.status === "error" && (
+            <p className="px-4 py-2 text-xs text-destructive">
+              The backend's UI could not be read ({ui.error}); showing the
+              built-in one.
+            </p>
+          )}
+          <LegacyIndexLayout />
+        </>
       )}
     </div>
   );

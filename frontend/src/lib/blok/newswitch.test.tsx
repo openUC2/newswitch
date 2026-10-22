@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bloks } from "@/apps/default/bloks";
+import jondaPayload from "./jonda.fixture.json";
 import { SwitchObjectiveArgsSchema } from "@/apps/default/hooks/actions/switchObjective";
 import {
   actionArgOrder,
@@ -18,7 +18,8 @@ import {
   type BlokDispatchActionHandler,
 } from "./renderer/runtime";
 
-const jonda: NewswitchBlokDeclaration = bloks.jonda;
+// The jonda blok exactly as the backend serves it at /schemas/bloks.
+const jonda = jondaPayload as unknown as NewswitchBlokDeclaration;
 
 const lens = (slot: number, name: string) => ({
   slot,

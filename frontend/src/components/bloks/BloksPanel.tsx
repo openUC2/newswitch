@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LayoutDashboard } from "lucide-react";
-import { bloks, type BlokKey } from "@/apps/default/bloks";
+import { useBackendUi } from "@/lib/blok/backendUi";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,13 +18,15 @@ import {
 } from "@/components/ui/dialog";
 import { NewswitchBlok } from "./NewswitchBlok";
 
-const BLOK_KEYS = Object.keys(bloks) as BlokKey[];
-
 /** Lists the bloks the backend declares; opening one draws it, live, in a dialog. */
 export function BloksPanel() {
-  const [open, setOpen] = useState<BlokKey | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const ui = useBackendUi();
+  const bloks = ui.status === "ready" ? ui.bloks : {};
+  const keys = Object.keys(bloks);
+  const opened = open ? bloks[open] : undefined;
 
-  if (BLOK_KEYS.length === 0) return null;
+  if (keys.length === 0) return null;
 
   return (
     <Card className="gap-3 py-4">
@@ -38,7 +40,7 @@ export function BloksPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2 px-4">
-        {BLOK_KEYS.map((key) => (
+        {keys.map((key) => (
           <Button
             key={key}
             size="sm"
@@ -58,12 +60,12 @@ export function BloksPanel() {
           <DialogHeader>
             <DialogTitle>{open}</DialogTitle>
             <DialogDescription>
-              {(open && bloks[open].description) || "Blok"}
+              {opened?.description || "Blok"}
             </DialogDescription>
           </DialogHeader>
-          {open && (
+          {opened && (
             <div className="max-h-[70vh] overflow-auto">
-              <NewswitchBlok blokKey={open} chrome="none" sizing="intrinsic" />
+              <NewswitchBlok blok={opened} chrome="none" sizing="intrinsic" />
             </div>
           )}
         </DialogContent>
