@@ -206,7 +206,15 @@ backend surface. When the server starts, the agent serves a validated, frozen
 fragment** written in a JSX-like markup. Bloks are served at
 `/schemas/bloks` and read by the frontend **at run time** (nothing about the UI is
 built in): it fetches them when it connects, and again on reconnect, and renders
-them with its blok renderer. The backend declares one default UI, chosen by
+them with its blok renderer.
+
+A blok's Tailwind classes are compiled **in the browser** (`@tailwindcss/browser`, fed
+the app's tokens from `frontend/src/theme.css`), since the build never sees them. Bloks
+can style by situation with three variants:
+- `past:` / `live:` — the app shows the replay timeline, or the live microscope;
+- `locked:` — a control (or a microscope panel) whose action a held lock keeps from
+  running now, e.g. `<StageControl className="locked:opacity-60" />` during a move.
+  A locked control is marked, not disabled. The backend declares one default UI, chosen by
 `ui` in `base_config.yaml` (`standard`, `minimal`, or `design`: the microscope of
 an optikit design in 3D, see `newswitch.design`). Bloks can bind to states
 (`@self.ObjectiveState.mounted_lenses`), loop (`<foreach>`), and invoke actions

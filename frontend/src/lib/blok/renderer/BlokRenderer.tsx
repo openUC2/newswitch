@@ -14,6 +14,7 @@ import {
   type BlokInvokeFunctionHandler,
   type BlokRefuseActionHandler,
   type BlokUnavailableDependencies,
+  type BlokLockedActions,
   type BlokTree,
 } from "./runtime";
 
@@ -29,6 +30,8 @@ type BlokRendererProps = {
   refuseAction?: BlokRefuseActionHandler;
   /** Dependencies it cannot act through now, with why: controls calling them show disabled. */
   unavailableDependencies?: BlokUnavailableDependencies;
+  /** Agent calls a held lock keeps from running now: their controls are marked `data-locked`. */
+  lockedActions?: BlokLockedActions;
   /** `none` draws no frame at all: the blok is drawn straight onto its host. */
   chrome?: "default" | "minimal" | "none";
   sizing?: "fill" | "intrinsic";
@@ -48,6 +51,7 @@ export default function BlokRenderer({
   dispatchAction,
   refuseAction,
   unavailableDependencies,
+  lockedActions,
   chrome = "default",
   sizing = "fill",
   debug = false,
@@ -97,6 +101,7 @@ export default function BlokRenderer({
       dispatchAction: resolvedDispatchAction,
       refuseAction,
       unavailableDependencies,
+      lockedActions,
     }),
   );
 
@@ -122,6 +127,10 @@ export default function BlokRenderer({
         .getState()
         .setUnavailableDependencies(unavailableDependencies);
   }, [unavailableDependencies, runtimeStore]);
+
+  useEffect(() => {
+    if (lockedActions) runtimeStore.getState().setLockedActions(lockedActions);
+  }, [lockedActions, runtimeStore]);
 
   // Swapping the payload in place must not carry the previous blok's local
   // edits — the paths they were written against no longer mean the same thing.

@@ -14,7 +14,7 @@ from newswitch.bloks.catalog import CATALOG_NAME
 STANDARD_UI = """
 <Resizable direction="row" className="h-full w-full">
     <ResizablePanel defaultSize="15" minSize="10" maxSize="30">
-        <SettingsPanel className="h-full" />
+        <SettingsPanel className="h-full past:opacity-70 past:grayscale" />
     </ResizablePanel>
     <ResizableHandle withHandle="true" />
     <ResizablePanel defaultSize="55">
@@ -43,10 +43,10 @@ STANDARD_UI = """
     <ResizableHandle withHandle="true" />
     <ResizablePanel defaultSize="30" minSize="15" maxSize="40">
         <ScrollArea className="h-full">
-            <div className="flex flex-col gap-4 p-4">
-                <StageControl />
-                <MultidimensionalAcquisitionControl />
-                <CalibrateLightPath />
+            <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
+                <StageControl className="locked:opacity-60" />
+                <MultidimensionalAcquisitionControl className="locked:opacity-60" />
+                <CalibrateLightPath className="locked:opacity-60" />
                 <BloksPanel />
             </div>
         </ScrollArea>

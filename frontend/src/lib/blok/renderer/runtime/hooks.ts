@@ -17,6 +17,7 @@ import {
 import { isActionSchema } from "./schemas";
 import { readScopedPath, resolveScopedPath, useBlokScope } from "./scope";
 import { bindTask } from "./task";
+import { lockedActionKey } from "./types";
 import type {
   BlokActionArgument,
   BlokComponentNode,
@@ -372,6 +373,51 @@ export function useActionUnavailable<TSchema extends z.ZodTypeAny>(
   return useBlokRuntime((state) => {
     for (const dependency of dependencies) {
       const reason = state.unavailableDependencies.get(dependency);
+      if (reason) return reason;
+    }
+    return undefined;
+  });
+}
+
+/** Every agent call a node's props make: their actions, and the calls in their arguments. */
+const agentCallsOf = (
+  props: ReadonlyArray<BlokComponentProp>,
+): Array<{ dependency: string; operation: string }> => {
+  const calls: Array<{ dependency: string; operation: string }> = [];
+  const visit = (argument: BlokActionArgument) => {
+    if (argument.agent_call) {
+      calls.push(argument.agent_call);
+      argument.agent_call.arguments?.forEach(visit);
+    }
+    argument.util_call?.arguments?.forEach(visit);
+    argument.value_list?.forEach(visit);
+    argument.value_dict?.forEach(visit);
+  };
+  for (const prop of props) {
+    if (prop.agent_call) {
+      calls.push(prop.agent_call);
+      prop.agent_call.arguments?.forEach(visit);
+    }
+    prop.util_call?.arguments?.forEach(visit);
+  }
+  return calls;
+};
+
+/**
+ * Why a node cannot run its action now, or `undefined`: one of the agent calls its
+ * props make is in the host's `lockedActions` (a lock it takes is held). The node
+ * is then marked `data-locked`, for the `locked:` variant.
+ */
+export function useNodeLocked(
+  props: ReadonlyArray<BlokComponentProp>,
+): string | undefined {
+  const calls = React.useMemo(() => agentCallsOf(props), [props]);
+  return useBlokRuntime((state) => {
+    if (state.lockedActions.size === 0) return undefined;
+    for (const call of calls) {
+      const reason = state.lockedActions.get(
+        lockedActionKey(call.dependency, call.operation),
+      );
       if (reason) return reason;
     }
     return undefined;

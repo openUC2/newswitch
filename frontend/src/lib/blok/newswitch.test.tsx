@@ -13,6 +13,8 @@ import {
   type NewswitchBlokDeclaration,
 } from "./newswitch";
 import BlokRenderer from "./renderer/BlokRenderer";
+import { locksOf } from "./microscope/locks";
+import { lockedActionKey } from "./renderer/runtime";
 import {
   normalizeBlokComponentTree,
   type BlokDispatchActionHandler,
@@ -129,5 +131,57 @@ describe("the jonda blok", () => {
         actionArgOrder(jonda, action.operation),
       ),
     ).toEqual({ ok: true, args: { slot: 2 } });
+  });
+});
+
+describe("locked controls", () => {
+  const renderJonda = (lockedActions?: ReadonlyMap<string, string>) =>
+    render(
+      <BlokRenderer
+        uiComponents={normalizeBlokComponentTree(jonda.components).roots}
+        initialState={mergeLiveState(jonda.demoState, {
+          ObjectiveState: {
+            slot: 1,
+            name: "10x",
+            magnification: 10,
+            mounted_lenses: [lens(1, "10x"), lens(2, "40x")],
+          },
+        })}
+        lockedActions={lockedActions}
+      />,
+    );
+
+  it("marks a control whose action a held lock keeps from running", () => {
+    renderJonda(
+      new Map([
+        [lockedActionKey("self", "switch_objective"), "objective is held"],
+      ]),
+    );
+    const marker = screen
+      .getByRole("button", { name: "40x" })
+      .closest("[data-locked]");
+    expect(marker).toBeTruthy();
+    expect(marker?.getAttribute("title")).toBe("objective is held");
+    // Marked, not disabled: what a locked control looks like is the blok's call.
+    expect(
+      (screen.getByRole("button", { name: "40x" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("leaves controls unmarked while nothing they need is locked", () => {
+    renderJonda(
+      new Map([[lockedActionKey("self", "move_stage"), "stage is held"]]),
+    );
+    expect(
+      screen.getByRole("button", { name: "40x" }).closest("[data-locked]"),
+    ).toBeNull();
+  });
+});
+
+describe("microscope panel locks", () => {
+  it("are the locks the panel's actions take", () => {
+    expect(locksOf(["move_stage", "move_home"])).toContain("stage_position");
+    expect(locksOf(["no_such_action"])).toEqual([]);
   });
 });

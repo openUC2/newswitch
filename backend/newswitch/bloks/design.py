@@ -109,12 +109,12 @@ def controls(config: NewswitchConfig) -> list[str]:
     """The control panels of the devices the configuration has, camera first."""
     panels = []
     if adapters.detectors(config) is not None:
-        panels.append("<CameraControl />")
+        panels.append('<CameraControl className="locked:opacity-60" />')
         panels.append(LIVE_BUTTONS)
     if adapters.illuminations(config) is not None:
-        panels.append("<IlluminationControl />")
+        panels.append('<IlluminationControl className="locked:opacity-60" />')
     if adapters.motion_stage(config) is not None:
-        panels.append("<StageControl />")
+        panels.append('<StageControl className="locked:opacity-60" />')
     return panels
 
 
@@ -130,7 +130,7 @@ def design_ui(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
     <ResizableHandle withHandle="true" />
     <ResizablePanel defaultSize="30" minSize="20" maxSize="45">
         <ScrollArea className="h-full">
-            <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                 {panels}
             </div>
         </ScrollArea>

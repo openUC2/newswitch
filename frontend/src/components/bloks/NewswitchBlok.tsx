@@ -12,7 +12,11 @@ import {
   type BlokSceneHost,
 } from "@/lib/blok/renderer/bloks/scene";
 import { selectAppIsLive, useAppStateStore } from "@/lib/arkitekt/app-state";
-import { getBlockingLock, useLockStoreApi } from "@/lib/arkitekt/locks/store";
+import {
+  getBlockingLock,
+  useLockStore,
+  useLockStoreApi,
+} from "@/lib/arkitekt/locks/store";
 import type { StateDefinition } from "@/lib/arkitekt/state";
 import { useStateContext } from "@/lib/arkitekt/state/state-context";
 import { useGlobalStateStore } from "@/lib/arkitekt/state/store";
@@ -32,6 +36,7 @@ import {
 import BlokRenderer from "@/lib/blok/renderer/BlokRenderer";
 import { newswitchBlokCatalog } from "@/lib/blok/microscope/catalog";
 import {
+  lockedActionKey,
   normalizeBlokComponentTree,
   type BlokDispatchActionHandler,
   type BlokRefuseActionHandler,
@@ -140,6 +145,31 @@ export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
     return unavailable;
   }, [blok, isLive, stateKeys]);
 
+  // --- Locks: the blok's actions a held lock keeps from running now -------
+  const locks = useLockStore(APP_KEY, (state) => state.locks);
+  const lockedActions = useMemo(() => {
+    const locked = new Map<string, string>();
+    for (const dependency of blok.dependencies ?? []) {
+      if (dependency.key !== SELF_DEPENDENCY) continue;
+      for (const action of dependency.actionDependencies ?? []) {
+        const operation = action.demand?.key ?? action.key;
+        const definition = ACTIONS_BY_NAME.get(operation);
+        if (!definition) continue;
+        const { lockKey, lockingTaskId } = getBlockingLock(
+          locks,
+          definition.lockKeys,
+        );
+        if (lockKey) {
+          locked.set(
+            lockedActionKey(SELF_DEPENDENCY, operation),
+            `${lockKey} is held by task ${lockingTaskId}`,
+          );
+        }
+      }
+    }
+    return locked;
+  }, [blok, locks]);
+
   const refuseAction = useCallback<BlokRefuseActionHandler>(() => {
     if (isLive) return false;
     toast.info(REPLAY_REASON, { id: "blok-replay-paused" });
@@ -237,19 +267,23 @@ export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
 
   return (
     <NewswitchHosts>
-      <BlokRenderer
-        // A different blok starts from a fresh runtime: nothing it wrote carries over.
-        key={blokKey}
-        surfaceId={`newswitch-${blokKey}`}
-        // A superset of the standard catalog: the microscope's components too.
-        catalog={newswitchBlokCatalog}
-        {...rendererProps}
-        uiComponents={roots}
-        initialState={initialState}
-        dispatchAction={dispatchAction}
-        refuseAction={refuseAction}
-        unavailableDependencies={unavailableDependencies}
-      />
+      {/* For the blok's `past:` / `live:` variants: whether it shows the past (replay). */}
+      <div className="contents" data-blok-time={isLive ? "live" : "past"}>
+        <BlokRenderer
+          // A different blok starts from a fresh runtime: nothing it wrote carries over.
+          key={blokKey}
+          surfaceId={`newswitch-${blokKey}`}
+          // A superset of the standard catalog: the microscope's components too.
+          catalog={newswitchBlokCatalog}
+          {...rendererProps}
+          uiComponents={roots}
+          initialState={initialState}
+          dispatchAction={dispatchAction}
+          refuseAction={refuseAction}
+          unavailableDependencies={unavailableDependencies}
+          lockedActions={lockedActions}
+        />
+      </div>
     </NewswitchHosts>
   );
 }

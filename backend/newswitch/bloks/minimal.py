@@ -13,7 +13,7 @@ MINIMAL_UI = """
 <Resizable direction="row" className="h-full w-full">
     <ResizablePanel defaultSize="22" minSize="15" maxSize="35">
         <ScrollArea className="h-full">
-            <div className="p-4"><CameraControl /></div>
+            <div className="p-4 past:opacity-70 past:grayscale"><CameraControl className="locked:opacity-60" /></div>
         </ScrollArea>
     </ResizablePanel>
     <ResizableHandle withHandle="true" />
@@ -34,7 +34,7 @@ MINIMAL_UI = """
     <ResizableHandle withHandle="true" />
     <ResizablePanel defaultSize="25" minSize="15" maxSize="40">
         <ScrollArea className="h-full">
-            <div className="p-4"><StageControl /></div>
+            <div className="p-4 past:opacity-70 past:grayscale"><StageControl className="locked:opacity-60" /></div>
         </ScrollArea>
     </ResizablePanel>
 </Resizable>

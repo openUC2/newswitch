@@ -1589,6 +1589,11 @@
   resolved "https://registry.yarnpkg.com/@standard-schema/utils/-/utils-0.3.0.tgz#3d5e608f16c2390c10528e98e59aef6bf73cae7b"
   integrity sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==
 
+"@tailwindcss/browser@4.1.18":
+  version "4.1.18"
+  resolved "https://registry.yarnpkg.com/@tailwindcss/browser/-/browser-4.1.18.tgz#fbb3c3c1d11bb2aa1045cd709105ff2b7b0c9cd2"
+  integrity sha512-cnAUsj2TXGslPmDEnM469b4MAFT/ifxjt+Bla/2vBTBzp/PIPo6pjKxRrd8x+S84/S1bAtEIlzbJaaJxgZUV8Q==
+
 "@tailwindcss/node@4.1.18":
   version "4.1.18"
   resolved "https://registry.yarnpkg.com/@tailwindcss/node/-/node-4.1.18.tgz#9863be0d26178638794a38d6c7c14666fb992e8a"

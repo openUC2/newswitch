@@ -8,6 +8,7 @@ import type {
   BlokInvokeFunctionHandler,
   BlokRefuseActionHandler,
   BlokUnavailableDependencies,
+  BlokLockedActions,
   BlokRuntimeContext,
   BlokRuntimeStore,
 } from "./types";
@@ -89,6 +90,7 @@ const composeRuntimeDataModel = (
 };
 
 const NONE_UNAVAILABLE: BlokUnavailableDependencies = new Map();
+const NONE_LOCKED: BlokLockedActions = new Map();
 
 export const createBlokRuntimeStore = (config?: {
   initialDataModel?: unknown;
@@ -97,6 +99,7 @@ export const createBlokRuntimeStore = (config?: {
   dispatchAction?: BlokDispatchActionHandler;
   refuseAction?: BlokRefuseActionHandler;
   unavailableDependencies?: BlokUnavailableDependencies;
+  lockedActions?: BlokLockedActions;
 }): BlokRuntimeStore => {
   const initialDataModel = config?.initialDataModel;
   const initialAgentMappingStateUpdates =
@@ -114,6 +117,7 @@ export const createBlokRuntimeStore = (config?: {
     refuseAction: config?.refuseAction,
     unavailableDependencies:
       config?.unavailableDependencies ?? NONE_UNAVAILABLE,
+    lockedActions: config?.lockedActions ?? NONE_LOCKED,
     setInitialDataModel: (nextInitialDataModel) => {
       set((currentState) => {
         if (Object.is(currentState.initialDataModel, nextInitialDataModel)) {
@@ -250,6 +254,9 @@ export const createBlokRuntimeStore = (config?: {
     },
     setUnavailableDependencies: (nextUnavailable) => {
       set({ unavailableDependencies: nextUnavailable });
+    },
+    setLockedActions: (nextLocked) => {
+      set({ lockedActions: nextLocked });
     },
   }));
 };

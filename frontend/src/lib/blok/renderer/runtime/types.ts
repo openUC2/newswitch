@@ -155,6 +155,19 @@ export type BlokRefuseActionHandler = (
 export type BlokUnavailableDependencies = ReadonlyMap<string, string>;
 
 /**
+ * The agent calls a host cannot run right now because a lock they take is held
+ * (by a running task), keyed `"<dependency>:<operation>"`, each with why
+ * ("stage_position is held by move_stage"). A control whose action makes one is
+ * marked `data-locked` (the `locked:` variant) with the reason on hover. It is
+ * not disabled: what a locked control looks like is the blok's to say.
+ */
+export type BlokLockedActions = ReadonlyMap<string, string>;
+
+/** The key of an agent call in `BlokLockedActions`. */
+export const lockedActionKey = (dependency: string, operation: string) =>
+  `${dependency}:${operation}`;
+
+/**
  * Lexical scope introduced by `foreach` and by a child's `basePath`.
  *
  * - `aliases` maps a scope name to an absolute data-model path. Reads *and*
@@ -205,6 +218,7 @@ export type BlokRuntimeContext = {
   dispatchAction: BlokDispatchActionHandler;
   refuseAction: BlokRefuseActionHandler | undefined;
   unavailableDependencies: BlokUnavailableDependencies;
+  lockedActions: BlokLockedActions;
   setInitialDataModel: (dataModel: unknown) => void;
   resetRuntimeValues: () => void;
   setRuntimeValue: (path: string, value: unknown) => void;
@@ -227,6 +241,7 @@ export type BlokRuntimeContext = {
   setUnavailableDependencies: (
     unavailable: BlokUnavailableDependencies,
   ) => void;
+  setLockedActions: (locked: BlokLockedActions) => void;
 };
 
 export type BlokObjectSchema = z.ZodObject<Record<string, z.ZodTypeAny>>;

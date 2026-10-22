@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BlokResolutionError } from "./hooks";
+import { BlokResolutionError, useNodeLocked } from "./hooks";
 import type {
   BlokComponentNode,
   BlokComponentProp,
@@ -179,8 +179,9 @@ const BlokComponentRendererInner = (props: {
   component: BlokComponentNode;
 }) => {
   const RenderComponent = props.definition.render;
+  const locked = useNodeLocked(props.props);
 
-  return (
+  const rendered = (
     <BlokNodeBoundary
       componentId={props.component.id}
       componentName={props.definition.name}
@@ -192,6 +193,17 @@ const BlokComponentRendererInner = (props: {
         schema={props.definition.schema}
       />
     </BlokNodeBoundary>
+  );
+
+  // A node whose action a held lock keeps from running is marked for the `locked:`
+  // variant. The marker takes no box (`display: contents`), so the layout stays; a
+  // scene or a logo cannot hold an element, and is not marked.
+  const context = props.definition.placement?.context ?? "html";
+  if (!locked || context !== "html") return rendered;
+  return (
+    <span className="contents" data-locked="" title={locked}>
+      {rendered}
+    </span>
   );
 };
 
