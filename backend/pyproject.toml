@@ -29,6 +29,9 @@ dependencies = [
     "tifffile>=2026.1.28",
     "useq-schema>=0.8.1",
     "uvicorn>=0.40.0",
+    # uvicorn serves websockets (/ws, /stream) only with a websocket library installed;
+    # without one an upgrade is handled as plain HTTP and fails auth with a 401.
+    "websockets>=15",
     "zarrs>=0.2.2",
     "zstandard>=0.25.0",
     "argon2-cffi>=25.1.0",
