@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
@@ -48,6 +49,7 @@ class UC2CanBusConfig:
     bitrate: int = 500_000
     sdo_timeout: float = 2.0
     # Default openUC2 node map (one motor board per axis).
+    configured_axes: Optional[list[str]] = None
     node_x: int = 11
     node_y: int = 12
     node_z: int = 13
@@ -92,6 +94,7 @@ class UC2CanBus:
         self.config = config or UC2CanBusConfig()
         self._broker = UC2EventBroker()
         self._client: Optional["AsyncUC2Client"] = None
+        self.on_connected: Callable[[], Awaitable[None]] | None = None
         self._connected = asyncio.Event()
         self._objective_slot = 1
 
@@ -119,7 +122,11 @@ class UC2CanBus:
 
     def axis_for_node(self, node_id: int, sub: int = 0) -> Optional[str]:
         """Return the stage axis served by a CAN (node id, sub-axis), if any."""
-        for axis in ("X", "Y", "Z", "A"):
+        for axis in (
+            self.config.configured_axes
+            if self.config.configured_axes is not None
+            else ("X", "Y", "Z", "A")
+        ):
             if self.node_for_axis(axis) == node_id and self.sub_for_axis(axis) == sub:
                 return axis
         return None
@@ -192,12 +199,15 @@ class UC2CanBus:
             sdo_timeout=self.config.sdo_timeout,
         )
         self._client = client
-        self.state.connected = True
         self.state.transport = "canopen"
-        self._connected.set()
         logger.info("UC2 CAN bus connected (%r)", client.sync)
 
         try:
+            if self.on_connected is not None:
+                await self.on_connected()
+            self.state.connected = True
+            self.state.last_error = ""
+            self._connected.set()
             async for event in client.events():
                 if isinstance(event, MotorUpdateEvent):
                     axis = self.axis_for_node(event.node_id, event.axis)
@@ -249,18 +259,23 @@ class UC2CanBus:
         is_absolute: bool = False,
         speed: Optional[float] = None,
         acceleration: Optional[float] = None,
+        timeout: Optional[float] = None,
     ) -> float:
         """Move one axis (event-driven wait on the TPDO done edge)."""
         client = await self._require_client()
         speed_steps = int(abs((speed or self.config.default_speed) * self.scale_for_axis(axis)))
-        final_steps = await client.move_and_wait(
-            axis=self.sub_for_axis(axis),
-            position=self.to_steps(axis, target),
-            speed=max(speed_steps, 1),
-            acceleration=int(acceleration or 0),
-            is_absolute=is_absolute,
-            node_id=self.node_for_axis(axis),
-            timeout=self.config.move_timeout_s,
+        wait_timeout = self.config.move_timeout_s if timeout is None else timeout
+        final_steps = await asyncio.wait_for(
+            client.move_and_wait(
+                axis=self.sub_for_axis(axis),
+                position=self.to_steps(axis, target),
+                speed=max(speed_steps, 1),
+                acceleration=int(acceleration or 0),
+                is_absolute=is_absolute,
+                node_id=self.node_for_axis(axis),
+                timeout=wait_timeout,
+            ),
+            timeout=wait_timeout,
         )
         return self.to_units(axis, final_steps)
 
@@ -269,16 +284,26 @@ class UC2CanBus:
         client = await self._require_client()
         await client.stop(axis=self.sub_for_axis(axis), node_id=self.node_for_axis(axis))
 
-    async def ahome_axis(self, axis: str) -> None:
+    async def ahome_axis(
+        self,
+        axis: str,
+        speed_steps: Optional[int] = None,
+        direction: Optional[int] = None,
+        timeout_ms: Optional[int] = None,
+    ) -> None:
         """Home one axis and wait for the homing-done status."""
         client = await self._require_client()
-        homed = await client.home_and_wait(
-            axis=self.sub_for_axis(axis),
-            speed=self.config.home_speed_steps,
-            direction=self.config.home_direction,
-            timeout_ms=self.config.home_timeout_ms,
-            node_id=self.node_for_axis(axis),
-            timeout=self.config.home_timeout_ms / 1000.0 + 10.0,
+        home_timeout = self.config.home_timeout_ms if timeout_ms is None else timeout_ms
+        homed = await asyncio.wait_for(
+            client.home_and_wait(
+                axis=self.sub_for_axis(axis),
+                speed=self.config.home_speed_steps if speed_steps is None else speed_steps,
+                direction=self.config.home_direction if direction is None else direction,
+                timeout_ms=home_timeout,
+                node_id=self.node_for_axis(axis),
+                timeout=home_timeout / 1000.0 + 10.0,
+            ),
+            timeout=home_timeout / 1000.0 + 10.0,
         )
         if not homed:
             raise RuntimeError(f"Homing axis {axis} failed or timed out")
@@ -343,20 +368,26 @@ class UC2CanBus:
 
     # -- illumination -----------------------------------------------------------------
 
-    async def aset_laser(self, channel: int, value: int) -> None:
+    async def aset_laser(self, channel: int, value: int, node_id: Optional[int] = None) -> None:
         """Set a laser PWM channel on the laser node."""
         client = await self._require_client()
-        await client.laser_set(channel=channel, pwm=value, node_id=self.config.node_laser)
+        await client.laser_set(
+            channel=channel,
+            pwm=value,
+            node_id=self.config.node_laser if node_id is None else node_id,
+        )
 
-    async def aled_fill(self, r: int, g: int, b: int) -> None:
+    async def aled_fill(self, r: int, g: int, b: int, node_id: Optional[int] = None) -> None:
         """Fill the LED matrix on the LED node."""
         client = await self._require_client()
-        await client.led_fill(r=r, g=g, b=b, node_id=self.config.node_led)
+        await client.led_fill(
+            r=r, g=g, b=b, node_id=self.config.node_led if node_id is None else node_id
+        )
 
-    async def aled_off(self) -> None:
+    async def aled_off(self, node_id: Optional[int] = None) -> None:
         """Turn the LED matrix off."""
         client = await self._require_client()
-        await client.led_off(node_id=self.config.node_led)
+        await client.led_off(node_id=self.config.node_led if node_id is None else node_id)
 
     # -- galvo -----------------------------------------------------------------------
 

@@ -93,7 +93,8 @@ class VirtualFilterBankManager:
         self.filter_bank_state.filters = list(self.config.filters)
 
         # Set active filter to default
-        self._set_active_filter(self.config.default_slot)
+        if self.config.filters:
+            self._set_active_filter(self.config.default_slot)
 
     def _get_filter(self, slot: int) -> Optional[Filter]:
         """Get a filter by its slot number."""

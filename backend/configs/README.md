@@ -166,3 +166,11 @@ flow style and further keys stay; the previous file is kept as `*.bak` (git-igno
 - A physical value written as scalar or `null` becomes a mapping.
 
 The app's shutdown hook writes exposure, gain, wheel positions and stage position back.
+
+## Hardware integration demos
+
+Two [reduced test configurations](demos/README.md) isolate Serial and direct CAN
+from the main example. Mixed connections and axes on different controllers are
+already demonstrated in `newswitch-config.yaml`. The main example additionally
+contains a CAN LED-matrix mapping. The demo README documents the supported runtime
+contract, startup commands and unsupported bridge/camera/wheel cases.

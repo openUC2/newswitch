@@ -32,7 +32,10 @@ class UC2StageConfig:
     registered_step_sizes: list[float] = field(
         default_factory=lambda: [10.0, 100.0, 1000.0, 10000.0]
     )
+    home_parallel: bool = False
     default_speed: float = 5000.0  # micrometers per second
+    axis_speeds: dict[str, float] = field(default_factory=dict)
+    axis_accelerations: dict[str, float] = field(default_factory=dict)
 
 
 class UC2StageManager:
@@ -84,19 +87,35 @@ class UC2StageManager:
     ) -> None:
         """Move all requested axes concurrently and await completion."""
         targets = {"X": x, "Y": y, "Z": z, "A": a}
+        for axis, target in targets.items():
+            if target is not None and axis not in self.config.axes:
+                raise ValueError(f"Axis {axis} is not configured")
         moves = [
             self.bus.amove_axis(
                 axis,
                 target,
                 is_absolute=is_absolute,
-                speed=self.config.default_speed,
+                speed=self.config.axis_speeds.get(axis, self.config.default_speed),
+                acceleration=self.config.axis_accelerations.get(axis),
             )
             for axis, target in targets.items()
             if target is not None and axis in self.config.axes
         ]
         if not moves:
             return
-        await asyncio.gather(*moves)
+        await self._together(moves)
+
+    @staticmethod
+    async def _together(commands: list) -> None:
+        """Cancel sibling operations when any member of a coordinated action fails."""
+        tasks = [asyncio.create_task(command) for command in commands]
+        try:
+            await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     def move_home(self) -> None:
         """Home the configured axes in mechanically safe order (Z first)."""
@@ -104,6 +123,9 @@ class UC2StageManager:
 
     async def _ahome(self) -> None:
         """Home axes sequentially in the configured order."""
-        for axis in self.config.home_axes:
-            if axis in self.config.axes:
+        axes = [axis for axis in self.config.home_axes if axis in self.config.axes]
+        if self.config.home_parallel:
+            await self._together([self.bus.ahome_axis(axis) for axis in axes])
+        else:
+            for axis in axes:
                 await self.bus.ahome_axis(axis)

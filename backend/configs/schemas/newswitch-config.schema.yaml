@@ -20,6 +20,25 @@ $defs:
           type: string
         title: Tags
         type: array
+      move_timeout_s:
+        default: 120.0
+        exclusiveMinimum: 0
+        title: Move Timeout S
+        type: number
+      homing_speed_steps:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Speed Steps
+      homing_timeout_ms:
+        anyOf:
+        - exclusiveMinimum: 0
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Timeout Ms
       inverted:
         default: false
         description: Axis runs in the opposite direction
@@ -46,6 +65,15 @@ $defs:
         description: Motor steps per um; null for a servo axis
         title: Steps Per Um
         x_firmware: full
+      homing_direction:
+        anyOf:
+        - enum:
+          - -1
+          - 1
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Direction
       homing_required:
         default: false
         description: Axis must be homed before use

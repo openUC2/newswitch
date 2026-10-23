@@ -20,6 +20,7 @@ from pydantic_settings import (
 )
 from newswitch.hooks.software_autofocus import software_autofocus_hook
 from rekuest_next import pausepoint, progress
+from rekuest_next.state.lock import acquired_locks
 from rekuest_next.agents.base import app_context
 from rekuest_next.api.schema import OptimisticInput
 from rekuest_next.app import get_default_app_registry
@@ -40,24 +41,14 @@ from newswitch.managers.acquistion_manager import AcquistionManager
 from newswitch.managers.cache.local_cache import LocalCacheManager
 from newswitch.managers.calibration import CalibrationManager
 from newswitch.managers.light_path import LightPathManager
-from newswitch.managers.uc2.stage_manager import UC2StageConfig, UC2StageManager
+from newswitch.managers.uc2.stage_manager import UC2StageManager
+from newswitch.managers.uc2.yaml_runtime import YamlUC2Bus
 from newswitch.managers.uc2.illumination_manager import (
-    UC2IlluminationConfig,
     UC2IlluminationManager,
 )
-from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
-from newswitch.managers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.managers.uc2.dispatch import dispatch_uc2_events
-from newswitch.managers.uc2.objective_manager import UC2ObjectiveConfig, UC2ObjectiveManager
-from newswitch.managers.uc2.filter_bank_manager import (
-    UC2FilterBankConfig,
-    UC2FilterBankManager,
-)
 from newswitch.protocols.autofocus import AutofocusState
-from newswitch.protocols.filter_bank import Filter as OpticalFilter
-from newswitch.protocols.illumination import Illumination
-from newswitch.protocols.objective import ObjectiveLens
 from newswitch.protocols.uc2 import UC2BusManager, UC2State
 from newswitch.registers import uc2 as uc2_registers  # noqa: F401  (registration side effects)
 from newswitch.routines import autofocus as autofocus_routine  # noqa: F401  (registration)
@@ -165,25 +156,39 @@ class ImswitchConfig(BaseSettings):
     `persistent_config_path` (changes always go into the persistent one, see
     `config_io.open_config`). None keeps the built-in virtual devices."""
 
-    # UC2 hardware transport (used when use_virtual_microscope is False).
-    # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
-    # over serial JSON). Both are plug-in replacements behind UC2BusManager.
-    uc2_transport: str = "rest"  # "canopen"
-    uc2_can_interface: Optional[str] = None  # "socketcan" | "waveshare" | None (auto)
+    # Legacy settings remain readable for import tools; hardware startup rejects
+    # overrides so mappings in the device YAML are the only hardware authority.
+    uc2_transport: str = "rest"
+    uc2_can_interface: Optional[str] = None
     uc2_can_channel: Optional[str] = "can0"
-    uc2_can_port: Optional[str] = None  # Waveshare USB-CAN-A serial port
-    uc2_serial_port: Optional[str] = None  # None = autodetect
+    uc2_can_port: Optional[str] = None
+    uc2_serial_port: Optional[str] = None
     uc2_baudrate: int = 962100
-    # Detailed per-component overrides, keyed like the corresponding config
-    # dataclasses (UC2CanBusConfig / UC2RestBusConfig / UC2StageConfig /
-    # UC2IlluminationConfig). Nested values win over the flat fields above.
-    # See backend/configs/*.json for complete examples.
     uc2_can: dict[str, Any] = {}
     uc2_rest: dict[str, Any] = {}
     uc2_stage: dict[str, Any] = {}
     uc2_illumination: dict[str, Any] = {}
     uc2_objective: dict[str, Any] = {}
     uc2_filter_bank: dict[str, Any] = {}
+
+    def open_device_config(self) -> config_io.ConfigFile | None:
+        """Honor an explicit file and always write to a separate persistent YAML."""
+        if self.config_file is None:
+            return None
+        selected = (
+            self.static_config_path
+            if self.load_from_static_config_path
+            else self.persistent_config_path
+        )
+        if self.config_file.resolve() != selected.resolve():
+            source = self.config_file
+            target = source.with_name(source.stem + ".persistent" + source.suffix)
+            return config_io.open_config(source, target, from_static=True)
+        return config_io.open_config(
+            self.static_config_path,
+            self.persistent_config_path,
+            from_static=self.load_from_static_config_path,
+        )
 
     def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
         """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
@@ -281,245 +286,207 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
     if not app_context:
         app_context = ImswitchConfig()
 
-    mode = "virtual" if app_context.use_virtual_microscope else "real hardware"
-    print(f"Initializing {mode} microscope managers")
-    print(f"UC2 transport: {app_context.uc2_transport}")
-    if app_context.uc2_transport == "canopen":
-        print(
-            "CAN interface: "
-            f"{app_context.uc2_can_interface}, "
-            f"channel={app_context.uc2_can_channel}, "
-            f"port={app_context.uc2_can_port}"
-        )
+    with acquired_locks(
+        "stage_position", "illumination", "objective", "filter_bank", "camera_parameters"
+    ):
+        mode = "virtual" if app_context.use_virtual_microscope else "real hardware"
+        print(f"Initializing {mode} microscope managers")
+        frame_broadcaster = FrameBroadcaster()
 
-    frame_broadcaster = FrameBroadcaster()
+        config = app_context
+        if config.use_virtual_microscope:
+            print("Using virtual microscope managers.")
 
-    config = app_context
-    if config.use_virtual_microscope:
-        print("Using virtual microscope managers.")
+        illumination_state = IlluminationState()
 
-    illumination_state = IlluminationState()
+        camera_state = CameraState()
 
-    camera_state = CameraState()
+        objective_state = ObjectiveState()
 
-    objective_state = ObjectiveState()
+        calibration_state = protocols.CalibrationState()
 
-    calibration_state = protocols.CalibrationState()
+        filter_bank_state = FilterBankState()
 
-    filter_bank_state = FilterBankState()
+        # Initialize states with current values from managers
+        stage_state = StageState()
 
-    # Initialize states with current values from managers
-    stage_state = StageState()
+        io_state = IOState()
 
-    io_state = IOState()
+        uc2_state = UC2State()
 
-    uc2_state = UC2State()
+        # Devices from the device configuration (static or persistent file, see
+        # base_config.yaml). Simulation may use built-in defaults; hardware requires
+        # explicit mappings and never invents device addresses.
+        cfg_file = config.open_device_config()
+        devices = cfg_file.config if cfg_file is not None else None
+        led_config = objective_config = filter_bank_config = virtual_stage_config = None
+        configured_detectors = None
+        if devices is not None:
+            sources = adapters.illuminations(devices)
+            if sources is not None:
+                led_config = LEDConfig(sources=sources)
+            lenses = adapters.objective_lenses(devices)
+            if lenses is not None:
+                objective_config = ObjectiveConfig(objectives=lenses[0], default_slot=lenses[1])
+            filters = adapters.filters(devices)
+            if filters is not None:
+                filter_bank_config = FilterBankConfig(filters=filters[0], default_slot=filters[1])
+            configured_detectors = adapters.detectors(devices)
+            if devices.stages:
+                adapters.apply_stage_limits(devices, stage_state)
+                virtual_stage_config = VirtualStageConfig(
+                    min_x=stage_state.min_x,
+                    max_x=stage_state.max_x,
+                    min_y=stage_state.min_y,
+                    max_y=stage_state.max_y,
+                    min_z=stage_state.min_z,
+                    max_z=stage_state.max_z,
+                    min_a=stage_state.min_a,
+                    max_a=stage_state.max_a,
+                )
 
-    # Devices from the device configuration (static or persistent file, see
-    # base_config.yaml); every manager whose device kind is missing from it (or when no
-    # file is configured) keeps its built-in defaults.
-    devices = None
-    if config.config_file is not None:
-        devices = config_io.open_config(
-            config.static_config_path,
-            config.persistent_config_path,
-            from_static=config.load_from_static_config_path,
-        ).config
-    led_config = objective_config = filter_bank_config = virtual_stage_config = None
-    configured_detectors = None
-    if devices is not None:
-        sources = adapters.illuminations(devices)
-        if sources is not None:
-            led_config = LEDConfig(sources=sources)
-        lenses = adapters.objective_lenses(devices)
-        if lenses is not None:
-            objective_config = ObjectiveConfig(objectives=lenses[0], default_slot=lenses[1])
-        filters = adapters.filters(devices)
-        if filters is not None:
-            filter_bank_config = FilterBankConfig(filters=filters[0], default_slot=filters[1])
-        configured_detectors = adapters.detectors(devices)
-        if devices.stages:
-            adapters.apply_stage_limits(devices, stage_state)
-            virtual_stage_config = VirtualStageConfig(
-                min_x=stage_state.min_x,
-                max_x=stage_state.max_x,
-                min_y=stage_state.min_y,
-                max_y=stage_state.max_y,
-                min_z=stage_state.min_z,
-                max_z=stage_state.max_z,
-                min_a=stage_state.min_a,
-                max_a=stage_state.max_a,
+        if config.use_virtual_microscope:
+            uc2_bus: UC2BusManager = VirtualUC2Bus(state=uc2_state)
+            stage: StageManager = VirtualStageManager(
+                stage=stage_state, config=virtual_stage_config
             )
-
-    if config.use_virtual_microscope:
-        uc2_bus: UC2BusManager = VirtualUC2Bus(state=uc2_state)
-        stage: StageManager = VirtualStageManager(stage=stage_state, config=virtual_stage_config)
-        led: IlluminationManager = VirtualLEDManager(
-            illumination_state=illumination_state, config=led_config
-        )
-    else:
-        if config.uc2_transport == "rest":
-            rest_kwargs: dict[str, Any] = {
-                "serialport": config.uc2_serial_port,
-                "baudrate": config.uc2_baudrate,
-            }
-            # A uc2-rest controller in the device configuration wins over the flat
-            # convenience fields; nested per-component overrides win over both.
-            serial_cfg = adapters.serial_settings(devices) if devices is not None else None
-            if serial_cfg is not None:
-                rest_kwargs.update(serialport=serial_cfg.port, baudrate=serial_cfg.baudrate)
-            rest_kwargs.update(config.uc2_rest)
-            uc2_bus = UC2RestBus(state=uc2_state, config=UC2RestBusConfig(**rest_kwargs))
+            led: IlluminationManager = VirtualLEDManager(
+                illumination_state=illumination_state, config=led_config
+            )
         else:
-            can_kwargs: dict[str, Any] = {
-                "interface": config.uc2_can_interface,
-                "channel": config.uc2_can_channel,
-                "port": config.uc2_can_port,
-                **config.uc2_can,
-            }
-            uc2_bus = UC2CanBus(state=uc2_state, config=UC2CanBusConfig(**can_kwargs))
-        stage_config = UC2StageConfig(**config.uc2_stage) if config.uc2_stage else None
-        illumination_kwargs = dict(config.uc2_illumination)
-        if "sources" in illumination_kwargs:
-            illumination_kwargs["sources"] = [
-                Illumination(**source) for source in illumination_kwargs["sources"]
+            if devices is None:
+                raise ValueError("Hardware mode requires a YAML device configuration")
+            legacy = [
+                name
+                for name, field in type(config).model_fields.items()
+                if name.startswith("uc2_") and getattr(config, name) != field.default
             ]
-        illumination_config = (
-            UC2IlluminationConfig(**illumination_kwargs) if illumination_kwargs else None
-        )
-        stage = UC2StageManager(stage_state=stage_state, bus=uc2_bus, config=stage_config)
-        led = UC2IlluminationManager(
-            illumination_state=illumination_state, bus=uc2_bus, config=illumination_config
-        )
+            if legacy:
+                raise ValueError(
+                    f"Use controller mappings in YAML instead of legacy overrides: {legacy}"
+                )
+            routed_bus = YamlUC2Bus(devices, uc2_state, illumination_state)
+            uc2_bus = routed_bus
+            stage = UC2StageManager(
+                stage_state=stage_state, bus=uc2_bus, config=routed_bus.stage_config
+            )
+            led = UC2IlluminationManager(
+                illumination_state=illumination_state,
+                bus=uc2_bus,
+                config=routed_bus.illumination_config,
+            )
+            configured_detectors = []
+            objective_config = objective_config or ObjectiveConfig(objectives=[])
+            filter_bank_config = filter_bank_config or FilterBankConfig(filters=[])
 
-    # Objective + filter wheel: real bus-backed managers on hardware, virtual in sim.
-    if config.use_virtual_microscope:
+        # Passive metadata only; no default hardware actuators are invented.
         objective: ObjectiveManager = VirtualObjectiveManager(
             objective_state=objective_state, config=objective_config
         )
         filter_bank: FilterBankManager = VirtualFilterBankManager(
             filter_bank_state=filter_bank_state, config=filter_bank_config
         )
-    else:
-        objective_kwargs = dict(config.uc2_objective)
-        if "lenses" in objective_kwargs:
-            objective_kwargs["lenses"] = [
-                ObjectiveLens(**lens) for lens in objective_kwargs["lenses"]
-            ]
-        objective = UC2ObjectiveManager(
+
+        detector = VirtualDetectorManager(
+            camera_state=camera_state,
+            stage_state=stage_state,
+            illumination_state=illumination_state,
+            broadcaster=frame_broadcaster,
             objective_state=objective_state,
-            bus=uc2_bus,
-            config=UC2ObjectiveConfig(**objective_kwargs) if objective_kwargs else None,
-        )
-        filter_kwargs = dict(config.uc2_filter_bank)
-        if "filters" in filter_kwargs:
-            filter_kwargs["filters"] = [OpticalFilter(**item) for item in filter_kwargs["filters"]]
-        filter_bank = UC2FilterBankManager(
             filter_bank_state=filter_bank_state,
-            bus=uc2_bus,
-            config=UC2FilterBankConfig(**filter_kwargs) if filter_kwargs else None,
+            detectors=configured_detectors,
+        )
+        io_manager = LocalFileIOManager(
+            state=io_state,
+            config=LocalFileConfig(base_path="/tmp/newswitch/images"),
         )
 
-    detector = VirtualDetectorManager(
-        camera_state=camera_state,
-        stage_state=stage_state,
-        illumination_state=illumination_state,
-        broadcaster=frame_broadcaster,
-        objective_state=objective_state,
-        filter_bank_state=filter_bank_state,
-        detectors=configured_detectors,
-    )
-    io_manager = LocalFileIOManager(
-        state=io_state,
-        config=LocalFileConfig(base_path="/tmp/newswitch/images"),
-    )
+        calibration_manager = CalibrationManager(calibration_state=calibration_state)
 
-    calibration_manager = CalibrationManager(calibration_state=calibration_state)
+        hook_state = protocols.HookState()
 
-    hook_state = protocols.HookState()
+        hook_manager = PythonHookManager(
+            protocols.HookContext(
+                stage_manager=stage,
+                detector_manager=detector,
+                illumination_manager=led,
+                objective_manager=objective,
+                io_manager=io_manager,
+            )
+        )
+        hook_manager.register_hook(protocols.SoftwareAutofocusHook, software_autofocus_hook)
+        hook_manager.register_hook(
+            protocols.ZCalibrationHook,
+            lambda hook, context: print("Z-calibration hook executed"),
+        )
 
-    hook_manager = PythonHookManager(
-        protocols.HookContext(
-            stage_manager=stage,
+        expanse_state = protocols.ExpanseState()
+        light_path_state = protocols.LightPathState()
+
+        light_path_manager = LightPathManager(
+            light_path_state=light_path_state,
+            objective_state=objective_state,
+            illumination_state=illumination_state,
+            filter_bank_state=filter_bank_state,
+            camera_state=camera_state,
+        )
+
+        expanse_manager = ExpanseManager(expanse=expanse_state)
+
+        metadata_manager = MetadataManager(
+            objective_state=objective_state,
+            stage_state=stage_state,
+            filter_bank_state=filter_bank_state,
+            illumination_state=illumination_state,
+            camera_state=camera_state,
+            calibration_state=calibration_state,
+        )  # We can pass actual light paths here if needed
+
+        # We can calculate possible light paths at startup if needed,
+        # this will populate the light path state with possible configurations based on the current microscope setup
+        light_path_manager.calculate_possible_light_paths()
+
+        cache_manager = LocalCacheManager()
+
+        autofocus_state = AutofocusState()
+
+        acquistion_manager = AcquistionManager(
+            expanse_manager=expanse_manager,
             detector_manager=detector,
-            illumination_manager=led,
-            objective_manager=objective,
-            io_manager=io_manager,
+            metadata_manager=metadata_manager,
+            light_path_manager=light_path_manager,
+            cache_manager=cache_manager,
         )
-    )
-    hook_manager.register_hook(protocols.SoftwareAutofocusHook, software_autofocus_hook)
-    hook_manager.register_hook(
-        protocols.ZCalibrationHook,
-        lambda hook, context: print("Z-calibration hook executed"),
-    )
 
-    expanse_state = protocols.ExpanseState()
-    light_path_state = protocols.LightPathState()
-
-    light_path_manager = LightPathManager(
-        light_path_state=light_path_state,
-        objective_state=objective_state,
-        illumination_state=illumination_state,
-        filter_bank_state=filter_bank_state,
-        camera_state=camera_state,
-    )
-
-    expanse_manager = ExpanseManager(expanse=expanse_state)
-
-    metadata_manager = MetadataManager(
-        objective_state=objective_state,
-        stage_state=stage_state,
-        filter_bank_state=filter_bank_state,
-        illumination_state=illumination_state,
-        camera_state=camera_state,
-        calibration_state=calibration_state,
-    )  # We can pass actual light paths here if needed
-
-    # We can calculate possible light paths at startup if needed,
-    # this will populate the light path state with possible configurations based on the current microscope setup
-    light_path_manager.calculate_possible_light_paths()
-
-    cache_manager = LocalCacheManager()
-
-    autofocus_state = AutofocusState()
-
-    acquistion_manager = AcquistionManager(
-        expanse_manager=expanse_manager,
-        detector_manager=detector,
-        metadata_manager=metadata_manager,
-        light_path_manager=light_path_manager,
-        cache_manager=cache_manager,
-    )
-
-    return (
-        frame_broadcaster,
-        uc2_bus,
-        uc2_state,
-        stage,
-        led,
-        detector,
-        objective,
-        filter_bank,
-        io_manager,
-        hook_manager,
-        stage_state,
-        illumination_state,
-        camera_state,
-        objective_state,
-        filter_bank_state,
-        io_state,
-        hook_state,
-        expanse_state,
-        calibration_state,
-        light_path_state,
-        light_path_manager,
-        calibration_manager,
-        expanse_manager,
-        metadata_manager,
-        acquistion_manager,
-        cache_manager,
-        autofocus_state,
-    )
+        return (
+            frame_broadcaster,
+            uc2_bus,
+            uc2_state,
+            stage,
+            led,
+            detector,
+            objective,
+            filter_bank,
+            io_manager,
+            hook_manager,
+            stage_state,
+            illumination_state,
+            camera_state,
+            objective_state,
+            filter_bank_state,
+            io_state,
+            hook_state,
+            expanse_state,
+            calibration_state,
+            light_path_state,
+            light_path_manager,
+            calibration_manager,
+            expanse_manager,
+            metadata_manager,
+            acquistion_manager,
+            cache_manager,
+            autofocus_state,
+        )
 
 
 @shutdown
@@ -539,11 +506,8 @@ def save_device_config(
     if not app_context.config_file:
         return
     try:
-        cfg_file = config_io.open_config(
-            app_context.static_config_path,
-            app_context.persistent_config_path,
-            from_static=app_context.load_from_static_config_path,
-        )
+        cfg_file = app_context.open_device_config()
+        assert cfg_file is not None
         adapters.sync_runtime_state(
             cfg_file.config, camera_state, objective_state, filter_bank_state, stage_state
         )

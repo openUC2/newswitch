@@ -69,6 +69,9 @@ devices:
         id: 21
         subid: 0
         pwm_max: 1023
+      led-matrix:
+        type: canopen-led-matrix
+        id: 20
       my-filter-wheel-axis:
         type: canopen-revolver
         id: 4
@@ -142,6 +145,13 @@ devices:
     bandwidth: 200
     spec_shape: gauss
 
+  # RGB matrix, routed through its controller mapping.
+  led-matrix:
+    type: lightsource
+    name: RGB LED matrix
+    channels: 3
+    coherence: incoherent
+
   # --- STAGES, AXES AND WHEELS ---
   my-filter-wheel:
     type: stage
@@ -183,7 +193,6 @@ devices:
       x: my-first-axis
       z: my-second-axis
 
-  # --- FILTERS (in my-filter-wheel) ---
   flt-gfp:
     type: filter
     name: GFP 525/50
