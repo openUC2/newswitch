@@ -16,8 +16,8 @@ Where the two disagree, the newer document wins.
 
 ## 1 · The problem, stated once
 
-Today a deployment is one flat JSON, parsed by `ImswitchConfig`
-([backend/newswitch/app.py:106](../backend/newswitch/app.py#L106)):
+Today a deployment is one flat JSON, parsed by `Settings`
+([backend/newswitch/settings.py](../backend/newswitch/settings.py)):
 
 ```python
 uc2_can: dict[str, Any] = {}
@@ -34,13 +34,13 @@ annotation. It works, and for one bench it is fine. It cannot answer four
 questions we now need answered:
 
 1. **What is the light path?** `LightPathManager.calculate_possible_light_paths()`
-   ([backend/newswitch/managers/light_path.py](../backend/newswitch/managers/light_path.py))
+   ([backend/newswitch/services/light_path.py](../backend/newswitch/services/light_path.py))
    invents it — `translate_z(120)` for the dichroic, a 40 mm ring for the
    illumination sources, edges wired by hand. The real answer lives in an
    optikit design and is never consulted.
 2. **What was the system doing at 14:32:07?** `CalibratedLightPath` already keys
    on a `light_path_state_hash`
-   ([backend/newswitch/protocols/calibration.py](../backend/newswitch/protocols/calibration.py)),
+   ([backend/newswitch/models/calibration.py](../backend/newswitch/models/calibration.py)),
    but nothing computes that hash from anything real, and nothing is written to
    disk.
 3. **How do I add a new kind of state?** Today: a new `uc2_*` dict, a new branch,
@@ -624,9 +624,10 @@ Two rules govern the graph:
 
 ![path identity](diagrams/path-identity.svg)
 
-`LightPathState.hash` and `LightPathState.transformation_hash` already exist in
-[backend/newswitch/protocols/core.py](../backend/newswitch/protocols/core.py) with
-placeholder implementations (`f"hash_{objective.slot}_{detector.slot}_…"`). Here
+`LightPathSnapshot.hash` and `LightPathSnapshot.transformation_hash` already exist in
+[backend/newswitch/models/light_path.py](../backend/newswitch/models/light_path.py) with
+placeholder implementations (`f"hash_{objective.slot}_{detector.slot}_…"` in
+[backend/newswitch/services/light_path.py](../backend/newswitch/services/light_path.py)). Here
 is what they should be.
 
 ### 8.1 `path_hash` — "this exact optical configuration"
@@ -693,7 +694,7 @@ timestamp, and nowhere else.
 | 7 | CAPABILITIES | published states, actions, calibration kinds | — |
 | 8 | SNAPSHOT | first `SystemSnapshot` at revision 0 | — |
 
-`ResolvedSystem` replaces `ImswitchConfig` as the `@app_context` object. Because
+`ResolvedSystem` replaces `Settings` as the `@app_context` object. Because
 it is frozen and fully linked, `provide_managers` stops being a hand-maintained
 27-element tuple and becomes a loop over `resolved.devices`, with the registry
 supplying both the manager and its published state type.
@@ -836,7 +837,7 @@ class SystemSnapshot(BaseModel):
 
     path_hash: str
     transform_hash: str
-    light_path: LightPathState             # the existing model — kubes + edges + affines
+    light_path: LightPathSnapshot          # the existing model — kubes + edges + affines
 
     active_variants: dict[DeviceRef, VariantRef]
     selector_slots: dict[DeviceRef, int]
@@ -889,7 +890,7 @@ needed to read it back years later.
 
 ### 11.4 Relation to `Metadata` today
 
-The existing `Metadata` model (`protocols/core.py`) carries `affine_matrix`,
+The existing `Metadata` model (`models/frames.py`) carries `affine_matrix`,
 `fov_width/height`, `light_state` and `acquisition_time` on **every image**. It
 becomes a **view**, computed on export from `(snapshot_id, revision)` — so
 OME-TIFF / OME-Zarr writers get exactly what they need without the runtime paying
@@ -977,7 +978,7 @@ Degraded, explicitly, with one warning — rather than a second code path.
 something running; it is removed outright. No converter, no v0 shim, no
 compatibility window.*
 
-- `ImswitchConfig`, the flat `uc2_*` dict fields, and the per-transport
+- `Settings`, the flat `uc2_*` dict fields, and the per-transport
   branches in `provide_managers` are **deleted**, not wrapped.
 - [backend/scripts/convert_imswitch_setup.py](../backend/scripts/convert_imswitch_setup.py)
   and the old flat configs (`backend/configs/uc2_canopen.json`,

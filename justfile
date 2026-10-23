@@ -28,9 +28,9 @@ install:
 
 # Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
 dev-backend:
-    cd backend && uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
+    cd backend && uv run uvicorn main_fastapi:create --factory --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
 
-# Frontend only -> http://localhost:$FRONTEND_PORT (needs the backend up for fresh codegen)
+# Frontend only -> http://localhost:$FRONTEND_PORT (codegen reads frontend/schemas/, no backend needed)
 # Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
 dev-frontend:
     cd frontend && yarn dev
@@ -47,19 +47,23 @@ wait-backend url=BACKEND_HEALTH:
     echo "backend did not answer within 60s" >&2
     exit 1
 
-# Run backend + frontend together (backend first: the frontend codegen fetches its schemas)
+# Run backend + frontend together. Any device configuration works: the frontend's hooks
+# are generated from the committed schema export (just export-schemas), not this backend.
 dev:
     #!/usr/bin/env bash
     set -uo pipefail
     trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
-    if ! just wait-backend; then
-      echo "!! backend unreachable - vite will fall back to the COMMITTED generated hooks" >&2
-      echo "!! (see frontend/plugins/generate-app.ts: fetch failures are warnings, not errors)" >&2
-    fi
+    (cd backend && exec uv run uvicorn main_fastapi:create --factory --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
+    just wait-backend || echo "!! backend unreachable - the frontend will show it as offline" >&2
     echo "frontend -> http://localhost:{{FRONTEND_PORT}}"
     (cd frontend && exec yarn dev) &
     wait
+
+# newswitch as an arkitekt agent (lovekit streams, the configuration's agent_ui), e.g.
+#   NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just agent
+# Logs in to the arkitekt server fakts finds (--url / $FAKTS_URL). Needs the extra 'agent'.
+agent *args:
+    cd backend && uv run --extra agent python main_arkitekt.py {{args}}
 
 # Isolated stack for Playwright. Vite's test mode skips backend schema codegen so an
 # E2E run cannot dirty the committed generated frontend files.
@@ -68,10 +72,15 @@ dev-e2e:
     set -euo pipefail
     trap 'trap - EXIT; kill 0' EXIT INT TERM
     rm -f frontend/test-results/e2e-auth.db
-    (cd backend && NEWSWITCH_AUTH_DB=../frontend/test-results/e2e-auth.db exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}}) &
+    (cd backend && NEWSWITCH_AUTH_DB=../frontend/test-results/e2e-auth.db exec uv run uvicorn main_fastapi:create --factory --host {{BACKEND_HOST}} --port {{BACKEND_PORT}}) &
     just wait-backend
     (cd frontend && exec yarn dev --mode test) &
     wait
+
+# Write a device configuration, UI included, from an optikit design; run it with
+# NEWSWITCH_CONFIG=<out> just dev. Needs the extra 'design'.
+build-design dsn out:
+    cd backend && uv run python -m newswitch.tools.build_design {{dsn}} -o {{out}}
 
 # ---------- quality ----------
 
@@ -114,32 +123,36 @@ check: fmt-check lint types test
 
 # List every account and its role (run on the appliance itself)
 list-users:
-    cd backend && uv run python -m newswitch.cli list-users
+    cd backend && uv run python -m newswitch.tools.accounts list-users
 
 # Recovery: set a new password for an existing account, e.g. after it's forgotten
 reset-password username password:
-    cd backend && uv run python -m newswitch.cli reset-password {{username}} {{password}}
+    cd backend && uv run python -m newswitch.tools.accounts reset-password {{username}} {{password}}
 
 # Recovery: create a fresh admin account, e.g. if every admin got locked out
 create-admin username password:
-    cd backend && uv run python -m newswitch.cli create-admin {{username}} {{password}}
+    cd backend && uv run python -m newswitch.tools.accounts create-admin {{username}} {{password}}
 
 
-# Fail if the committed generated code no longer matches the running backend.
-# Requires the backend to be up (`just dev-backend`).
-drift-check:
+# Write the schemas of a complete microscope (configs/newswitch-config.yaml) into
+# frontend/schemas/, which the frontend's codegen generates its typed hooks from.
+export-schemas:
+    cd backend && uv run python -m newswitch.tools.export_schemas
+
+# Fail if the committed schema export or generated frontend code is stale.
+drift-check: export-schemas
     #!/usr/bin/env bash
     set -euo pipefail
-    just wait-backend
     cd frontend && yarn build >/dev/null
     cd ..
-    if ! git diff --quiet -- frontend/src/apps frontend/blok.json; then
-      echo "!! generated code is out of sync with the backend:" >&2
-      git diff --stat -- frontend/src/apps frontend/blok.json >&2
-      echo "!! run 'just dev-backend' + 'cd frontend && yarn build', then commit the result" >&2
+    paths="frontend/schemas frontend/src/apps"
+    if ! git diff --quiet -- $paths; then
+      echo "!! the schema export or the generated code is out of date:" >&2
+      git diff --stat -- $paths >&2
+      echo "!! commit the result of 'just drift-check' (it just regenerated both)" >&2
       exit 1
     fi
-    echo "generated code matches the backend"
+    echo "schema export and generated code match the backend"
 
 # ---------- build ----------
 

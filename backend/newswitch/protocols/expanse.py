@@ -1,26 +1,12 @@
-"""
-Stage Manager Protocol
-
-Defines the protocol for stage/positioner control and associated state. # TODO: What is this?!
-"""
+"""The expanse protocol: the frames acquired so far, as the frontend shows them in space."""
 
 from typing import Protocol, runtime_checkable
-from dataclasses import field
+
+from newswitch.models.frames import Frame, Image
 from newswitch.protocols.base import Manager
-from newswitch.protocols.core import Image, Frame
-from newswitch.arkitekt_app import nsapp
+from newswitch.states.expanse import ExpanseState
 
 
-@nsapp.state(required_locks=["expanse_state"])
-class ExpanseState:
-    """Shared state for stage position."""
-
-    current_id: str = field(default_factory=lambda: "expanse_001")
-    current_images: list[Image] = field(default_factory=lambda: [])
-    current_frames: list[Frame] = field(default_factory=lambda: [])
-
-
-@nsapp.context(locks=["expanse_state"])
 @runtime_checkable
 class ExpanseManager(Manager, Protocol):
     """Protocol defining the interface for expanse managers."""

@@ -1,0 +1,68 @@
+{
+  "count": 9,
+  "locks": {
+    "expanse_state": {
+      "key": "expanse_state",
+      "definition": {
+        "key": "expanse_state",
+        "description": "Lock definition for expanse_state"
+      }
+    },
+    "stage_position": {
+      "key": "stage_position",
+      "definition": {
+        "key": "stage_position",
+        "description": "Lock definition for stage_position"
+      }
+    },
+    "illumination": {
+      "key": "illumination",
+      "definition": {
+        "key": "illumination",
+        "description": "Lock definition for illumination"
+      }
+    },
+    "camera_parameters": {
+      "key": "camera_parameters",
+      "definition": {
+        "key": "camera_parameters",
+        "description": "Lock definition for camera_parameters"
+      }
+    },
+    "io": {
+      "key": "io",
+      "definition": {
+        "key": "io",
+        "description": "Lock definition for io"
+      }
+    },
+    "objective": {
+      "key": "objective",
+      "definition": {
+        "key": "objective",
+        "description": "Lock definition for objective"
+      }
+    },
+    "filter_bank": {
+      "key": "filter_bank",
+      "definition": {
+        "key": "filter_bank",
+        "description": "Lock definition for filter_bank"
+      }
+    },
+    "galvo": {
+      "key": "galvo",
+      "definition": {
+        "key": "galvo",
+        "description": "Lock definition for galvo"
+      }
+    },
+    "hook_registry": {
+      "key": "hook_registry",
+      "definition": {
+        "key": "hook_registry",
+        "description": "Lock definition for hook_registry"
+      }
+    }
+  }
+}

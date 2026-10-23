@@ -3,13 +3,13 @@
 The stage scene fills the screen: the stage and its axes, the live image, the frames and
 images taken (placed where they were taken), with the panels that float over it. The
 stage's and the camera's controls are beside it.
+
+Used only by ``python -m newswitch.tools.build_design``, which writes the bloks into a
+configuration's ``ui``; newswitch itself reads them from there.
 """
 
-from arkitekt import bsx
-
-from newswitch.arkitekt_app import nsapp
 from newswitch.bloks.fluorescence import ACQUIRE_OR_CALIBRATE
-from newswitch.bloks.catalog import CATALOG_NAME
+from newswitch.config_io import BlokEntry
 
 STAGE_UI = f"""
 <Resizable direction="row" className="h-full w-full">
@@ -47,14 +47,13 @@ STAGE_UI = f"""
 """
 
 
-def declare(default: bool) -> None:
-    """Declare the stage view."""
-    nsapp.blok(
-        "view-stage",
-        bsx(STAGE_UI),
+NAME = "view-stage"
+
+
+def blok(default: bool) -> BlokEntry:
+    """The stage view."""
+    return BlokEntry(
+        bsx=STAGE_UI,
         description="Stage: the sample on the stage, with the images taken there.",
-        catalog=CATALOG_NAME,
-        context="html",
         default=default,
-        mode="strict",
     )

@@ -1,5 +1,5 @@
 {
-  "_comment": "Full openUC2 setup driven by the USB-connected UC2 master (UC2-REST JSON protocol). This also covers the CAN-HAT master: the host talks serial JSON to the master, which bridges to its CAN slaves. Bench-validated 2026-07 against firmware UC2_canopen_master V2.0 on /dev/cu.SLAB_USBtoUART at 921600 baud. Set uc2_serial_port to null for auto-discovery. require_master keeps auto-discovery from picking a slave board. Boot with: NEWSWITCH_CONFIG=configs/uc2_serial.json uvicorn main:app --port 8099. steps_per_um 3.2 = 0.3125 um/step (openUC2 default lead screw); adjust per machine.",
+  "_comment": "Full openUC2 setup driven by the USB-connected UC2 master (UC2-REST JSON protocol). This also covers the CAN-HAT master: the host talks serial JSON to the master, which bridges to its CAN slaves. Bench-validated 2026-07 against firmware UC2_canopen_master V2.0 on /dev/cu.SLAB_USBtoUART at 921600 baud. Set uc2_serial_port to null for auto-discovery. require_master keeps auto-discovery from picking a slave board. Boot with: NEWSWITCH_CONFIG=configs/uc2_serial.json uvicorn main_fastapi:create --factory --port 8099. steps_per_um 3.2 = 0.3125 um/step (openUC2 default lead screw); adjust per machine.",
   "use_virtual_microscope": false,
   "uc2_transport": "rest",
   "uc2_serial_port": "/dev/cu.SLAB_USBtoUART",

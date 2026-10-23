@@ -272,7 +272,7 @@
     <p class="eyebrow">newswitch · backend</p>
     <h1>Architecture &amp; Developer Guide</h1>
     <p class="lede">How the FastAPI server, the arkitekt agent, the device managers and the
-      generated frontend fit together — and what every decorator in the codebase actually does.</p>
+      generated frontend fit together — and what every registration in the codebase actually does.</p>
     <p class="meta">
       <span><b>Target:</b> arkitekt 8 · arkitekt-runtime 5 · arkitekt-fastapi 2.1</span>
       <span><b>Repo:</b> newswitch/backend</span>
@@ -308,14 +308,17 @@
 
       <p>newswitch is a FastAPI app whose entire functional surface is managed by an
         <em class="term">arkitekt agent</em> embedded in the server. Nothing in the backend
-        defines REST endpoints for microscope features by hand. Instead, everything is declared on one
-        app object, <code>nsapp</code>:</p>
+        defines REST endpoints for microscope features by hand. Instead, everything is registered on an
+        app registry that <code>create_registry</code> creates fresh for every app. Modules only declare
+        plain functions and plain <code>@dataclass</code> models and states (no decorators);
+        <code>create_registry</code> imports them by name and registers them explicitly, according to the
+        device configuration:</p>
 
       <ul>
-        <li><strong>functions</strong> decorated with <code>@nsapp.action</code> become remotely callable <em class="term">actions</em>;</li>
-        <li><strong>data classes</strong> decorated with <code>@nsapp.state</code> become reactive shared state, pushed to every browser as JSON-patches;</li>
-        <li><strong>service classes</strong> marked with <code>@nsapp.context</code> (the “managers”) are dependency-injected into those functions by type annotation;</li>
-        <li>the frontend <strong>generates typed React hooks</strong> from the running backend’s schema endpoints, so UI code never hand-writes API calls.</li>
+        <li><strong>functions</strong> registered with <code>app.register_action</code> (in <code>create_registry</code>) become remotely callable <em class="term">actions</em>;</li>
+        <li><strong>data classes</strong> registered with <code>app.register_state</code> become reactive shared state, pushed to every browser as JSON-patches;</li>
+        <li><strong>service classes</strong> registered with <code>app.register_context</code> (the “managers”) are dependency-injected into those functions by type annotation;</li>
+        <li>the frontend <strong>generates typed React hooks</strong> from the backend’s schemas (a committed export of a complete microscope, <code>frontend/schemas/</code>), so UI code never hand-writes API calls.</li>
       </ul>
 
       <figure>
@@ -412,10 +415,12 @@
     <section id="concepts">
       <div class="h2row"><span class="num">02</span><h2>arkitekt concepts, one by one</h2></div>
 
-      <h3>One app object</h3>
-      <p>Everything is declared on one object, <code>nsapp = App("newswitch", app_context=ImswitchConfig)</code>
-        in <code>newswitch/arkitekt_app.py</code>. There are no module-level decorators and no global
-        registry: every declaring module imports <code>nsapp</code>. The stack is four packages, pinned
+      <h3>An app registry per app</h3>
+      <p><code>create_registry(devices, services=())</code> in <code>newswitch/microscope/registry.py</code> creates a fresh
+        <code>App("newswitch", app_context=Settings)</code> and explicitly registers, by name, what
+        the device configuration has: the models, the core, one group per configured part and the actions
+        needing several parts; the entry file then adds how the frames are watched and the configuration’s UI. Nothing registers itself on import and no
+        module holds an app: two apps in one process share nothing. The stack is four packages, pinned
         exactly in <code>backend/pyproject.toml</code>:</p>
       <ul>
         <li><code>arkitekt</code> 8.0.0 — the <code>App</code> facade, <code>Task</code>, <code>OptimisticInput</code>, <code>bsx</code>, <code>withValidator</code>;</li>
@@ -430,8 +435,8 @@
         in <code>create_app</code>) is the <em class="term">runtime container</em> for the whole app. It
         does not do microscope work itself. It owns:</p>
       <ul>
-        <li><code>contexts</code> — the live manager instances (everything <code>@nsapp.context</code>), keyed by name; routes find one by class with <code>context_of_type(agent, cls)</code> (<code>newswitch/routes/contexts.py</code>);</li>
-        <li><code>states</code> — the live state instances (everything <code>@nsapp.state</code>), each with a revision counter and a serialized (“shrunk”) copy;</li>
+        <li><code>contexts</code> — the live manager instances (everything <code>app.register_context</code>), keyed by name (newswitch’s own routes do not look them up here: they read them off the registry’s <code>Microscope</code>, see <a href="#video">§06</a>);</li>
+        <li><code>states</code> — the live state instances (everything <code>app.register_state</code>), each with a revision counter and a serialized (“shrunk”) copy;</li>
         <li><code>locks</code> — named task locks such as <code>stage_position</code>;</li>
         <li>the <strong>implementation map</strong> — one entry per declared action;</li>
         <li>the startup and shutdown hooks and the background workers;</li>
@@ -449,25 +454,42 @@
         <p>In upstream Arkitekt the agent connects <em>out</em> to an arkitekt server and receives
           assignments from there. In newswitch <strong>arkitekt-fastapi</strong> replaces that
           transport: the agent lives inside uvicorn and browsers talk to it directly over
-          <code>/ws</code> plus a few REST routes. Same model, no external server.</p>
+          <code>/ws</code> plus a few REST routes. Same model, no external server. Served by
+          <code>main_arkitekt.py</code> (<code>python main_arkitekt.py</code>) newswitch does connect out, as a
+          plain arkitekt agent — see <a href="#serving">Two ways to serve</a>.</p>
       </div>
 
       <h3>The app context</h3>
-      <p><code>App("newswitch", app_context=ImswitchConfig)</code> declares which class is the
-        <strong>app context</strong> — the one settings object of a deployment. <code>ImswitchConfig</code>
-        lives in <code>newswitch/config.py</code> and reads <code>base_config.yaml</code>. There is no marker
+      <p><code>App("newswitch", app_context=Settings)</code> declares which class is the
+        <strong>app context</strong> — the one settings object of a deployment. <code>Settings</code>
+        lives in <code>newswitch/settings.py</code> and reads <code>base_config.yaml</code>. There is no marker
         decorator; the declaration on the <code>App</code> is all there is.</p>
       <p>The object you pass as <code>app_context=</code> into <code>configure_fastapi</code> travels into
         <code>agent.aprovide(context=…)</code> and becomes <strong>injectable by type</strong> into hooks and
-        actions. That is why <code>provide_managers(app_context: ImswitchConfig)</code> receives the config:
+        actions. That is why the startup hooks (<code>provide_stage(app_context: Settings)</code>, …) receive the config:
         the parameter’s <em>type annotation</em> is matched against the app-context class. The served app
         refuses to start without one (<code>require_app_context</code> in the lifespan).</p>
 
-      <h3><code>@nsapp.startup</code> — the composition root</h3>
-<pre><code>@nsapp.startup
-async def provide_managers(app_context: ImswitchConfig) -&gt; Tuple[
-    FrameBroadcaster, UC2BusManager, UC2State, StageManager, …, StageState, …
-]:</code></pre>
+      <h3><code>app.register_startup</code> — the composition root</h3>
+<pre><code># newswitch/microscope/parts.py: data and functions
+parts = configured_parts(devices)          # Parts(stage=True, detector=True, …), a value
+build_microscope(settings, devices)        # -&gt; Microscope: a record of every state and manager
+
+# newswitch/microscope/registry.py, in create_registry:
+built: list[Microscope] = []
+
+def microscope(settings: Settings) -&gt; Microscope:    # one build, on the first hook
+    if not built:
+        built.append(build_microscope(settings, devices))
+    return built[0]
+
+if parts.stage:
+    async def provide_stage(app_context: Settings) -&gt; Tuple[StageManager, StageState]:
+        m = microscope(app_context)
+        return m.stage, m.stage_state
+
+    app.register_startup(provide_stage)
+…</code></pre>
       <p>Startup hooks run <strong>once, when the agent boots</strong> (inside <code>aprovide</code>,
         before anything is callable). Two pieces of magic, both driven purely by type annotations:</p>
       <ol class="prose">
@@ -480,11 +502,23 @@ async def provide_managers(app_context: ImswitchConfig) -&gt; Tuple[
           context go into <code>agent.contexts</code>; objects whose class is a state go into
           <code>agent.states</code> (serialized, revision 0, immediately subscribable).</li>
       </ol>
-      <p>So <code>provide_managers</code> is the <strong>composition root</strong>: everything it returns
-        is published for the rest of the agent lifecycle and becomes injectable into every action,
-        background worker and shutdown hook. <code>@nsapp.shutdown</code> hooks
-        (<code>save_device_config</code>, <code>close_detector</code>) run on teardown, after background
-        workers and running tasks are cancelled.</p>
+      <p>So <code>create_registry</code> is the <strong>composition root</strong>: it defines one startup
+        hook per part (<code>provide_core</code>, <code>provide_stage</code>,
+        <code>provide_illumination</code>, <code>provide_detector</code>, <code>provide_objective</code>,
+        <code>provide_filter_bank</code>, <code>provide_uc2</code>, and <code>provide_focus</code> for the
+        focus group, stage + detector), closures with static <code>Tuple[…]</code> return annotations,
+        next to the registration of what they provide, only for the configured parts. Startup hooks get
+        only the app context injected (no states or contexts exist yet) and none sees what another
+        returned, while the parts depend on each other (the simulated detector reads four other states,
+        acquisition and hooks use several managers, the UC2 parts share one bus); so all hooks hand out
+        the objects of one <code>build_microscope</code>, made on the first hook and kept in
+        <code>create_registry</code>’s closure. A part the configuration lacks is never constructed (on hardware nothing
+        talks to the bus for it); the states shared managers read of it (light path, metadata, the
+        simulated detector) stay empty. Everything a hook returns is published for the rest of the agent
+        lifecycle and becomes injectable into every action, background worker and shutdown hook.
+        <code>app.register_shutdown</code> hooks (<code>save_device_config</code>, if the microscope was started;
+        <code>close_detector</code>) run on teardown, after background workers and running tasks are
+        cancelled.</p>
       <div class="note clay">
         <span class="tag">Footgun</span>
         <p>If you build a new manager and forget to add it to <strong>both</strong> the returned value
@@ -496,11 +530,14 @@ async def provide_managers(app_context: ImswitchConfig) -&gt; Tuple[
         live shared state instance” (e.g. <code>state: StageState</code>). Contexts are never serialized;
         states are.</p>
 
-      <h3><code>@nsapp.action</code> — actions</h3>
+      <h3><code>app.register_action</code> — actions</h3>
       <p>Any function becomes a remotely callable action:</p>
-<pre><code>@nsapp.action(optimistics=[OptimisticInput(state="StageState", path="/x", accessor="/x"), …])
+<pre><code># newswitch/actions/stage.py: a plain function
 def move_stage(stage: StageManager, task: Task, x: float | None = None, …) -&gt; None:
-    stage.move(x=x, …, task=task)</code></pre>
+    stage.move(x=x, …, task=task)
+
+# newswitch/microscope/registry.py, in create_registry, when a stage is configured
+app.register_action(stage.move_stage, optimistics=[OptimisticInput(state="StageState", path="/x", accessor="/x"), …])</code></pre>
       <ul>
         <li>Parameters that are contexts or states are injected and stay invisible to callers; everything
           else becomes the action’s <em class="term">argument schema</em> (its “ports”), which is what the
@@ -518,34 +555,35 @@ def move_stage(stage: StageManager, task: Task, x: float | None = None, …) -&g
         <li>Argument validators are blok UtilCalls built with
           <code>withValidator("len(value) &gt; 0", error_message=…)</code>, evaluated in the frontend by
           <code>src/lib/arkitekt/calls.ts</code>.</li>
-        <li>Declarations happen at <strong>import time</strong> onto <code>nsapp</code> — which is why
-          <code>app.py</code> imports <code>newswitch.registers.uc2</code> and the routines purely for their
-          side effects.</li>
+        <li>Nothing is registered at import time: a function becomes an action when
+          <code>create_registry</code> calls <code>app.register_action(fn, …)</code> on the registry it creates.</li>
       </ul>
 
-      <h3><code>@nsapp.background</code> — daemons</h3>
-      <p><code>@nsapp.background</code> functions are long-running workers started right after the startup
+      <h3><code>app.register_background</code> — daemons</h3>
+      <p><code>app.register_background</code> functions are long-running workers started right after the startup
         hooks; async ones run on the event loop, sync ones in a dedicated thread. They use the same injection:
         <code>run_uc2_bus(uc2_bus: UC2BusManager)</code> gets the live bus. newswitch runs three — the
         detector acquisition loop, the UC2 bus connection pump, and the UC2 event → state dispatcher.</p>
 
-      <h3>The class decorators</h3>
+      <h3>Registering classes</h3>
+      <p>Models and states are plain <code>@dataclass</code>es; registering them does not change the class,
+        so any number of registries can take the same one.</p>
       <div class="tablewrap">
         <table class="wrapfirst">
-          <thead><tr><th>Decorator</th><th>From</th><th>What it does</th></tr></thead>
+          <thead><tr><th>Registration</th><th>From</th><th>What it does</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>@nsapp.context</code></td>
+              <td><code>app.register_context</code></td>
               <td><code>arkitekt.App</code></td>
               <td>Marks a class (usually a <code>Protocol</code>) as an <strong>injectable service</strong> — a “manager”. <code>locks=[…]</code> are the locks every action taking this context holds.</td>
             </tr>
             <tr>
-              <td><code>@nsapp.state</code></td>
+              <td><code>app.register_state</code></td>
               <td><code>arkitekt.App</code></td>
               <td>The heavy one. Introspects the class into a <strong>state schema</strong> (a port per field) and makes instances <em>evented</em>: every <code>setattr</code> applies the change under the state’s own RLock and publishes a JSON-patch with a new revision to all subscribers. <code>required_locks=[…]</code> are the locks every action taking this state holds; writes are not checked against locks.</td>
             </tr>
             <tr>
-              <td><code>@nsapp.model</code></td>
+              <td><code>app.register_model</code></td>
               <td><code>arkitekt.App</code></td>
               <td>Marks a dataclass as a <strong>serializable data structure</strong> so it can appear inside action arguments, returns and state fields. Its identifier is <code>@newswitch/&lt;snake_name&gt;</code>; enums travel by member name (<code>"SEQUENTIAL"</code>). Used for config and value objects (<code>StageConfig</code>, <code>Illumination</code>, <code>UC2CanBusConfig</code>). No reactivity.</td>
             </tr>
@@ -559,56 +597,111 @@ def move_stage(stage: StageManager, task: Task, x: float | None = None, …) -&g
       </div>
 
       <h3>The app registry and bloks</h3>
-      <p><code>nsapp.registry</code> is the app’s <strong>AppRegistry</strong> — the accumulator for
-        everything above: implementations, state schemas, locks, bloks, hooks. The decorators write into it;
-        <code>nsapp.register_action(fn)</code> is the explicit spelling used for the routines:</p>
-<pre><code>nsapp.register_action(acquire_multidimensional_acquisition)
-nsapp.register_action(scan_region)</code></pre>
+      <p><code>app.registry</code> is an app’s <strong>AppRegistry</strong> — the accumulator for
+        everything above: implementations, state schemas, locks, bloks, hooks. <code>create_registry</code>
+        creates one and registers everything on it explicitly, by name, based on the device
+        configuration, and <code>create_app</code> serves it:</p>
+      <ol class="prose">
+        <li>the models, always (<code>register_models(app)</code>);</li>
+        <li>the core every microscope has: io, hooks, expanse, calibration, light path, metadata, cache,
+          the action <code>clear_expanse</code>;</li>
+        <li>one group per configured part — stage, illumination, detector, objective, filter bank, UC2 board
+          (a <code>uc2-rest</code> or <code>canopen</code> controller) — each with its states, contexts,
+          startup hook, actions (<code>newswitch/actions/&lt;part&gt;.py</code>) and background tasks;</li>
+        <li>what needs several parts, when all are there: the focus group (stage + detector,
+          <code>parts.focus</code>: the state <code>AutofocusState</code> from
+          <code>provide_focus</code>, and <code>run_autofocus</code>, <code>calibrate_light_path</code>,
+          <code>scan_region</code>); <code>acquire_multidimensional_acquisition</code> (stage + detector +
+          illumination); <code>run_uc2_event_dispatch</code> (UC2 board + stage).</li>
+      </ol>
+      <p>The detectors send their frames to the context <code>FrameSink</code> (a runtime-checkable
+        protocol, <code>newswitch.broadcasters.FrameSink</code>), which the core registers but does not provide:
+        the entry file provides it with a startup hook of its own, and passes in the arkitekt <code>services</code>
+        the <code>App</code> is created with. The background <code>run_detector_loop(detector: DetectorManager,
+        sink: FrameSink)</code> gets both contexts injected and calls <code>detector.acquire_live(sink)</code>.
+        The entry file also registers how the frames are watched and the configuration’s UI on the returned
+        app (<a href="#serving">Two ways to serve</a>).</p>
+<pre><code>def create_registry(devices: NewswitchConfig | None,
+                    services: Sequence[Service[Any]] = ()) -&gt; App:
+    app = App("newswitch", app_context=Settings, services=services, root=ASSET_ROOT)
+    parts = configured_parts(devices)
+    built: list[Microscope] = []
+    def microscope(settings: Settings) -&gt; Microscope: …  # build_microscope(settings, devices), once
+    register_models(app)
+    app.register_state(IOState, required_locks=[locks.IO])  # … the core
+    app.register_context(FrameSink)                        # provided by the entry file
+    app.register_startup(provide_core)                     # closures over microscope()
+    app.register_action(core.clear_expanse)
+    if parts.stage:
+        app.register_state(StageState, required_locks=[locks.STAGE])
+        app.register_context(StageManager, locks=[locks.STAGE])
+        app.register_startup(provide_stage)
+        app.register_action(stage.move_stage, optimistics=[…])
+    …                                                      # illumination, detector, …
+    if parts.focus:                                        # stage + detector
+        app.register_state(AutofocusState)
+        app.register_startup(provide_focus)
+        app.register_action(scan_region)                   # run_autofocus, calibrate_light_path
+    return app
+
+# main_fastapi.py: the transport and the UI, on top
+async def provide_frame_broadcaster(app_context: Settings) -&gt; Tuple[FrameSink]:
+    return (FrameBroadcaster(),)             # the detectors’ sink: the live view’s broadcaster
+
+def create_fastapi_registry(devices: NewswitchConfig | None) -&gt; App:
+    app = create_registry(devices)
+    app.register_startup(provide_frame_broadcaster)
+    declare_ui(app, devices)                 # the config’s ui
+    return app</code></pre>
+      <p>Without a configuration only the models and the core are registered: <code>clear_expanse</code> is
+        the only action. The configuration’s bloks
+        are validated strictly against what was registered: a blok calling an action whose device is
+        absent is refused.</p>
       <p>You can register <strong>any function</strong> whose non-injected parameters are serializable
         types — that is how a new “app” (in the ImSwitch sense) gets its backend surface. When the server
         starts, the agent serves a validated, frozen snapshot of the registry.</p>
-      <p><code>nsapp.blok(name, bsx(…))</code> is different: it ships a <strong>server-defined UI
-        fragment</strong> written in a JSX-like markup. Bloks are served at <code>/schemas/bloks</code> and
-        read by the frontend <strong>at run time</strong>, nothing about the UI is built in, then rendered by the
-        frontend’s blok renderer. The backend declares one default UI, chosen by <code>ui</code> in
-        <code>base_config.yaml</code>: <code>standard</code>, <code>minimal</code> or <code>design</code> (an optikit
-        design’s microscope in 3D). Bloks can bind to states
+      <p>A blok is different: it ships a <strong>server-defined UI fragment</strong> written in a
+        JSX-like markup. Bloks are served at <code>/schemas/bloks</code> and read by the frontend
+        <strong>at run time</strong>, nothing about the UI is built in, then rendered by the frontend’s blok
+        renderer. They are not written in Python: they are the <code>ui</code> section of the device
+        configuration, checked against the catalog the frontend publishes
+        (<code>newswitch/bloks/newswitch-catalog.json</code>, versioned as <code>newswitch@&lt;n&gt;</code>). Bloks can bind to states
         (<code>@self.ObjectiveState.mounted_lenses</code>), loop (<code>&lt;foreach&gt;</code>) and invoke
         actions (<code>onClick="@self.switch_objective(lens.slot)"</code>). Use them for small panels that
         should not require a frontend build.</p>
-      <div class="note clay">
-        <span class="tag">What is “jonda”?</span>
-        <p>Simply the arbitrary name of a demo blok left in <code>app.py</code> — the card itself reads
-          <em>“Bene don’t look at this yet, this is just a placeholder.”</em> It demonstrates the binding
-          syntax and can be renamed or removed freely.</p>
-      </div>
     </section>
 
     <!-- ============ 3 ============ -->
     <section id="boot">
       <div class="h2row"><span class="num">03</span><h2>Boot lifecycle, step by step</h2></div>
-      <p>What happens when you run <code>uvicorn main:app --port 8099</code>:</p>
+      <p>What happens when you run <code>uvicorn main_fastapi:create --factory --port 8099</code>:</p>
 
       <ol class="steps">
         <li>
           <span class="idx">01</span>
           <div class="body">
-            <b>Import time</b>
-            <p>Importing <code>newswitch.app</code> (and the protocol, register and routine modules it
-              imports) executes every <code>@nsapp.*</code> decorator — <code>nsapp.registry</code> fills up.
-              <code>main.load_config()</code> optionally reads <code>NEWSWITCH_CONFIG</code>, then
-              <code>create_app(config)</code> runs.</p>
-            <span class="where">backend/main.py · backend/newswitch/app.py</span>
+            <b>main_fastapi.create()</b>
+            <p>uvicorn calls the factory (<code>uvicorn main_fastapi:create --factory</code>), on every reload again.
+              <code>newswitch.settings.load_settings()</code> reads <code>base_config.yaml</code>, optionally replaced by the
+              file <code>NEWSWITCH_CONFIG</code> names, then <code>create_app(settings)</code> runs. Importing
+              modules registers nothing.</p>
+            <span class="where">backend/main_fastapi.py</span>
           </div>
         </li>
         <li>
           <span class="idx">02</span>
           <div class="body">
             <b>create_app builds the FastAPI app</b>
-            <p>Adds auth and CORS middleware, then calls <code>configure_fastapi(app=app,
-              app_registry=nsapp.registry, expand_user_from_request=…, app_context=config,
-              db_file=config.db_path)</code> from <code>arkitekt_fastapi</code>.</p>
-            <span class="where">newswitch/app.py → create_app()</span>
+            <p>Adds auth and CORS middleware, reads the device configuration (<code>load_devices(config, "ui")</code>),
+              creates the registry (<code>create_fastapi_registry(devices)</code>: <code>create_registry(devices)</code>,
+              the startup hook <code>provide_frame_broadcaster</code> that provides a <code>FrameBroadcaster</code> as the
+              <code>FrameSink</code>, <code>declare_ui</code>), then calls <code>configure_fastapi(app=app,
+              app_registry=registry.registry, expand_user_from_request=…, app_context=config,
+              db_file=config.db_path)</code> from <code>arkitekt_fastapi</code>. Then the non-agent routes
+              are added: accounts (<code>newswitch/accounts/routes.py</code>), and the routes of
+              <code>newswitch/routes/</code>, module-level routers — <code>newswitch.routes.liveview.router</code> at
+              <code>/stream</code>, <code>newswitch.routes.files.router</code>, <code>newswitch.routes.cache.router</code>.</p>
+            <span class="where">backend/main_fastapi.py → create_app()</span>
           </div>
         </li>
         <li>
@@ -662,18 +755,21 @@ nsapp.register_action(scan_region)</code></pre>
             <p>Inside <code>async with agent:</code> the provide task starts and orchestrates the rest of
               the boot. On shutdown this task is cancelled, tearing everything down — background workers
               and running tasks are cancelled (which is why <code>abackground()</code> implementations must
-              re-raise <code>CancelledError</code>), then the <code>@nsapp.shutdown</code> hooks run.</p>
+              re-raise <code>CancelledError</code>), then the <code>app.register_shutdown</code> hooks run.</p>
             <span class="where">arkitekt_fastapi/routes.py:91 · arkitekt_runtime/agents/base.py:2106</span>
           </div>
         </li>
         <li>
           <span class="idx">08</span>
           <div class="body">
-            <b>@nsapp.startup provide_managers runs</b>
-            <p><code>ImswitchConfig</code> is injected by type. The body builds every state and manager,
+            <b>The startup hooks run</b>
+            <p>One <code>app.register_startup</code> hook per configured part (<code>provide_core</code>,
+              <code>provide_stage</code>, …). <code>Settings</code> is injected by type. The first hook
+              builds the states and managers of every configured part (<code>build_microscope</code>, once),
               choosing <code>VirtualUC2Bus</code>, <code>UC2CanBus</code> or <code>UC2RestBus</code> from
-              <code>config.uc2_transport</code>, and returns one big tuple.</p>
-            <span class="where">newswitch/app.py → provide_managers()</span>
+              <code>config.uc2_transport</code>; each hook returns its part’s tuple. The entry file’s
+              <code>provide_frame_broadcaster</code> provides the <code>FrameSink</code>.</p>
+            <span class="where">newswitch/microscope/registry.py → provide_&lt;part&gt;() · parts.py → build_microscope()</span>
           </div>
         </li>
         <li>
@@ -689,8 +785,8 @@ nsapp.register_action(scan_region)</code></pre>
         <li>
           <span class="idx">10</span>
           <div class="body">
-            <b>@nsapp.background workers start</b>
-            <p><code>run_detector_loop</code> (frames → FrameBroadcaster), <code>run_uc2_bus</code>
+            <b>app.register_background workers start</b>
+            <p><code>run_detector_loop</code> (frames → the <code>FrameSink</code>, here the FrameBroadcaster), <code>run_uc2_bus</code>
               (connects the transport, pumps telemetry, reconnects with exponential backoff) and
               <code>run_uc2_event_dispatch</code> (mirrors bus events into
               <code>StageState</code>/<code>UC2State</code>).</p>
@@ -701,8 +797,8 @@ nsapp.register_action(scan_region)</code></pre>
           <span class="idx">11</span>
           <div class="body">
             <b>Frontend connects</b>
-            <p>At build time the Vite plugin already fetched <code>/schemas/*</code> and generated typed
-              hooks and bloks. At runtime the browser opens <code>/ws</code> with <code>journal: true</code>,
+            <p>At build time the Vite plugin already generated typed hooks from the committed schema export
+              (<code>frontend/schemas/</code>, written by <code>just export-schemas</code>). At runtime the browser opens <code>/ws</code> with <code>journal: true</code>,
               receives the current states with their revisions, and subscribes to patches, task events and
               locks; every frame then carries its journal <code>pos</code>.</p>
             <span class="where">frontend/plugins/generate-app.ts · frontend/src/lib/arkitekt/transport/</span>
@@ -749,13 +845,21 @@ nsapp.register_action(scan_region)</code></pre>
           <code>required_locks</code>, a context’s <code>locks</code>). They do two things: an action waits
           until no other running action holds the same lock — real mutual exclusion, command exclusivity
           over a device for a whole multi-step operation — and the UI is told
-          (<code>LOCK</code>/<code>UNLOCK</code>) so it can disable conflicting actions.</li>
+          (<code>LOCK</code>/<code>UNLOCK</code>) so it can disable conflicting actions. The names are the
+          constants of <code>newswitch/microscope/locks.py</code>, one per part (and shared service): <code>STAGE</code>
+          (<code>"stage_position"</code>), <code>ILLUMINATION</code>, <code>DETECTOR</code>
+          (<code>"camera_parameters"</code>), <code>OBJECTIVE</code>, <code>FILTER_BANK</code>,
+          <code>GALVO</code>, <code>IO</code>, <code>HOOKS</code> (<code>"hook_registry"</code>),
+          <code>EXPANSE</code> (<code>"expanse_state"</code>), <code>CACHE</code>; each part’s state and
+          manager carry its lock (the <code>ObjectiveManager</code> holds <code>OBJECTIVE</code>), the
+          <code>AcquisitionManager</code> holds <code>EXPANSE</code> and <code>IO</code>, and the UC2
+          actions name theirs explicitly.</li>
         <li><strong>State writes are not checked against locks.</strong> Managers, background loops (the UC2
           event dispatch) and shutdown hooks write states freely. Writes made inside an action through the
           injected state are attributed to the task (the patch carries its <code>task_id</code>) and refused
           after the task ended; writes made by managers or hooks directly carry no task id.</li>
         <li><code>optimistics=[OptimisticInput(state=…, path="/x", accessor="/x")]</code> on
-          <code>@nsapp.action</code> lets the UI apply a <em>predicted</em> patch immediately when the call is
+          <code>app.register_action</code> lets the UI apply a <em>predicted</em> patch immediately when the call is
           made; the real patch reconciles it.</li>
         <li>The <strong>journal</strong> is one ordered record per agent session: every entry has a
           <code>pos</code> (1, 2, 3 … no gaps), a <code>global_rev</code>, a <code>kind</code>, a
@@ -770,15 +874,72 @@ nsapp.register_action(scan_region)</code></pre>
     <!-- ============ 6 ============ -->
     <section id="video">
       <div class="h2row"><span class="num">06</span><h2>Video streaming (separate from /ws)</h2></div>
-      <p>Bulk pixels never travel through the state system. The detector background loop pushes frames
-        into the <strong>FrameBroadcaster</strong>, which owns shared encoders (zstd, H.264) keyed by
+      <p>Bulk pixels never travel through the state system. The detector background loop
+        (<code>run_detector_loop</code>, <code>detector.acquire_live(sink)</code>) pushes frames into the
+        <strong>FrameBroadcaster</strong> — the <code>FrameSink</code> <code>main_fastapi.py</code> provides — which owns shared encoders (zstd, H.264) keyed by
         <code>(slot, config)</code> — ten browsers cost one encode. Browsers open
-        <code>WS /stream/zstd/{slot}</code> or <code>/stream/h264/{slot}</code> and decode with
+        <code>WS /stream/zstd/{slot}</code> or <code>/stream/h264/{slot}</code> — the first message is the
+        client’s auth frame — and decode with
         <code>fzstd</code> / <code>jmuxer</code>. Scan and acquisition code can broadcast into additional
         slots, for example stitched-map tiles.</p>
+      <p><code>create_app</code> includes the module-level routers of <code>newswitch/routes/</code> —
+        <code>liveview.router</code> at <code>/stream</code>, <code>files.router</code>
+        (<code>/files/…</code>), <code>cache.router</code> (<code>/cache/…</code>). All read what they need off
+        the running agent’s contexts (<code>running_context(connection, cls)</code> in
+        <code>routes/__init__.py</code>, for requests and websockets): files the <code>IOManager</code>, cache the
+        <code>CacheManager</code>, the live view the <code>FrameBroadcaster</code> (provided as the
+        <code>FrameSink</code>). Before startup the HTTP routes answer 503 and the live-view websocket closes
+        with 1013.</p>
       <p class="meta" style="margin:0"><span>backend/newswitch/broadcasters/</span>
-        <span>backend/newswitch/routes/ws/liveview.py</span>
+        <span>backend/newswitch/routes/liveview.py</span>
         <span>frontend/src/components/liveview/StreamingView.tsx</span></p>
+
+      <h3 id="serving">Two ways to serve</h3>
+      <p>The detectors only know the <strong>FrameSink</strong> protocol (<code>start_broadcasting()</code>,
+        <code>broadcast_sync(slot, frame)</code> from the detector’s thread), a context <code>create_registry</code>
+        registers and the entry file provides. Which sink they get, and which UI
+        is declared, is up to the entry file. Both start the same way (<code>backend/main.py</code>: settings,
+        then <code>load_devices(config, "ui" | "agent_ui")</code>, which raises <code>ConfigError</code> when the device
+        configuration lacks that UI section), call <code>create_registry(devices, services=())</code>, then
+        register on the returned app what is particular to them, among it a module-level startup hook that
+        provides the <code>FrameSink</code>; <code>python main.py fastapi|arkitekt</code> picks one.</p>
+      <div class="tablewrap">
+        <table class="wrapfirst">
+          <thead><tr><th></th><th><code>main_fastapi.py</code></th><th><code>main_arkitekt.py</code></th></tr></thead>
+          <tbody>
+            <tr><td>Run</td><td><code>uvicorn main_fastapi:create --factory</code>, <code>just dev</code></td><td><code>python main_arkitekt.py</code>, <code>just agent</code></td></tr>
+            <tr><td>Registry</td><td><code>create_fastapi_registry(devices)</code> → <code>App</code></td><td><code>create_arkitekt_registry(devices)</code> → <code>App</code></td></tr>
+            <tr><td>Sink</td><td><code>FrameBroadcaster</code>, provided as the <code>FrameSink</code></td><td><code>LovekitSink(cameras_of(devices))</code> (<code>broadcasters/lovekit.py</code>), provided as the <code>FrameSink</code>; <code>services=(lovekit_service,)</code></td></tr>
+            <tr><td>Registers</td><td>startup <code>provide_frame_broadcaster</code> → <code>Tuple[FrameSink]</code></td><td>state <code>CameraStreams</code>, startup <code>provide_lovekit_sink</code> → <code>Tuple[FrameSink, CameraStreams]</code>, background <code>publish_camera_streams</code> (when there are detectors)</td></tr>
+            <tr><td>UI</td><td>config <code>ui</code>, the newswitch frontend’s catalog (<code>declare_ui</code>)</td><td>config <code>agent_ui</code>, Orkestrator’s standard catalog (<code>declare_agent_ui</code>)</td></tr>
+            <tr><td>Frames</td><td><code>WS /stream/…</code> (above)</td><td>lovekit streams, one per detector</td></tr>
+            <tr><td>HTTP routes</td><td>auth, accounts, <code>newswitch/routes/</code>: live view, files, cache</td><td>none</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>main_arkitekt.py</code> runs the registry with <code>arkitekt.run</code>, which logs in to the arkitekt server
+        fakts finds (<code>--url</code> / <code>$FAKTS_URL</code>); it needs the extra <code>agent</code>
+        (<code>arkitekt[rekuest,lovekit]</code>, <code>uv sync --extra agent</code>), and only it imports
+        lovekit (<code>newswitch.broadcasters</code> does not import <code>lovekit.py</code>). Each configured detector becomes a lovekit <code>VideoStream</code>, keyed by its key in the
+        device configuration (stable across restarts) and titled by its name (<code>cameras_of(devices)</code>
+        → <code>list[CameraStream]</code>). The startup hook <code>provide_lovekit_sink</code> provides a
+        <code>LovekitSink(cameras_of(load_devices(app_context)))</code> as the <code>FrameSink</code>, and a
+        <code>CameraStreams</code>. The <code>LovekitSink</code> keeps the newest frame per detector; the background
+        hook <code>publish_camera_streams(lovekit, sink: FrameSink, live: CameraStreams)</code> (a sink that is
+        not a <code>LovekitSink</code> is refused with a <code>TypeError</code>) sends what is new, at most <code>MAX_FPS</code> (15) per stream, converting with <code>to_rgba</code> off the event
+        loop (~37 ms per 1920×1200 frame). The declared streams are held in the state
+        <code>CameraStreams</code>, which the <code>agent_ui</code> bloks show
+        (<code>&lt;StructureDisplay value="@stream" /&gt;</code>). The <code>agent_ui</code> is checked
+        strictly, offline, against the catalog arkitekt ships (<code>orkestrator@v4.2.1</code>) and the
+        registry; a configuration without one does not start as an agent. The agent serves no HTTP
+        routes: the files the IO manager writes and the frame cache are not reachable from Orkestrator,
+        so a frame’s cache id or a file handle points nowhere there — a known gap. So far the agent is
+        tested offline only, with a fake lovekit client.</p>
+      <p class="meta" style="margin:0"><span>backend/main.py</span>
+        <span>backend/main_fastapi.py</span>
+        <span>backend/main_arkitekt.py</span>
+        <span>backend/newswitch/broadcasters/lovekit.py</span>
+        <span>backend/newswitch/broadcasters/sink.py</span></p>
     </section>
 
     <!-- ============ 7 ============ -->
@@ -788,17 +949,26 @@ nsapp.register_action(scan_region)</code></pre>
         <table class="wrapfirst">
           <thead><tr><th>Path</th><th>Role</th></tr></thead>
           <tbody>
-            <tr><td><code>newswitch/arkitekt_app.py</code></td><td>The one app object: <code>nsapp = App("newswitch", app_context=ImswitchConfig)</code>. Every declaring module imports it.</td></tr>
-            <tr><td><code>newswitch/config.py</code></td><td><code>ImswitchConfig</code>, the app context, read from <code>base_config.yaml</code>.</td></tr>
-            <tr><td><code>newswitch/app.py</code></td><td>App assembly: <code>provide_managers</code> (<code>@nsapp.startup</code>), shutdown hooks, background workers, most actions, blok demos, <code>create_app</code> (<code>configure_fastapi</code>).</td></tr>
-            <tr><td><code>newswitch/protocols/</code></td><td>The <strong>contracts</strong>: per-domain <code>Protocol</code> (<code>@nsapp.context</code>) plus <code>@nsapp.state</code> classes — <code>stage</code>, <code>illumination</code>, <code>detector</code>, <code>objective</code>, <code>filter_bank</code>, <code>uc2</code> (bus protocol and typed hardware events), <code>autofocus</code>, <code>light_path</code>/<code>core</code> (Kube optics model), <code>expanse</code>, <code>io</code>, <code>hook_manager</code>, <code>metadata</code>, <code>calibration</code>, <code>acquistion_manager</code>, <code>cache</code>.</td></tr>
-            <tr><td><code>newswitch/managers/virtual/</code></td><td>Full simulation implementations: stage, LED, detector with synthetic PSF, objective, filter bank.</td></tr>
-            <tr><td><code>newswitch/managers/uc2/</code></td><td>Real hardware: <code>canopen_bus.py</code>, <code>rest_bus.py</code>, <code>virtual_bus.py</code> (transports behind <code>UC2BusManager</code>), <code>event_broker.py</code> (fan-out), <code>dispatch.py</code> (events → states), plus bus-based device managers for stage, illumination, objective, filter bank and galvo.</td></tr>
-            <tr><td><code>newswitch/registers/</code></td><td>Standalone <code>@nsapp.action</code> modules, imported for side effects — e.g. <code>uc2.py</code> with home/stop/laser/LED/galvo/node-scan actions.</td></tr>
-            <tr><td><code>newswitch/routines/</code></td><td>Multi-step procedures registered as actions: <code>region_scan</code>, <code>multidimensional_acquisition</code>, <code>calibration</code>, <code>autofocus</code>. The template for porting ImSwitch “apps”.</td></tr>
-            <tr><td><code>newswitch/hooks/</code></td><td>Policy functions bound through the <code>HookManager</code>, e.g. software autofocus.</td></tr>
-            <tr><td><code>newswitch/broadcasters/</code></td><td>FrameBroadcaster and encoders.</td></tr>
-            <tr><td><code>newswitch/routes/</code></td><td>Hand-written non-agent routes: <code>/stream</code> websockets, file and cache HTTP; <code>contexts.py</code> (<code>context_of_type</code>) finds a manager of the running agent.</td></tr>
+            <tr><td><code>main.py</code></td><td><strong>Start here</strong>: the steps both ways of serving share. <code>load_devices(config, "ui" | "agent_ui")</code>: the device configuration of the settings, <code>ConfigError</code> without that UI section; <code>python main.py fastapi|arkitekt</code>.</td></tr>
+            <tr><td><code>main_fastapi.py</code></td><td>Served by FastAPI: the startup hook <code>provide_frame_broadcaster</code> (a <code>FrameBroadcaster</code> as the <code>FrameSink</code>), <code>create_fastapi_registry(devices)</code> → <code>App</code> (<code>create_registry</code>, that startup hook, <code>declare_ui</code>), <code>create_app</code> (<code>configure_fastapi</code>, auth, accounts, the routers of <code>newswitch/routes/</code>), the uvicorn factory <code>create</code>, <code>main</code>.</td></tr>
+            <tr><td><code>main_arkitekt.py</code></td><td>Served as an arkitekt agent: <code>cameras_of(devices)</code>, the startup hook <code>provide_lovekit_sink</code> (a <code>LovekitSink</code> as the <code>FrameSink</code>, and <code>CameraStreams</code>), <code>create_arkitekt_registry(devices)</code> → <code>App</code> (<code>create_registry</code> with <code>lovekit_service</code>, the state <code>CameraStreams</code>, that startup hook, <code>publish_camera_streams</code>, <code>declare_agent_ui</code>), <code>create(settings)</code>, <code>main</code> (<code>arkitekt.run</code>).</td></tr>
+            <tr><td><code>newswitch/tools/</code></td><td>Tools beside the servers: <code>build_design.py</code> (<code>just build-design</code>), <code>export_schemas.py</code> (<code>just export-schemas</code>: <code>create_registry</code> on <code>REFERENCE_CONFIG</code>, its registry snapshot written to <code>frontend/schemas/</code>), <code>accounts.py</code> (account recovery from a shell).</td></tr>
+            <tr><td><code>newswitch/settings.py</code></td><td><code>Settings</code> (the app context), read from <code>base_config.yaml</code> (among its fields <code>image_dir</code>, <code>cache_dir</code>), and <code>load_settings</code> / <code>load_devices</code>: the settings and device configuration both servers start from.</td></tr>
+            <tr><td><code>newswitch/microscope/registry.py</code></td><td><code>create_registry(devices, services=())</code>: creates a fresh <code>App("newswitch", app_context=Settings, services=services)</code> and explicitly registers, by name, the models (<code>register_models</code>), the core (with the context <code>FrameSink</code>, which the entry file provides), one group per configured part and the multi-part actions; no UI, no streams (the entry files add those).</td></tr>
+            <tr><td><code>newswitch/microscope/parts.py</code></td><td>Data and functions: <code>configured_parts(devices)</code> → <code>Parts</code> (which parts; <code>focus</code> = stage + detector), <code>build_microscope(settings, devices)</code> → <code>Microscope</code> (a record of every state and manager, absent parts None), from <code>build_uc2_bus</code>, <code>build_stage</code>, <code>build_illumination</code>, <code>build_objective</code>, <code>build_filter_bank</code>, <code>build_detector_manager</code>; <code>save_device_config(settings, microscope)</code>. The startup hooks are closures in <code>create_registry</code>.</td></tr>
+            <tr><td><code>newswitch/microscope/locks.py</code></td><td>The lock names, one constant per part (and shared service): <code>STAGE</code> = <code>"stage_position"</code>, <code>ILLUMINATION</code>, <code>DETECTOR</code> = <code>"camera_parameters"</code>, <code>OBJECTIVE</code>, <code>FILTER_BANK</code>, <code>GALVO</code>, <code>IO</code>, <code>HOOKS</code> = <code>"hook_registry"</code>, <code>EXPANSE</code> = <code>"expanse_state"</code>, <code>CACHE</code>.</td></tr>
+            <tr><td><code>newswitch/routes/</code></td><td>The routes <code>main_fastapi.py</code> serves beside the agent, each a module-level <code>router</code>: <code>liveview.py</code> (<code>/stream</code> websockets, from the running <code>FrameBroadcaster</code>), <code>files.py</code> (<code>/files/…</code>, the <code>IOManager</code>), <code>cache.py</code> (<code>/cache/…</code>, the <code>CacheManager</code>); <code>__init__.py</code>: <code>running_context(connection, cls)</code>, the running agent’s context for a request or websocket (503 before startup; the live view closes with 1013).</td></tr>
+            <tr><td><code>newswitch/actions/</code></td><td>Plain action, background and shutdown functions, one module per part, registered by <code>create_registry</code> only when the part is configured: <code>core.py</code> (<code>clear_expanse</code>), <code>stage.py</code>, <code>illumination.py</code>, <code>detector.py</code> (also <code>run_detector_loop</code>, <code>close_detector</code>), <code>objective.py</code>, <code>filter_bank.py</code>, <code>uc2.py</code> (home/stop/LED/galvo/node-scan actions, <code>run_uc2_bus</code>, <code>run_uc2_event_dispatch</code>).</td></tr>
+            <tr><td><code>newswitch/routines/</code></td><td>Multi-step procedures registered as actions: <code>region_scan</code>, <code>multidimensional_acquisition</code>, <code>calibration</code>, <code>autofocus</code>; <code>common.py</code> holds what they share (<code>z_sweep</code>, <code>field_of_view</code>, <code>acquire_step</code>). The template for porting ImSwitch “apps”.; <code>affine_matrix.py</code> (pixel shifts, the pixel→stage affine).</td></tr>
+            <tr><td><code>newswitch/protocols/</code></td><td>The <strong>contracts</strong>: the manager protocols only (<code>app.register_context</code>), one module per part or service — <code>stage</code>, <code>illumination</code>, <code>detector</code> (+ <code>DetectorFrame</code>), <code>objective</code>, <code>filter_bank</code>, <code>uc2</code> (<code>UC2BusManager</code>), <code>acquisition</code>, <code>cache</code>, <code>calibration</code>, <code>expanse</code>, <code>io</code>, <code>light_path</code>, <code>metadata</code>, <code>hook_manager</code> (+ <code>HookContext</code>, <code>UnsupportedHook</code>).</td></tr>
+            <tr><td><code>newswitch/states/</code></td><td>The states (<code>app.register_state</code>), one module per state: <code>StageState</code>, <code>IlluminationState</code>, <code>CameraState</code>, <code>ObjectiveState</code>, <code>FilterBankState</code>, <code>UC2State</code>, <code>IOState</code>, <code>HookState</code>, <code>ExpanseState</code>, <code>CalibrationState</code>, <code>LightPathState</code>, <code>AutofocusState</code>.</td></tr>
+            <tr><td><code>newswitch/models/</code></td><td>The value types (<code>app.register_model</code>): <code>light_path</code> (Kube optics model, <code>LightPathSnapshot</code>), <code>frames</code> (<code>Frame</code>, <code>Image</code>, <code>Metadata</code>), <code>devices</code>, <code>hooks</code>, <code>calibration</code>, <code>io</code>, <code>uc2</code> (typed hardware events), <code>acquisition</code> (<code>MultidimensionalAcquisition</code>, <code>StreamIllumination</code>, <code>Stack</code>, …).</td></tr>
+            <tr><td><code>newswitch/drivers/virtual/</code></td><td>Full simulation implementations: stage, LED, detector, objective, filter bank; <code>simulation/</code> renders the frames (sample, synthetic PSF, defocus, noise).</td></tr>
+            <tr><td><code>newswitch/drivers/uc2/</code></td><td>Real hardware: <code>canopen_bus.py</code>, <code>rest_bus.py</code>, <code>virtual_bus.py</code> (transports behind <code>UC2BusManager</code>), <code>event_broker.py</code> (fan-out), <code>dispatch.py</code> (events → states), plus bus-based device managers for stage, illumination, objective and filter bank, and <code>uc2_detector.py</code> (real cameras through uc2_cam_py).</td></tr>
+            <tr><td><code>newswitch/services/</code></td><td>The managers every microscope shares: <code>acquisition</code>, <code>cache/</code>, <code>calibration</code>, <code>expanse</code>, <code>io/</code>, <code>light_path</code>, <code>metadata</code>, <code>hooks/</code> (<code>manager.py</code>: <code>PythonHookManager</code>; <code>software_autofocus.py</code>).</td></tr>
+            <tr><td><code>newswitch/broadcasters/</code></td><td>The <code>FrameSink</code> protocol (<code>sink.py</code>, runtime-checkable; the context the detectors stream to, provided by the entry file), <code>FrameBroadcaster</code> and encoders (zstd, H.264) for <code>main_fastapi.py</code>; <code>lovekit.py</code> for <code>main_arkitekt.py</code> (<code>LovekitSink</code>, <code>CameraStream</code>, <code>CameraStreams</code>, <code>publish_camera_streams</code>, <code>MAX_FPS</code>; not imported by the package).</td></tr>
+            <tr><td><code>newswitch/accounts/</code></td><td>Users and auth of the FastAPI server: <code>auth.py</code> (login, tokens, middleware), <code>store.py</code> (the account database), <code>routes.py</code> (account management). Live view, files and cache are in <code>newswitch/routes/</code>.</td></tr>
+            <tr><td><code>newswitch/reference/complete-microscope.yaml</code></td><td>The reference microscope: every part, devices only (no <code>ui</code>); what the frontend’s schemas are exported from.</td></tr>
             <tr><td><code>configs/</code></td><td>Device configuration read via <code>base_config.yaml</code> (<code>newswitch-config.yaml</code>, generated schema in <code>schemas/</code>), and whole-microscope setup files loaded via <code>NEWSWITCH_CONFIG</code>: <code>uc2_serial.json</code>, <code>uc2_canopen.json</code>.</td></tr>
             <tr><td><code>tests/</code></td><td>pytest; agent-level tests drive the app through <code>AsyncAgentTestClient</code> (<code>arkitekt_fastapi.testing</code>).</td></tr>
           </tbody>
@@ -810,12 +980,12 @@ nsapp.register_action(scan_region)</code></pre>
         <table class="wrapfirst">
           <thead><tr><th>ImSwitch</th><th>newswitch</th></tr></thead>
           <tbody>
-            <tr><td><code>FooController</code> + <code>@APIExport</code></td><td><code>@nsapp.action</code> functions in <code>registers/</code> or <code>routines/</code></td></tr>
-            <tr><td><code>FooManager</code> (device)</td><td><code>@nsapp.context</code> Protocol in <code>protocols/</code> + implementation in <code>managers/</code></td></tr>
-            <tr><td><code>CommunicationChannel</code> signals</td><td><code>@nsapp.state</code> mutations (auto-broadcast)</td></tr>
-            <tr><td><code>MasterController</code></td><td><code>@nsapp.startup provide_managers</code></td></tr>
+            <tr><td><code>FooController</code> + <code>@APIExport</code></td><td><code>app.register_action</code> functions in <code>actions/</code> or <code>routines/</code></td></tr>
+            <tr><td><code>FooManager</code> (device)</td><td><code>app.register_context</code> Protocol in <code>protocols/</code> + implementation in <code>drivers/</code> (or <code>services/</code>)</td></tr>
+            <tr><td><code>CommunicationChannel</code> signals</td><td><code>app.register_state</code> mutations (auto-broadcast)</td></tr>
+            <tr><td><code>MasterController</code></td><td><code>build_microscope</code> (<code>newswitch/microscope/parts.py</code>), handed out by one <code>app.register_startup</code> hook per configured part (<code>create_registry</code>)</td></tr>
             <tr><td>React widget + Redux slice + axios file</td><td>one component using <strong>generated</strong> hooks</td></tr>
-            <tr><td>setup JSON <code>availableWidgets</code></td><td><code>NEWSWITCH_CONFIG</code> file plus which managers <code>provide_managers</code> builds</td></tr>
+            <tr><td>setup JSON <code>availableWidgets</code></td><td><code>NEWSWITCH_CONFIG</code> file plus which parts <code>configured_parts</code> finds (<code>build_microscope</code> builds, <code>create_registry</code> registers)</td></tr>
           </tbody>
         </table>
       </div>
@@ -826,10 +996,10 @@ nsapp.register_action(scan_region)</code></pre>
       <div class="h2row"><span class="num">08</span><h2>The UC2 hardware layer</h2></div>
       <p><code>protocols/uc2.py</code> defines the transport-agnostic <strong>UC2BusManager</strong>:
         stage verbs in micrometers, laser and LED in raw PWM, galvo in DAC counts, objective slots and
-        node scan — plus <code>subscribe()</code> yielding typed events (<code>PositionUpdate</code>,
+        node scan — plus <code>subscribe()</code> yielding typed events (<code>models/uc2.py</code>: <code>PositionUpdate</code>,
         <code>MotionDone</code>, <code>HomingChanged</code>, <code>EStopChanged</code>,
         <code>ButtonPressed</code>, <code>NodeSeen</code>, <code>BusError</code>).</p>
-      <p>Three interchangeable implementations, selected in <code>provide_managers</code> from
+      <p>Three interchangeable implementations, selected in <code>build_uc2_bus</code> from
         <code>uc2_transport</code>: <strong>UC2CanBus</strong> (CANopen via <code>uc2canopen.aio</code> —
         node map, µm↔steps scaling, event-driven motion-done from TPDO frames),
         <strong>UC2RestBus</strong> (serial JSON via <code>uc2rest.aio</code> — single ESP32 master,
@@ -850,7 +1020,10 @@ nsapp.register_action(scan_region)</code></pre>
       <p>The Expanse is newswitch’s <strong>infinite sample-space canvas</strong> — the world map of
         everything that has been imaged. <code>ExpanseState</code> holds placed <code>Image</code>s, each
         with its stage-space affine transform; position, pixel size and orientation come from the
-        <code>MetadataManager</code> and the Kube optics model. <code>ExpanseManager</code> adds and clears
+        <code>MetadataManager</code> and the Kube optics model — the 4×4 pixel→stage affine
+        <code>calibrate_light_path</code> measured for the frame’s light path, or without one the nominal
+        pixel size (the detector’s <code>pixel_size_um</code> / the objective’s magnification).
+        <code>ExpanseManager</code> adds and clears
         entries; acquisitions push their frames into it. The frontend renders it as the three.js scene in
         <code>frontend/src/components/stage/</code> — planes textured from zarr tiles, with camera
         navigation. <code>clear_expanse</code> is the registered action that empties it.</p>
@@ -866,12 +1039,22 @@ nsapp.register_action(scan_region)</code></pre>
     <!-- ============ 10 ============ -->
     <section id="frontend">
       <div class="h2row"><span class="num">10</span><h2>Frontend in one paragraph</h2></div>
-      <p><code>frontend/plugins/generate-app.ts</code> — a Vite plugin run on every dev and build — fetches
-        <code>/schemas/implementations|states|locks</code> from the running backend and emits
+      <p>What a backend registers depends on its device configuration (<code>create_registry</code>), but
+        the frontend’s hooks must cover everything newswitch can do. So <code>just export-schemas</code>
+        (<code>uv run python -m newswitch.tools.export_schemas</code>) builds <code>create_registry</code> in-process on the
+        reference microscope <code>backend/newswitch/reference/complete-microscope.yaml</code>
+        (<code>REFERENCE_CONFIG</code>: every part, devices only, no <code>ui</code>; it refuses a configuration
+        missing any part), takes a snapshot of the registry — nothing is started, no app, no startup hooks —
+        and writes exactly what a FastAPI backend on it serves at <code>/schemas/implementations|states|locks</code>
+        into the committed <code>frontend/schemas/{implementations,states,locks}.json</code> — the mirror of the
+        blok catalog, which the frontend exports for the backend.
+        <code>frontend/plugins/generate-app.ts</code> — a Vite plugin run on every dev and build — reads only those
+        files (no backend needed; a missing file fails the build and points at <code>just export-schemas</code>) and emits
         <code>src/apps/default/hooks/{actions,states,locks}/*.ts</code> — zod schemas plus typed hooks such as
         <code>useMoveStage</code> and <code>useStageState</code>. Bloks are read at run time instead.
-        These files are committed, and <code>just drift-check</code> fails CI if they diverge from the
-        backend. The hand-written runtime in <code>src/lib/arkitekt/</code> (formerly
+        The export and these files are committed, and <code>just drift-check</code> (the
+        <code>codegen-drift</code> CI job) re-exports, rebuilds and fails if <code>frontend/schemas</code>,
+        <code>frontend/src/apps</code> diverge from what is committed. The hand-written runtime in <code>src/lib/arkitekt/</code> (formerly
         <code>src/lib/rekuest</code>) manages the <code>/ws</code> connection, task assignment, patch
         application and locks. Its INIT opts into the journal: frames carry <code>pos</code> and
         <code>journal_session</code>, and on reconnect the client sends
@@ -885,8 +1068,8 @@ nsapp.register_action(scan_region)</code></pre>
         generated hooks.</p>
       <div class="note">
         <span class="tag">Workflow</span>
-        <p>If you add or rename a backend action or state: run the backend, then
-          <code>cd frontend &amp;&amp; yarn build</code>, and commit the regenerated files.</p>
+        <p>If you add or rename a backend action, state or lock: run <code>just export-schemas</code>, then
+          <code>cd frontend &amp;&amp; yarn build</code> (or just <code>just drift-check</code>), and commit the regenerated files.</p>
       </div>
     </section>
 
@@ -897,16 +1080,16 @@ nsapp.register_action(scan_region)</code></pre>
         <table class="wrapfirst">
           <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
           <tbody>
-            <tr><td><strong>App</strong></td><td>The one declaration object, <code>nsapp</code> (<code>arkitekt.App</code>); its <code>registry</code> is what the agent serves.</td></tr>
+            <tr><td><strong>App</strong></td><td>An app registry (<code>arkitekt.App</code>), created per app by <code>create_registry</code>; its <code>registry</code> is what the agent serves.</td></tr>
             <tr><td><strong>Agent</strong></td><td>Runtime container managing contexts, states, locks, actors, assignments and the journal. One per app; embedded in FastAPI here.</td></tr>
             <tr><td><strong>Actor</strong></td><td>Executor for one registered implementation; handles one assignment at a time and reports lifecycle events.</td></tr>
             <tr><td><strong>Assignment / task</strong></td><td>One invocation of an action, with id, args, lifecycle events and journaled history; injected into the action as <code>task: Task</code>.</td></tr>
             <tr><td><strong>Implementation</strong></td><td>The registered form of a function: name plus argument/return ports, locks and optimistics.</td></tr>
             <tr><td><strong>Port</strong></td><td>Typed slot in a schema — an argument, a return value, or a state field.</td></tr>
             <tr><td><strong>Shrinking / expanding</strong></td><td>arkitekt’s serialization (Python object → JSON) and deserialization.</td></tr>
-            <tr><td><strong>Context</strong></td><td>Injectable long-lived service object (<code>@nsapp.context</code>), a.k.a. manager.</td></tr>
-            <tr><td><strong>State</strong></td><td>Reactive shared data object (<code>@nsapp.state</code>); mutations broadcast as revisioned JSON-patches.</td></tr>
-            <tr><td><strong>App context</strong></td><td>The one config object (<code>ImswitchConfig</code>, declared on <code>App(…, app_context=…)</code>) passed at boot and injectable by type.</td></tr>
+            <tr><td><strong>Context</strong></td><td>Injectable long-lived service object (<code>app.register_context</code>), a.k.a. manager.</td></tr>
+            <tr><td><strong>State</strong></td><td>Reactive shared data object (<code>app.register_state</code>); mutations broadcast as revisioned JSON-patches.</td></tr>
+            <tr><td><strong>App context</strong></td><td>The one config object (<code>Settings</code>, declared on <code>App(…, app_context=…)</code>) passed at boot and injectable by type.</td></tr>
             <tr><td><strong>Lock</strong></td><td>Named action lock: actions holding the same lock never run at the same time; surfaced to the UI as LOCK/UNLOCK. Does not gate state writes.</td></tr>
             <tr><td><strong>Journal</strong></td><td>One ordered record (<code>pos</code> 1, 2, 3 …) per agent session; the world at any position is states + tasks + locks. Backs reconnect/resume and <code>/replay</code>.</td></tr>
             <tr><td><strong>Blok</strong></td><td>Server-defined UI fragment (JSX-like <code>bsx</code> markup) rendered by the frontend without a frontend build.</td></tr>

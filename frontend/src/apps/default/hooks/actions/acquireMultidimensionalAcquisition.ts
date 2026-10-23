@@ -4,19 +4,19 @@ import { createIndexedUnion } from './utils';
 import { validatorAccepts, type UtilCall } from '@/lib/arkitekt/calls';
 
 // --- Shared Models ---
-export const IlluminationSchema = z
+export const StreamIlluminationSchema = z
   .object({
     __identifier: z
-      .literal('@newswitch/illumination')
-      .default('@newswitch/illumination'),
+      .literal('@newswitch/stream_illumination')
+      .default('@newswitch/stream_illumination'),
     source: z.string(),
     wavelength: z.number(),
     intensity: z.number(),
   })
-  .brand('@newswitch/illumination')
+  .brand('@newswitch/stream_illumination')
   .describe('Represents an illumination channel to acquire.');
-export type Illumination = z.input<typeof IlluminationSchema>;
-export type IlluminationOutput = z.infer<typeof IlluminationSchema>;
+export type StreamIllumination = z.input<typeof StreamIlluminationSchema>;
+export type StreamIlluminationOutput = z.infer<typeof StreamIlluminationSchema>;
 
 export const StreamsSchema = z
   .object({
@@ -35,7 +35,7 @@ export const StreamsSchema = z
       ),
     /** List of illuminations to use for this stream (e.g., [{'source': 'LED1', 'wavelength': 488, 'intensity': 0.8}]) */
     illuminations: z.array(
-      IlluminationSchema.describe(
+      StreamIlluminationSchema.describe(
         'Represents an illumination channel to acquire.',
       ),
     ),
@@ -101,11 +101,12 @@ export const SoftwareAutofocusHookSchema = z
     __identifier: z
       .literal('@newswitch/software_autofocus_hook')
       .default('@newswitch/software_autofocus_hook'),
-    speed: z.number(),
+    z_range: z.number(),
+    steps: z.number(),
   })
   .brand('@newswitch/software_autofocus_hook')
   .describe(
-    'Data class representing a software autofocus hook to be executed during acquisition.',
+    'Refocus by software: sweep Z around the current position, move to the sharpest plane.',
   );
 export type SoftwareAutofocusHook = z.input<typeof SoftwareAutofocusHookSchema>;
 export type SoftwareAutofocusHookOutput = z.infer<
@@ -128,7 +129,7 @@ export type ZCalibrationHookOutput = z.infer<typeof ZCalibrationHookSchema>;
 
 export const ZHookUnionSchema = createIndexedUnion([
   SoftwareAutofocusHookSchema.describe(
-    'Data class representing a software autofocus hook to be executed during acquisition.',
+    'Refocus by software: sweep Z around the current position, move to the sharpest plane.',
   ),
   ZCalibrationHookSchema.describe(
     'Data class representing a z-calibration hook to be executed during acquisition.',
@@ -160,7 +161,7 @@ export type StackOutput = z.infer<typeof StackSchema>;
 
 export const PHookUnionSchema = createIndexedUnion([
   SoftwareAutofocusHookSchema.describe(
-    'Data class representing a software autofocus hook to be executed during acquisition.',
+    'Refocus by software: sweep Z around the current position, move to the sharpest plane.',
   ),
   ZCalibrationHookSchema.describe(
     'Data class representing a z-calibration hook to be executed during acquisition.',
@@ -194,7 +195,7 @@ export type PositionOutput = z.infer<typeof PositionSchema>;
 
 export const THookUnionSchema = createIndexedUnion([
   SoftwareAutofocusHookSchema.describe(
-    'Data class representing a software autofocus hook to be executed during acquisition.',
+    'Refocus by software: sweep Z around the current position, move to the sharpest plane.',
   ),
   ZCalibrationHookSchema.describe(
     'Data class representing a z-calibration hook to be executed during acquisition.',
@@ -245,7 +246,7 @@ export type TimepointOutput = z.infer<typeof TimepointSchema>;
 
 export const MHookUnionSchema = createIndexedUnion([
   SoftwareAutofocusHookSchema.describe(
-    'Data class representing a software autofocus hook to be executed during acquisition.',
+    'Refocus by software: sweep Z around the current position, move to the sharpest plane.',
   ),
   ZCalibrationHookSchema.describe(
     'Data class representing a z-calibration hook to be executed during acquisition.',
@@ -329,7 +330,7 @@ export const MultidimensionalAcquisitionSchema = z
     }
   })
   .brand('@newswitch/multidimensional_acquisition')
-  .describe('Configuration for the acquisition.');
+  .describe('Configuration for a multidimensional acquisition.');
 export type MultidimensionalAcquisition = z.input<
   typeof MultidimensionalAcquisitionSchema
 >;
@@ -729,11 +730,11 @@ export const LightEdgeStateSchema = z
 export type LightEdgeState = z.input<typeof LightEdgeStateSchema>;
 export type LightEdgeStateOutput = z.infer<typeof LightEdgeStateSchema>;
 
-export const LightPathStateSchema = z
+export const LightPathSnapshotSchema = z
   .object({
     __identifier: z
-      .literal('@newswitch/light_path_state')
-      .default('@newswitch/light_path_state'),
+      .literal('@newswitch/light_path_snapshot')
+      .default('@newswitch/light_path_snapshot'),
     /** Hash of the light path configuration, used to uniquely describe the optical path for this image */
     hash: z
       .string()
@@ -759,12 +760,12 @@ export const LightPathStateSchema = z
         'Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image',
       ),
   })
-  .brand('@newswitch/light_path_state')
+  .brand('@newswitch/light_path_snapshot')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
-export type LightPathState = z.input<typeof LightPathStateSchema>;
-export type LightPathStateOutput = z.infer<typeof LightPathStateSchema>;
+export type LightPathSnapshot = z.input<typeof LightPathSnapshotSchema>;
+export type LightPathSnapshotOutput = z.infer<typeof LightPathSnapshotSchema>;
 
 export const MetadataSchema = z
   .object({
@@ -775,7 +776,7 @@ export const MetadataSchema = z
     fov_width: z.number(),
     fov_height: z.number(),
     /** Data class representing the light path used for an image, including illumination settings. */
-    light_state: LightPathStateSchema.describe(
+    light_state: LightPathSnapshotSchema.describe(
       'Data class representing the light path used for an image, including illumination settings.',
     ),
     acquisition_time: z.string(),
@@ -828,13 +829,13 @@ export type FrameOutput = z.infer<typeof FrameSchema>;
 
 // --- Schemas ---
 export const AcquireMultidimensionalAcquisitionArgsSchema = z.object({
-  /** Configuration for the acquisition. */
+  /** Configuration for a multidimensional acquisition. */
   config: MultidimensionalAcquisitionSchema.describe(
-    'Configuration for the acquisition.',
+    'Configuration for a multidimensional acquisition.',
   ),
 });
 export const AcquireMultidimensionalAcquisitionReturnSchema = z.object({
-  /** List of acquired images with metadata. */
+  /** The frames, in the order acquired. */
   return0: z.array(
     FrameSchema.describe(
       'Represents a single 3D volume captured by the detector.',
@@ -860,7 +861,7 @@ export const AcquireMultidimensionalAcquisitionDefinition: ActionDefinition<
   name: 'acquire_multidimensional_acquisition',
   appKey: 'default',
   description:
-    'Simulate the acquisition of a multidimensional dataset based on the provided configuration.',
+    "Acquire a multidimensional dataset: timepoints x positions x z stacks x channels.\n\nPer timepoint the stage visits each position, then each plane of its stacks, and every\nstream's detector acquires a frame there; hooks (`m_hooks`, `t_hooks`, `p_hooks`,\n`z_hooks`) run at the start, per timepoint, per position and per plane.",
   argsSchema: AcquireMultidimensionalAcquisitionArgsSchema,
   returnSchema: AcquireMultidimensionalAcquisitionReturnSchema,
   lockKeys: [
@@ -874,7 +875,11 @@ export const AcquireMultidimensionalAcquisitionDefinition: ActionDefinition<
 };
 
 /**
- * Simulate the acquisition of a multidimensional dataset based on the provided configuration.
+ * Acquire a multidimensional dataset: timepoints x positions x z stacks x channels.
+
+Per timepoint the stage visits each position, then each plane of its stacks, and every
+stream's detector acquires a frame there; hooks (`m_hooks`, `t_hooks`, `p_hooks`,
+`z_hooks`) run at the start, per timepoint, per position and per plane.
  */
 export const useAcquireMultidimensionalAcquisition = () => {
   return useAction(AcquireMultidimensionalAcquisitionDefinition);

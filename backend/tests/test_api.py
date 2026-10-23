@@ -5,10 +5,11 @@ for full async integration testing with proper event handling.
 Verifies that the agent correctly processes assignments and returns results.
 """
 
-import pytest
-from fastapi import FastAPI
-from arkitekt_fastapi.testing import AsyncAgentTestClient
 from typing import ParamSpec
+
+import pytest
+from arkitekt_fastapi.testing import AsyncAgentTestClient
+from fastapi import FastAPI
 
 from tests.conftest import collect_until_completed
 

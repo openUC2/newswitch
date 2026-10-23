@@ -13,14 +13,16 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from newswitch.broadcasters import FrameBroadcaster
-from newswitch.managers.virtual import VirtualDetectorManager
-from newswitch.managers.io import LocalFileConfig, LocalFileIOManager
-from newswitch.managers.virtual.virtual_detector import DetectorConfig
-from newswitch.protocols import CameraState, IlluminationState, StageState
-from newswitch.protocols.illumination import Illumination
-from newswitch.protocols.io import FileFormat, IOState
-from newswitch.protocols.objective import ObjectiveState
+from newswitch.drivers.virtual import VirtualDetectorManager
+from newswitch.drivers.virtual.virtual_detector import DetectorConfig
+from newswitch.models.devices import Illumination
+from newswitch.models.io import FileFormat
+from newswitch.services.io import LocalFileConfig, LocalFileIOManager
+from newswitch.states.detector import CameraState
+from newswitch.states.illumination import IlluminationState
+from newswitch.states.io import IOState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
 
 # Type alias for the detector with IO fixture return type
 DetectorWithIO = tuple[VirtualDetectorManager, LocalFileIOManager, IOState, Path]
@@ -81,13 +83,11 @@ def illuminated_detector_with_io(
     io_state = IOState()
 
     # Create detector with astigmatism sample type for consistent visible frames
-    broadcaster = FrameBroadcaster()
     detector = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
-        broadcaster=broadcaster,
         config=DetectorConfig(sample_type="astigmatism"),
     )
     # Activate and configure detector
@@ -127,14 +127,11 @@ def default_illumination_detector_with_io(
     objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
     illumination_state = IlluminationState()  # Default: empty sources
     io_state = IOState()
-
-    broadcaster = FrameBroadcaster()
     detector = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
-        broadcaster=broadcaster,
     )
     # Activate detector
     detector.activate_detector(1)

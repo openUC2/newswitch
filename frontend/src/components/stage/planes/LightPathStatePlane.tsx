@@ -1,4 +1,4 @@
-import type { LightPathState } from "@/components/lightpathstate/LightPathStateRender";
+import type { LightPathSnapshot } from "@/components/lightpathstate/LightPathStateRender";
 import { Suspense, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { DetectorKubePlane } from "./kubes/DetectorKubePlane";
@@ -76,7 +76,7 @@ export const InvertedHullOutline = ({
 };
 
 // --- Main Light Path Plane Component ---
-export const LightPathStatePlane = ({ path }: { path: LightPathState }) => {
+export const LightPathStatePlane = ({ path }: { path: LightPathSnapshot }) => {
   const selectedKubeState = useKubeStateStore((s) => s.selectedKubeState);
   const setKubeState = useKubeStateStore((s) => s.setSelectedKubeState);
 

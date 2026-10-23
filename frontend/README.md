@@ -69,7 +69,6 @@ Generated output includes app-specific:
 - state hooks and schemas
 - lock hooks and schemas
 - app registry definitions consumed by the runtime
-- `blok.json`, which stores a grouped raw description of apps, states, tasks, and locks
 
 The generated registry is consumed from [src/apps](src/apps).
 
@@ -79,17 +78,17 @@ Schema-driven generation is centralized in [plugins/generate-app.ts](plugins/gen
 
 The generator:
 
-1. fetches remote schema definitions for configured apps
+1. reads the committed schema export (`frontend/schemas/*.json`, written by the backend's
+   `just export-schemas` from a complete reference microscope)
 2. derives port and model information
 3. emits strongly typed frontend bindings
 4. writes the shared app registry
-5. writes `blok.json` for inspection and downstream tooling
 
 Important behavior:
 
 - model generation is consolidated in one place
 - state/task/lock generation shares the same schema translation approach
-- generated code is **preserved** when schema endpoints are unavailable, so a temporary backend outage does not wipe the frontend bindings
+- no backend is needed: a missing or unreadable export fails the build (`just export-schemas` writes it)
 
 This keeps the UI aligned with backend contracts while reducing manual maintenance.
 

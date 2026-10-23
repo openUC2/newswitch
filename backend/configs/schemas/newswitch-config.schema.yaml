@@ -89,6 +89,35 @@ $defs:
     - steps_per_um
     title: AxisConfig
     type: object
+  BlokEntry:
+    additionalProperties: false
+    description: 'A blok of the ``ui`` section: its BSX source, exactly as the frontend gets it.'
+    properties:
+      bsx:
+        description: The blok's tree as BSX source
+        title: Bsx
+        type: string
+      description:
+        anyOf:
+        - type: string
+        - type: 'null'
+        default: null
+        description: Shown in the bottom bar; a view's starts with its tab label
+        title: Description
+      default:
+        type: boolean
+        default: false
+        description: The blok shown first
+        title: Default
+      context:
+        default: html
+        description: Where the blok renders
+        title: Context
+        type: string
+    required:
+    - bsx
+    title: BlokEntry
+    type: object
   CanOpenProtocol:
     additionalProperties: false
     description: CANopen bus; each mapped device names its node with ``id`` (and ``subid``).
@@ -1362,6 +1391,26 @@ $defs:
     - transport
     title: Uc2RestProtocol
     type: object
+  UiConfig:
+    additionalProperties: false
+    description: 'A UI section (``ui``, ``agent_ui``): the bloks, and the catalog they are written against.'
+    properties:
+      catalog:
+        description: The catalog the bloks were written against, as <name>@<version>
+        pattern: ^[A-Za-z0-9_-]+@[A-Za-z0-9_.-]+$
+        title: Catalog
+        type: string
+      bloks:
+        additionalProperties:
+          $ref: '#/$defs/BlokEntry'
+        description: The bloks, keyed by name
+        title: Bloks
+        type: object
+    required:
+    - catalog
+    - bloks
+    title: UiConfig
+    type: object
   Usb3VisionProtocol:
     additionalProperties: false
     description: USB3 Vision camera; the transport is managed by the camera SDK.
@@ -1421,6 +1470,24 @@ properties:
     description: All devices, keyed by their identifier
     title: Devices
     type: object
+  assets:
+    additionalProperties:
+      type: string
+    description: Files the bloks read as @self.assets.<name>, relative to newswitch/
+    title: Assets
+    type: object
+  ui:
+    anyOf:
+    - $ref: '#/$defs/UiConfig'
+    - type: 'null'
+    default: null
+    description: The bloks the newswitch frontend shows (FastAPI mode), in its catalog
+  agent_ui:
+    anyOf:
+    - $ref: '#/$defs/UiConfig'
+    - type: 'null'
+    default: null
+    description: The bloks Orkestrator shows (agent mode), in its standard catalog
 required:
 - newswitch_version
 - devices

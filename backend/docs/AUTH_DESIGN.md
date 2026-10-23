@@ -6,11 +6,11 @@ it stands, not a target design — see "Deferred" at the end for known gaps.
 
 ## One authenticator, plus a test double
 
-`backend/newswitch/auth.py` defines an `Authenticator` protocol (`check_token`, `login`,
+`backend/newswitch/accounts/auth.py` defines an `Authenticator` protocol (`check_token`, `login`,
 `username_for_token`, `logout`). Production code has exactly one implementation:
 
 - `UserStoreAuthenticator` — what `create_app`/`default_authenticator()` wires up. Backed by
-  `newswitch.users.UserStore`, a real multi-account table with random, individually-revocable
+  `newswitch.accounts.store.UserStore`, a real multi-account table with random, individually-revocable
   session tokens.
 
 `AllowAllAuthenticator` is a second, no-op implementation that accepts everything; it exists only
@@ -29,7 +29,7 @@ with code 1008, which the frontend can tell apart from a dropped connection wort
 
 ## Storage: `backend/auth.db`
 
-`newswitch/users.py` owns a small SQLite database, gitignored like the legacy `auth.yaml`, created
+`newswitch/accounts/store.py` owns a small SQLite database, gitignored like the legacy `auth.yaml`, created
 automatically wherever it's pointed (default `backend/auth.db`, overridable via `NEWSWITCH_AUTH_DB`).
 Three tables:
 
@@ -89,7 +89,7 @@ custom/ad-hoc roles.
 
 Only `admin` is enforced anywhere today:
 
-- `require_admin` (`backend/newswitch/routes/http/users.py`) gates the entire account-management API —
+- `require_admin` (`backend/newswitch/accounts/routes.py`) gates the entire account-management API —
   listing/creating/editing/deleting users, resetting passwords, reading the audit log.
 - `UserStore.count_enabled_admins()` guards against removing the last admin: `PATCH .../users/{u}`
   and `DELETE .../users/{u}` both refuse an edit that would leave zero enabled admins, and `DELETE`
@@ -102,14 +102,14 @@ Only `admin` is enforced anywhere today:
 
 Two ways to reach the same `UserStore`:
 
-- **Admin HTTP API** (`backend/newswitch/routes/http/users.py`, mounted under `/auth/*`): `GET/POST
+- **Admin HTTP API** (`backend/newswitch/accounts/routes.py`, mounted under `/auth/*`): `GET/POST
   /auth/users`, `PATCH/DELETE /auth/users/{username}`, `POST /auth/users/{username}/password` (admin
   resets someone else's password), `GET /auth/me`, `POST /auth/me/password` (self-service; returns a
   fresh token since changing your own password revokes the session that asked). 404s entirely if the
   app's authenticator isn't `UserStoreAuthenticator` — legacy/test authenticators have no accounts to
   manage. Surfaced in the frontend as the Account menu → "Manage users" / "Audit log" pages, guarded by
   `RequireAdmin`.
-- **Recovery CLI** (`backend/newswitch/cli.py`, `python -m newswitch.cli ...`, wrapped by
+- **Recovery CLI** (`backend/newswitch/tools/accounts.py`, `python -m newswitch.tools.accounts ...`, wrapped by
   `just list-users` / `just reset-password` / `just create-admin`): talks to `UserStore` directly,
   bypassing HTTP auth entirely. Meant to be run on the appliance itself (local shell or SSH) for the
   cases the web UI can't help with — every admin locked out, a forgotten password, a corrupted role.

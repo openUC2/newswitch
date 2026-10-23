@@ -12,9 +12,8 @@ Optimized for minimal latency with:
 import asyncio
 from typing import Optional
 
-
-from newswitch.broadcasters.encoders.config import EncoderConfig
 from newswitch.broadcasters.encoders.base import EncoderProtocol
+from newswitch.broadcasters.encoders.config import EncoderConfig
 
 
 class EncoderSubscription:

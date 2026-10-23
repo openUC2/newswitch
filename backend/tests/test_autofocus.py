@@ -3,17 +3,7 @@
 import numpy as np
 import pytest
 
-from newswitch.broadcasters import FrameBroadcaster
-from newswitch.managers.virtual import VirtualStageManager
-from newswitch.managers.virtual.virtual_detector import VirtualDetectorManager
-from newswitch.managers.virtual.virtual_stage import StageConfig
-from newswitch.protocols import (
-    CameraState,
-    FilterBankState,
-    IlluminationState,
-    ObjectiveState,
-    StageState,
-)
+from newswitch.microscope.parts import Microscope
 from newswitch.routines.autofocus import autofocus_sweep, compute_focus_metric
 
 
@@ -33,38 +23,24 @@ def test_compute_focus_metric_prefers_sharp_images() -> None:
         compute_focus_metric(sharp, "no_such_metric")
 
 
-def test_autofocus_sweep_finds_focus_on_virtual_microscope() -> None:
-    """The sweep finds the virtual detector's focal plane (z=0) from a defocused start.
+def test_autofocus_sweep_finds_focus_on_virtual_microscope(microscope: Microscope) -> None:
+    """The sweep finds the virtual detector's focal plane from a defocused start.
 
-    The virtual detector blurs frames with sigma = 1 + |z| * 0.1, so the
-    sharpest plane in any symmetric sweep is the one closest to z = 0.
+    The virtual detector blurs a frame with a Gaussian of sigma = 0.5 px per micrometre of
+    distance to its focal plane, so the sharpest plane of a sweep around it is that plane.
+    The reference microscope's first light source is on, so the frames carry signal; the
+    focal plane sits inside the stage's travel (z starts at 0).
     """
-    stage_state = StageState(z=6.0)
-    illumination_state = IlluminationState()
-    camera_state = CameraState()
-    objective_state = ObjectiveState()
-    filter_bank_state = FilterBankState()
+    assert microscope.stage is not None and microscope.detector is not None
+    microscope.detector.config.focal_plane_z = 50.0
+    microscope.stage.move(z=56.0, is_absolute=True)
 
-    stage = VirtualStageManager(
-        stage=stage_state,
-        config=StageConfig(simulated_pos_sleep_per_micrometer=0.0),
+    z_positions = [44.0 + index * 1.0 for index in range(13)]
+    best_z, metrics = autofocus_sweep(
+        microscope.stage, microscope.detector, z_positions, detector_slot=1
     )
-    detector = VirtualDetectorManager(
-        camera_state=camera_state,
-        stage_state=stage_state,
-        illumination_state=illumination_state,
-        broadcaster=FrameBroadcaster(),
-        objective_state=objective_state,
-        filter_bank_state=filter_bank_state,
-    )
-    detector.activate_detector(slot=1)
-
-    # 13 planes from -6..+6 um around z=6-6=0-centered grid
-    z_positions = [-6.0 + index * 1.0 for index in range(13)]
-    best_z, metrics = autofocus_sweep(stage, detector, z_positions, detector_slot=1)
 
     assert len(metrics) == len(z_positions)
-    # Best plane must be within one grid step of the true focus at z=0.
-    assert abs(best_z) <= 1.0
-    # And the stage is parked where the sweep ended; the routine moves it
-    # to best_z afterwards (covered by the agent-level test).
+    assert abs(best_z - 50.0) <= 1.0
+    # Sharpness falls off on both sides of focus.
+    assert metrics[0] < max(metrics) and metrics[-1] < max(metrics)

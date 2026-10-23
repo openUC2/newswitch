@@ -104,9 +104,8 @@ jobs:
 
       - run: yarn test
 
-      # No backend in CI: the vite plugin warns on failed schema fetches and reuses the
-      # committed blok.json + src/apps/default/**. A green build here therefore also
-      # asserts those generated files are present and coherent in git.
+      # The vite plugin generates src/apps/default/** from the committed schema export
+      # (frontend/schemas/, no backend needed); a missing export fails the build.
       - run: yarn build
 
   e2e:
@@ -147,11 +146,11 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # The frontend is GENERATED from the running backend, and the generator fails SILENTLY
-  # (fetch errors are warnings; it falls back to the committed output). So committed hooks
-  # can drift away from the backend with nothing to catch it. This job boots the real
-  # backend, regenerates, and fails if the result differs from what is committed.
-  # It only works because both halves live in one repo at one commit.
+  # The frontend's typed hooks are GENERATED from the schemas of a complete microscope,
+  # which the backend exports into frontend/schemas/ (what a running backend registers
+  # depends on its device configuration, so the hooks are not generated from one). This
+  # job re-exports, regenerates, and fails if either result differs from what is
+  # committed. It only works because both halves live in one repo at one commit.
   codegen-drift:
     needs: changes
     if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
@@ -173,41 +172,24 @@ jobs:
       - run: yarn install --frozen-lockfile
         working-directory: frontend
 
-      # Actions does not read .env, so export it explicitly: the port below AND the
-      # schema URLs in frontend/.env (which expand ${BACKEND_PORT:-8099}) both follow it.
-      - name: Load the ports from .env
-        run: |
-          set -a; . ./.env; set +a
-          echo "BACKEND_PORT=$BACKEND_PORT" >> "$GITHUB_ENV"
-          echo "FRONTEND_PORT=$FRONTEND_PORT" >> "$GITHUB_ENV"
-
-      - name: Boot the backend
-        # 127.0.0.1, not $BACKEND_HOST: nothing outside the runner should reach this.
-        run: uv run uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" &
+      - name: Export the schemas of the complete microscope
+        run: uv run python -m newswitch.tools.export_schemas
         working-directory: backend
-
-      - name: Wait for the schema endpoints
-        run: |
-          for _ in $(seq 1 60); do
-            curl -sf "http://localhost:$BACKEND_PORT/schemas/states" >/dev/null 2>&1 && exit 0
-            sleep 1
-          done
-          echo "backend never came up" >&2
-          exit 1
 
       - name: Regenerate
         run: yarn build
         working-directory: frontend
 
-      - name: Fail if the committed codegen is stale
+      - name: Fail if the committed export or codegen is stale
         run: |
-          if ! git diff --quiet -- frontend/src/apps frontend/blok.json; then
-            echo "::error::Generated frontend code does not match the backend."
-            git diff --stat -- frontend/src/apps frontend/blok.json
-            git diff -- frontend/src/apps frontend/blok.json | head -100
+          paths="frontend/schemas frontend/src/apps"
+          if ! git diff --quiet -- $paths; then
+            echo "::error::The schema export or the generated frontend code is stale: run just drift-check locally and commit the result."
+            git diff --stat -- $paths
+            git diff -- $paths | head -100
             exit 1
           fi
-          echo "Generated code matches the backend."
+          echo "Schema export and generated code match the backend."
 
   ci-ok:
     # One required status check that still passes when path filters skip a job

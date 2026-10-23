@@ -18,12 +18,12 @@ import pytest
 from jsonschema import Draft202012Validator
 from ruamel.yaml import YAML
 
-from newswitch.app import ImswitchConfig
+from newswitch.settings import Settings
 from newswitch.config_io import config_schema, load_config
 from newswitch.config_io.document import to_plain
 from newswitch.config_io.validation import SCHEMA_FILE_NAME
 
-_SETTINGS = ImswitchConfig(config_file=None)
+_SETTINGS = Settings(config_file=None)
 CONFIG_FILE = _SETTINGS.static_config_path
 SCHEMA_FILE = _SETTINGS.schema_dir / SCHEMA_FILE_NAME
 

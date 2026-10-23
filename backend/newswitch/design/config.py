@@ -180,6 +180,16 @@ def device_tree(
     return {"newswitch_version": _schema_version(), "devices": devices}
 
 
+def design_tree(dsn: str | Path) -> dict[str, Any]:
+    """The newswitch configuration document of the design at ``dsn``, not yet validated.
+
+    Raises:
+        DesignConfigError: A device cannot be translated.
+    """
+    dsn = Path(dsn)
+    return device_tree(optikit.devices(dsn), optikit.load_design(dsn).inputs)
+
+
 def design_config(dsn: str | Path) -> config_io.NewswitchConfig:
     """The newswitch configuration of the design at ``dsn``, validated.
 
@@ -188,5 +198,4 @@ def design_config(dsn: str | Path) -> config_io.NewswitchConfig:
         config_io.ConfigError: The result does not validate.
     """
     dsn = Path(dsn)
-    tree = device_tree(optikit.devices(dsn), optikit.load_design(dsn).inputs)
-    return config_io.parse_tree(tree, name=f"design {dsn.name}")
+    return config_io.parse_tree(design_tree(dsn), name=f"design {dsn.name}")

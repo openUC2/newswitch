@@ -2,13 +2,13 @@
 
 The live view fills the screen, with buttons to start and stop it; the stage's controls
 sit beside it. For moving around a sample by eye.
+
+Used only by ``python -m newswitch.tools.build_design``, which writes the bloks into a
+configuration's ``ui``; newswitch itself reads them from there.
 """
 
-from arkitekt import bsx
-
-from newswitch.arkitekt_app import nsapp
 from newswitch.bloks.fluorescence import ACQUIRE_OR_CALIBRATE
-from newswitch.bloks.catalog import CATALOG_NAME
+from newswitch.config_io import BlokEntry
 
 MINIMAL_UI = f"""
 <Resizable direction="row" className="h-full w-full">
@@ -36,14 +36,13 @@ MINIMAL_UI = f"""
 """
 
 
-def declare(default: bool) -> None:
-    """Declare the minimal view."""
-    nsapp.blok(
-        "view-minimal",
-        bsx(MINIMAL_UI),
+NAME = "view-minimal"
+
+
+def blok(default: bool) -> BlokEntry:
+    """The minimal view."""
+    return BlokEntry(
+        bsx=MINIMAL_UI,
         description="Minimal: the live image and the stage, nothing else.",
-        catalog=CATALOG_NAME,
-        context="html",
         default=default,
-        mode="strict",
     )

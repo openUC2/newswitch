@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
 import numpy as np
+
+from newswitch.models.frames import Metadata
 from newswitch.protocols.base import Manager
-from newswitch.protocols.core import Metadata
-from newswitch.arkitekt_app import nsapp
 
 
-@nsapp.context(locks=["cache"])
 @runtime_checkable
 class CacheManager(Manager, Protocol):
     """Protocol defining the interface for Cache managers."""

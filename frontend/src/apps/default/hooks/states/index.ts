@@ -48,6 +48,7 @@ export {
   FilterBankKubeStateSchema,
   ObjectiveTurretKubeStateSchema,
   LightEdgeStateSchema,
+  LightPathSnapshotSchema,
   MetadataSchema,
   ImageSchema,
   ScaleSchema,
@@ -78,7 +79,8 @@ export type {
   ObjectiveTurretKubeStateOutput,
   LightEdgeState,
   LightEdgeStateOutput,
-  LightPathStateOutput,
+  LightPathSnapshot,
+  LightPathSnapshotOutput,
   Metadata,
   MetadataOutput,
   Image,
@@ -134,6 +136,7 @@ export {
   ObjectiveTurretKubeSchema,
   LightEdgeSchema,
   LightPathSchema,
+  LightPathStateSchema,
   LightPathStateDefinition,
   useLightPathState,
 } from './LightPathState';
@@ -160,6 +163,7 @@ export type {
   LightEdgeOutput,
   LightPath,
   LightPathOutput,
+  LightPathState,
 } from './LightPathState';
 export {
   ObjectiveLensSchema,

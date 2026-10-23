@@ -18,20 +18,35 @@ just dev         # backend , then frontend (will autocodegen)-> http://localhost
 Run `just` on its own to see every recipe. Both ports come from the committed root `.env` — see
 [Environment](#environment).
 
-## The one rule: the backend comes up first
+## The one rule: re-export the schemas when the API changes
 
-The frontend is **generated from the backend**. On every `vite dev` and `vite build`, the plugin at
-`frontend/plugins/generate-app.ts` fetches three schema endpoints from a *running* backend —
-`/schemas/implementations`, `/schemas/states`, `/schemas/locks` — and regenerates the typed hooks in
-`frontend/src/apps/default/**` along with `frontend/blok.json`.
+The frontend's typed hooks are **generated from the backend's schemas** — but not from a running backend.
+What a backend registers depends on its device configuration (`create_registry` in
+`backend/newswitch/microscope/registry.py`), while the hooks must cover everything newswitch can do. So the
+schemas come from a committed export of a *complete* microscope:
 
-If the backend is **not** reachable, the codegen does **not** fail. It warns and silently falls back to
-the committed generated files. 
+```bash
+just export-schemas   # = cd backend && uv run python -m newswitch.tools.export_schemas
+```
 
-> **If you start the frontend without the backend, you are developing against stale hooks and nothing will
-> stop you.** `just dev` sequences the two and warns loudly if the backend never came up.
+builds the app registry in-process on the reference microscope
+`backend/newswitch/reference/complete-microscope.yaml` (every part, devices only, no `ui`; it refuses a
+configuration missing any part), takes a snapshot of it — nothing is started — and writes exactly what a
+FastAPI backend on it serves at `/schemas/implementations`, `/schemas/states` and `/schemas/locks` into
+`frontend/schemas/{implementations,states,locks}.json`. It is the mirror of the blok catalog, which the
+frontend exports for the backend.
 
-`frontend/blok.json` and `frontend/src/apps/default/**` are **committed on purpose**. Don't gitignore them.
+On every `vite dev` and `vite build`, the plugin at `frontend/plugins/generate-app.ts` reads only those files
+(paths set in `frontend/vite.config.ts`) and regenerates the typed hooks in `frontend/src/apps/default/**`.
+No backend is needed for codegen, so `just dev` works on any device
+configuration (e.g. `NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just dev`) without
+rewriting the generated hooks. A missing export file fails the build and points at `just export-schemas`.
+
+> **After changing an action, state or lock, run `just export-schemas`** — otherwise the frontend keeps
+> generating from the old export. `just drift-check` catches it.
+
+`frontend/schemas/` and `frontend/src/apps/default/**` are **committed on purpose**.
+Don't gitignore them.
 
 
 ## Common recipes
@@ -40,7 +55,7 @@ the committed generated files.
 just install                 # install both halves + activate git hooks
 just dev                     # both, correctly sequenced
 just dev-backend             # backend only  -> :$BACKEND_PORT  (hot-reloads on edit)
-just dev-frontend            # frontend only -> :$FRONTEND_PORT (backend must already be up)
+just dev-frontend            # frontend only -> :$FRONTEND_PORT (codegen needs no backend)
 
 just check                   # fmt-check + lint + types + tests
 just fmt                     # ruff format + prettier, in place
@@ -48,7 +63,8 @@ just lint                    # ruff + eslint
 just types                   # tsc against tsconfig.app.json
 just test                    # pytest + vitest
 just test-all                # also runs the backend integration tests
-just drift-check             # is the committed codegen still in sync with the backend?
+just export-schemas          # write the complete microscope's schemas into frontend/schemas/
+just drift-check             # are the committed export and codegen still in sync with the backend?
 
 just build                   # frontend bundle + backend wheel/sdist
 just clean                   # nuke .venv, node_modules, dist
@@ -56,14 +72,44 @@ just clean                   # nuke .venv, node_modules, dist
 just list-users               # list every account and its role (run on the appliance)
 just reset-password user pw   # recovery: set a new password for an existing account
 just create-admin user pw     # recovery: create a fresh admin account
+
+just agent                    # serve as an arkitekt agent instead (see below)
 ```
+
+### Two ways to serve: FastAPI or arkitekt agent
+
+newswitch can be served two ways, each its own entry file. Both read the same settings and
+device configuration (`load_devices` in `backend/main.py`) and call
+`create_registry(devices, services=())`, which registers the context `FrameSink` the detectors
+send their frames to; each entry file then registers on the returned app a startup hook that
+provides that sink, how the frames are watched and the UI.
+
+| Entry file | Run | Registry | Frames | UI | HTTP routes |
+| --- | --- | --- | --- | --- | --- |
+| `backend/main_fastapi.py` | `uvicorn main_fastapi:create --factory`, `just dev` | `create_fastapi_registry` | `FrameBroadcaster` → websocket live view `/stream/...` | config `ui`, in the newswitch frontend's catalog | auth, accounts, live view, files, cache |
+| `backend/main_arkitekt.py` | `python main_arkitekt.py`, `just agent` | `create_arkitekt_registry` | `LovekitSink` → one lovekit `VideoStream` per detector | config `agent_ui`, in Orkestrator's standard catalog | none |
+
+Serving as an agent is new: newswitch runs as an arkitekt agent (`arkitekt.run`), logs in to the arkitekt
+server fakts finds (`--url` or `$FAKTS_URL`) and is shown in Orkestrator. It needs the extra `agent`
+(`arkitekt[rekuest,lovekit]`):
+
+```bash
+cd backend && uv sync --extra agent
+NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just agent   # extra args go to the agent, e.g. --url
+```
+
+A configuration without an `agent_ui` section does not start as an agent (see
+`backend/configs/README.md`). The agent serves no HTTP routes: the files and the frame cache that
+`main_fastapi.py` serves (`/files/...`, `/cache/...`) are not reachable from Orkestrator yet. The agent is
+tested offline only, against a fake lovekit client; it has not been run against a real arkitekt
+server, lovekit or LiveKit yet.
 
 ### Codegen drift
 
-Because the generator falls back silently, committed hooks can quietly diverge from the backend.
-`just drift-check` (and the `codegen-drift` CI job) boots the backend, regenerates, and fails if the
-result differs from what's committed. If it fails, run `just dev-backend`, then `cd frontend && yarn build`,
-and commit the regenerated output.
+The committed export and hooks can quietly diverge from the backend if nobody re-exports.
+`just drift-check` (and the `codegen-drift` CI job) re-exports the schemas, runs `yarn build`, and fails if
+`frontend/schemas` or `frontend/src/apps` differ from what's committed — no backend
+is booted. If it fails, commit what it just regenerated.
 
 ### End-to-end tests with Playwright
 
@@ -154,11 +200,11 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 4. A window **"uc2_cam_py debug - Simulated UC2-SIM SN SIM-0001"** opens. It shows a bright
    Gaussian spot that walks row by row over a 5 × 4 grid of the 640 × 480 sensor, 20 images per
-   second. The terminal also prints `Initializing real hardware microscope managers`, followed
-   by repeated `UC2 serial bus error ... reconnecting` warnings. Those come from stage and
-   illumination looking for a UC2 board that is not there; they do not affect the camera.
+   second. The configuration has only the camera, so only the detector is built: no stage,
+   illumination or UC2 bus is started for it.
 5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
-   browser, next to the debug window.
+   browser, next to the debug window. Capturing works too: the light path holds only the parts
+   the microscope has (here just the detector).
 6. Optional: record to disk. Set `store_image_data: true` for `sim-cam` in
    `configs/camTest_config.yaml` and restart. Each acquisition session is written as a `.uc2rb`
    file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
@@ -206,9 +252,9 @@ just down-hard   # ALSO drops the named volumes - see below
 just logs
 ```
 
-Compose is the one path with **no schema race**: the frontend's `depends_on` waits on a backend
-healthcheck. The probe hits `/health`, which is public and needs no credentials; because uvicorn
-serves nothing until startup completes, a healthy backend is also one whose schema endpoints answer.
+The frontend container's codegen reads the committed schema export (`frontend/schemas/`), so it does not
+need the backend container. Compose's backend healthcheck probes `/health`, which is public and needs no
+credentials.
 
 
 ## Authentication
@@ -256,9 +302,10 @@ browser will only let you set headers on some of them:
 | Websockets (`/ws`, `/stream/*`) | the first message after connect - a `WebSocket` cannot set headers |
 | Images and zarr chunks | `?token=` - three.js' `TextureLoader` and zarrita cannot set headers either |
 
-`/health`, `/auth/login` and `/schemas/*` stay public. `/schemas/*` has to be - the frontend's codegen
-reads it at build time, before anyone could have logged in - and it exposes only the shape of the API,
-no data and no control.
+`/health`, `/auth/login` and `/schemas/*` stay public. `/schemas/*` is served for tools and inspection
+(`just export-schemas` writes the same objects from a registry snapshot without calling it, the
+frontend's codegen reads the committed export),
+and it exposes only the shape of the API, no data and no control.
 
 A rejected websocket closes with code **1008**, which the frontend treats as "log out", distinct from a
 dropped connection it should retry.
@@ -284,19 +331,18 @@ It propagates everywhere from there:
 | `docker compose` | interpolation for the published ports, plus an `environment:` block so the value also reaches inside each container |
 | `frontend/.env`, `.env.docker` | `${BACKEND_PORT:-8099}` in the URLs; an exported value wins, the fallback keeps a bare `yarn dev` working |
 | `vite.config.ts` | `server.port` / `preview.port` from `FRONTEND_PORT` |
-| backend | `os.environ` in `newswitch.app:main` and `backend/test.py`; the Dockerfile sets matching `ENV` defaults |
+| backend | `os.environ` in `main_fastapi:main` and `backend/test.py`; the Dockerfile sets matching `ENV` defaults |
 | CI | a "Load the ports from .env" step exports them into `$GITHUB_ENV` |
 
 To change a port for one run, export it — a shell variable beats the file in all of the above:
 
 ```bash
-BACKEND_PORT=9000 just dev      # backend, health check, codegen URLs and vite all follow
+BACKEND_PORT=9000 just dev      # backend, health check, frontend URLs and vite all follow
 BACKEND_PORT=9000 just up       # same for compose (published port + container port)
 ```
 
-To change it for good, edit the root `.env`. One caveat: `frontend/blok.json` records the schema URLs it
-was generated from, ports included, so a *permanent* port change means regenerating and committing it.
-An ad-hoc `BACKEND_PORT=... yarn dev` will dirty that file — `git checkout -- frontend/blok.json` after.
+To change it for good, edit the root `.env`. Codegen reads the committed export, not a backend URL, so a
+port change does not touch the generated files.
 CI is unaffected: it reads the same `.env`.
 
 ### Frontend URLs
@@ -308,13 +354,10 @@ gitignored):
 ```dotenv
 VITE_BACKEND_URL=http://my-lab-box:${BACKEND_PORT:-8099}
 VITE_WEBSOCKET_URL=ws://my-lab-box:${BACKEND_PORT:-8099}/ws
-VITE_SCHEMA_IMPLEMENTATION_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/implementations
-VITE_SCHEMA_STATES_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/states
-VITE_SCHEMA_LOCKS_URL=http://my-lab-box:${BACKEND_PORT:-8099}/schemas/locks
 ```
 
 Apart from `BACKEND_HOST` / `BACKEND_PORT`, the backend reads no `.env` — the rest is configured in
-`backend/base_config.yaml`, read by `ImswitchConfig` (`backend/newswitch/app.py`).
+`backend/base_config.yaml`, read by `Settings` (`backend/main_fastapi.py`).
 
 ## Releases
 

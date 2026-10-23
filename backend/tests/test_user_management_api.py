@@ -12,9 +12,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from newswitch.app import ImswitchConfig, create_app
-from newswitch.auth import AllowAllAuthenticator, UserStoreAuthenticator
-from newswitch.users import Role, UserStore
+from main_fastapi import create_app
+from newswitch.accounts.auth import AllowAllAuthenticator, UserStoreAuthenticator
+from newswitch.settings import Settings
+from newswitch.accounts.store import Role, UserStore
 
 
 @pytest.fixture
@@ -29,7 +30,7 @@ def store(tmp_path: Path) -> UserStore:
 @pytest.fixture
 def client(store: UserStore) -> Iterator[TestClient]:
     """A client wired to a `UserStoreAuthenticator` over `store`."""
-    app: FastAPI = create_app(ImswitchConfig(), authenticator=UserStoreAuthenticator(store))
+    app: FastAPI = create_app(Settings(), authenticator=UserStoreAuthenticator(store))
     with TestClient(app) as test_client:
         yield test_client
 
@@ -291,7 +292,7 @@ def test_non_admin_cannot_read_the_audit_log(client: TestClient, store: UserStor
 
 def test_user_management_is_unavailable_without_a_user_store() -> None:
     """An authenticator with no accounts (e.g. tests' `AllowAllAuthenticator`) has no store to manage."""
-    app = create_app(ImswitchConfig(), authenticator=AllowAllAuthenticator())
+    app = create_app(Settings(), authenticator=AllowAllAuthenticator())
     with TestClient(app) as legacy_client:
         response = legacy_client.get("/auth/users", headers={"Authorization": "Bearer test-token"})
     assert response.status_code == 404

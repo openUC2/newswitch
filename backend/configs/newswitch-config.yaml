@@ -201,6 +201,21 @@ devices:
     spec_shape: tophat
     transmission: 0.9
 
+  # --- OBJECTIVES (no turret: the first is in use) ---
+  obj-10x:
+    type: objective
+    name: Plan 10x/0.25
+    magnification: 10.0
+    na: 0.25
+    wd: 10.6
+
+  obj-20x:
+    type: objective
+    name: Plan 20x/0.40
+    magnification: 20.0
+    na: 0.4
+    wd: 3.0
+
   # --- CAMERAS ---
   bigcamera42:
     type: detector
@@ -235,3 +250,118 @@ devices:
     trigger:
       type: hardware
       edge: rising
+
+# --- UI ---
+# The bloks the frontend shows, checked against the catalog it publishes
+# (newswitch/bloks/newswitch-catalog.json); `catalog` names the version they were
+# written against. The bottom bar switches between the view-... bloks; `default`
+# is shown first.
+ui:
+  catalog: newswitch@1
+  bloks:
+    view-standard:
+      description: 'Standard: settings, the stage view with its images, acquisition.'
+      default: true
+      bsx: |
+        <Resizable direction="row" className="h-full w-full">
+            <ResizablePanel defaultSize="15" minSize="10" maxSize="30">
+                <SettingsPanel className="h-full past:opacity-70 past:grayscale" />
+            </ResizablePanel>
+            <ResizableHandle withHandle="true" />
+            <ResizablePanel defaultSize="55">
+                <div className="flex h-full flex-col overflow-hidden bg-muted/30">
+                    <StageView className="flex-1">
+                        <StageScene>
+                            <FrameLightPathLayer />
+                            <StageAxis />
+                            <FramesLayer />
+                            <StagePlane />
+                            <LivesLayer />
+                            <LightPathLayer />
+                            <ImagesLayer />
+                            <StagePositioner />
+                            <RectangleDrawer />
+                        </StageScene>
+                        <ScanRegionPanel />
+                        <ImageMetadataPanel />
+                        <KubeStatePanel />
+                        <FramePanel />
+                        <SceneOverlay />
+                        <DebugOverlay />
+                    </StageView>
+                </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle="true" />
+            <ResizablePanel defaultSize="30" minSize="15" maxSize="40">
+                <ScrollArea className="h-full">
+                    <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
+                        <StageControl className="locked:opacity-60" />
+                        <MultidimensionalAcquisitionControl className="locked:opacity-60 past:hidden" />
+                        <CalibrateLightPath className="locked:opacity-60 past:hidden" />
+                        <BloksPanel />
+                    </div>
+                </ScrollArea>
+            </ResizablePanel>
+        </Resizable>
+    view-minimal:
+      description: 'Minimal: the live image and the stage, nothing else.'
+      bsx: |
+        <Resizable direction="row" className="h-full w-full">
+            <ResizablePanel defaultSize="70">
+                <div className="flex h-full flex-col gap-3 p-4">
+                    <div className="flex gap-2 past:hidden">
+                        <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
+                        <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
+                        <LiveView className="h-full" />
+                    </div>
+                </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle="true" />
+            <ResizablePanel defaultSize="30" minSize="20" maxSize="45">
+                <ScrollArea className="h-full">
+                    <div className="p-4 past:opacity-70 past:grayscale">
+                        <StageControl className="locked:opacity-60" />
+                      
+        <if when="@utils.list.isEmpty(value=self.CalibrationState.calibrated_light_paths)" then="calibrate" else="acquire">
+            <div id="calibrate" className="flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-zinc-950/80 p-3 shadow-xl backdrop-blur past:hidden">
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <span text="Light path not calibrated" className="text-sm font-medium text-amber-200" />
+                    <span text="Calibrate once: images then get their pixel size and their place on the stage." className="text-xs text-muted-foreground" />
+                </div>
+                <Button label="Calibrate" icon="wand" size="sm" className="shrink-0 rounded-full bg-amber-400 text-black hover:bg-amber-300" onClick="@self.calibrate_light_path()" />
+            </div>
+            <Button id="acquire" label="Acquire" icon="camera" size="lg" fullWidth="true" className="h-12 rounded-full text-base shadow-xl past:hidden" onClick="@self.capture_image()" />
+        </if>
+                    </div>
+                </ScrollArea>
+            </ResizablePanel>
+        </Resizable>
+
+# --- AGENT UI ---
+# What Orkestrator shows in agent mode (python main_arkitekt.py): bloks in its
+# standard catalog (`catalog` names the release), the cameras as lovekit streams.
+agent_ui:
+  catalog: orkestrator@v4.2.1
+  bloks:
+    view-microscope:
+      description: 'Microscope: the camera streams, live view and acquiring.'
+      default: true
+      bsx: |
+        <div className="flex flex-col gap-4 p-4">
+            <Card>
+                <CardHeader><CardTitle text="Cameras" /></CardHeader>
+                <CardContent>
+                    <foreach items="@self.CameraStreams.streams" let="#stream">
+                        <StructureDisplay value="@stream" />
+                    </foreach>
+                </CardContent>
+            </Card>
+            <div className="flex gap-2">
+                <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
+                <Button label="Stop" icon="square" onClick="@self.stop_live_view()" />
+                <Button label="Acquire" icon="camera" onClick="@self.capture_image()" />
+                <Button label="Home stage" icon="home" onClick="@self.move_home()" />
+            </div>
+        </div>

@@ -18,15 +18,16 @@ import pytest
 
 uc2_cam_py = pytest.importorskip("uc2_cam_py")
 
-from newswitch.broadcasters import FrameBroadcaster  # noqa: E402
-from newswitch.managers.uc2.uc2_detector import UC2DetectorManager  # noqa: E402
-from newswitch.protocols import CameraState, DetectorManager  # noqa: E402
-from newswitch.protocols.detector import FULL_SENSOR, Colormap, Detector  # noqa: E402
+from newswitch.broadcasters import FrameBroadcaster, FrameSink  # noqa: E402
+from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager  # noqa: E402
+from newswitch.models.devices import FULL_SENSOR, Colormap, Detector  # noqa: E402
+from newswitch.protocols import DetectorManager  # noqa: E402
+from newswitch.states.detector import CameraState  # noqa: E402
 
 #: Vendor options of the simulated camera: small and fast.
 VENDOR_OPTIONS: dict[str, Any] = {"sensor_width": 400, "sensor_height": 200, "frame_rate": 100.0}
 
-#: ``make_manager(*cameras, broadcaster=None, debug_window=False)``
+#: ``make_manager(*cameras, debug_window=False)``
 ManagerFactory = Callable[..., UC2DetectorManager]
 
 
@@ -94,20 +95,18 @@ def make_manager(recording_dir: Path) -> Iterator[ManagerFactory]:
         recording_dir: The recording folder fixture.
 
     Yields:
-        ``make_manager(*cameras, broadcaster=None, debug_window=False)``; without cameras
+        ``make_manager(*cameras, debug_window=False)``; without cameras
         one `camera()`. Every camera gets `VENDOR_OPTIONS`.
     """
     made: list[UC2DetectorManager] = []
 
     def _make(
         *cameras: Detector,
-        broadcaster: FrameBroadcaster | None = None,
         debug_window: bool = False,
     ) -> UC2DetectorManager:
         detectors = list(cameras) or [camera()]
         manager = UC2DetectorManager(
             camera_state=CameraState(),
-            broadcaster=broadcaster or FrameBroadcaster(),
             cameras=detectors,
             vendor_options={detector.slot: VENDOR_OPTIONS for detector in detectors},
             recording_dir=recording_dir,
@@ -137,9 +136,9 @@ def camera_records(manager: UC2DetectorManager) -> bool:
     return manager._cameras[1].camera.is_recording
 
 
-def start_live(manager: UC2DetectorManager) -> threading.Thread:
+def start_live(manager: UC2DetectorManager, sink: FrameSink) -> threading.Thread:
     """Run `acquire_live` in a daemon thread and set `is_acquiring`, as the app does."""
-    live = threading.Thread(target=manager.acquire_live, daemon=True)
+    live = threading.Thread(target=manager.acquire_live, args=(sink,), daemon=True)
     live.start()
     manager.state.is_acquiring = True
     return live
@@ -332,8 +331,8 @@ def test_image_info(manager: UC2DetectorManager) -> None:
 def test_recording(make_manager: ManagerFactory, recording_dir: Path) -> None:
     """With store_image_data the live stream is recorded; stopping it completes the file."""
     broadcaster = RecordingBroadcaster()
-    manager = make_manager(camera(store_image_data=True), broadcaster=broadcaster)
-    start_live(manager)
+    manager = make_manager(camera(store_image_data=True))
+    start_live(manager, broadcaster)
     wait_until(lambda: len(broadcaster.sent) >= 3)
     detector = manager.state.get_detector_for_slot(1)
     assert detector.is_recording and detector.recording_file is not None
@@ -357,8 +356,8 @@ def test_recording(make_manager: ManagerFactory, recording_dir: Path) -> None:
 def test_live_stream(make_manager: ManagerFactory) -> None:
     """While acquiring, new images are broadcast; stopping and closing end it."""
     broadcaster = RecordingBroadcaster()
-    manager = make_manager(broadcaster=broadcaster)
-    live = start_live(manager)
+    manager = make_manager()
+    live = start_live(manager, broadcaster)
 
     wait_until(lambda: len(broadcaster.sent) >= 3)
     assert broadcaster.is_broadcasting

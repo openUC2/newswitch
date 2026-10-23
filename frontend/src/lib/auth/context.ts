@@ -6,7 +6,7 @@
 
 import { createContext, useContext } from "react";
 
-/** Mirrors the backend's `newswitch.users.Role` enum. */
+/** Mirrors the backend's `newswitch.accounts.store.Role` enum. */
 export type Role = "admin" | "operator" | "viewer" | "analyst";
 
 export type AuthContextValue = {

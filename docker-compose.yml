@@ -49,7 +49,7 @@ services:
       ["yarn", "dev", "--mode", "docker", "--host", "0.0.0.0", "--port", "${FRONTEND_PORT:-5173}"]
     depends_on:
       backend:
-        # The codegen fetches the schemas before vite boots, so wait for them
+        # The UI talks to the backend; codegen does not need it (frontend/schemas/)
         condition: service_healthy
 
 volumes:

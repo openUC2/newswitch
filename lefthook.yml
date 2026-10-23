@@ -17,7 +17,7 @@ pre-commit:
     format-frontend:
       root: frontend/
       glob: "*.{ts,tsx,css}"
-      # blok.json and src/apps/** are generated - the generator owns their formatting.
+      # src/apps/** is generated - the generator owns its formatting.
       exclude: "src/apps/**"
       run: yarn prettier --write {staged_files} && git add {staged_files}
     format-backend:

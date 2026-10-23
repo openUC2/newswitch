@@ -20,13 +20,16 @@ with the util functions (``compare.*``, ``str.concat``, ``fmt.*``, ``math.*``,
 blok picks colours from a value.
 
 The fragments use fixed node ids for their ``if`` branches: each may appear once per blok.
+
+Used only by ``python -m newswitch.tools.build_design``, which writes the bloks into a
+configuration's ``ui``; newswitch itself reads them from there.
 """
 
 from dataclasses import dataclass
 
-from arkitekt import bsx
+from newswitch.config_io import BlokEntry
 
-from newswitch.arkitekt_app import nsapp
+NAME = "view-fluorescence"
 
 
 @dataclass(frozen=True)
@@ -276,13 +279,9 @@ def fluorescence_ui(has_filters: bool) -> str:
 </div>"""
 
 
-def declare(catalog: str, has_filters: bool) -> None:
-    """Declare the fluorescence view."""
-    nsapp.blok(
-        "view-fluorescence",
-        bsx(fluorescence_ui(has_filters)),
+def blok(has_filters: bool) -> BlokEntry:
+    """The fluorescence view."""
+    return BlokEntry(
+        bsx=fluorescence_ui(has_filters),
         description="Fluorescence: excitation, emission and detection, built from blok primitives.",
-        catalog=catalog,
-        context="html",
-        mode="strict",
     )

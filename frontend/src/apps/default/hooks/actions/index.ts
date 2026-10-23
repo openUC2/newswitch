@@ -5,22 +5,16 @@ import { CalibrateLightPathDefinition } from './calibrateLightPath';
 import { CaptureImageDefinition } from './captureImage';
 import { ClearExpanseDefinition } from './clearExpanse';
 import { DeactivateDetectorDefinition } from './deactivateDetector';
-import { DumpStatesToStdinDefinition } from './dumpStatesToStdin';
-import { FailingCameraDefinition } from './failingCamera';
 import { GalvoGetStatusDefinition } from './galvoGetStatus';
 import { GalvoRasterScanDefinition } from './galvoRasterScan';
 import { GalvoSetPositionDefinition } from './galvoSetPosition';
 import { GalvoStopDefinition } from './galvoStop';
 import { HomeObjectiveDefinition } from './homeObjective';
 import { HomeStageDefinition } from './homeStage';
-import { KillBenedictDefinition } from './killBenedict';
 import { LedMatrixFillDefinition } from './ledMatrixFill';
 import { LedMatrixOffDefinition } from './ledMatrixOff';
-import { LongStuffRunningDefinition } from './longStuffRunning';
 import { MoveHomeDefinition } from './moveHome';
 import { MoveStageDefinition } from './moveStage';
-import { MoveToStagePositionDefinition } from './moveToStagePosition';
-import { NeverEndingFunctionDefinition } from './neverEndingFunction';
 import { RunAutofocusDefinition } from './runAutofocus';
 import { ScanRegionDefinition } from './scanRegion';
 import { SetIlluminationIntensityDefinition } from './setIlluminationIntensity';
@@ -38,7 +32,7 @@ import { UpdateDetectorDefinition } from './updateDetector';
 
 export { createIndexedUnion } from './utils';
 export {
-  IlluminationSchema,
+  StreamIlluminationSchema,
   StreamsSchema,
   SoftwareAutofocusHookSchema,
   ZCalibrationHookSchema,
@@ -56,8 +50,8 @@ export {
   useAcquireMultidimensionalAcquisition,
 } from './acquireMultidimensionalAcquisition';
 export type {
-  Illumination,
-  IlluminationOutput,
+  StreamIllumination,
+  StreamIlluminationOutput,
   Streams,
   StreamsOutput,
   SoftwareAutofocusHook,
@@ -123,23 +117,6 @@ export type {
   DeactivateDetectorReturn,
 } from './deactivateDetector';
 export {
-  DumpStatesToStdinArgsSchema,
-  DumpStatesToStdinReturnSchema,
-  DumpStatesToStdinDefinition,
-  useDumpStatesToStdin,
-} from './dumpStatesToStdin';
-export type {
-  DumpStatesToStdinArgs,
-  DumpStatesToStdinReturn,
-} from './dumpStatesToStdin';
-export {
-  FailingCameraArgsSchema,
-  FailingCameraReturnSchema,
-  FailingCameraDefinition,
-  useFailingCamera,
-} from './failingCamera';
-export type { FailingCameraArgs, FailingCameraReturn } from './failingCamera';
-export {
   GalvoStatusSchema,
   GalvoGetStatusArgsSchema,
   GalvoGetStatusReturnSchema,
@@ -194,13 +171,6 @@ export {
 } from './homeStage';
 export type { HomeStageArgs, HomeStageReturn } from './homeStage';
 export {
-  KillBenedictArgsSchema,
-  KillBenedictReturnSchema,
-  KillBenedictDefinition,
-  useKillBenedict,
-} from './killBenedict';
-export type { KillBenedictArgs, KillBenedictReturn } from './killBenedict';
-export {
   LedMatrixFillArgsSchema,
   LedMatrixFillReturnSchema,
   LedMatrixFillDefinition,
@@ -214,16 +184,6 @@ export {
   useLedMatrixOff,
 } from './ledMatrixOff';
 export type { LedMatrixOffArgs, LedMatrixOffReturn } from './ledMatrixOff';
-export {
-  LongStuffRunningArgsSchema,
-  LongStuffRunningReturnSchema,
-  LongStuffRunningDefinition,
-  useLongStuffRunning,
-} from './longStuffRunning';
-export type {
-  LongStuffRunningArgs,
-  LongStuffRunningReturn,
-} from './longStuffRunning';
 export {
   MoveHomeArgsSchema,
   MoveHomeReturnSchema,
@@ -240,26 +200,6 @@ export {
 } from './moveStage';
 export type { MoveStageArgs, MoveStageReturn } from './moveStage';
 export {
-  MoveToStagePositionArgsSchema,
-  MoveToStagePositionReturnSchema,
-  MoveToStagePositionDefinition,
-  useMoveToStagePosition,
-} from './moveToStagePosition';
-export type {
-  MoveToStagePositionArgs,
-  MoveToStagePositionReturn,
-} from './moveToStagePosition';
-export {
-  NeverEndingFunctionArgsSchema,
-  NeverEndingFunctionReturnSchema,
-  NeverEndingFunctionDefinition,
-  useNeverEndingFunction,
-} from './neverEndingFunction';
-export type {
-  NeverEndingFunctionArgs,
-  NeverEndingFunctionReturn,
-} from './neverEndingFunction';
-export {
   RunAutofocusArgsSchema,
   RunAutofocusReturnSchema,
   RunAutofocusDefinition,
@@ -267,18 +207,12 @@ export {
 } from './runAutofocus';
 export type { RunAutofocusArgs, RunAutofocusReturn } from './runAutofocus';
 export {
-  ImageSchema,
   ScanRegionArgsSchema,
   ScanRegionReturnSchema,
   ScanRegionDefinition,
   useScanRegion,
 } from './scanRegion';
-export type {
-  Image,
-  ImageOutput,
-  ScanRegionArgs,
-  ScanRegionReturn,
-} from './scanRegion';
+export type { ScanRegionArgs, ScanRegionReturn } from './scanRegion';
 export {
   SetIlluminationIntensityArgsSchema,
   SetIlluminationIntensityReturnSchema,
@@ -393,22 +327,16 @@ export const globalActionDefinition = {
   CaptureImage: CaptureImageDefinition,
   ClearExpanse: ClearExpanseDefinition,
   DeactivateDetector: DeactivateDetectorDefinition,
-  DumpStatesToStdin: DumpStatesToStdinDefinition,
-  FailingCamera: FailingCameraDefinition,
   GalvoGetStatus: GalvoGetStatusDefinition,
   GalvoRasterScan: GalvoRasterScanDefinition,
   GalvoSetPosition: GalvoSetPositionDefinition,
   GalvoStop: GalvoStopDefinition,
   HomeObjective: HomeObjectiveDefinition,
   HomeStage: HomeStageDefinition,
-  KillBenedict: KillBenedictDefinition,
   LedMatrixFill: LedMatrixFillDefinition,
   LedMatrixOff: LedMatrixOffDefinition,
-  LongStuffRunning: LongStuffRunningDefinition,
   MoveHome: MoveHomeDefinition,
   MoveStage: MoveStageDefinition,
-  MoveToStagePosition: MoveToStagePositionDefinition,
-  NeverEndingFunction: NeverEndingFunctionDefinition,
   RunAutofocus: RunAutofocusDefinition,
   ScanRegion: ScanRegionDefinition,
   SetIlluminationIntensity: SetIlluminationIntensityDefinition,

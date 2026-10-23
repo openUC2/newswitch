@@ -542,7 +542,7 @@ class Device:
     A primitive with ``static-models: {newswitch-device: <file>}`` and
     ``results: {newswitch-device-id: ...}`` is one. Its config is that file, with
     ``results['newswitch-device-config']`` merged over it: what optikit's own
-    ``tools/examples/newswitch/config.py`` writes into ``_newswitch-config.yml``,
+    ``tools/examples/newswitch/settings.py`` writes into ``_newswitch-config.yml``,
     read here from the designs themselves.
     """
 

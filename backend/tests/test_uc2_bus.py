@@ -6,21 +6,15 @@ from typing import Any
 
 import pytest
 
-from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
-from newswitch.managers.uc2.rest_bus import UC2RestBusConfig
-from newswitch.managers.uc2.dispatch import apply_uc2_event
-from newswitch.managers.uc2.stage_manager import UC2StageConfig, UC2StageManager
-from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
-from newswitch.protocols.stage import StageState
-from newswitch.protocols.uc2 import (
-    BusError,
-    EStopChanged,
-    MotionDone,
-    NodeSeen,
-    PositionUpdate,
-    UC2BusManager,
-    UC2State,
-)
+from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+from newswitch.drivers.uc2.dispatch import apply_uc2_event
+from newswitch.drivers.uc2.rest_bus import UC2RestBusConfig
+from newswitch.drivers.uc2.stage_manager import UC2StageConfig, UC2StageManager
+from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
+from newswitch.models.uc2 import BusError, EStopChanged, MotionDone, NodeSeen, PositionUpdate
+from newswitch.protocols.uc2 import UC2BusManager
+from newswitch.states.stage import StageState
+from newswitch.states.uc2 import UC2State
 
 
 def make_virtual_bus() -> VirtualUC2Bus:
@@ -144,12 +138,12 @@ def test_apply_uc2_event_updates_states() -> None:
 
 
 def test_shipped_config_files_load() -> None:
-    """The example setup JSONs parse into ImswitchConfig and typed bus configs."""
-    from newswitch.app import ImswitchConfig
+    """The example setup JSONs parse into Settings and typed bus configs."""
+    from newswitch.settings import Settings
 
     configs_dir = Path(__file__).parent.parent / "configs"
 
-    serial_cfg = ImswitchConfig.model_validate_json((configs_dir / "uc2_serial.json").read_text())
+    serial_cfg = Settings.model_validate_json((configs_dir / "uc2_serial.json").read_text())
     assert serial_cfg.use_virtual_microscope is False
     assert serial_cfg.uc2_transport == "rest"
     rest_kwargs: dict[str, Any] = {
@@ -166,7 +160,7 @@ def test_shipped_config_files_load() -> None:
     assert serial_cfg.uc2_stage["registered_step_sizes"] == [10.0, 100.0, 1000.0, 10000.0]
     assert len(serial_cfg.uc2_illumination["sources"]) == 3
 
-    can_cfg = ImswitchConfig.model_validate_json((configs_dir / "uc2_canopen.json").read_text())
+    can_cfg = Settings.model_validate_json((configs_dir / "uc2_canopen.json").read_text())
     assert can_cfg.uc2_transport == "canopen"
     can_kwargs: dict[str, Any] = {
         "interface": can_cfg.uc2_can_interface,

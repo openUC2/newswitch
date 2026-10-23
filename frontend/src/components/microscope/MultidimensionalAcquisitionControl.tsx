@@ -27,7 +27,7 @@ import {
   AcquireMultidimensionalAcquisitionArgsSchema,
   useAcquireMultidimensionalAcquisition,
   type AcquireMultidimensionalAcquisitionArgs,
-  type Illumination,
+  type StreamIllumination,
   type Position,
   type Stack,
   type Streams,
@@ -81,7 +81,7 @@ function stringToZSlices(raw: string): number[] {
 // Default factories from live state
 // ---------------------------------------------------------------------------
 
-function makeDefaultIllumination(): Illumination {
+function makeDefaultIllumination(): StreamIllumination {
   return { source: "LED1", wavelength: 488, intensity: 0.8 };
 }
 

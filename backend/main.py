@@ -1,43 +1,64 @@
-"""Module-level ASGI app, so `uvicorn main:app --reload` can re-import on every edit.
+"""newswitch: how a running microscope is put together. Start here.
 
-`test.py` builds the app inside `__main__` and hands the object to `uvicorn.run(...)`,
-which pins it to one process and rules out reload. Uvicorn's reloader needs an import
-string it can re-evaluate, which is what `app` below provides.
+    NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just dev     # main_fastapi.py
+    NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just agent   # main_arkitekt.py
+    uv run python main.py fastapi | arkitekt
 
-Settings, including which device configuration to load, come from base_config.yaml.
-To boot a specific microscope, set NEWSWITCH_CONFIG to a JSON file whose values
-override single ImswitchConfig fields of base_config.yaml, e.g.
+newswitch is served one of two ways. Both start the same way, then register what is
+particular to them:
 
-    NEWSWITCH_CONFIG=configs/uc2_canopen.json uvicorn main:app --port 8099
+1. settings  `newswitch.settings.load_settings`: ``backend/base_config.yaml``, or the file
+             ``NEWSWITCH_CONFIG`` names in its place (a device configuration ``.yaml``, or
+             settings overrides ``.json``);
+2. devices   `load_devices`: the device configuration the settings point at
+             (``configs/README.md``), with the UI section the server shows;
+3. registry  `newswitch.microscope.registry.create_registry`: a fresh app registry with
+             only what the configured devices need registered on it;
+4. serve     - `main_fastapi`: registers the websocket live view's `FrameBroadcaster` and
+               the ``ui`` bloks (the newswitch frontend's catalog), and serves the registry
+               with auth, accounts, live view, files and the cache;
+             - `main_arkitekt`: registers a lovekit stream per detector and the
+               ``agent_ui`` bloks (Orkestrator's catalog), and runs it as an arkitekt agent.
 
-Without the variable base_config.yaml alone applies. Ready-made setups
-live in backend/configs/ (uc2_serial.json, uc2_canopen.json).
+Tools beside them (building a configuration from a design, exporting the frontend's
+schemas, recovering accounts) are in `newswitch.tools`.
 """
 
-import json
-import os
-from pathlib import Path
+import argparse
 
-from newswitch.app import ImswitchConfig, create_app
+from newswitch import config_io, settings
 
 
-def load_config() -> ImswitchConfig:
-    """Build the app config from base_config.yaml, overridden by the NEWSWITCH_CONFIG JSON file."""
-    config_path = os.environ.get("NEWSWITCH_CONFIG")
-    if not config_path:
-        return ImswitchConfig()
+def load_devices(config: settings.Settings, ui_section: str) -> config_io.NewswitchConfig | None:
+    """Step 2: the device configuration of `config`, which must have `ui_section`.
 
-    candidate = Path(config_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = Path(__file__).resolve().parent / candidate
+    Raises:
+        config_io.ConfigError: It has no `ui_section` (``ui`` for FastAPI, ``agent_ui``
+            for arkitekt): newswitch shows only the bloks its configuration lists.
+    """
+    devices = settings.load_devices(config)
+    if devices is not None and getattr(devices, ui_section) is None:
+        raise config_io.ConfigError(
+            f"{config.config_file} has no {ui_section} section: newswitch shows only the "
+            "bloks its configuration lists (see configs/README.md)"
+        )
+    return devices
 
-    return ImswitchConfig(**json.loads(candidate.read_text()))
 
+def main(argv: list[str] | None = None) -> None:
+    """Serve newswitch the way the command line says."""
+    parser = argparse.ArgumentParser(prog="python main.py", description=__doc__.splitlines()[0])
+    parser.add_argument("mode", choices=["fastapi", "arkitekt"], help="how to serve newswitch")
+    args = parser.parse_args(argv)
+    if args.mode == "fastapi":
+        import main_fastapi
 
-app = create_app(load_config())
+        main_fastapi.main()
+    else:
+        import main_arkitekt  # needs the extra agent
+
+        main_arkitekt.main()
 
 
 if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8099)
+    main()

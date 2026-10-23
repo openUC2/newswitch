@@ -11,7 +11,7 @@
  * 401 into a redirect.
  */
 
-const STORAGE_KEY = "newswitch.auth.token";
+const STORAGE_KEY = "newswitch.accounts.auth.token";
 
 type Listener = () => void;
 

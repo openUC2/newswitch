@@ -20,84 +20,15 @@ emergency stop, buttons) are exposed as a typed async event stream via
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Optional, Protocol, Union, runtime_checkable
+from typing import Any, AsyncIterator, Optional, Protocol, runtime_checkable
 
-
+from newswitch.models.uc2 import UC2Event
 from newswitch.protocols.base import BackgroundManager
-from newswitch.arkitekt_app import nsapp
-
-STAGE_AXES = ("X", "Y", "Z", "A")
-
+from newswitch.states.uc2 import UC2State
 
 # ---------------------------------------------------------------------------
 # Typed hardware events
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class PositionUpdate:
-    """Live position telemetry for one stage axis (micrometers)."""
-
-    axis: str
-    position: float
-
-
-@dataclass(frozen=True)
-class MotionDone:
-    """A stage axis finished its motion at ``position`` (micrometers)."""
-
-    axis: str
-    position: float
-
-
-@dataclass(frozen=True)
-class HomingChanged:
-    """Homing phase change for an axis (0=idle, 1=homing, 2=done, 3=timeout)."""
-
-    axis: str
-    status: int
-
-
-@dataclass(frozen=True)
-class EStopChanged:
-    """The hardware emergency-stop state changed."""
-
-    active: bool
-
-
-@dataclass(frozen=True)
-class ButtonPressed:
-    """A hardware button / firmware key-value event was received."""
-
-    key: Optional[str]
-    data: Any
-
-
-@dataclass(frozen=True)
-class NodeSeen:
-    """A bus node announced itself (CAN heartbeat or firmware identity)."""
-
-    node_id: int
-    nmt_state: int
-
-
-@dataclass(frozen=True)
-class BusError:
-    """A transport-level error occurred (link loss, protocol error)."""
-
-    message: str
-
-
-UC2Event = Union[
-    PositionUpdate,
-    MotionDone,
-    HomingChanged,
-    EStopChanged,
-    ButtonPressed,
-    NodeSeen,
-    BusError,
-]
 
 
 # ---------------------------------------------------------------------------
@@ -105,25 +36,11 @@ UC2Event = Union[
 # ---------------------------------------------------------------------------
 
 
-@nsapp.state
-@dataclass
-class UC2State:
-    """Connection, identity, and safety state of the UC2 hardware bus."""
-
-    connected: bool = False
-    transport: str = "virtual"
-    firmware: str = ""
-    estop_active: bool = False
-    nodes_online: list[int] = field(default_factory=list)
-    last_error: str = ""
-
-
 # ---------------------------------------------------------------------------
 # Bus protocol
 # ---------------------------------------------------------------------------
 
 
-@nsapp.context
 @runtime_checkable
 class UC2BusManager(BackgroundManager, Protocol):
     """Protocol for transport backends driving openUC2 hardware.

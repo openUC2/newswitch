@@ -6,8 +6,6 @@ import type { Plugin } from 'vite';
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SRC_DIR = path.resolve(__dirname, '../src');
 const DEFAULT_APPS_DIR = path.resolve(SRC_DIR, 'apps');
-const BLOK_PATH = path.resolve(ROOT_DIR, 'blok.json');
-const PACKAGE_JSON_PATH = path.resolve(ROOT_DIR, 'package.json');
 
 const DEFAULT_APP_KEY = 'default';
 const DEFAULT_ARKITEKT_IMPORT_PATH = '@/lib/arkitekt';
@@ -172,11 +170,11 @@ type LockModuleEntry = {
 };
 
 export interface GenerateAppPluginOptions {
-  key?: string;
-  name?: string;
-  hooksSchemaUrl?: string;
-  statesSchemaUrl?: string;
-  locksSchemaUrl?: string;
+  key: string;
+  /** The committed schema export (`just export-schemas`), relative to the frontend's root. */
+  hooksSchemaPath: string;
+  statesSchemaPath: string;
+  locksSchemaPath: string;
   hooksWhitelist?: string[];
   hooksBlacklist?: string[];
   statesWhitelist?: string[];
@@ -192,8 +190,6 @@ export interface GenerateAppsPluginOptions {
 }
 
 interface NormalizedGenerateAppPluginOptions extends GenerateAppPluginOptions {
-  key: string;
-  name?: string;
   symbolPrefix?: string;
 }
 
@@ -234,50 +230,6 @@ const sortedEntries = <T>(record: Record<string, T>): [string, T][] =>
 
 // Object key order follows the backend's JSON wire order, which is not stable across
 // runs. Sort it away. Arrays are left alone - their order is semantic.
-const sortKeysDeep = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map(sortKeysDeep);
-  }
-
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.keys(record)
-        .sort(byCodepoint)
-        .map((key) => [key, sortKeysDeep(record[key])]),
-    );
-  }
-
-  return value;
-};
-
-// The backend derives these fields through Python sets, so their wire order changes with
-// Python's per-process hash seed. Their order has no meaning; normalize it before the
-// schema snapshot reaches blok.json so a fresh CI process cannot create false drift.
-const sortSetLikeSchemaArrays = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map(sortSetLikeSchemaArrays);
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, child]) => {
-        const normalized = sortSetLikeSchemaArrays(child);
-        if (
-          (key === 'locks' || key === 'manipulates') &&
-          Array.isArray(normalized) &&
-          normalized.every((entry) => typeof entry === 'string')
-        ) {
-          return [key, [...normalized].sort(byCodepoint)];
-        }
-        return [key, normalized];
-      }),
-    );
-  }
-
-  return value;
-};
-
 // Every write goes through here. Rewriting a byte-identical file would churn its mtime,
 // which re-triggers Vite's watcher and makes `git status` dirty after a no-op codegen.
 const writeIfChanged = (filePath: string, content: string) => {
@@ -348,10 +300,6 @@ const formatAndWrite = async (filePath: string, content: string) => {
   writeIfChanged(filePath, formatted);
 };
 
-const formatAndWriteJson = (filePath: string, value: unknown) => {
-  writeIfChanged(filePath, `${JSON.stringify(value, null, 2)}\n`);
-};
-
 const readJsonFile = (filePath: string) => {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<
@@ -363,46 +311,28 @@ const readJsonFile = (filePath: string) => {
   }
 };
 
-const fetchSchemaJson = async (schemaUrl?: string, label?: string) => {
-  if (!schemaUrl) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(schemaUrl);
-
-    if (!response.ok) {
-      console.warn(
-        `⚠️ [GenApps] Failed to fetch ${label ?? 'schema'} from ${schemaUrl}: ${response.status}`,
-      );
-      return null;
-    }
-
-    return (await response.json()) as Record<string, unknown>;
-  } catch (error) {
-    console.warn(
-      `⚠️ [GenApps] Error fetching ${label ?? 'schema'} from ${schemaUrl}:`,
-      error,
+/** A committed schema export; one that is missing or unreadable fails the build. */
+const readSchemaJson = (schemaPath: string, label: string) => {
+  const resolved = path.resolve(ROOT_DIR, schemaPath);
+  const data = readJsonFile(resolved);
+  if (!data) {
+    throw new Error(
+      `[GenApps] No ${label} at ${resolved}: run \`just export-schemas\``,
     );
-    return null;
   }
+  return data;
 };
 
 const normalizeApps = (
   apps: GenerateAppPluginOptions[],
 ): NormalizedGenerateAppPluginOptions[] => {
   const normalizedApps = apps.map((app, index) => {
-    const explicitKey = normalizeOptionalString(app.key);
-    const legacyName = normalizeOptionalString(app.name);
-    const key = explicitKey ?? legacyName;
+    const key = normalizeOptionalString(app.key);
 
     if (!key) {
-      throw new Error(
-        `App at index ${index} must define a "key" or a legacy "name".`,
-      );
+      throw new Error(`App at index ${index} must define a "key".`);
     }
 
-    const normalizedName = explicitKey ? legacyName : undefined;
     const symbolPrefix =
       key === DEFAULT_APP_KEY
         ? undefined
@@ -411,13 +341,11 @@ const normalizeApps = (
     return {
       ...app,
       key,
-      name: normalizedName,
       symbolPrefix,
     };
   });
 
   const seenKeys = new Map<string, string>();
-  const seenNames = new Map<string, string>();
   const seenPrefixes = new Map<string, string>();
 
   for (const app of normalizedApps) {
@@ -427,15 +355,6 @@ const normalizeApps = (
       );
     }
     seenKeys.set(app.key, app.key);
-
-    if (app.name) {
-      if (seenNames.has(app.name)) {
-        throw new Error(
-          `Duplicate app name "${app.name}" found for app keys "${seenNames.get(app.name)}" and "${app.key}".`,
-        );
-      }
-      seenNames.set(app.name, app.key);
-    }
 
     if (app.symbolPrefix) {
       if (seenPrefixes.has(app.symbolPrefix)) {
@@ -1414,7 +1333,7 @@ export default function generateAppsPlugin(
     options.arkitektImportPath ?? DEFAULT_ARKITEKT_IMPORT_PATH;
 
   // buildStart fires on `vite build` AND on every dev-server (re)start. Without this the
-  // whole pipeline - three fetches plus a full rewrite - re-runs on each restart.
+  // whole pipeline - three reads plus a full rewrite - re-runs on each restart.
   let generation: Promise<void> | null = null;
 
   return {
@@ -1428,15 +1347,6 @@ export default function generateAppsPlugin(
   async function generate() {
     ensureDir(appsDir);
 
-    const packageData = readJsonFile(PACKAGE_JSON_PATH) ?? {};
-    const scripts =
-      (packageData.scripts as Record<string, string> | undefined) ?? {};
-    const previousBlok = readJsonFile(BLOK_PATH) ?? {};
-    const previousApps =
-      (previousBlok.apps as
-        | Record<string, Record<string, unknown>>
-        | undefined) ?? {};
-    const blokApps: Record<string, Record<string, unknown>> = {};
     const availableApps: NormalizedGenerateAppPluginOptions[] = [];
 
     for (const app of normalizedApps) {
@@ -1449,44 +1359,18 @@ export default function generateAppsPlugin(
       ensureDir(appRootDir);
       ensureDir(appHooksDir);
 
-      const [hooksSchemaJson, statesSchemaJson, locksSchemaJson] =
-        await Promise.all([
-          fetchSchemaJson(app.hooksSchemaUrl, `${app.key} task schema`),
-          fetchSchemaJson(app.statesSchemaUrl, `${app.key} state schema`),
-          fetchSchemaJson(app.locksSchemaUrl, `${app.key} lock schema`),
-        ]);
-
-      const previousAppEntry = previousApps[app.key] ?? {};
-      const previousAppSchemas = (previousAppEntry.schemas ?? {}) as Record<
-        string,
-        string | null
-      >;
-
-      blokApps[app.key] = {
-        key: app.key,
-        name: app.name ?? app.key,
-        tasks:
-          (hooksSchemaJson?.implementations as
-            | Record<string, unknown>
-            | undefined) ??
-          (previousAppEntry.tasks as Record<string, unknown> | undefined) ??
-          {},
-        states:
-          (statesSchemaJson?.states as Record<string, unknown> | undefined) ??
-          (previousAppEntry.states as Record<string, unknown> | undefined) ??
-          {},
-        locks:
-          (locksSchemaJson?.locks as Record<string, unknown> | undefined) ??
-          (previousAppEntry.locks as Record<string, unknown> | undefined) ??
-          {},
-        // Fall back to the recorded URLs: these come from env (VITE_SCHEMA_*), so a build
-        // with those vars unset would otherwise overwrite good values with null.
-        schemas: {
-          tasks: app.hooksSchemaUrl ?? previousAppSchemas.tasks ?? null,
-          states: app.statesSchemaUrl ?? previousAppSchemas.states ?? null,
-          locks: app.locksSchemaUrl ?? previousAppSchemas.locks ?? null,
-        },
-      };
+      const hooksSchemaJson = readSchemaJson(
+        app.hooksSchemaPath,
+        `${app.key} task schema`,
+      );
+      const statesSchemaJson = readSchemaJson(
+        app.statesSchemaPath,
+        `${app.key} state schema`,
+      );
+      const locksSchemaJson = readSchemaJson(
+        app.locksSchemaPath,
+        `${app.key} lock schema`,
+      );
 
       if (isHooksSchema(hooksSchemaJson)) {
         await generateActionsDirectory({
@@ -1667,40 +1551,5 @@ export type AppKey = keyof AppsDefinition;
 export type AppDefinition = AppsDefinition[AppKey];
 `,
     );
-
-    // Everything except generatedAt. Key order comes from the backend's JSON and is not
-    // stable, so deep-sort it before comparing or writing.
-    const blokPayload = sortKeysDeep(
-      sortSetLikeSchemaArrays({
-        app: {
-          name: (packageData.name as string | undefined) ?? 'unknown',
-          version: (packageData.version as string | undefined) ?? '0.0.0',
-          description: (packageData.description as string | undefined) ?? '',
-          startPage:
-            (packageData.homepage as string | undefined) ?? '/index.html',
-          type: (packageData.type as string | undefined) ?? 'unknown',
-          scripts: {
-            dev: scripts.dev ?? '',
-            build: scripts.build ?? '',
-            preview: scripts.preview ?? '',
-          },
-        },
-        apps: blokApps,
-      }),
-    ) as Record<string, unknown>;
-
-    // Only stamp a new generatedAt when the content actually changed. Otherwise every
-    // dev-server start would dirty blok.json (780KB) for no reason.
-    const { generatedAt: previousGeneratedAt, ...previousPayload } =
-      previousBlok;
-    const unchanged =
-      typeof previousGeneratedAt === 'string' &&
-      JSON.stringify(sortKeysDeep(previousPayload)) ===
-        JSON.stringify(blokPayload);
-
-    formatAndWriteJson(BLOK_PATH, {
-      generatedAt: unchanged ? previousGeneratedAt : new Date().toISOString(),
-      ...blokPayload,
-    });
   }
 }

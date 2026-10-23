@@ -18,7 +18,6 @@ export const IlluminationSchema = z
     slot: z.number(),
     intensity: z.number(),
     wavelength: z.number(),
-    fartface: z.number(),
     channel: z.number(),
     max_intensity: z.number(),
     min_intensity: z.number(),
@@ -26,7 +25,7 @@ export const IlluminationSchema = z
   })
   .brand('@newswitch/illumination')
   .describe(
-    'Shared state for illumination parameters.\n\n    Note: intensity is divided by 1000 in the detector for actual scaling,\n    so 10000.0 gives an effective intensity of 10.0.\n    ',
+    'A light source: its kind, wavelength (nm), hardware channel, and intensity within\n    min..max (the light it gives is intensity / max_intensity of its full power).',
   );
 export type Illumination = z.input<typeof IlluminationSchema>;
 export type IlluminationOutput = z.infer<typeof IlluminationSchema>;
@@ -35,7 +34,7 @@ export type IlluminationOutput = z.infer<typeof IlluminationSchema>;
 export const IlluminationStateSchema = z.object({
   illuminations: z.array(
     IlluminationSchema.describe(
-      'Shared state for illumination parameters.\n\n    Note: intensity is divided by 1000 in the detector for actual scaling,\n    so 10000.0 gives an effective intensity of 10.0.\n    ',
+      'A light source: its kind, wavelength (nm), hardware channel, and intensity within\n    min..max (the light it gives is intensity / max_intensity of its full power).',
     ),
   ),
 });

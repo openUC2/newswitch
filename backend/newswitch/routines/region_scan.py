@@ -1,25 +1,24 @@
 """Routine for scanning a rectangular region as a tiled grid of stage positions."""
 
+import logging
 import math
-from enum import Enum
 from typing import Annotated
-from newswitch import protocols
-from newswitch.protocols.core import Image
+
 from arkitekt import Description, Task
 
+from newswitch import protocols
+from newswitch.models.acquisition import (
+    ScanOrder,
+)
+from newswitch.models.frames import Frame
+from newswitch.routines.common import acquire_step
 
-class ScanOrder(str, Enum):
-    """Defines the order in which stage positions are visited during acquisition."""
-
-    SNAKE_ROW = "SNAKE_ROW"
-    SNAKE_COL = "SNAKE_COL"
-    RASTER_ROW = "RASTER_ROW"
-    RASTER_COL = "RASTER_COL"
+logger = logging.getLogger(__name__)
 
 
 def scan_region(
     light_path_manager: protocols.LightPathManager,
-    acquisition_manager: protocols.AcquistionManager,
+    acquisition_manager: protocols.AcquisitionManager,
     metadata_manager: protocols.MetadataManager,
     detector_manager: protocols.DetectorManager,
     stage_manager: protocols.StageManager,
@@ -37,18 +36,20 @@ def scan_region(
         ),
     ]
     | None = None,
-) -> list[Image]:
-    """Simulate the acquisition of a multidimensional dataset based on the provided configuration.
+) -> list[Frame]:
+    """Scan a rectangular region of the stage tile by tile.
 
-    Args:
-        config (MultidimensionalAcquisition): Configuration for the acquisition.
+    The region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered
+    with fields of view of the detector (`detector_slot`, else the first active one),
+    overlapping by `overlap`, visited in `scan_order`; every active detector acquires a
+    frame at each tile.
 
     Returns:
-        list[AcquiredImage]: List of acquired images with metadata.
+        The frames, in the order acquired.
     """
 
-    print(
-        f"Scanning region from ({start_x}, {start_y}) to ({end_x}, {end_y}) in {scan_order} order."
+    logger.info(
+        "Scanning (%s, %s)..(%s, %s) in %s order", start_x, start_y, end_x, end_y, scan_order
     )
 
     # 1. Calculate FOV for the current objective and detector configuration
@@ -65,16 +66,10 @@ def scan_region(
     )
     metadata = metadata_manager.get_metadata_for_light_path(current_light_path)
 
-    fov_width = (
-        metadata.affine_matrix[0][0] * current_detector.width
-    )  # Placeholder: e.g., pixel_size_x * sensor_width
-    fov_height = (
-        metadata.affine_matrix[1][1] * current_detector.height
-    )  # Placeholder: e.g., pixel_size_y * sensor_height
-    # Placeholder: e.g., pixel_size_y * sensor_height
-    print(
-        f"Calculated FOV: {fov_width:.2f} x {fov_height:.2f} (um) based on current configuration."
-    )
+    # The field of view of its light path (calibrated, else nominal): positive whatever the
+    # camera's orientation
+    fov_width, fov_height = abs(metadata.fov_width), abs(metadata.fov_height)
+    logger.info("Field of view: %.2f x %.2f um", fov_width, fov_height)
 
     # 2. Define Region Bounds, ensuring min/max are correctly assigned regardless of drag direction
     min_x, max_x = min(start_x, end_x), max(start_x, end_x)
@@ -123,31 +118,14 @@ def scan_region(
                 y = start_grid_y + actual_r * step_y
                 path_points.append((x, y))
 
-    print(
-        f"Calculated {cols} cols and {rows} rows ({len(path_points)} total points) based on FOV and overlap."
-    )
+    logger.info("%d cols x %d rows: %d tiles", cols, rows, len(path_points))
 
-    acquired_images: list[Image] = []
-
-    total_len = len(path_points)
-
-    # 5. Execute Moves and Acquisitions
+    acquired_images: list[Frame] = []
+    total = len(path_points)
     for i, (tgt_x, tgt_y) in enumerate(path_points):
-        print(f"Moving to position {i + 1}/{len(path_points)} -> X: {tgt_x:.2f}, Y: {tgt_y:.2f}")
-        task.pausepoint()
-
-        task.progress(int((i / total_len) * 100), f"Moving to point {i + 1}/{total_len}")
-
-        # Move Stage
         stage_manager.move(x=tgt_x, y=tgt_y, is_absolute=True)
-
-        images = acquisition_manager.acquire()
-
-        acquired_images.extend(images)
-
-        # Update progress
-        task.progress(
-            int(((i + 1) / len(path_points)) * 100), f"Acquired point {i + 1}/{len(path_points)}"
+        acquired_images.extend(
+            acquire_step(acquisition_manager, task, i + 1, total, f"Acquired tile {i + 1}/{total}")
         )
 
     return acquired_images

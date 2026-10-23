@@ -3,6 +3,20 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 import { createIndexedUnion } from './utils';
 
 // --- Shared Models ---
+export const ScaleSchema = z
+  .object({
+    __identifier: z.literal('@newswitch/scale').default('@newswitch/scale'),
+    x: z.number(),
+    y: z.number(),
+    z: z.number(),
+    cached_id: z.string().nullable().optional(),
+    affine_matrix: z.array(z.array(z.number())).nullable().optional(),
+  })
+  .brand('@newswitch/scale')
+  .describe('Represents a scale factor for a 3D volume.');
+export type Scale = z.input<typeof ScaleSchema>;
+export type ScaleOutput = z.infer<typeof ScaleSchema>;
+
 export const ObjectiveKubeStateSchema = z
   .object({
     __identifier: z
@@ -381,11 +395,11 @@ export const LightEdgeStateSchema = z
 export type LightEdgeState = z.input<typeof LightEdgeStateSchema>;
 export type LightEdgeStateOutput = z.infer<typeof LightEdgeStateSchema>;
 
-export const LightPathStateSchema = z
+export const LightPathSnapshotSchema = z
   .object({
     __identifier: z
-      .literal('@newswitch/light_path_state')
-      .default('@newswitch/light_path_state'),
+      .literal('@newswitch/light_path_snapshot')
+      .default('@newswitch/light_path_snapshot'),
     /** Hash of the light path configuration, used to uniquely describe the optical path for this image */
     hash: z
       .string()
@@ -411,12 +425,12 @@ export const LightPathStateSchema = z
         'Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image',
       ),
   })
-  .brand('@newswitch/light_path_state')
+  .brand('@newswitch/light_path_snapshot')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
-export type LightPathState = z.input<typeof LightPathStateSchema>;
-export type LightPathStateOutput = z.infer<typeof LightPathStateSchema>;
+export type LightPathSnapshot = z.input<typeof LightPathSnapshotSchema>;
+export type LightPathSnapshotOutput = z.infer<typeof LightPathSnapshotSchema>;
 
 export const MetadataSchema = z
   .object({
@@ -427,7 +441,7 @@ export const MetadataSchema = z
     fov_width: z.number(),
     fov_height: z.number(),
     /** Data class representing the light path used for an image, including illumination settings. */
-    light_state: LightPathStateSchema.describe(
+    light_state: LightPathSnapshotSchema.describe(
       'Data class representing the light path used for an image, including illumination settings.',
     ),
     acquisition_time: z.string(),
@@ -442,19 +456,41 @@ export const MetadataSchema = z
 export type Metadata = z.input<typeof MetadataSchema>;
 export type MetadataOutput = z.infer<typeof MetadataSchema>;
 
-export const ImageSchema = z
+export const ArrayMetadataSchema = z
   .object({
-    __identifier: z.literal('@newswitch/image').default('@newswitch/image'),
+    __identifier: z
+      .literal('@newswitch/array_metadata')
+      .default('@newswitch/array_metadata'),
+    min_value: z.number(),
+    max_value: z.number(),
+  })
+  .brand('@newswitch/array_metadata')
+  .describe(
+    'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
+  );
+export type ArrayMetadata = z.input<typeof ArrayMetadataSchema>;
+export type ArrayMetadataOutput = z.infer<typeof ArrayMetadataSchema>;
+
+export const FrameSchema = z
+  .object({
+    __identifier: z.literal('@newswitch/frame').default('@newswitch/frame'),
     id: z.string(),
+    scales: z.array(
+      ScaleSchema.describe('Represents a scale factor for a 3D volume.'),
+    ),
     /** Data class representing metadata for an image, including its ID and affine transformation matrix. */
     metadata: MetadataSchema.describe(
       'Data class representing metadata for an image, including its ID and affine transformation matrix.',
     ),
+    /** Metadata for a raw array before it is saved as an image, including the light path and acquisition settings. */
+    array_metadata: ArrayMetadataSchema.describe(
+      'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
+    ),
   })
-  .brand('@newswitch/image')
-  .describe('Represents a single image captured by the detector.');
-export type Image = z.input<typeof ImageSchema>;
-export type ImageOutput = z.infer<typeof ImageSchema>;
+  .brand('@newswitch/frame')
+  .describe('Represents a single 3D volume captured by the detector.');
+export type Frame = z.input<typeof FrameSchema>;
+export type FrameOutput = z.infer<typeof FrameSchema>;
 
 // --- Schemas ---
 export const ScanRegionArgsSchema = z.object({
@@ -496,9 +532,11 @@ export const ScanRegionArgsSchema = z.object({
     .optional(),
 });
 export const ScanRegionReturnSchema = z.object({
-  /** List of acquired images with metadata. */
+  /** The frames, in the order acquired. */
   return0: z.array(
-    ImageSchema.describe('Represents a single image captured by the detector.'),
+    FrameSchema.describe(
+      'Represents a single 3D volume captured by the detector.',
+    ),
   ),
 });
 
@@ -516,14 +554,19 @@ export const ScanRegionDefinition: ActionDefinition<
   name: 'scan_region',
   appKey: 'default',
   description:
-    'Simulate the acquisition of a multidimensional dataset based on the provided configuration.',
+    'Scan a rectangular region of the stage tile by tile.\n\nThe region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered\nwith fields of view of the detector (`detector_slot`, else the first active one),\noverlapping by `overlap`, visited in `scan_order`; every active detector acquires a\nframe at each tile.',
   argsSchema: ScanRegionArgsSchema,
   returnSchema: ScanRegionReturnSchema,
   lockKeys: ['camera_parameters', 'expanse_state', 'io', 'stage_position'],
 };
 
 /**
- * Simulate the acquisition of a multidimensional dataset based on the provided configuration.
+ * Scan a rectangular region of the stage tile by tile.
+
+The region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered
+with fields of view of the detector (`detector_slot`, else the first active one),
+overlapping by `overlap`, visited in `scan_order`; every active detector acquires a
+frame at each tile.
  */
 export const useScanRegion = () => {
   return useAction(ScanRegionDefinition);

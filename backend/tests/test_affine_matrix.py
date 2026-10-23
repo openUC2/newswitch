@@ -1,19 +1,21 @@
 """Tests for fitting and validating the 3D affine matrix from virtual detector images."""
 
+import copy
 from typing import Generator
-import useq as us
+
 import numpy as np
 import pytest
-import copy
-from newswitch.broadcasters import FrameBroadcaster
-from newswitch.logic.affine_matrix import calculate_3d_affine, check_calibration
-from newswitch.managers.virtual import VirtualDetectorManager
-from newswitch.managers.virtual.virtual_detector import DetectorConfig
-from newswitch.protocols import CameraState, IlluminationState, StageState
-from newswitch.protocols.illumination import Illumination
-from newswitch.protocols.objective import ObjectiveState
-from newswitch.managers.virtual.virtual_stage import VirtualStageManager
+import useq as us
 
+from newswitch.drivers.virtual import VirtualDetectorManager
+from newswitch.drivers.virtual.virtual_detector import DetectorConfig
+from newswitch.drivers.virtual.virtual_stage import VirtualStageManager
+from newswitch.routines.affine_matrix import calculate_3d_affine, check_calibration
+from newswitch.models.devices import Illumination
+from newswitch.states.detector import CameraState
+from newswitch.states.illumination import IlluminationState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
 
 DetectorWithState = tuple[VirtualDetectorManager, VirtualStageManager]
 
@@ -57,13 +59,11 @@ def affine_stage_detector() -> Generator[DetectorWithState, None, None]:
     stage_manager = VirtualStageManager(stage=stage_state)
 
     # Create detector with astigmatism sample type for consistent visible frames
-    broadcaster = FrameBroadcaster()
     detector = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
-        broadcaster=broadcaster,
         config=DetectorConfig(sample_type="astigmatism"),
     )
     # Activate and configure detector

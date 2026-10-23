@@ -1,16 +1,16 @@
 """Tests for the CLI recovery tool.
 
 `main()` is called directly (not via subprocess) so these run at unit-test speed;
-`newswitch.cli`'s own `UserStore()` call picks up `NEWSWITCH_AUTH_DB` from the
-environment exactly like it would when invoked as `python -m newswitch.cli`.
+`newswitch.tools.accounts`'s own `UserStore()` call picks up `NEWSWITCH_AUTH_DB` from the
+environment exactly like it would when invoked as `python -m newswitch.tools.accounts`.
 """
 
 from pathlib import Path
 
 import pytest
 
-from newswitch.cli import main
-from newswitch.users import Role, UserStore
+from newswitch.tools.accounts import main
+from newswitch.accounts.store import Role, UserStore
 
 
 @pytest.fixture(autouse=True)

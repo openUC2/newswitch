@@ -395,11 +395,11 @@ export const LightEdgeStateSchema = z
 export type LightEdgeState = z.input<typeof LightEdgeStateSchema>;
 export type LightEdgeStateOutput = z.infer<typeof LightEdgeStateSchema>;
 
-export const LightPathStateSchema = z
+export const LightPathSnapshotSchema = z
   .object({
     __identifier: z
-      .literal('@newswitch/light_path_state')
-      .default('@newswitch/light_path_state'),
+      .literal('@newswitch/light_path_snapshot')
+      .default('@newswitch/light_path_snapshot'),
     /** Hash of the light path configuration, used to uniquely describe the optical path for this image */
     hash: z
       .string()
@@ -425,12 +425,12 @@ export const LightPathStateSchema = z
         'Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image',
       ),
   })
-  .brand('@newswitch/light_path_state')
+  .brand('@newswitch/light_path_snapshot')
   .describe(
     'Data class representing the light path used for an image, including illumination settings.',
   );
-export type LightPathState = z.input<typeof LightPathStateSchema>;
-export type LightPathStateOutput = z.infer<typeof LightPathStateSchema>;
+export type LightPathSnapshot = z.input<typeof LightPathSnapshotSchema>;
+export type LightPathSnapshotOutput = z.infer<typeof LightPathSnapshotSchema>;
 
 export const MetadataSchema = z
   .object({
@@ -441,7 +441,7 @@ export const MetadataSchema = z
     fov_width: z.number(),
     fov_height: z.number(),
     /** Data class representing the light path used for an image, including illumination settings. */
-    light_state: LightPathStateSchema.describe(
+    light_state: LightPathSnapshotSchema.describe(
       'Data class representing the light path used for an image, including illumination settings.',
     ),
     acquisition_time: z.string(),

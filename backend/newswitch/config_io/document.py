@@ -5,7 +5,7 @@ and flow/block style survive a write-back. Validation works on a plain copy
 (`to_plain`) of that tree; only the writer touches the tree itself.
 
 Paths are used as given; which file to read (and where it lives) is decided by
-`newswitch.app.ImswitchConfig` from ``backend/base_config.yaml``.
+`newswitch.settings.Settings` from ``backend/base_config.yaml``.
 """
 
 from __future__ import annotations

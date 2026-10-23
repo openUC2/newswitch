@@ -6,14 +6,14 @@ protocol, which is the seam `create_app` actually uses.
 """
 
 import sqlite3
-from pathlib import Path
 import time
+from pathlib import Path
 
 import pytest
 from argon2.exceptions import VerifyMismatchError
 
-from newswitch.auth import UserStoreAuthenticator
-from newswitch.users import (
+from newswitch.accounts.auth import UserStoreAuthenticator
+from newswitch.accounts.store import (
     Role,
     User,
     UserAlreadyExistsError,

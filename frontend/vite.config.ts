@@ -9,9 +9,8 @@ export default defineConfig(({ mode }) => {
   // Load env file based on mode
   const env = loadEnv(mode, process.cwd(), "");
 
-  // Vitest shares this config, and the codegen plugin fetches schemas from a running
-  // backend in buildStart. Under test there is no backend, so it would warn on every run
-  // and rewrite generated sources as a side effect of running tests. Skip it.
+  // Vitest shares this config; generating the hooks is no part of running tests (it would
+  // rewrite generated sources as a side effect). Skip it.
   const isTest = mode === "test" || process.env.VITEST === "true";
 
   // Ports come from the env files (frontend/.env*, which in turn read the root .env when
@@ -29,9 +28,12 @@ export default defineConfig(({ mode }) => {
               apps: [
                 {
                   key: "default", // We could use Imswitch here, but "default" is more generic and doesn't tie us to a specific app name
-                  hooksSchemaUrl: env.VITE_SCHEMA_IMPLEMENTATION_URL,
-                  statesSchemaUrl: env.VITE_SCHEMA_STATES_URL,
-                  locksSchemaUrl: env.VITE_SCHEMA_LOCKS_URL,
+                  // The schemas of a complete microscope, exported by the backend
+                  // (`just export-schemas`): what a running backend registers depends
+                  // on its device configuration, the hooks must cover everything.
+                  hooksSchemaPath: "schemas/implementations.json",
+                  statesSchemaPath: "schemas/states.json",
+                  locksSchemaPath: "schemas/locks.json",
                 },
               ],
               baseDir: path.resolve(__dirname, "src/apps"),

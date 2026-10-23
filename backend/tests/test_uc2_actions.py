@@ -1,8 +1,8 @@
 """Agent-level tests for the Wave-1 UC2 registered actions (virtual bus)."""
 
 import pytest
-from fastapi import FastAPI
 from arkitekt_fastapi.testing import AsyncAgentTestClient
+from fastapi import FastAPI
 
 from tests.conftest import collect_until_completed
 
@@ -59,13 +59,28 @@ async def test_galvo_actions(virtual_microscope_app: FastAPI) -> None:
 
 @pytest.mark.asyncio
 async def test_run_autofocus_action(virtual_microscope_app: FastAPI) -> None:
-    """run_autofocus completes on the virtual microscope."""
+    """run_autofocus finds the focal plane and leaves the stage there.
+
+    The virtual detector's focal plane is z = 0 (the bottom of the stage's travel); from
+    z = 6 a sweep over 0..12 finds it.
+    """
     async with AsyncAgentTestClient(virtual_microscope_app) as client:
         # A detector must be active for capture_image to produce frames.
         result = await client.assign("activate_detector", {"slot": 1})
         events = await collect_until_completed(client, result.task_id)
         assert events[-1].event_type == "COMPLETED"
 
-        result = await client.assign("run_autofocus", {"z_range": 4.0, "steps": 5})
+        result = await client.assign("move_stage", {"z": 6.0, "is_absolute": True})
         events = await collect_until_completed(client, result.task_id, timeout=30.0)
         assert events[-1].event_type == "COMPLETED"
+
+        result = await client.assign("run_autofocus", {"z_range": 12.0, "steps": 13})
+        events = await collect_until_completed(client, result.task_id, timeout=30.0)
+        assert events[-1].event_type == "COMPLETED"
+        returned = [e.get_returns() for e in events if e.get_returns()]
+        assert returned, "run_autofocus returned no focus position"
+        best_z = next(iter(returned[-1].values()))
+        assert abs(best_z) <= 1.0
+
+        stage = (await client.get("/states/StageState")).json()["state"]
+        assert stage["z"] == pytest.approx(best_z)

@@ -1,5 +1,5 @@
 {
-  "_comment": "One simulated uc2_cam_py camera (camTest_config.yaml) through the camera manager, which runs on real hardware only. Needs the extra camera (uv sync --extra camera). Boot with: NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app --port 8069. Stage and illumination look for a UC2 board and keep retrying without one. Runtime values are saved to camTest_config.persistent.yaml, so the main persistent file stays untouched.",
+  "_comment": "One simulated uc2_cam_py camera (camTest_config.yaml) through the camera manager, which runs on real hardware only. Needs the extra camera (uv sync --extra camera). Boot with: NEWSWITCH_CONFIG=configs/camTest.json uvicorn main_fastapi:create --factory --port 8069. Only the detector is built (no UC2 board needed), so capture works. Runtime values are saved to camTest_config.persistent.yaml, so the main persistent file stays untouched.",
   "use_virtual_microscope": false,
   "static_config_path": "camTest_config.yaml",
   "persistent_config_path": "camTest_config.persistent.yaml"

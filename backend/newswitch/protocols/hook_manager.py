@@ -4,69 +4,38 @@ Detector Manager Protocol
 Defines the protocol for detector/camera control and associated state.
 """
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, Type, runtime_checkable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Optional, Protocol, Type, runtime_checkable
 
-
-from newswitch.protocols.stage import StageManager
+from newswitch.models.hooks import Hook
 from newswitch.protocols.base import Manager
+from newswitch.protocols.stage import StageManager
 
 from .detector import DetectorManager
 from .illumination import IlluminationManager
 from .io import IOManager
 from .objective import ObjectiveManager
-from newswitch.arkitekt_app import nsapp
 
 if TYPE_CHECKING:
     pass
 
 
-@nsapp.model
-class SoftwareAutofocusHook:
-    """Data class representing a software autofocus hook to be executed during acquisition."""
-
-    speed: float = 1.0  # Speed of autofocus movement (arbitrary units)
-
-
-@nsapp.model
-class ZCalibrationHook:
-    """Data class representing a z-calibration hook to be executed during acquisition."""
-
-    calibration_points: int = 5  # Number of points to use for z-calibration
-
-
-Hook = SoftwareAutofocusHook | ZCalibrationHook
-
-
-@nsapp.model
-@dataclass
-class RegisteredHook:
-    """Data class representing a hook to be executed during acquisition."""
-
-    type: str  # HookType as string for serialization
-
-
-@nsapp.state(required_locks=["hook_registry"])
-class HookState:
-    """Shared state for camera parameters.
-
-    Default values are set to produce visible images with default illumination.
-    Higher exposure and gain ensure the captured images have sufficient
-    brightness after uint16→uint8 conversion for PNG output.
-    """
-
-    registered_hooks: list[RegisteredHook] = field(default_factory=lambda: [])
-
-
 @dataclass
 class HookContext:
-    """Context provided to hooks for access to managers and services."""
+    """Context provided to hooks for access to managers and services.
 
-    stage_manager: StageManager
-    detector_manager: DetectorManager
-    illumination_manager: IlluminationManager
-    objective_manager: ObjectiveManager
+    A manager is None when the microscope lacks that device (see `newswitch.microscope.parts`).
+    """
+
+    stage_manager: Optional[StageManager]
+    detector_manager: Optional[DetectorManager]
+    illumination_manager: Optional[IlluminationManager]
+    objective_manager: Optional[ObjectiveManager]
     io_manager: IOManager
+
+
+class UnsupportedHook(Exception):
+    """A hook that cannot run here: no handler for it, or not at that point of an acquisition."""
 
 
 class HookHandler(Protocol):
@@ -77,10 +46,9 @@ class HookHandler(Protocol):
         ...
 
 
-@nsapp.context(locks=["hook_registry"])
 @runtime_checkable
 class HookManager(Manager, Protocol):
-    """Protocol defining the interface for detector/camera managers."""
+    """Runs the hooks an acquisition asks for, with the handlers registered for them."""
 
     def register_hook(self, hook: Type[Hook], hook_handler: HookHandler) -> None:
         """Register a hook implementation.
@@ -90,9 +58,14 @@ class HookManager(Manager, Protocol):
         it falls back to a no-arg constructor and calls initialize if present.
         """
 
+    def check(self, hooks: list[Hook], level: str) -> None:
+        """Refuse hooks that cannot run (at `level`: m, t, p or z), before anything moves."""
+        ...
+
     def execute(self, hook: Hook) -> None:
-        """Execute a single hook if registered."""
+        """Run one hook; one without a handler is refused (`UnsupportedHook`)."""
+        ...
 
     def execute_all(self, hooks: list[Hook]) -> None:
-        """Execute a list of hooks in order."""
+        """Run hooks in order."""
         ...

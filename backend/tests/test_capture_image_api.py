@@ -5,8 +5,8 @@ verifying that captured images are properly saved and contain visible content.
 """
 
 import pytest
-from fastapi import FastAPI
 from arkitekt_fastapi.testing import AsyncAgentTestClient
+from fastapi import FastAPI
 
 from tests.conftest import collect_until_completed
 

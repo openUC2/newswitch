@@ -16,19 +16,19 @@ from typing import Any
 import pytest
 import yaml
 
-import newswitch.app as app_module
-from newswitch.app import ImswitchConfig, build_detector_manager
+from newswitch.microscope import parts as microscope
+from newswitch.actions.detector import close_detector
 from newswitch.broadcasters import FrameBroadcaster
+from newswitch.settings import Settings
 from newswitch.config_io import NewswitchConfig, load_config
-from newswitch.managers.virtual import VirtualDetectorManager
-from newswitch.protocols import (
-    CameraState,
-    DetectorManager,
-    FilterBankState,
-    IlluminationState,
-    ObjectiveState,
-    StageState,
-)
+from newswitch.drivers.virtual import VirtualDetectorManager
+from newswitch.microscope.parts import build_detector_manager
+from newswitch.protocols import DetectorManager
+from newswitch.states.detector import CameraState
+from newswitch.states.filter_bank import FilterBankState
+from newswitch.states.illumination import IlluminationState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
 
 #: One small simulated uc2_cam_py camera behind a USB3 Vision controller.
 CAMERA_DOC: dict[str, Any] = {
@@ -53,7 +53,7 @@ CAMERA_DOC: dict[str, Any] = {
 #: Modules that import uc2_cam_py; removed so a test can make the import fail.
 CAMERA_MODULES = (
     "uc2_cam_py",
-    "newswitch.managers.uc2.uc2_detector",
+    "newswitch.drivers.uc2.uc2_detector",
 )
 
 
@@ -72,7 +72,7 @@ def camera_devices(tmp_path: Path) -> NewswitchConfig:
     return load_config(path).config
 
 
-def _build(config: ImswitchConfig, devices: NewswitchConfig | None) -> DetectorManager:
+def _build(config: Settings, devices: NewswitchConfig | None) -> DetectorManager:
     """Call `build_detector_manager` with fresh states, holding the camera lock."""
     return build_detector_manager(
         config,
@@ -82,17 +82,16 @@ def _build(config: ImswitchConfig, devices: NewswitchConfig | None) -> DetectorM
         objective_state=ObjectiveState(),
         illumination_state=IlluminationState(),
         filter_bank_state=FilterBankState(),
-        broadcaster=FrameBroadcaster(),
     )
 
 
-def _settings(tmp_path: Path, *, virtual: bool, debug_window: bool = False) -> ImswitchConfig:
+def _settings(tmp_path: Path, *, virtual: bool, debug_window: bool = False) -> Settings:
     """Base settings without a device file, recording into `tmp_path`.
 
     The debug window is off unless asked for: the shipped base config switches it on, and
     no window may pop up during the tests.
     """
-    return ImswitchConfig(
+    return Settings(
         use_virtual_microscope=virtual,
         config_file=None,
         camera_recording_dir=tmp_path / "recordings",
@@ -124,7 +123,7 @@ def test_missing_camera_library_falls_back(
     for name in CAMERA_MODULES:
         monkeypatch.delitem(sys.modules, name, raising=False)
     monkeypatch.setitem(sys.modules, "uc2_cam_py", None)  # makes the import fail
-    with caplog.at_level(logging.WARNING, logger=app_module.logger.name):
+    with caplog.at_level(logging.WARNING, logger=microscope.logger.name):
         manager = _build(_settings(tmp_path, virtual=False), camera_devices)
     assert isinstance(manager, VirtualDetectorManager)
     assert "uv sync --extra camera" in caplog.text
@@ -133,7 +132,7 @@ def test_missing_camera_library_falls_back(
 def test_real_hardware_opens_the_cameras(tmp_path: Path, camera_devices: NewswitchConfig) -> None:
     """On real hardware configured cameras open through uc2_cam_py; shutdown closes them."""
     pytest.importorskip("uc2_cam_py")
-    from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
+    from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager
 
     manager = _build(_settings(tmp_path, virtual=False), camera_devices)
     try:
@@ -144,7 +143,7 @@ def test_real_hardware_opens_the_cameras(tmp_path: Path, camera_devices: Newswit
         assert (detector.serial_number, detector.connection_type) == ("SIM-0001", "USB3")
         assert not detector.is_recording  # no debug window: nobody holds it
     finally:
-        app_module.close_detector(manager)
+        close_detector(manager)
     with pytest.raises(RuntimeError, match="closed"):
         manager.capture_image(1)
 
@@ -157,7 +156,7 @@ def test_camera_debug_window_is_passed_on(
     Without a display, so uc2_cam_py only logs an error instead of opening the window.
     """
     pytest.importorskip("uc2_cam_py")
-    from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
+    from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager
 
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
@@ -167,14 +166,14 @@ def test_camera_debug_window_is_passed_on(
         assert manager._cameras[1].camera._debug_window is not None
         assert manager.state.get_detector_for_slot(1).is_recording
     finally:
-        app_module.close_detector(manager)
+        close_detector(manager)
 
 
 def test_close_detector_ends_the_virtual_live_loop(tmp_path: Path) -> None:
     """The shutdown hook closes any detector manager; the virtual one ends its live loop."""
     manager = _build(_settings(tmp_path, virtual=True), None)
-    live = threading.Thread(target=manager.acquire_live, daemon=True)
+    live = threading.Thread(target=manager.acquire_live, args=(FrameBroadcaster(),), daemon=True)
     live.start()
-    app_module.close_detector(manager)
+    close_detector(manager)
     live.join(timeout=2.0)
     assert not live.is_alive()

@@ -34,7 +34,7 @@ export type CalibratedLightPathOutput = z.infer<
 // --- Schemas ---
 export const CalibrateLightPathArgsSchema = z.object({});
 export const CalibrateLightPathReturnSchema = z.object({
-  /** List of acquired images with metadata. */
+  /** The calibrated light paths. */
   return0: z.array(
     CalibratedLightPathSchema.describe(
       'Shared state for affine transformation parameters.',
@@ -60,14 +60,18 @@ export const CalibrateLightPathDefinition: ActionDefinition<
   name: 'calibrate_light_path',
   appKey: 'default',
   description:
-    'Simulate the acquisition of a multidimensional dataset based on the provided configuration.',
+    'Calibrate the light path of every active detector: its pixel-to-stage transform.\n\nThe stage moves `CALIBRATION_STEP_UM` in x only, then in y only, at a fixed focus; the\nimage shifts give the pixel scale (rotation and flip included), stored per light path\nfor the frames acquired through it. The stage ends where it started.',
   argsSchema: CalibrateLightPathArgsSchema,
   returnSchema: CalibrateLightPathReturnSchema,
   lockKeys: ['camera_parameters', 'stage_position'],
 };
 
 /**
- * Simulate the acquisition of a multidimensional dataset based on the provided configuration.
+ * Calibrate the light path of every active detector: its pixel-to-stage transform.
+
+The stage moves `CALIBRATION_STEP_UM` in x only, then in y only, at a fixed focus; the
+image shifts give the pixel scale (rotation and flip included), stored per light path
+for the frames acquired through it. The stage ends where it started.
  */
 export const useCalibrateLightPath = () => {
   return useAction(CalibrateLightPathDefinition);

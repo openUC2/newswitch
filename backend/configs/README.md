@@ -9,6 +9,7 @@ newswitch reads **one** YAML file describing every device. The code lives in
 | `configs/newswitch-config.persistent.yaml` | Persistent configuration: receives every change (git-ignored) |
 | `configs/camTest_config.yaml`, `configs/camTest.json` | One simulated uc2_cam_py camera and the base-config overrides to boot it (see "Cameras") |
 | `configs/schemas/newswitch-config.schema.yaml` | JSON Schema (Draft 2020-12) as YAML, generated from the dataclasses |
+| `newswitch/reference/complete-microscope.yaml` | The reference microscope (every part, devices only, no `ui`) that `just export-schemas` builds the frontend's schemas from; not a configuration to run |
 | `newswitch/config_io/devices.py` | One dataclass per device type — the source of truth |
 | `newswitch/config_io/values.py` | `PhysVal`, `Trigger`, `Firmware` |
 | `newswitch/config_io/connection.py` | Controller connections, see `backend/docs/connection-reference.md` |
@@ -45,6 +46,79 @@ devices:
     name: ...
     ...
 ```
+
+Further top-level sections: `ui` (required to run newswitch in FastAPI mode), `agent_ui`
+(required in agent mode, see below) and `assets` (optional):
+
+```yaml
+assets:                   # files the bloks read as @self.assets.<name>, relative to newswitch/
+  design: assets/design/f59c2fb9bf4105e5-c1.glb
+ui:                       # the bloks this microscope shows, and nothing else
+  catalog: newswitch@1      # the catalog version the bloks were written against
+  bloks:
+    view-3d:
+      description: "3D: ..."   # a view's description starts with its tab label
+      default: true            # the blok shown first
+      bsx: |                   # the blok's tree, exactly as the frontend gets it
+        <div className="h-full w-full">...</div>
+```
+
+The UI is the configuration's: newswitch declares exactly these bloks, checked against the
+catalog the frontend publishes (`newswitch/bloks/newswitch-catalog.json`, written by
+`cd frontend && yarn catalog:export`); one the catalog refuses stops the backend. A file
+without `ui` does not start.
+
+The catalog is versioned: `NEWSWITCH_CATALOG_VERSION` in the frontend
+(`src/lib/blok/microscope/catalog.tsx`), bumped with every change to it (`yarn
+catalog:export` refuses a changed catalog under the old version). `ui.catalog` names the
+version the bloks were written against. A newer version than the frontend's is refused; an
+older one is checked against the current catalog all the same, with a warning. Once the
+bloks pass, set `ui.catalog` to the current version. `newswitch-config.fluorescence.yaml` is such a file, built from the optikit
+fluorescence design:
+
+```bash
+just build-design ../../../testing/testdata/optikit/examples/designs/microscopes/fluorescence.dsn configs/newswitch-config.fluorescence.yaml
+NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just dev
+```
+
+The model under `assets/` is git-ignored: on a fresh checkout rebuild once (needs the
+extra `design`), or startup stops with the missing asset.
+
+### `agent_ui`: the UI in agent mode
+
+`ui` is the UI of FastAPI mode (`main_fastapi`, the newswitch frontend). Served as an arkitekt
+agent (`python main_arkitekt.py`, `just agent`), newswitch shows the optional top-level
+`agent_ui` instead: same shape (`catalog` + `bloks`), but written against Orkestrator's
+standard catalog, the one arkitekt ships:
+
+```yaml
+agent_ui:
+  catalog: orkestrator@v4.2.1   # orkestrator@<release>
+  bloks:
+    view-microscope:
+      description: 'Microscope: the camera streams, live view and acquiring.'
+      default: true
+      bsx: |
+        <div className="flex flex-col gap-4 p-4">
+            ...
+            <foreach items="@self.CameraStreams.streams" let="#stream">
+                <StructureDisplay value="@stream" />
+            </foreach>
+            ...
+        </div>
+```
+
+The bloks are checked strictly, offline, against that catalog and against what the registry
+registered (`newswitch.bloks.declare_agent_ui`). Another catalog than `orkestrator` is
+refused; another release is checked against the shipped one, with a warning. A file
+without `agent_ui` does not start in agent mode (FastAPI mode ignores the section). Agent
+mode serves no HTTP routes, so bloks there cannot show the files or the frame cache that
+FastAPI mode serves (`/files/...`, `/cache/...`).
+
+Every shipped configuration has one, `view-microscope`: the detectors' lovekit streams (the
+state `CameraStreams`) as `StructureDisplay`s, buttons to start/stop the live view and
+acquire, and "Home stage" where there is a stage. For a design, `just build-design` writes
+it alongside `ui` (`newswitch/bloks/agent.py`).
 
 All keys are snake_case. Device entries may carry further keys newswitch does not know
 (e.g. `optikit_dsn_variable`); they are kept in `extras` and never validated. Everything
@@ -136,8 +210,10 @@ virtual microscope keeps its simulated detector.
   showing its newest image, and keeps the cameras acquiring from startup (so with
   `store_image_data: true` they record all the time).
 - `camTest_config.yaml` is a simulated camera (`manufacturer: Simulated`) for trying it
-  out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app`. Walkthrough:
-  "End-to-end test for camera" in the root `README.md`.
+  out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main_fastapi:create --factory`. Walkthrough:
+  "End-to-end test for camera" in the root `README.md`. It has only the camera, so only the
+  detector is built; light paths hold only the parts a configuration has, so capturing works
+  on it too.
 
 ## Stages, axes and wheels
 

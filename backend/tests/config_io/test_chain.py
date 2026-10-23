@@ -21,10 +21,10 @@ from newswitch.config_io import (
     adapters,
     open_config,
 )
-from newswitch.protocols.detector import CameraState
-from newswitch.protocols.filter_bank import FilterBankState
-from newswitch.protocols.objective import ObjectiveState
-from newswitch.protocols.stage import StageState
+from newswitch.states.detector import CameraState
+from newswitch.states.filter_bank import FilterBankState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
 
 from .conftest import get_device
 

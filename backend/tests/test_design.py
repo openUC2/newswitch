@@ -2,16 +2,15 @@
 
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
+from main_fastapi import create_fastapi_registry
 from newswitch.config_io import adapters
 from newswitch.config_io.devices import AxisConfig, ControllerConfig, DetectorConfig
-from newswitch.optikit import dsn as optikit
 from newswitch.design.config import DesignConfigError, design_config, device_tree
+from newswitch.optikit import dsn as optikit
 
 FLUORESCENCE = Path(
     os.environ.get(
@@ -135,37 +134,27 @@ def test_the_fluorescence_design_is_a_newswitch_configuration() -> None:
     assert adapters.objective_lenses(config) is None and adapters.filters(config) is None
 
 
-def declared_bloks(**config: str) -> dict:
-    """The bloks a fresh process declares for a config: one UI per process."""
-    code = (
-        "import json, newswitch.app\n"
-        "from newswitch.arkitekt_app import nsapp\n"
-        "from newswitch.bloks import declare_ui\n"
-        "from newswitch.config import ImswitchConfig\n"
-        f"declare_ui(ImswitchConfig(config_file=None, **{config!r}))\n"
-        "print(json.dumps({k: [b.catalog, b.default] for k, b in nsapp.registry.get_declared_bloks().items()}))\n"
-    )
-    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    return json.loads(done.stdout.strip().splitlines()[-1])
-
-
-def test_ui_minimal_shows_the_minimal_view_first() -> None:
-    """ui=minimal: the minimal view is the default, the standard one a tab beside it."""
-    bloks = declared_bloks(ui="minimal")
-    assert bloks["view-minimal"] == ["newswitch", True]
-    assert bloks["view-standard"] == ["newswitch", False]
-
-
 @needs_design
-def test_the_design_ui_shows_the_designs_devices() -> None:
-    """ui=design declares the design's UI and a card per device it has."""
+def test_a_built_configuration_carries_the_design_ui(tmp_path: Path) -> None:
+    """The build writes the devices and the bloks; newswitch declares them as written."""
     pytest.importorskip("pyvista")
-    bloks = declared_bloks(ui="design", design=str(FLUORESCENCE))
+    from newswitch import config_io
+    from newswitch.bloks import load_catalog
+    from newswitch.design.build import build
+
+    out = build(FLUORESCENCE, tmp_path / "newswitch-config.fluorescence.yaml")
+    loaded = config_io.load_config(out).config
+    assert loaded.ui is not None and "design" in loaded.assets
+    assert loaded.ui.catalog == load_catalog().id
+    assert loaded.ui.bloks["view-3d"].default
+    assert "<Model" in loaded.ui.bloks["view-3d"].bsx
+
+    bloks = {
+        k: [b.catalog, b.default]
+        for k, b in create_fastapi_registry(loaded).registry.get_declared_bloks().items()
+    }
     assert bloks["view-3d"] == ["newswitch", True]
-    assert bloks["view-stage"] == ["newswitch", False]
-    assert bloks["view-minimal"] == ["newswitch", False]
-    assert bloks["view-fluorescence"] == ["newswitch", False]
-    assert {"design-camera", "design-laser", "design-stage"} <= set(bloks)
+    assert {"view-fluorescence", "view-stage", "view-minimal", "design-camera"} <= set(bloks)
     assert "view-standard" not in bloks
 
 

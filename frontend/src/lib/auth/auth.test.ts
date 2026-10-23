@@ -22,7 +22,9 @@ describe("token store", () => {
     setToken(TOKEN);
     // A fresh read is what a page load does; the value must come from storage
     // rather than from module state.
-    expect(window.localStorage.getItem("newswitch.auth.token")).toBe(TOKEN);
+    expect(window.localStorage.getItem("newswitch.accounts.auth.token")).toBe(
+      TOKEN,
+    );
   });
 
   it("notifies subscribers, which is what turns a 401 into a redirect", () => {

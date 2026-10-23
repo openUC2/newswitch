@@ -14,19 +14,27 @@ import numpy as np
 from arkitekt import Task
 from scipy import ndimage
 
-from newswitch.protocols.autofocus import AutofocusState
 from newswitch.protocols.detector import DetectorManager
 from newswitch.protocols.stage import StageManager
-from newswitch.arkitekt_app import nsapp
+from newswitch.routines.common import z_sweep
+from newswitch.states.autofocus import AutofocusState
+
+#: The Gaussian (px) the Laplacian focus metric is taken over, against pixel noise.
+FOCUS_METRIC_SIGMA = 1.0
 
 
 def compute_focus_metric(image: np.ndarray, metric: str = "laplacian_variance") -> float:
-    """Score the sharpness of an image (higher = sharper)."""
+    """Score the sharpness of an image (higher = sharper).
+
+    ``laplacian_variance`` is the variance of the image's Laplacian of Gaussian: the small
+    Gaussian (1 px) keeps shot and read noise, which is sharp at every focus, from
+    drowning the sample's edges. ``intensity_variance`` is the plain image variance.
+    """
     data = np.asarray(image, dtype=np.float32)
     while data.ndim > 2:
         data = data.mean(axis=0)
     if metric == "laplacian_variance":
-        return float(ndimage.laplace(data).var())
+        return float(ndimage.gaussian_laplace(data, sigma=FOCUS_METRIC_SIGMA).var())
     if metric == "intensity_variance":
         return float(data.var())
     raise ValueError(f"Unknown focus metric {metric!r}")
@@ -61,7 +69,6 @@ def autofocus_sweep(
     return best_z, metrics
 
 
-@nsapp.action(locks=["stage_position"])
 def run_autofocus(
     stage: StageManager,
     detector: DetectorManager,
@@ -83,11 +90,7 @@ def run_autofocus(
     Returns:
         The Z position (micrometers) of best focus; the stage is left there.
     """
-    if steps < 3:
-        raise ValueError("steps must be >= 3")
-
-    z_center = stage.state.z
-    z_positions = [z_center - z_range / 2 + index * z_range / (steps - 1) for index in range(steps)]
+    z_positions = z_sweep(stage.state.z, z_range, steps)
 
     autofocus_state.running = True
     autofocus_state.metric_name = metric

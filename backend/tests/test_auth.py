@@ -16,8 +16,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from newswitch.app import ImswitchConfig, create_app
-from newswitch.auth import (
+from main_fastapi import create_app
+from newswitch.accounts.auth import (
     AUTH_FILE_ENV_VAR,
     AuthenticationError,
     Credentials,
@@ -25,7 +25,8 @@ from newswitch.auth import (
     default_authenticator,
     load_credentials,
 )
-from newswitch.users import Role, UserStore
+from newswitch.settings import Settings
+from newswitch.accounts.store import Role, UserStore
 
 USERNAME = "operator"
 PASSWORD = "hunter2"
@@ -43,7 +44,7 @@ def store(tmp_path: Path) -> UserStore:
 def authed_app(store: UserStore) -> FastAPI:
     """The app with a real account store, so the gate is actually exercised."""
     return create_app(
-        ImswitchConfig(config_file=None),
+        Settings(config_file=None),
         authenticator=UserStoreAuthenticator(store),
     )
 
@@ -90,7 +91,9 @@ def test_missing_default_file_falls_back_with_a_warning(
 ) -> None:
     """A fresh clone must run without setup, but must say so."""
     monkeypatch.delenv(AUTH_FILE_ENV_VAR, raising=False)
-    monkeypatch.setattr("newswitch.auth.DEFAULT_AUTH_FILE", "/nonexistent/auth.yaml", raising=False)
+    monkeypatch.setattr(
+        "newswitch.accounts.auth.DEFAULT_AUTH_FILE", "/nonexistent/auth.yaml", raising=False
+    )
     with caplog.at_level("WARNING"):
         credentials = load_credentials()
     assert credentials == Credentials(username="admin", password="admin")
@@ -180,7 +183,7 @@ def test_logout_revokes_a_user_store_session(tmp_path: Path) -> None:
     """Logout invalidates exactly the session used, not every session for the account."""
     store = UserStore(tmp_path / "auth.db")
     store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
-    app = create_app(ImswitchConfig(), authenticator=UserStoreAuthenticator(store))
+    app = create_app(Settings(), authenticator=UserStoreAuthenticator(store))
     with TestClient(app) as user_client:
         login_response = user_client.post("/auth/login", headers=basic_header())
         token = login_response.json()["token"]

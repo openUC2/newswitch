@@ -30,6 +30,8 @@ from .document import write_plain
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_FILE_NAME = "newswitch-config.schema.yaml"
 TOP_LEVEL_KEYS = ("newswitch_version", "devices")
+#: Top-level keys a file may leave out.
+OPTIONAL_KEYS = ("assets", "ui", "agent_ui")
 
 
 def _explain(error: ValidationError) -> tuple[list[str], str]:
@@ -92,7 +94,8 @@ def prepare_document(data: Any) -> tuple[dict[str, Any], list[str]]:  # noqa: AN
     if not isinstance(data, dict):
         return {}, [f"<root>: expected a mapping, got {type(data).__name__}"]
 
-    problems = [f"<root>: unknown key {key!r}" for key in data if key not in TOP_LEVEL_KEYS]
+    known = TOP_LEVEL_KEYS + OPTIONAL_KEYS
+    problems = [f"<root>: unknown key {key!r}" for key in data if key not in known]
     problems += [f"<root>: missing key {key!r}" for key in TOP_LEVEL_KEYS if key not in data]
 
     devices = data.get("devices")
@@ -163,7 +166,7 @@ def export_schema(path: str | Path) -> Path:
 
     Args:
         path: Target file, normally `SCHEMA_FILE_NAME` in
-            `newswitch.app.ImswitchConfig.schema_dir`.
+            `newswitch.settings.Settings.schema_dir`.
 
     Returns:
         The path written to.

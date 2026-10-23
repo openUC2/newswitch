@@ -1,4 +1,4 @@
-"""Tests for `ImswitchConfig`: the settings read from ``backend/base_config.yaml``.
+"""Tests for `Settings`: the settings read from ``backend/base_config.yaml``.
 
 Apart from the first test, `BASE_CONFIG_FILE` is pointed at a temporary file, so each
 test decides the content itself.
@@ -13,8 +13,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-import newswitch.config as config_module
-from newswitch.config import BASE_CONFIG_FILE, ImswitchConfig
+import newswitch.settings as config_module
+from newswitch.settings import BASE_CONFIG_FILE, Settings
 
 BASE: dict[str, Any] = {
     "use_virtual_microscope": True,
@@ -33,7 +33,7 @@ BaseWriter = Callable[..., Path]
 
 @pytest.fixture
 def write_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BaseWriter:
-    """Return a helper that writes a base config and makes `ImswitchConfig` read it.
+    """Return a helper that writes a base config and makes `Settings` read it.
 
     Args:
         tmp_path: Pytest's built-in temporary path fixture.
@@ -55,7 +55,7 @@ def write_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BaseWriter:
 
 def test_shipped_base_config_loads() -> None:
     """The committed base_config.yaml is complete and points at the shipped device file."""
-    settings = ImswitchConfig()
+    settings = Settings()
     assert settings.config_dir == BASE_CONFIG_FILE.parent / "configs"
     assert settings.schema_dir == settings.config_dir / "schemas"
     assert settings.static_config_path == settings.config_dir / "newswitch-config.yaml"
@@ -68,7 +68,7 @@ def test_shipped_base_config_loads() -> None:
 def test_values_come_from_the_file(write_base: BaseWriter) -> None:
     """Every setting is taken from the file."""
     write_base(use_virtual_microscope=False, db_path="other.db", available_cubes=["c"])
-    settings = ImswitchConfig()
+    settings = Settings()
     assert settings.use_virtual_microscope is False
     assert settings.db_path == "other.db"
     assert settings.available_cubes == ["c"]
@@ -77,17 +77,17 @@ def test_values_come_from_the_file(write_base: BaseWriter) -> None:
 def test_static_or_persistent(write_base: BaseWriter) -> None:
     """`load_from_static_config_path` decides which device file is used."""
     base = write_base()
-    assert ImswitchConfig().config_file == base.parent / "configs" / "static.yaml"
+    assert Settings().config_file == base.parent / "configs" / "static.yaml"
 
     write_base(load_from_static_config_path=False)
-    assert ImswitchConfig().config_file == base.parent / "configs" / "persistent.yaml"
+    assert Settings().config_file == base.parent / "configs" / "persistent.yaml"
 
 
 def test_keyword_arguments_override_the_file(write_base: BaseWriter) -> None:
     """``config_file=None`` (the tests' virtual devices) wins over the file."""
     write_base()
-    assert ImswitchConfig(config_file=None).config_file is None
-    assert ImswitchConfig(db_path="x.db").db_path == "x.db"
+    assert Settings(config_file=None).config_file is None
+    assert Settings(db_path="x.db").db_path == "x.db"
 
 
 def test_relative_dirs_follow_the_base_file(
@@ -98,7 +98,7 @@ def test_relative_dirs_follow_the_base_file(
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
-    settings = ImswitchConfig()
+    settings = Settings()
     assert settings.config_dir == base.parent / "configs"
     assert settings.schema_dir == base.parent / "configs" / "schemas"
 
@@ -110,7 +110,7 @@ def test_explicit_paths_are_kept(write_base: BaseWriter, tmp_path: Path) -> None
         static_config_path=str(tmp_path / "devices.yaml"),
         persistent_config_path="sub/persistent.yaml",
     )
-    settings = ImswitchConfig()
+    settings = Settings()
     assert settings.config_dir == tmp_path / "abs"
     assert settings.static_config_path == tmp_path / "devices.yaml"
     assert settings.persistent_config_path == Path("sub/persistent.yaml")
@@ -119,26 +119,26 @@ def test_explicit_paths_are_kept(write_base: BaseWriter, tmp_path: Path) -> None
 def test_camera_recording_dir(write_base: BaseWriter, tmp_path: Path) -> None:
     """The recording folder is optional; relative to the base file, or absolute."""
     base = write_base()
-    assert ImswitchConfig().camera_recording_dir is None
+    assert Settings().camera_recording_dir is None
     write_base(camera_recording_dir="data/recordings")
-    assert ImswitchConfig().camera_recording_dir == base.parent / "data" / "recordings"
+    assert Settings().camera_recording_dir == base.parent / "data" / "recordings"
     write_base(camera_recording_dir=str(tmp_path / "recordings"))
-    assert ImswitchConfig().camera_recording_dir == tmp_path / "recordings"
+    assert Settings().camera_recording_dir == tmp_path / "recordings"
 
 
 def test_camera_debug_window(write_base: BaseWriter) -> None:
     """The debug window is off unless the file switches it on."""
     write_base()
-    assert ImswitchConfig().camera_debug_window is False
+    assert Settings().camera_debug_window is False
     write_base(camera_debug_window=True)
-    assert ImswitchConfig().camera_debug_window is True
+    assert Settings().camera_debug_window is True
 
 
 def test_unknown_key_is_an_error(write_base: BaseWriter) -> None:
     """A misspelled key is reported instead of silently ignored."""
     write_base(use_virutal_microscope=True)
     with pytest.raises(ValidationError, match="use_virutal_microscope"):
-        ImswitchConfig()
+        Settings()
 
 
 def test_missing_key_is_an_error(write_base: BaseWriter) -> None:
@@ -148,18 +148,18 @@ def test_missing_key_is_an_error(write_base: BaseWriter) -> None:
     del data["db_path"]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(ValidationError, match="db_path"):
-        ImswitchConfig()
+        Settings()
 
 
 def test_missing_base_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without the base config newswitch refuses to start."""
     monkeypatch.setattr(config_module, "BASE_CONFIG_FILE", tmp_path / "base_config.yaml")
     with pytest.raises(FileNotFoundError, match="base_config.yaml"):
-        ImswitchConfig()
+        Settings()
 
 
 def test_environment_is_ignored(write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch) -> None:
     """Environment variables do not override the file."""
     write_base()
     monkeypatch.setenv("DB_PATH", "from-env.db")
-    assert ImswitchConfig().db_path == "agent_data.db"
+    assert Settings().db_path == "agent_data.db"

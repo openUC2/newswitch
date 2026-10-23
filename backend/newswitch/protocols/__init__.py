@@ -1,108 +1,46 @@
-"""
-Virtual Microscope Protocols
+"""The manager protocols: what each part of a microscope (and each service) can do.
 
-Protocol definitions for microscope control managers.
-Each protocol defines the interface that a manager must implement,
-along with the associated state class.
+Implementations live in `newswitch.drivers` (hardware and simulation) and
+`newswitch.services`; the states they publish in `newswitch.states`, the values they
+exchange in `newswitch.models`.
 """
 
-from .stage import StageManager, StageState
-from .illumination import IlluminationManager, IlluminationState
-from .detector import (
-    DetectorManager,
-    CameraState,
-    DetectorFrame,
-    DetectorSessionInfo,
-)
-from .objective import ObjectiveManager, ObjectiveState
-from .filter_bank import FilterBankManager, FilterBankState, Filter
-from .io import IOManager, IOState, FileHandle, FileFormat
-from .light_path import LightPathManager, LightPathState
-from .uc2 import (
-    UC2BusManager,
-    UC2State,
-    UC2Event,
-    PositionUpdate,
-    MotionDone,
-    HomingChanged,
-    EStopChanged,
-    ButtonPressed,
-    NodeSeen,
-    BusError,
-)
-from .hook_manager import (
-    HookManager,
-    Hook,
-    HookContext,
-    SoftwareAutofocusHook,
-    ZCalibrationHook,
-    RegisteredHook,
-    HookState,
-)
-from .expanse import ExpanseManager, ExpanseState, Image
-from .core import LightPath, Metadata
-from .metadata import MetadataManager
-from .calibration import CalibrationManager, CalibrationState
-from .acquistion_manager import AcquistionManager
+from .acquisition import AcquisitionManager
+from .base import BackgroundManager, Manager
 from .cache import CacheManager
+from .calibration import CalibrationManager
+from .detector import DetectorFrame, DetectorManager, DetectorSessionInfo
+from .expanse import ExpanseManager
+from .filter_bank import FilterBankManager
+from .hook_manager import HookContext, HookHandler, HookManager, UnsupportedHook
+from .illumination import IlluminationManager
+from .io import IOManager
+from .light_path import LightPathManager
+from .metadata import MetadataManager
+from .objective import ObjectiveManager
+from .stage import StageManager
+from .uc2 import UC2BusManager
 
 __all__ = [
-    # Managers
-    "AcquistionManager",
-    # Cache
+    "AcquisitionManager",
+    "BackgroundManager",
     "CacheManager",
-    # Stage
-    "LightPath",
-    "Metadata",
-    "StageManager",
-    "StageState",
-    "SoftwareAutofocusHook",
     "CalibrationManager",
-    "CalibrationState",
-    "ZCalibrationHook",
-    "RegisteredHook",
-    "HookState",
-    # Illumination
-    "IlluminationManager",
-    "IlluminationState",
-    # Light Path
-    "LightPathManager",
-    "LightPathState",
-    # Metadata
-    # Hook Manager
-    "HookManager",
-    "Hook",
-    "HookContext",
-    # Detector
-    "DetectorManager",
-    "CameraState",
     "DetectorFrame",
+    "DetectorManager",
     "DetectorSessionInfo",
     "ExpanseManager",
-    "ExpanseState",
-    "Image",
-    # Objective
-    "ObjectiveManager",
-    "ObjectiveState",
-    "MetadataManager",
-    # Filter Bank
     "FilterBankManager",
-    "FilterBankState",
-    "Filter",
-    # IO
+    "HookContext",
+    "HookHandler",
+    "HookManager",
+    "IlluminationManager",
     "IOManager",
-    "IOState",
-    "FileHandle",
-    "FileFormat",
-    # UC2 hardware bus
+    "LightPathManager",
+    "Manager",
+    "MetadataManager",
+    "ObjectiveManager",
+    "StageManager",
     "UC2BusManager",
-    "UC2State",
-    "UC2Event",
-    "PositionUpdate",
-    "MotionDone",
-    "HomingChanged",
-    "EStopChanged",
-    "ButtonPressed",
-    "NodeSeen",
-    "BusError",
+    "UnsupportedHook",
 ]

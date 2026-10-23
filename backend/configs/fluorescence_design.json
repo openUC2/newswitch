@@ -1,6 +1,0 @@
-{
-  "_comment": "The openUC2 fluorescence microscope, described by its optikit design (a checkout of github.com/openUC2/optikit beside this repository; the path is relative to backend/). Needs the extra 'design'. Start with NEWSWITCH_CONFIG=configs/fluorescence_design.json.",
-  "use_virtual_microscope": true,
-  "design": "../../../testing/testdata/optikit/examples/designs/microscopes/fluorescence.dsn",
-  "ui": "design"
-}

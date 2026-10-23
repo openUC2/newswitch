@@ -4,22 +4,13 @@ Stage Manager Protocol
 Defines the protocol for stage/positioner control and associated state.
 """
 
-from typing import Optional, Protocol, runtime_checkable, List
+from typing import Protocol, runtime_checkable
+
+from newswitch.models.light_path import LightPath
 from newswitch.protocols.base import Manager
-from newswitch.protocols.core import LightPath
-from arkitekt import model_field
-from newswitch.arkitekt_app import nsapp
+from newswitch.states.light_path import LightPathState
 
 
-@nsapp.state
-class LightPathState:
-    """State class for the LightPathManager, holding the current light path information."""
-
-    light_paths: List[LightPath] = model_field(default_factory=list)
-    current_light_path: Optional[LightPath] = None
-
-
-@nsapp.context
 @runtime_checkable
 class LightPathManager(Manager, Protocol):
     """Protocol defining the interface for light path managers."""

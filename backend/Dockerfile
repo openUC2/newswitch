@@ -37,11 +37,11 @@ ENV BACKEND_HOST=0.0.0.0 \
 # it just is not reflected here.
 EXPOSE ${BACKEND_PORT}
 
-# main.py exposes a module-level `app`, which is what lets --reload re-import on edit.
+# main_fastapi:create is a factory, so --reload builds a fresh app on every edit.
 # The source dir is bind-mounted by compose, so edits on the host reload the container.
 # Via `sh -c` so $BACKEND_PORT is expanded instead of passed literally, and `exec` so
 # uvicorn replaces the shell as PID 1 and still receives SIGTERM from `docker compose down`.
-CMD ["sh", "-c", "exec uvicorn main:app --host \"$BACKEND_HOST\" --port \"$BACKEND_PORT\" --reload"]
+CMD ["sh", "-c", "exec uvicorn main_fastapi:create --factory --host \"$BACKEND_HOST\" --port \"$BACKEND_PORT\" --reload"]
 
 # python:slim has no curl, so probe with urllib instead
 HEALTHCHECK --interval=5s --timeout=5s --retries=30 --start-period=30s \

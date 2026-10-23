@@ -17,17 +17,17 @@ from newswitch.config_io import (
 )
 from newswitch.config_io import ObjectiveConfig as ObjectiveDevice
 from newswitch.config_io.devices import NewswitchConfig
-from newswitch.managers.virtual import (
+from newswitch.drivers.virtual import (
     FilterBankConfig,
     ObjectiveConfig,
     VirtualFilterBankManager,
     VirtualObjectiveManager,
 )
-from newswitch.protocols.detector import CameraState
-from newswitch.protocols.filter_bank import FilterBankState
-from newswitch.protocols.illumination import IlluminationKind
-from newswitch.protocols.objective import ObjectiveState
-from newswitch.protocols.stage import StageState
+from newswitch.models.devices import IlluminationKind
+from newswitch.states.detector import CameraState
+from newswitch.states.filter_bank import FilterBankState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
 
 from .conftest import DocWriter, get_device
 
@@ -73,6 +73,26 @@ def test_illuminations(config: NewswitchConfig) -> None:
     assert (laser.slot, laser.kind) == (2, IlluminationKind.LASER)
     assert led.is_active and led.intensity == led.max_intensity == adapters.FULL_INTENSITY
     assert not laser.is_active and laser.intensity == laser.min_intensity == 0.0
+
+
+def test_illumination_channel_is_the_hardware_address(
+    write_doc: DocWriter, minimal_doc: dict[str, Any]
+) -> None:
+    """A source's channel is its id on the controller mapping it, else its slot.
+
+    Not `channels`, the number of spectral channels a source has.
+    """
+    devices = minimal_doc["devices"]
+    devices["led"]["channels"] = 3
+    for controller in (d for d in devices.values() if d.get("type") == "controller"):
+        controller.get("mapping", {}).pop("led", None)
+        controller.get("mapping", {}).pop("laser", None)
+    devices["mainboard"]["mapping"]["laser"] = {"type": "uc2-laser", "id": 7, "pwm_max": 1023}
+    illuminations = adapters.illuminations(load_config(write_doc(minimal_doc)).config)
+    assert illuminations is not None
+    led, laser = illuminations
+    assert (led.slot, led.channel) == (1, 1)
+    assert (laser.slot, laser.channel) == (2, 7)
 
 
 def test_unknown_wavelength(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:

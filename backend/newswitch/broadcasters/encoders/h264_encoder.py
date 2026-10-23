@@ -1,12 +1,13 @@
 """Shared async H.264 encoder that pipes frames through an ffmpeg subprocess."""
 
+import asyncio
+from typing import Optional
+
+import numpy as np
 from koil import unkoil
 
 from .config import H264EncoderConfig
-from typing import Optional
-import asyncio
 from .subscription import EncoderSubscription
-import numpy as np
 
 
 class H264Encoder:

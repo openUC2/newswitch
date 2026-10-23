@@ -5,23 +5,23 @@ laser glows while on, its camera glows while acquiring (with the live view poppi
 and a click on a device opens its controls (cards for the devices the design has, and only
 those). Nothing else is on screen; the bottom bar switches to the other views.
 
-A design may bring its own UI: a ``newswitch-ui.bsx`` in its folder is the default blok
-then (checked against the newswitch catalog like any other), and the design is the source
-of the microscope's UI. The device cards and the model asset are declared either way, so
-such a blok can use them.
+The same scene is written for agent mode too (`agent_bloks`): Orkestrator renders it, so
+its cards and the popout are those of `newswitch.bloks.agent`, in Orkestrator's catalog.
+
+A design may bring its own UI: a ``newswitch-ui.bsx`` in its folder is the 3D view then.
+The device cards and the model asset are written either way, so such a blok can use them.
+
+Used only by ``python -m newswitch.tools.build_design``, which writes these bloks into the
+design's configuration; newswitch itself reads them from there.
 """
 
 from pathlib import Path
 
-from arkitekt import bsx
-
-from newswitch import arkitekt_app
-from newswitch.arkitekt_app import nsapp
-from newswitch.bloks import fluorescence
-from newswitch.config_io import NewswitchConfig, adapters
+from newswitch.bloks import agent, fluorescence
+from newswitch.config_io import BlokEntry, NewswitchConfig, adapters
 from newswitch.config_io.devices import LightsourceConfig
-from newswitch.optikit import dsn as optikit
 from newswitch.design.model import build_model
+from newswitch.optikit import dsn as optikit
 
 #: The model's asset name: a blok reads it as ``@self.assets.design``.
 MODEL_ASSET = "design"
@@ -68,8 +68,23 @@ def _components(dsn: Path) -> dict[str, list[str]]:
     return kinds
 
 
-def scene_tree(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
-    """The 3D view of the design's model, bound to newswitch's states (BSX)."""
+#: Device kind -> the card a click on it opens, in the newswitch frontend.
+DESIGN_CARDS = {"camera": CAMERA_CARD, "laser": LASER_CARD, "stage": STAGE_CARD}
+
+
+def scene_tree(
+    dsn: Path,
+    model: optikit.Model,
+    config: NewswitchConfig,
+    cards: dict[str, str] = DESIGN_CARDS,
+    popout: str = LIVE_POPOUT,
+) -> str:
+    """The 3D view of the design's model, bound to newswitch's states (BSX).
+
+    `cards` names the blok a click on a device of each kind opens (a kind it leaves out
+    opens nothing), `popout` what floats at the camera while it acquires (``{node}``: the
+    camera's node).
+    """
     kinds = _components(dsn)
     in_model = [path for paths in kinds.values() for path in paths if path in model.components]
 
@@ -89,17 +104,19 @@ def scene_tree(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
         if path in in_model and index < len(sources):
             on = f"$state.self.IlluminationState.illuminations.{index}.is_active"
             glow[path] = optikit.Glow(on, color="#38bdf8", intensity=0.6)
-            opens[path] = LASER_CARD
+            if "laser" in cards:
+                opens[path] = cards["laser"]
     for path in kinds.get("camera", [])[:1]:
         if path in in_model:
             glow[path] = optikit.Glow(
                 "@self.CameraState.is_acquiring", color="#22c55e", intensity=0.5
             )
-            opens[path] = CAMERA_CARD
-            children = LIVE_POPOUT.format(node=model.components[path])
+            if "camera" in cards:
+                opens[path] = cards["camera"]
+            children = popout.format(node=model.components[path])
     for path in kinds.get("stage", [])[:1]:
-        if path in in_model:
-            opens[path] = STAGE_CARD
+        if path in in_model and "stage" in cards:
+            opens[path] = cards["stage"]
 
     return optikit.scene(
         model, asset=MODEL_ASSET, joints=joints, glow=glow, open=opens, children=children
@@ -118,11 +135,18 @@ def design_ui(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
 """
 
 
-def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
-    """Declare the design's model asset, its device cards and its UI as the default blok."""
+def bloks(dsn: Path, config: NewswitchConfig) -> tuple[dict[str, str], dict[str, BlokEntry]]:
+    """The design's assets and bloks: its device cards and the 3D view (the default).
+
+    Builds the model (see `build_model`), so this takes seconds the first time.
+
+    Returns:
+        ``(assets, bloks)``: asset name -> path relative to the app's root (``newswitch/``),
+        and blok name -> blok.
+    """
     model_path, model = build_model(dsn)
-    root = Path(arkitekt_app.__file__).parent
-    nsapp.register_asset(MODEL_ASSET, str(model_path.relative_to(root)))
+    root = Path(__file__).parents[1]  # newswitch/, where assets are found
+    assets = {MODEL_ASSET: str(model_path.relative_to(root))}
 
     cards = {
         CAMERA_CARD: (
@@ -145,24 +169,42 @@ def declare(dsn: Path, config: NewswitchConfig, catalog: str) -> None:
             adapters.motion_stage(config),
         ),
     }
-    for name, (tree, present) in cards.items():
-        if present is not None:
-            nsapp.blok(
-                name,
-                bsx(tree),
-                description=f"The design's {name.removeprefix('design-')}: opens where it is clicked.",
-                catalog=catalog,
-                mode="strict",
-            )
+    entries = {
+        name: BlokEntry(
+            bsx=tree,
+            description=f"The design's {name.removeprefix('design-')}: opens where it is clicked.",
+        )
+        for name, (tree, present) in cards.items()
+        if present is not None
+    }
 
     own = dsn / DESIGN_UI_FILE
     tree = own.read_text(encoding="utf-8") if own.is_file() else design_ui(dsn, model, config)
-    nsapp.blok(
-        "view-3d",
-        bsx(tree),
+    entries["view-3d"] = BlokEntry(
+        bsx=tree,
         description=f"3D: the microscope of the design {dsn.name}; click a device for its controls.",
-        catalog=catalog,
-        context="html",
         default=True,
-        mode="strict",
     )
+    return assets, entries
+
+
+def agent_bloks(dsn: Path, config: NewswitchConfig) -> dict[str, BlokEntry]:
+    """The design's bloks for agent mode: its device cards, then the 3D view (a scene).
+
+    The cards come first: the scene opens them, and Orkestrator checks that they are there.
+    The model asset is the one `bloks` writes (`MODEL_ASSET`).
+    """
+    _, model = build_model(dsn)
+    present = {
+        "camera": adapters.detectors(config),
+        "laser": adapters.illuminations(config),
+        "stage": adapters.motion_stage(config),
+    }
+    entries = {
+        agent.CARDS[kind]: agent.card(kind) for kind, found in present.items() if found is not None
+    }
+    cards = {kind: agent.CARDS[kind] for kind, found in present.items() if found is not None}
+    entries[agent.SCENE_NAME] = agent.scene_blok(
+        scene_tree(dsn, model, config, cards=cards, popout=agent.LIVE_POPOUT), dsn.name
+    )
+    return entries

@@ -9,8 +9,8 @@ from typing import Generator
 
 import pytest
 
-from newswitch.managers.virtual import VirtualStageManager
-from newswitch.protocols import StageState
+from newswitch.drivers.virtual import VirtualStageManager
+from newswitch.states.stage import StageState
 
 
 @pytest.fixture

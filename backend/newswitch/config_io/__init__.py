@@ -38,6 +38,7 @@ from .connection import Connection, check_shared_resources, resource_key, transp
 from .devices import (
     DEVICE_TYPES,
     AxisConfig,
+    BlokEntry,
     ControllerConfig,
     DetectorConfig,
     Device,
@@ -48,6 +49,7 @@ from .devices import (
     NewswitchConfig,
     ObjectiveConfig,
     StageConfig,
+    UiConfig,
     field_markers,
 )
 from .document import ensure_persistent_copy
@@ -59,6 +61,7 @@ from .values import Firmware, PhysVal, Trigger
 __all__ = [
     "DEVICE_TYPES",
     "AxisConfig",
+    "BlokEntry",
     "ConfigError",
     "ConfigFile",
     "ConfigWarning",
@@ -76,6 +79,7 @@ __all__ = [
     "PhysVal",
     "Reference",
     "StageConfig",
+    "UiConfig",
     "Trigger",
     "check_references",
     "check_shared_resources",

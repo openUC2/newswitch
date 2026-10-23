@@ -37,11 +37,19 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from ..protocols.detector import CameraState, Colormap, Detector
-from ..protocols.filter_bank import Filter, FilterBankState
-from ..protocols.illumination import Illumination, IlluminationKind
-from ..protocols.objective import ObjectiveLens, ObjectiveState
-from ..protocols.stage import StageState
+from newswitch.models.devices import (
+    Colormap,
+    Detector,
+    Filter,
+    Illumination,
+    IlluminationKind,
+    ObjectiveLens,
+)
+from newswitch.states.detector import CameraState
+from newswitch.states.filter_bank import FilterBankState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
+
 from .connection import GigEVisionProtocol, SerialTransport, Uc2RestProtocol, Usb3VisionProtocol
 from .devices import (
     AxisConfig,
@@ -49,6 +57,7 @@ from .devices import (
     DetectorConfig,
     DeviceBase,
     FilterConfig,
+    LightsourceConfig,
     NewswitchConfig,
     ObjectiveConfig,
     StageConfig,
@@ -166,21 +175,28 @@ def illuminations(config: NewswitchConfig) -> list[Illumination] | None:
     Returns:
         One `Illumination` per light source, or None when there are none.
     """
-    sources = config.lightsources
+    sources = config.keyed(LightsourceConfig)
     if not sources:
         return None
+
+    def channel(key: str, slot: int) -> int:
+        # The source's address on the controller mapping it (a UC2 laser id), else its slot.
+        # Not `channels`: that is the number of spectral channels the source has.
+        mapped = config.controller_of(key)
+        return mapped[1].id if mapped is not None else slot
+
     return [
         Illumination(
             kind=IlluminationKind.LASER if source.coherence == "coherent" else IlluminationKind.LED,
             slot=index + 1,
             wavelength=0.0 if source.wavelength is None else source.wavelength,
-            channel=source.channels,
+            channel=channel(key, index + 1),
             max_intensity=FULL_INTENSITY,
             min_intensity=0.0,
             intensity=FULL_INTENSITY if index == 0 else 0.0,
             is_active=index == 0,
         )
-        for index, source in enumerate(sources)
+        for index, (key, source) in enumerate(sources.items())
     ]
 
 

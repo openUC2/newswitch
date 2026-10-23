@@ -7,13 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from newswitch.managers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
-from newswitch.managers.uc2.filter_bank_manager import UC2FilterBankManager
-from newswitch.managers.uc2.objective_manager import UC2ObjectiveManager
-from newswitch.managers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
-from newswitch.protocols.filter_bank import FilterBankState
-from newswitch.protocols.objective import ObjectiveState
-from newswitch.protocols.uc2 import BusError, UC2State
+from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+from newswitch.drivers.uc2.filter_bank_manager import UC2FilterBankManager
+from newswitch.drivers.uc2.objective_manager import UC2ObjectiveManager
+from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
+from newswitch.models.uc2 import BusError
+from newswitch.states.filter_bank import FilterBankState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.uc2 import UC2State
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from convert_imswitch_setup import convert_setup  # noqa: E402
@@ -169,13 +170,13 @@ async def test_virtual_bus_scan_nodes() -> None:
 
 def test_convert_imswitch_rest_setup() -> None:
     """example_uc2.json (ESP32 serial) converts to a valid rest-transport config."""
-    from newswitch.app import ImswitchConfig
-    from newswitch.managers.uc2.rest_bus import UC2RestBusConfig
+    from newswitch.settings import Settings
+    from newswitch.drivers.uc2.rest_bus import UC2RestBusConfig
 
     setup = json.loads((FIXTURES / "example_uc2.json").read_text())
     config, skipped = convert_setup(setup)
 
-    validated = ImswitchConfig.model_validate(config)
+    validated = Settings.model_validate(config)
     assert validated.uc2_transport == "rest"
     assert validated.use_virtual_microscope is False
     # COM3 is not portable -> autodetect
@@ -194,13 +195,13 @@ def test_convert_imswitch_rest_setup() -> None:
 
 def test_convert_imswitch_canopen_setup() -> None:
     """canopen.json converts to a valid canopen-transport config."""
-    from newswitch.app import ImswitchConfig
-    from newswitch.managers.uc2.canopen_bus import UC2CanBusConfig
+    from newswitch.settings import Settings
+    from newswitch.drivers.uc2.canopen_bus import UC2CanBusConfig
 
     setup = json.loads((FIXTURES / "canopen.json").read_text())
     config, _ = convert_setup(setup)
 
-    validated = ImswitchConfig.model_validate(config)
+    validated = Settings.model_validate(config)
     assert validated.uc2_transport == "canopen"
     assert validated.uc2_can_interface == "socketcan"
     assert validated.uc2_can_channel == "can0"

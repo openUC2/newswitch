@@ -1,10 +1,10 @@
 """Inspect the configuration from the shell.
 
-python -m newswitch.config_io                        # ImswitchConfig().config_file
+python -m newswitch.config_io                        # Settings().config_file
 python -m newswitch.config_io path/to/other.yaml
 python -m newswitch.config_io --export-schema        # regenerate the YAML schema
 
-The defaults come from ``backend/base_config.yaml`` via `newswitch.app.ImswitchConfig`.
+The defaults come from ``backend/base_config.yaml`` via `newswitch.settings.Settings`.
 """
 
 from __future__ import annotations
@@ -42,15 +42,15 @@ def main(argv: list[str]) -> int:
     Returns:
         Process exit code: 0 on success, 1 when the file is invalid.
     """
-    # imported here, not at module level: newswitch.app itself imports config_io
-    from newswitch.app import ImswitchConfig
+    # imported here, not at module level: main_fastapi itself imports config_io
+    from newswitch.settings import Settings
 
     parser = argparse.ArgumentParser(prog="python -m newswitch.config_io")
     parser.add_argument("file", nargs="?", help="config file (default: base_config.yaml)")
     parser.add_argument("--export-schema", action="store_true", help="write the YAML schema")
     args = parser.parse_args(argv)
 
-    settings = ImswitchConfig()
+    settings = Settings()
     if args.export_schema:
         print(f"wrote {export_schema(settings.schema_dir / SCHEMA_FILE_NAME)}")
         return 0

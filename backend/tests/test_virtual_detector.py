@@ -13,12 +13,15 @@ import numpy as np
 import pytest
 
 from newswitch.broadcasters import FrameBroadcaster
-from newswitch.managers.virtual import VirtualDetectorManager
-from newswitch.managers.virtual.virtual_detector import DetectorConfig
-from newswitch.protocols import CameraState, DetectorManager, IlluminationState, StageState
-from newswitch.protocols.detector import FULL_SENSOR, Detector, DetectorFrame
-from newswitch.protocols.illumination import Illumination
-from newswitch.protocols.objective import ObjectiveState
+from newswitch.drivers.virtual import VirtualDetectorManager
+from newswitch.drivers.virtual.virtual_detector import DetectorConfig
+from newswitch.models.devices import FULL_SENSOR, Detector, Illumination
+from newswitch.protocols import DetectorManager
+from newswitch.protocols.detector import DetectorFrame
+from newswitch.states.detector import CameraState
+from newswitch.states.illumination import IlluminationState
+from newswitch.states.objective import ObjectiveState
+from newswitch.states.stage import StageState
 
 
 @pytest.fixture
@@ -67,13 +70,11 @@ def virtual_detector_manager(
         VirtualDetectorManager: A configured detector manager ready for testing.
     """
     camera_state, stage_state, objective_state, illumination_state = detector_states
-    broadcaster = FrameBroadcaster()
     manager = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
-        broadcaster=broadcaster,
         config=DetectorConfig(sample_type="cells", width=256, height=256),
     )
     # Activate a detector for testing
@@ -98,13 +99,11 @@ def astigmatism_detector_manager(
         VirtualDetectorManager: A configured detector manager ready for testing.
     """
     camera_state, stage_state, objective_state, illumination_state = detector_states
-    broadcaster = FrameBroadcaster()
     manager = VirtualDetectorManager(
         camera_state=camera_state,
         stage_state=stage_state,
         objective_state=objective_state,
         illumination_state=illumination_state,
-        broadcaster=broadcaster,
         config=DetectorConfig(sample_type="astigmatism", width=256, height=256),
     )
     # Activate a detector for testing
@@ -141,13 +140,11 @@ class TestDetectorProtocolCompliance:
             detector_states: The required states from the detector_states fixture.
         """
         camera_state, stage_state, objective_state, illumination_state = detector_states
-        broadcaster = FrameBroadcaster()
         detector = VirtualDetectorManager(
             camera_state=camera_state,
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
             config=DetectorConfig(sample_type="cells", width=256, height=256),
         )
 
@@ -329,7 +326,6 @@ class TestIlluminationEffect:
             detector_states: The required states from the detector_states fixture.
         """
         camera_state, stage_state, objective_state, illumination_state = detector_states
-        broadcaster = FrameBroadcaster()
 
         # Use astigmatism mode which generates consistent frames
         detector = VirtualDetectorManager(
@@ -337,7 +333,6 @@ class TestIlluminationEffect:
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
             config=DetectorConfig(
                 sample_type="astigmatism",
                 width=128,
@@ -376,7 +371,6 @@ class TestCameraSettings:
             detector_states: The required states from the detector_states fixture.
         """
         camera_state, stage_state, objective_state, illumination_state = detector_states
-        broadcaster = FrameBroadcaster()
 
         # Use astigmatism mode which generates consistent frames
         detector = VirtualDetectorManager(
@@ -384,7 +378,6 @@ class TestCameraSettings:
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
             config=DetectorConfig(
                 sample_type="astigmatism",
                 width=128,
@@ -413,7 +406,6 @@ class TestCameraSettings:
             detector_states: The required states from the detector_states fixture.
         """
         camera_state, stage_state, objective_state, illumination_state = detector_states
-        broadcaster = FrameBroadcaster()
 
         # Use astigmatism mode which generates consistent frames
         detector = VirtualDetectorManager(
@@ -421,7 +413,6 @@ class TestCameraSettings:
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=broadcaster,
             config=DetectorConfig(
                 sample_type="astigmatism",
                 width=128,
@@ -485,7 +476,6 @@ class TestReadout:
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=FrameBroadcaster(),
             config=DetectorConfig(
                 sample_type="astigmatism",
                 width=128,
@@ -597,7 +587,6 @@ class TestReadout:
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
-            broadcaster=FrameBroadcaster(),
             config=DetectorConfig(width=256, height=256),
             detectors=[configured],
         )
@@ -658,8 +647,7 @@ class TestLiveStream:
         manager.deactivate_detector(2)
         manager.deactivate_detector(3)
         broadcaster = RecordingBroadcaster()
-        manager.broadcaster = broadcaster
-        thread = threading.Thread(target=manager.acquire_live, daemon=True)
+        thread = threading.Thread(target=manager.acquire_live, args=(broadcaster,), daemon=True)
         thread.start()
         yield manager, broadcaster
         manager.close()

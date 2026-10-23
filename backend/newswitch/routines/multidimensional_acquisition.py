@@ -1,136 +1,28 @@
 "Routine for performing a multidimensional acquisition with multiple timepoints, positions, z-stacks, and channels."
 
-from datetime import datetime
+import logging
 import random
-from enum import Enum
-from newswitch import protocols
-from newswitch.protocols.core import Frame
-from newswitch.protocols.hook_manager import Hook
 import time
-from arkitekt import Task, model_field, withValidator
-from newswitch.arkitekt_app import nsapp
+from datetime import datetime
 
+from arkitekt import Task
 
-class PositionOrder(str, Enum):
-    """Defines the order in which stage positions are visited during acquisition."""
+from newswitch import protocols
+from newswitch.models.acquisition import (
+    MultidimensionalAcquisition,
+    PositionOrder,
+    Stack,
+    StreamIllumination,
+)
+from newswitch.models.frames import Frame
+from newswitch.routines.common import acquire_step
 
-    SEQUENTIAL = "sequential"
-    RANDOM = "random"
-
-
-@nsapp.model
-class Illumination:
-    """Represents an illumination channel to acquire."""
-
-    source: str  # Name of the illumination source (e.g., "LED1", "Laser2")
-    wavelength: float  # Wavelength of the illumination in nm
-    intensity: float  # Intensity of the illumination (0-1)
-
-
-@nsapp.model
-class Streams:
-    """Represents which channels to acquire at each position."""
-
-    detector: str = model_field(
-        description="Name or slot of the detector to use for this stream (e.g., 'Camera1' or '1')"
-    )
-    mapping: str = model_field(
-        description="Mapping name for this stream (e.g., 'GFP', 'RFP') to be used in file naming and metadata"
-    )
-    # This is using a validator input, which will run on the frontend to ensure the user has entered at least one illumination with valid intensity before allowing them to start the acquisition
-    illuminations: list[Illumination] = model_field(
-        default_factory=list,
-        validators=[
-            withValidator(
-                "len(value) > 0",
-                error_message="We need at least one illumination channel to acquire this stream",
-            )
-        ],
-        description="List of illuminations to use for this stream (e.g., [{'source': 'LED1', 'wavelength': 488, 'intensity': 0.8}])",
-    )
-
-
-@nsapp.model
-class Stack:
-    """Represents a stack of images at different z-slices."""
-
-    z_offset: float  # Offset from the current z position
-    z_slices: list[float]  # List of z-slice positions
-    z_step: float  # Step size between z-slices
-    channels: list[Streams]  # List of channels to acquire at each z-slice
-    z_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at each z-slice (e.g., 'autofocus', 'z_calibration')",
-    )  # List of hooks to execute at each z-slice (e.g., "autofocus", "z_calibration")
-
-
-@nsapp.model
-class Position:
-    """Represents a position in 3D space."""
-
-    x: float
-    y: float
-    z: float
-    stacks: list[Stack]
-    p_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at each position (e.g., 'autofocus', 'z_calibration')",
-    )
-
-
-@nsapp.model
-class Timepoint:
-    """Represents a timepoint in a temporal sequence."""
-
-    time: datetime | None = model_field(
-        default=None,
-        description="Absolute time to acquire this timepoint (e.g., '2024-01-01T12:00:00') or None to acquire immediately after the previous timepoint",
-    )
-    positions: list[Position] = model_field(
-        default_factory=list,
-        description="List of stage positions to acquire at this timepoint",
-    )
-    position_order: PositionOrder = model_field(
-        default=PositionOrder.SEQUENTIAL,
-        description="Order in which to visit stage positions (e.g., 'sequential', 'random')",
-    )
-    t_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at each timepoint (e.g., 'autofocus', 'z_calibration')",
-    )
-
-
-@nsapp.model
-class MultidimensionalAcquisition:
-    """Configuration for a multidimensional acquisition."""
-
-    timepoints: list[Timepoint] = model_field(
-        default_factory=list,
-        description="List of timepoints to acquire, each with its own stage positions and hooks",
-        validators=[
-            withValidator(
-                "len(value) > 0",
-                error_message="You need at least one timepoint to perform an acquisition",
-            )
-        ],
-    )
-    file_name: str = model_field(
-        default="acquisition",
-        description="Base file name for acquired images (e.g., 'experiment1')",
-    )
-    file_format: str = model_field(
-        default="TIFF",
-        description="File format for saving acquired images (e.g., 'TIFF', 'PNG')",
-    )
-    m_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at the start of the acquisition (e.g., 'autofocus', 'z_calibration')",
-    )
+logger = logging.getLogger(__name__)
 
 
 def acquire_multidimensional_acquisition(
     config: MultidimensionalAcquisition,
-    acquisition_manager: protocols.AcquistionManager,
+    acquisition_manager: protocols.AcquisitionManager,
     io_manager: protocols.IOManager,
     light_path_manager: protocols.LightPathManager,
     detector_manager: protocols.DetectorManager,
@@ -141,20 +33,27 @@ def acquire_multidimensional_acquisition(
     hook_manager: protocols.HookManager,
     task: Task,
 ) -> list[Frame]:
-    """Simulate the acquisition of a multidimensional dataset based on the provided configuration.
+    """Acquire a multidimensional dataset: timepoints x positions x z stacks x channels.
 
-    Args:
-        config (MultidimensionalAcquisition): Configuration for the acquisition.
+    Per timepoint the stage visits each position, then each plane of its stacks, and every
+    stream's detector acquires a frame there; hooks (`m_hooks`, `t_hooks`, `p_hooks`,
+    `z_hooks`) run at the start, per timepoint, per position and per plane.
 
     Returns:
-        list[AcquiredImage]: List of acquired images with metadata.
+        The frames, in the order acquired.
     """
     acquired: list[Frame] = []
-    print(f"Starting acquisition with config: {config}")
+
+    # Every hook must be able to run where it is asked for, before anything moves
+    hook_manager.check(config.m_hooks or [], "m")
+    for timepoint in config.timepoints or []:
+        hook_manager.check(timepoint.t_hooks or [], "t")
+        for position in timepoint.positions or []:
+            hook_manager.check(position.p_hooks or [], "p")
+            for stack in position.stacks or []:
+                hook_manager.check(stack.z_hooks or [], "z")
 
     hook_manager.execute_all(config.m_hooks or [])
-
-    print(f"Executing acquisition hooks: {config.m_hooks}")
 
     # Calculate total number of images to acquire for progress tracking
     total_images = 0
@@ -172,8 +71,6 @@ def acquire_multidimensional_acquisition(
     for time_index, timepoint in enumerate(config.timepoints):
         if timepoint.time and timepoint.time > datetime.now():
             time.sleep((timepoint.time - datetime.now()).total_seconds())
-        else:
-            time.sleep(2)
 
         hook_manager.execute_all(timepoint.t_hooks or [])
 
@@ -181,20 +78,23 @@ def acquire_multidimensional_acquisition(
         if timepoint.position_order == PositionOrder.RANDOM:
             positions = random.sample(positions, k=len(positions))
 
-        print(
-            f"Acquiring timepoint {time_index} with positions: {positions} and hooks: {timepoint.t_hooks}"
-        )
+        logger.info("Timepoint %d: %d positions", time_index, len(positions))
 
         for position_index, position in enumerate(positions):
-            hook_manager.execute_all(position.p_hooks or [])
-
             task.progress(
                 int((current_image / total_images * 100)) if total_images > 0 else 0,
                 message=f"T{time_index + 1}/{len(config.timepoints)} | Position {position_index + 1}/{len(positions)} | Moving to ({position.x:.1f}, {position.y:.1f}, {position.z:.1f})",
             )
+            stage_manager.move(
+                x=position.x, y=position.y, z=position.z, is_absolute=True, task=task
+            )
+            # Position hooks run there (an autofocus may refocus); the stacks are centred
+            # on where the stage is afterwards.
+            hook_manager.execute_all(position.p_hooks or [])
+            base_z = stage_manager.state.z
 
             for stack in position.stacks or []:
-                z_positions = _resolve_z_positions(position.z, stack)
+                z_positions = _resolve_z_positions(base_z, stack)
 
                 for z_index, z_pos in enumerate(z_positions):
                     stage_manager.move(
@@ -225,18 +125,17 @@ def acquire_multidimensional_acquisition(
                             detector_manager.activate_detector(slot)
 
                         current_image += 1
-                        task.pausepoint()
-                        images = acquisition_manager.acquire()
-
-                        acquired.extend(images)
-
-                        # Update progress
-                        task.progress(
-                            int(((current_image) / total_images * 100)) if total_images > 0 else 0,
-                            f"Acquired image {current_image}/{total_images} (T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}, Stream{stream_index + 1})",
+                        acquired.extend(
+                            acquire_step(
+                                acquisition_manager,
+                                task,
+                                current_image,
+                                total_images,
+                                f"Acquired image {current_image}/{total_images} (T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}, Stream{stream_index + 1})",
+                                slots=[slot],
+                            )
                         )
 
-                        print("streaming acquired image data...")
                         for channel in channels_to_disable:
                             illumination_manager.turn_off_channel(channel)
 
@@ -252,7 +151,7 @@ def _resolve_z_positions(base_z: float, stack: Stack) -> list[float]:
     return [base_z]
 
 
-def _resolve_illumination_channel(illumination: Illumination) -> int:
+def _resolve_illumination_channel(illumination: StreamIllumination) -> int:
     digits = "".join(ch for ch in illumination.source if ch.isdigit())
     if digits:
         return int(digits)
