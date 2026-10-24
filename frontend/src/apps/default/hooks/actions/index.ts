@@ -3,6 +3,7 @@ import { AcquireMultidimensionalAcquisitionDefinition } from './acquireMultidime
 import { ActivateDetectorDefinition } from './activateDetector';
 import { CalibrateLightPathDefinition } from './calibrateLightPath';
 import { CaptureImageDefinition } from './captureImage';
+import { CaptureImageAndSaveToDiskDefinition } from './captureImageAndSaveToDisk';
 import { ClearExpanseDefinition } from './clearExpanse';
 import { DeactivateDetectorDefinition } from './deactivateDetector';
 import { DumpStatesToStdinDefinition } from './dumpStatesToStdin';
@@ -25,6 +26,7 @@ import { RunAutofocusDefinition } from './runAutofocus';
 import { ScanRegionDefinition } from './scanRegion';
 import { SetIlluminationIntensityDefinition } from './setIlluminationIntensity';
 import { StartLiveViewDefinition } from './startLiveView';
+import { StartLiveViewAndSaveToDiskDefinition } from './startLiveViewAndSaveToDisk';
 import { StopLiveViewDefinition } from './stopLiveView';
 import { StopStageDefinition } from './stopStage';
 import { SwitchFilterDefinition } from './switchFilter';
@@ -105,6 +107,16 @@ export {
   useCaptureImage,
 } from './captureImage';
 export type { CaptureImageArgs, CaptureImageReturn } from './captureImage';
+export {
+  CaptureImageAndSaveToDiskArgsSchema,
+  CaptureImageAndSaveToDiskReturnSchema,
+  CaptureImageAndSaveToDiskDefinition,
+  useCaptureImageAndSaveToDisk,
+} from './captureImageAndSaveToDisk';
+export type {
+  CaptureImageAndSaveToDiskArgs,
+  CaptureImageAndSaveToDiskReturn,
+} from './captureImageAndSaveToDisk';
 export {
   ClearExpanseArgsSchema,
   ClearExpanseReturnSchema,
@@ -297,6 +309,16 @@ export {
 } from './startLiveView';
 export type { StartLiveViewArgs, StartLiveViewReturn } from './startLiveView';
 export {
+  StartLiveViewAndSaveToDiskArgsSchema,
+  StartLiveViewAndSaveToDiskReturnSchema,
+  StartLiveViewAndSaveToDiskDefinition,
+  useStartLiveViewAndSaveToDisk,
+} from './startLiveViewAndSaveToDisk';
+export type {
+  StartLiveViewAndSaveToDiskArgs,
+  StartLiveViewAndSaveToDiskReturn,
+} from './startLiveViewAndSaveToDisk';
+export {
   StopLiveViewArgsSchema,
   StopLiveViewReturnSchema,
   StopLiveViewDefinition,
@@ -391,6 +413,7 @@ export const globalActionDefinition = {
   ActivateDetector: ActivateDetectorDefinition,
   CalibrateLightPath: CalibrateLightPathDefinition,
   CaptureImage: CaptureImageDefinition,
+  CaptureImageAndSaveToDisk: CaptureImageAndSaveToDiskDefinition,
   ClearExpanse: ClearExpanseDefinition,
   DeactivateDetector: DeactivateDetectorDefinition,
   DumpStatesToStdin: DumpStatesToStdinDefinition,
@@ -413,6 +436,7 @@ export const globalActionDefinition = {
   ScanRegion: ScanRegionDefinition,
   SetIlluminationIntensity: SetIlluminationIntensityDefinition,
   StartLiveView: StartLiveViewDefinition,
+  StartLiveViewAndSaveToDisk: StartLiveViewAndSaveToDiskDefinition,
   StopLiveView: StopLiveViewDefinition,
   StopStage: StopStageDefinition,
   SwitchFilter: SwitchFilterDefinition,

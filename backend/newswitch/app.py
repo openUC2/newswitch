@@ -5,6 +5,7 @@ This module provides a FastAPI server with arkitekt_next integration
 for controlling a virtual microscope through registered functions.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -20,23 +21,17 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 from newswitch.hooks.software_autofocus import software_autofocus_hook
-from rekuest_next import pausepoint, progress
 from rekuest_next.agents.base import app_context
-from rekuest_next.api.schema import OptimisticInput
 from rekuest_next.app import get_default_app_registry
 from rekuest_next.contrib.fastapi import (
     configure_fastapi,
 )
-from rekuest_next import jsx
-import koil
-from rekuest_next.register import register
 from rekuest_next.agents.hooks.startup import startup
 from rekuest_next.agents.hooks.shutdown import shutdown
 from rekuest_next.agents.hooks.background import background
 
 
 # Import protocol contexts and states
-from newswitch.protocols.core import Frame
 from newswitch.managers.acquistion_manager import AcquistionManager
 from newswitch.managers.cache.local_cache import LocalCacheManager
 from newswitch.managers.calibration import CalibrationManager
@@ -60,8 +55,7 @@ from newswitch.protocols.filter_bank import Filter as OpticalFilter
 from newswitch.protocols.illumination import Illumination
 from newswitch.protocols.objective import ObjectiveLens
 from newswitch.protocols.uc2 import UC2BusManager, UC2State
-from newswitch.registers import uc2 as uc2_registers  # noqa: F401  (registration side effects)
-from newswitch.routines import autofocus as autofocus_routine  # noqa: F401  (registration)
+from newswitch import registers  # noqa: F401  (registration side effects: every action)
 from newswitch.managers.expanse_manager import ExpanseManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.protocols import (
@@ -77,7 +71,6 @@ from newswitch.protocols import (
     FilterBankState,
 )
 from newswitch.protocols.calibration import CalibrationState
-from newswitch.protocols.detector import Detector
 from newswitch.protocols.io import IOManager, IOState
 from newswitch import protocols
 from newswitch import config_io
@@ -113,12 +106,6 @@ from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
 from newswitch.routes.http.users import router as users_router
 
-# Import routines
-from newswitch.routines import scan_region
-from newswitch.routines.calibration import calibrate_light_path
-from newswitch.routines.multidimensional_acquisition import (
-    acquire_multidimensional_acquisition,
-)
 from newswitch.managers.python_hook_manager import PythonHookManager
 
 logger = logging.getLogger(__name__)
@@ -244,6 +231,32 @@ class ImswitchConfig(BaseSettings):
         if not BASE_CONFIG_FILE.is_file():
             raise FileNotFoundError(f"{BASE_CONFIG_FILE} is missing; newswitch needs it to start")
         return (init_settings, YamlConfigSettingsSource(settings_cls, yaml_file=BASE_CONFIG_FILE))
+
+
+#: Environment variable naming a JSON file whose values override single fields of
+#: `BASE_CONFIG_FILE`, e.g. ``configs/camTest.json``.
+CONFIG_ENV_VAR = "NEWSWITCH_CONFIG"
+
+
+def load_app_config() -> ImswitchConfig:
+    """Build the app config from base_config.yaml, overridden by the `CONFIG_ENV_VAR` file.
+
+    Every way of starting the app goes through here (``main.py``, ``python -m
+    newswitch.app``), so they all honour the variable. Without it, or when it is empty,
+    base_config.yaml alone applies. A relative path is taken relative to the backend folder
+    (where base_config.yaml lives), so the working directory does not matter.
+
+    Raises:
+        FileNotFoundError: The named file does not exist.
+        ValueError: The file is not valid JSON, or a value does not fit its field.
+    """
+    config_path = os.environ.get(CONFIG_ENV_VAR)
+    if not config_path:
+        return ImswitchConfig()
+    candidate = Path(config_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = BASE_CONFIG_FILE.parent / candidate
+    return ImswitchConfig(**json.loads(candidate.read_text()))
 
 
 # ====================
@@ -650,376 +663,11 @@ async def run_uc2_event_dispatch(
 
 
 # ====================
-# Registered Functions - Illumination
-# ====================
-@register
-def clear_expanse(expanse_manager: protocols.ExpanseManager) -> None:
-    """Clear the expanse state, removing all current images."""
-    expanse_manager.reset_expanse()
-
-
-@register
-def set_illumination_intensity(  # TODO: Why is this function here?!
-    illumination: IlluminationManager,
-    intensity: float,
-    channel: int = 1,
-) -> float:
-    """
-    Set illumination intensity for a specific channel.
-
-    Args:
-        intensity: Light intensity value
-        channel: Illumination channel number (default 1)
-
-    Returns:
-        The actual clamped intensity value.
-    """
-    result = illumination.set_intensity(intensity, channel)
-    return result
-
-
-@register
-def long_stuff_running() -> None:
-    """A long-running function to test optimistic updates and progress."""
-
-    for i in range(10):
-        progress(i * 10, f"Long task progress: {i * 10}%")
-        pausepoint()  # Await for a breakpoint to allow for testing of progress updates
-        koil.sleep(0.5)
-
-
-@register
-def turn_on_illumination(  # TODO: Why is this function here?!
-    illumination: IlluminationManager,
-    state: IlluminationState,
-    channel: int = 1,
-    intensity: Optional[float] = None,
-) -> str:
-    """
-    Turn on a specific illumination channel.
-
-    Args:
-        channel: Illumination channel number (default 1)
-        intensity: Optional intensity to set. Uses current/default if not provided.
-
-    Returns:
-        Confirmation message.
-    """
-    result = illumination.turn_on(channel, intensity)
-    return result
-
-
-@register
-def turn_off_illumination_channel(
-    illumination: IlluminationManager,
-    state: IlluminationState,
-    channel: int,
-) -> str:
-    """
-    Turn off a specific illumination channel.
-
-    Args:
-        channel: Illumination channel number to turn off
-
-    Returns:
-        Confirmation message.
-    """  # Move stage home when turning off illumination for safety
-    result = illumination.turn_off_channel(channel)
-    return result
-
-
-# ====================
-# Registered Functions - Stage
-# ====================
-
-
-# Here we use the locks explicitly, when setting them like this we are ourselves responsible
-# for ensuring that the locks are properly set for this execution context
-@register(locks=["stage_position"])
-def failing_camera(camera: CameraState, intensity: int) -> str:
-    """A function that always fails to test lock release."""
-    camera.detectors[0].current_gain += intensity  # type: igThis is just to have some side effect that we can check in the test, but the function will still fail
-    return "This function should fail."
-
-
-# This function uses the optimistic pattern
-# It allows for the function to define how the state should be updated optimistically at the moment the function runs
-# This is useful for setters like this move function, where we want the UI to reflect the new position immediately,
-# without waiting for the function to complete
-@register(
-    optimistics=[
-        OptimisticInput(
-            state=StageState.__name__,
-            path="",
-            accessor="({...state, x: args.x, y: args.y, z: args.z, a: args.a})",
-        )
-    ],
-)
-def move_stage(  # TODO: Why is this function here?!
-    stage: StageManager,
-    x: Optional[float] = None,
-    y: Optional[float] = None,
-    z: Optional[float] = None,
-    a: Optional[float] = None,
-    is_absolute: bool = False,
-    step_size: float = 1.0,
-) -> None:
-    """
-    Move the stage to a new position.
-
-    Args:
-        x: X position (micrometers)
-        y: Y position (micrometers)
-        z: Z position (micrometers)
-        a: A (rotation) position
-        is_absolute: If True, move to absolute position; if False, relative move
-        step_size: Step size in micrometers for movement simulation (default: 1.0)
-    """
-    # Read current position from state
-    stage.move(x=x, y=y, z=z, a=a, step_size=step_size, is_absolute=is_absolute)
-
-
-@register
-def move_home(stage: StageManager, state: StageState) -> None:
-    """Move stage to home position."""  # TODO: Why is this function here?!
-    pos = stage.move_home()
-    return pos
-
-
-@register(
-    description="Move the stage to a specified position with a long execution time to test optimistic updates."
-)
-def kill_benedict(stage: StageManager, kill_hard: str, die_young: bool) -> None:
-    """A function that simulates a critical failure to test error handling and lock release."""
-    raise RuntimeError("Benedict has been killed. This is a simulated critical failure.")
-
-
-# TODO: Why was this function defined?
-
-
-@register
-def move_to_stage_position(
-    stage: StageManager,
-    state: StageState,
-    position_x: int,
-    position_y: int,
-    position_z: int,
-) -> None:
-    """
-    Move the stage to a specified position.
-
-    Args:
-        position: Target stage position
-    """
-    stage.move(
-        x=position_x,
-        y=position_y,
-        z=position_z,
-        is_absolute=True,
-    )
-
-
-# ====================
-# Registered Functions - Detector
-# ====================
-
-
-@register
-def capture_image(
-    detector: DetectorManager,
-    acquisition_manager: protocols.AcquistionManager,
-) -> list[Frame]:
-    """
-    Capture an image from the detector and save it to disk.
-
-    Args:
-        slot: Detector slot number
-
-    Returns a FileHandle that can be used to retrieve the image via the
-    /files/{file_path} HTTP endpoint.
-    """
-    files = (
-        acquisition_manager.acquire()
-    )  # This will capture an image and save it to disk, returning the file handle
-
-    return files
-
-
-@register
-def dump_states_to_stdin(
-    stage_state: StageState,
-    illumination_state: IlluminationState,
-    camera_state: CameraState,
-    objective_state: ObjectiveState,
-    filter_bank_state: FilterBankState,
-    expanse_state: protocols.ExpanseState,
-) -> None:
-    """Dump the current states of all managers for debugging purposes."""
-    print("Dumping states to JSON:")
-    print(len(expanse_state.current_frames))
-
-
-@register
-def start_live_view(camera_state: CameraState) -> str:
-    """
-    Start broadcasting frames to the video WebSocket endpoint.
-
-    Call this to begin streaming frames captured by the detector
-    to connected video clients.
-    """
-
-    camera_state.is_acquiring = True
-    return "Broadcasting started. Frames will now be sent to video clients."
-
-
-@register
-def stop_live_view(camera_state: CameraState) -> str:
-    """
-    Stop broadcasting frames to the video WebSocket endpoint.
-
-    Call this to stop streaming frames captured by the detector
-    to connected video clients.
-    """
-    camera_state.is_acquiring = False
-    return "Broadcasting stopped. No frames will be sent to video clients."
-
-
-@register
-def activate_detector(detector: DetectorManager, slot: int) -> None:
-    """
-    Activate a detector by its slot number.
-
-    Args:
-        slot: Detector slot number to activate
-    """
-
-    detector.activate_detector(slot)
-    return None
-
-
-@register
-def deactivate_detector(detector: DetectorManager, slot: int) -> str:
-    """
-    Deactivate a detector by its slot number.
-
-    Args:
-        slot: Detector slot number to deactivate
-    """
-    detector.deactivate_detector(slot)
-    return f"Detector slot {slot} deactivated"
-
-
-@register
-def update_detector(
-    detector: DetectorManager,
-    slot: int,
-    exposure_time: float | None = None,
-    gain: float | None = None,
-) -> Detector:
-    """
-    Update detector settings.
-
-    Args:
-        slot: Detector slot number
-        exposure_time: Exposure time in seconds (optional)
-        gain: Gain value (optional)
-    """
-    return detector.update_detector(slot, exposure_time, gain)
-
-
-# ====================
-# Registered Functions - Objective
-# ====================
-
-
-@register
-def never_ending_function() -> None:
-    """A function that never ends to test how the system handles long-running functions."""
-    pass
-
-
-@register
-def switch_objective(objective: ObjectiveManager, state: ObjectiveState, slot: int) -> None:
-    """
-    Switch to a specific objective slot.
-
-    Args:
-        slot: Objective slot number
-    """
-    objective.switch_objective(slot)
-
-
-@register
-def toggle_objective(objective: ObjectiveManager, state: ObjectiveState) -> None:
-    """Toggle to the next objective in the turret."""
-    objective.toggle_objective()
-
-
-# ====================
-# Registered Functions - Filter Bank
-# ====================
-
-
-@register
-def switch_filter(
-    filter_bank: FilterBankManager, state: FilterBankState, slot: int
-) -> protocols.Filter:
-    """
-    Switch to a specific filter slot.
-
-    Args:
-        slot: Filter slot number
-
-    Returns:
-        The newly active filter.
-    """
-    return filter_bank.switch_filter(slot)
-
-
-@register
-def toggle_filter(filter_bank: FilterBankManager, state: FilterBankState) -> protocols.Filter:
-    """Toggle to the next filter in the wheel.
-
-    Returns:
-        The newly active filter.
-    """
-    return filter_bank.toggle_filter()
-
-
-# ====================
 # FastAPI Application
 # ====================
 
 
 default_app_registry = get_default_app_registry()
-default_app_registry.register(acquire_multidimensional_acquisition)
-default_app_registry.register(calibrate_light_path)
-default_app_registry.register(scan_region)
-default_app_registry.register_blok(
-    "jonda",
-    jsx("""
-            <Card id="opentrons-controller" className="w-[380px] border-blue-200 shadow-md">
-                <CardHeader>
-                    <CardTitle text="Newswitch Handler" />
-                    <CardDescription text="Bene don't look at this yet, this is just a placeholder" />
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                    <div className="flex items-center justify-between p-3 border rounded-md bg-slate-50">
-                        <span className="text-sm font-medium text-slate-700" text="Deck Status" />
-                        <span className="text-xs font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-1 rounded-full" text="Idle" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                        <foreach items="@self.ObjectiveState.mounted_lenses" let="#lens">
-                            <Button
-                                label="@lens.name"
-                                onClick="@self.switch_objective(lens.slot)"
-                            />
-                        </foreach>
-                    </div>
-                </CardContent>
-            </Card>
-        """),
-)
 
 
 def create_app(
@@ -1106,9 +754,10 @@ def main() -> None:
     """Main entry point to run the FastAPI server.
 
     Host and port come from BACKEND_HOST / BACKEND_PORT (the repo's root .env, which
-    `just` and docker compose export), so they stay defined in exactly one place.
+    `just` and docker compose export), so they stay defined in exactly one place. The
+    settings come from `load_app_config`, so ``NEWSWITCH_CONFIG`` applies as for main.py.
     """
-    config = ImswitchConfig()
+    config = load_app_config()
     app = create_app(config)
     uvicorn.run(
         app,

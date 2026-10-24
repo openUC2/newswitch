@@ -6,11 +6,16 @@ detector slot. It implements `DetectorManager`, used by the actions, the routine
 live stream. Importing this module imports uc2_cam_py, so the app imports it only when
 cameras are configured (the package `managers.uc2` does not import it).
 
-uc2_cam_py acquires into a ring buffer on a C++ thread; with ``store_image_data`` every
-acquired image is also recorded to a ``.uc2rb`` file. A camera acquires as long as anyone
+uc2_cam_py acquires into a ring buffer on a C++ thread. A camera acquires as long as anyone
 holds it: the live stream, a snapshot, or its debug window. The first holder starts it,
 the last one stops it, so a snapshot never ends a live stream. Every start is a new
-session (and a new file when recording).
+session.
+
+Writing the images to disk (uc2_cam_py's ``store_image_data``, a ``.uc2rb`` file) is off
+when a camera is opened and follows the same pattern: the live stream and a snapshot ask
+for it with ``save_to_disk``; the first request switches it on (a new file from the next
+image on), the last one switches it off. uc2_cam_py switches it without restarting the
+acquisition.
 
 With ``debug_window`` uc2_cam_py shows each camera's newest image in a window of its own
 (debugging without the frontend); the cameras are then held from the start, so the window
@@ -72,13 +77,15 @@ MIN_CAPTURE_TIMEOUT_S = 2.0
 
 @dataclass(eq=False)
 class _OpenCamera:
-    """An opened camera, its detector and who currently needs it acquiring."""
+    """An opened camera, its detector and who currently needs it acquiring or storing."""
 
     detector: Detector
     camera: uc2_cam_py.Camera
     lock: threading.Lock = field(default_factory=threading.Lock)
-    """Serializes starting, stopping and geometry changes."""
+    """Serializes starting, stopping, switching the storing and geometry changes."""
     holders: set[object] = field(default_factory=set)
+    storers: set[object] = field(default_factory=set)
+    """Who currently needs every image written to disk."""
 
 
 def _sample_type(pixel_format: str) -> str:
@@ -115,9 +122,10 @@ def _mirror(detector: Detector, camera: uc2_cam_py.Camera) -> None:
 
 
 def _mirror_recording(detector: Detector, camera: uc2_cam_py.Camera) -> None:
-    """Copy whether the camera acquires, and into which file, into its detector."""
+    """Copy whether the camera acquires and stores, and into which file, into its detector."""
     with acquired_locks(CAMERA_LOCK):
         detector.is_recording = camera.is_recording
+        detector.store_image_data = camera.store_image_data
         detector.recording_file = camera.recording_file
 
 
@@ -219,6 +227,8 @@ class UC2DetectorManager:
         self._cameras: dict[int, _OpenCamera] = {}
         # held for a round of the live loop, so stopping cannot interleave with it
         self._live_lock = threading.Lock()
+        # the live stream writes to disk (set by start_acquire_live)
+        self._save_live = False
         options = vendor_options or {}
         try:
             for detector in cameras:
@@ -245,10 +255,12 @@ class UC2DetectorManager:
         recording_dir: Path | None,
         debug_window: bool,
     ) -> uc2_cam_py.Camera:
-        """Open one camera; values that are not configured keep uc2_cam_py's defaults."""
+        """Open one camera; values that are not configured keep uc2_cam_py's defaults.
+
+        Writing to disk starts off (uc2_cam_py's default is on); see `_store`.
+        """
         options: dict[str, Any] = dict(vendor_options)
-        if detector.store_image_data is not None:
-            options["store_image_data"] = detector.store_image_data
+        options["store_image_data"] = False
         return uc2_cam_py.create_camera(
             vendor=detector.manufacturer,
             connection_type=detector.connection_type,
@@ -341,17 +353,57 @@ class UC2DetectorManager:
                 cam.camera.stop()
                 _mirror_recording(cam.detector, cam.camera)
 
+    def _store(self, cam: _OpenCamera, holder: object) -> None:
+        """Register `holder` as needing the images on disk; the first one switches it on.
+
+        While the camera acquires, uc2_cam_py opens a new file from the next image on;
+        otherwise the next start records.
+
+        Raises:
+            RuntimeError: The manager is closed, or uc2_cam_py cannot start writing.
+            OSError: uc2_cam_py's disk check failed (directory, free space); `holder` is
+                then not registered.
+        """
+        with cam.lock:
+            if self._closed:
+                raise RuntimeError("the camera manager has been closed")
+            if not cam.storers:
+                cam.camera.store_image_data = True
+            cam.storers.add(holder)
+            _mirror_recording(cam.detector, cam.camera)
+
+    def _unstore(self, cam: _OpenCamera, holder: object) -> None:
+        """Unregister `holder`; the last one switches writing to disk off (file complete)."""
+        with cam.lock:
+            if holder not in cam.storers:
+                return
+            cam.storers.discard(holder)
+            if not cam.storers and not self._closed:
+                cam.camera.store_image_data = False
+                _mirror_recording(cam.detector, cam.camera)
+
+    def _leave_live(self, cam: _OpenCamera) -> None:
+        """Take a camera out of the live stream: end its writing to disk, then release it."""
+        self._unstore(cam, LIVE)
+        self._release(cam, LIVE)
+
     # ------------------------------------------------------ DetectorManager
 
-    def capture_image(self, slot: int | None = None) -> DetectorFrame:
+    def capture_image(self, slot: int | None = None, save_to_disk: bool = False) -> DetectorFrame:
         """Capture one image exposed after this call.
 
         The camera runs free (no trigger), so this waits for the first image that reached
         the host at least one exposure time after the call. A camera that is not
         acquiring is started for it and stopped again.
 
+        With ``save_to_disk`` the image is also written to a ``.uc2rb`` file
+        (`Detector.recording_file`). uc2_cam_py writes from switching on to switching off,
+        so depending on the frame rate the file may hold an image or two next to it.
+        While the live stream writes to disk anyway, its file simply goes on.
+
         Args:
             slot: Detector slot number; None = the first active detector.
+            save_to_disk: Also write the image to disk.
 
         Returns:
             The image (an own copy) with its timing.
@@ -359,18 +411,23 @@ class UC2DetectorManager:
         Raises:
             ValueError: No active detector with this slot.
             RuntimeError: The manager is closed.
+            OSError: Writing to disk cannot start (directory, free space).
             TimeoutError: No image arrived in time.
         """
         detector = self._get_active_detector(slot)
         if detector is None:
             raise ValueError(f"No active detector found with slot {slot}")
         cam = self._open_camera(detector.slot)
-        requested_ns = time.monotonic_ns()
         token = object()
-        self._hold(cam, token)
         try:
+            if save_to_disk:
+                self._store(cam, token)
+            # after switching the storing on: only images from then on are in the file
+            requested_ns = time.monotonic_ns()
+            self._hold(cam, token)
             return self._wait_for_image(detector.slot, cam.camera, requested_ns)
         finally:
+            self._unstore(cam, token)
             self._release(cam, token)
 
     @staticmethod
@@ -419,7 +476,8 @@ class UC2DetectorManager:
     def deactivate_detector(self, slot: int) -> None:
         """Deactivate a detector; its camera leaves the live stream at once.
 
-        A camera held for its debug window keeps acquiring.
+        The live stream's writing to disk ends for it. A camera held for its debug window
+        keeps acquiring.
 
         Args:
             slot: Detector slot number.
@@ -430,7 +488,7 @@ class UC2DetectorManager:
         detector = self._require_detector(slot)
         with self._live_lock:
             detector.is_active = False
-            self._release(self._open_camera(slot), LIVE)
+            self._leave_live(self._open_camera(slot))
 
     def update_detector(
         self,
@@ -539,7 +597,8 @@ class UC2DetectorManager:
         """Stream the active cameras while `CameraState.is_acquiring` is set.
 
         Runs in the detector background thread until `close`. Holds every active camera
-        while streaming and sends each new image (an own copy) to the broadcaster.
+        while streaming and sends each new image (an own copy) to the broadcaster. While
+        the live stream writes to disk, a camera joining it writes too.
         """
         self.broadcaster.start_broadcasting()
         last_sent: dict[int, int] = {}
@@ -553,11 +612,13 @@ class UC2DetectorManager:
                             continue
                         if self.state.is_acquiring and detector.is_active:
                             if LIVE not in cam.holders:
+                                if self._save_live:
+                                    self._store_for_live(cam)
                                 self._hold(cam, LIVE)
                             streaming = True
                             self._send_new_image(detector.slot, cam.camera, last_sent)
                         else:
-                            self._release(cam, LIVE)
+                            self._leave_live(cam)
             except Exception:
                 if self._closed:
                     break
@@ -578,17 +639,58 @@ class UC2DetectorManager:
             last_sent[slot] = image.time_ns
             self.broadcaster.broadcast_sync(slot, data)
 
+    def _store_for_live(self, cam: _OpenCamera) -> None:
+        """Let a camera joining the live stream write to disk; if that fails, it only streams."""
+        try:
+            self._store(cam, LIVE)
+        except (OSError, RuntimeError) as exc:
+            logger.error(
+                "camera %s joins the live stream without writing to disk: %s", cam.detector.key, exc
+            )
+
+    def start_acquire_live(self, save_to_disk: bool = False) -> None:
+        """Start the live stream: set `CameraState.is_acquiring` (protocol method).
+
+        With ``save_to_disk`` the active cameras write every image to disk from now on
+        (cameras activated later join in), until `stop_acquire_live` or their
+        deactivation. Without it, writing the live stream asked for ends.
+
+        Raises:
+            OSError, RuntimeError: Writing to disk cannot start on a camera; the live
+                stream is then not started and no camera writes for it.
+        """
+        with self._live_lock:
+            if save_to_disk:
+                switched_on: list[_OpenCamera] = []
+                try:
+                    for detector in self.list_active_detectors():
+                        cam = self._cameras.get(detector.slot)
+                        if cam is not None and LIVE not in cam.storers:
+                            self._store(cam, LIVE)
+                            switched_on.append(cam)
+                except BaseException:
+                    for cam in switched_on:
+                        self._unstore(cam, LIVE)
+                    raise
+            else:
+                for cam in self._cameras.values():
+                    self._unstore(cam, LIVE)
+            self._save_live = save_to_disk
+            self.state.is_acquiring = True
+
     def stop_acquire_live(self) -> None:
         """Stop the live stream: clear `CameraState.is_acquiring` and release the cameras.
 
-        A camera nobody else holds stops before this returns, so its recording is complete
-        on disk; one held for its debug window keeps acquiring. `acquire_live` keeps
-        running and streams again once `is_acquiring` is set.
+        Writing to disk for the live stream ends, and a camera nobody else holds stops
+        before this returns, so its file is complete; one held for its debug window keeps
+        acquiring. `acquire_live` keeps running and streams again once the live stream is
+        started.
         """
         with self._live_lock:
             self.state.is_acquiring = False
+            self._save_live = False
             for cam in self._cameras.values():
-                self._release(cam, LIVE)
+                self._leave_live(cam)
 
     def close(self) -> None:
         """Stop and release all cameras, so their recordings are complete on disk.
@@ -599,6 +701,8 @@ class UC2DetectorManager:
         for cam in self._cameras.values():
             with cam.lock:
                 cam.holders.clear()
+                cam.storers.clear()
                 cam.camera.close()
             with acquired_locks(CAMERA_LOCK):
                 cam.detector.is_recording = False
+                cam.detector.store_image_data = False

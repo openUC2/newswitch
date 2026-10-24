@@ -110,7 +110,7 @@ devices:
       protocol: gige-vision
     mapping:
       # Cameras: serial_number OR index selects the camera (neither: the first one);
-      # optional buffer_size, store_image_data and vendor_options (see configs/README.md)
+      # optional buffer_size and vendor_options (see configs/README.md)
       bigcamera42:
         type: gige-vision-camera
         id: 0

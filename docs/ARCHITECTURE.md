@@ -143,8 +143,8 @@ def move_stage(stage: StageManager, x: float | None = None, ...) -> None: ...
   (from `rekuest_next`) — that's what powers the live progress bar and the
   pause/step buttons.
 - Registration happens at **import time** into the *default app registry* —
-  which is why `app.py` imports `newswitch.registers.uc2` and the routines
-  for their side effects.
+  which is why `app.py` imports the package `newswitch.registers` (every
+  action module, the routines and the bloks) for its side effects.
 
 ### 2.5 `@background` — daemons
 
@@ -199,8 +199,9 @@ What happens when you run `uvicorn main:app --port 8099`:
 
 1. **Import time** (`main.py` → `newswitch.app`): importing `app.py` executes
    every `@register`/`@state`/`@context`/`@startup`/`@background` decorator —
-   the default app registry fills up. `main.load_config()` optionally reads
-   `NEWSWITCH_CONFIG` and `create_app(config)` runs.
+   the default app registry fills up. `load_app_config()` (in `newswitch.app`, also
+   used by `python -m newswitch.app`) optionally reads `NEWSWITCH_CONFIG` and
+   `create_app(config)` runs.
 2. **`create_app`** builds the FastAPI app, adds CORS, then calls
    **`configure_fastapi(app, default_app_registry, app_context=config, ...)`**
    which:
@@ -306,11 +307,11 @@ can broadcast into additional slots (e.g. stitched-map tiles).
 
 | Path | Role |
 |---|---|
-| `newswitch/app.py` | App assembly: `ImswitchConfig` (@app_context), `provide_managers` (@startup), background workers, most `@register` actions, blok demos, `create_app`. |
+| `newswitch/app.py` | App assembly: `ImswitchConfig` (@app_context), `provide_managers` (@startup), background and shutdown hooks, `create_app`. No `@register` actions. |
 | `newswitch/protocols/` | The **contracts**: per-domain `Protocol` (@context) + `@state` classes. `stage.py`, `illumination.py`, `detector.py`, `objective.py`, `filter_bank.py`, `uc2.py` (bus protocol + typed hardware events), `autofocus.py`, `light_path.py`/`core.py` (Kube/light-path optics model), `expanse.py`, `io.py`, `hook_manager.py`, `metadata.py`, `calibration.py`, `acquistion_manager.py`, `cache.py`. |
 | `newswitch/managers/virtual/` | Full simulation implementations (stage, LED, detector with synthetic PSF, objective, filter bank). |
 | `newswitch/managers/uc2/` | Real hardware: `canopen_bus.py` / `rest_bus.py` / `virtual_bus.py` (transports behind `UC2BusManager`), `event_broker.py` (fan-out), `dispatch.py` (events → states), plus bus-based device managers (`stage_manager.py`, `illumination_manager.py`, `objective_manager.py`, `filter_bank_manager.py`, `galvo_scanner.py`). |
-| `newswitch/registers/` | Standalone `@register` action modules (imported for side effects), e.g. `uc2.py` (home/stop/laser/LED/galvo/node-scan actions). |
+| `newswitch/registers/` | Everything the frontend can call, imported as one package for its side effects: one `@register` module per device (`detector.py`, `stage.py`, `illumination.py`, `objective.py`, `filter_bank.py`, `expanse.py`), `uc2.py` (home/stop/laser/LED/galvo/node-scan actions), `routines.py` (registers the routines), `debug.py` (test/demo actions), `bloks.py`. |
 | `newswitch/routines/` | Multi-step procedures registered as actions: `region_scan.py`, `multidimensional_acquisition.py`, `calibration.py`, `autofocus.py`. The template for porting ImSwitch "apps". |
 | `newswitch/hooks/` | Policy functions bound through the `HookManager` (e.g. software autofocus). |
 | `newswitch/broadcasters/` | FrameBroadcaster + encoders. |

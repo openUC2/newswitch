@@ -107,7 +107,6 @@ virtual microscope keeps its simulated detector.
         id: 0
         serial_number: "00F12345678"   # or index: 0; neither = the first camera
         buffer_size: 16                # images in the ring buffer
-        store_image_data: true         # record every acquired image
         vendor_options: {}             # passed to the vendor unchanged
 
   bigcamera42:
@@ -124,17 +123,19 @@ virtual microscope keeps its simulated detector.
   manufacturer uc2_cam_py's default vendor is used.
 - `serial_number` or `index` select the camera (not both); without them the connection's
   `serial_number`/`index` are used. Quote numeric serial numbers.
-- `buffer_size`, `store_image_data` and `vendor_options` are optional; unset values keep
-  uc2_cam_py's defaults (recording is on by default). Recordings (`.uc2rb` plus a `.json`
-  sidecar, one file per acquisition session) go to `camera_recording_dir` of
-  `base_config.yaml`.
+- `buffer_size` and `vendor_options` are optional; unset values keep uc2_cam_py's defaults.
+- Writing to disk is not configured here: it is off until an action asks for it,
+  `start_live_view_and_save_to_disk` (until `stop_live_view`) or
+  `capture_image_and_save_to_disk`. Recordings (`.uc2rb` plus a `.json` sidecar, one file
+  per switch-on) go to `camera_recording_dir` of `base_config.yaml`. The former key
+  `store_image_data` is ignored with a warning.
 - After opening, the binning, exposure and gain are written to the camera, and the frame
   rate when it has a `value`. An exposure or gain without `value` gets the detector default
   (0.1 s, gain 1), not the camera's own setting. What the camera reports (model, sensor,
   limits, current values) then replaces the configured values in the running detector.
 - `camera_debug_window: true` in `base_config.yaml` opens a uc2_cam_py window per camera
-  showing its newest image, and keeps the cameras acquiring from startup (so with
-  `store_image_data: true` they record all the time).
+  showing its newest image, and keeps the cameras acquiring from startup (without writing
+  to disk; `stop_live_view` ends the writing even though the camera keeps acquiring).
 - `camTest_config.yaml` is a simulated camera (`manufacturer: Simulated`) for trying it
   out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app`. Walkthrough:
   "End-to-end test for camera" in the root `README.md`.

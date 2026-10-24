@@ -159,10 +159,21 @@ to the image in a debug window; no camera hardware and no frontend are needed.
    illumination looking for a UC2 board that is not there; they do not affect the camera.
 5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
    browser, next to the debug window.
-6. Optional: record to disk. Set `store_image_data: true` for `sim-cam` in
-   `configs/camTest_config.yaml` and restart. Each acquisition session is written as a `.uc2rb`
-   file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
-   the camera running, this records continuously, about 12 MB/s here.
+6. Optional: record to disk. Call the action `start_live_view_and_save_to_disk` (there is no
+   button yet; the frontend hook is `useStartLiveViewAndSaveToDisk`), e.g. with a token from
+   `/auth/login`:
+
+   ```bash
+   TOKEN=$(curl -s -u <user>:<password> -X POST http://localhost:8069/auth/login \
+     | python3 -c "import json, sys; print(json.load(sys.stdin)['token'])")
+   curl -s -X POST http://localhost:8069/start_live_view_and_save_to_disk \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"args": {}, "cached": false, "log": true, "capture": false, "ephemeral": false}'
+   ```
+
+   The images are written as a `.uc2rb` file plus a `.json` sidecar to
+   `backend/data/recordings/`, about 12 MB/s here, until `stop_live_view` (same call). A
+   single saved snapshot: `capture_image_and_save_to_disk`.
 7. Stop with Ctrl+C. The window closes and the runtime values are saved to
    `configs/camTest_config.persistent.yaml`; the main persistent file is not touched.
 

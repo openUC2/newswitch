@@ -19,6 +19,12 @@ File: newswitch/app.py
 - Instantiates **manager implementations** that operate on those states.
 - Returns everything as a dependency-injection tuple used by registered functions.
 
+Entry points: `main.py` (`uvicorn main:app`, with reload; or `python main.py`) and
+`python -m newswitch.app` (`app.main()`) both build the settings with `load_app_config()`:
+`base_config.yaml`, overridden by the JSON file named in `NEWSWITCH_CONFIG`, and serve on
+`BACKEND_HOST`/`BACKEND_PORT` when run directly. `python -m newswitch.cli` is the
+account-database tool, no server.
+
 ### Key pieces
 
 - **States** are created once at startup: `StageState`, `IlluminationState`, `CameraState`, `ObjectiveState`, `IOState`.
@@ -54,7 +60,13 @@ are written back; comments stay intact. Details: `backend/configs/README.md`.
 
 ### Registered functions
 
-`app.py` registers multiple callable functions (e.g., illumination control, detector settings, capture) that receive **managers + state** injected by the agent. These functions are the primary API surface for automation or external systems.
+Everything the frontend can call lives in `newswitch/registers/`: one module per device
+(`detector`, `stage`, `illumination`, `objective`, `filter_bank`, `expanse`), `uc2` (the UC2
+bus itself), `routines` (registers the workflows of `newswitch/routines/`), `debug` (test and
+demo actions) and `bloks`. The functions receive **managers + state** injected by the agent
+and are the primary API surface for automation or external systems. `app.py` only imports
+the package (`from newswitch import registers`) for its registration side effects; it holds
+no `@register` function itself.
 
 ## Locking mechanism (state safety)
 
@@ -80,7 +92,8 @@ Both implement `DetectorManager` (`protocols/detector.py`): besides activation, 
 gain it covers frame rate, binning and ROI (`update_detector`; `frame_rate=0` removes the
 limit, `FULL_SENSOR` selects the complete sensor), snapshots with their timing
 (`capture_image` returns a `DetectorFrame`), the session metadata (`get_image_info`), the
-live loop (`acquire_live`, `stop_acquire_live`) and `close`. The `Detector` in
+live loop (`acquire_live`, `start_acquire_live`, `stop_acquire_live`) and `close`. Live
+stream and snapshot take `save_to_disk` (the virtual detector refuses it). The `Detector` in
 `CameraState` holds everything about a detector: how it is configured and opened, what the
 device reports (identity, sensor, ranges, capabilities), the current settings and whether it
 records; the managers keep it up to date, so the frontend sees all of it.
@@ -102,8 +115,13 @@ mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section 
   also for its simulated camera: `uv sync --extra camera`. CI leaves the extra out; the
   camera tests skip there.
 - A camera acquires while anyone holds it (live stream, snapshot, debug window); every
-  start is a new session and, with `store_image_data`, a new `.uc2rb` file in
-  `camera_recording_dir` (`base_config.yaml`).
+  start is a new session.
+- Writing to disk (a `.uc2rb` file in `camera_recording_dir`, `base_config.yaml`) is off
+  when a camera opens and is switched by the actions `start_live_view_and_save_to_disk`
+  (until `stop_live_view` or deactivating the detector) and
+  `capture_image_and_save_to_disk`; uc2_cam_py's property `store_image_data` switches it
+  without restarting the acquisition. A saved snapshot's file may hold an image or two next
+  to it. `Detector.store_image_data` shows whether a camera writes right now.
 - `camera_debug_window` (`base_config.yaml`, shipped `true`) passes `debug_window=True` to
   every `create_camera`: uc2_cam_py shows each camera's newest image in an X11 window, and the
   manager holds the cameras from startup so the window always has an image.

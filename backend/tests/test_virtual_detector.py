@@ -715,3 +715,25 @@ class TestLiveStream:
         manager.state.is_acquiring = True
         wait_until(lambda: len(broadcaster.sent) > count)
         assert manager.get_image_info(1) is not first_session
+
+    def test_start_acquire_live(
+        self, live: tuple[VirtualDetectorManager, RecordingBroadcaster]
+    ) -> None:
+        """start_acquire_live starts the stream like setting the flag."""
+        manager, broadcaster = live
+        manager.start_acquire_live()
+        assert manager.state.is_acquiring
+        wait_until(lambda: len(broadcaster.sent) >= 3)
+        manager.stop_acquire_live()
+
+    def test_cannot_save_to_disk(
+        self, live: tuple[VirtualDetectorManager, RecordingBroadcaster]
+    ) -> None:
+        """Saving to disk fails clearly and changes nothing."""
+        manager, broadcaster = live
+        with pytest.raises(NotImplementedError, match="cannot record to disk"):
+            manager.start_acquire_live(save_to_disk=True)
+        assert not manager.state.is_acquiring
+        with pytest.raises(NotImplementedError, match="cannot record to disk"):
+            manager.capture_image(slot=1, save_to_disk=True)
+        assert broadcaster.sent == []

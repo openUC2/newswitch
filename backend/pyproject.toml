@@ -48,7 +48,7 @@ uc2 = [
 # (/opt/MVS) to build, also for the simulated camera, and Python 3.12 - hence the markers,
 # and CI leaves this extra out.
 camera = [
-    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@ccfb0e9dd00930d959e918a6a7dd6635c31ef142 ; sys_platform == 'linux' and python_version == '3.12'",
+    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@f37014bb3bedb2ac79ea389f3b8cf0ff5dcaf3f7 ; sys_platform == 'linux' and python_version == '3.12'",
 ]
 
 [tool.uv]
