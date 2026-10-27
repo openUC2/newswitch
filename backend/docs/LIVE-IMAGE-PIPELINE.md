@@ -277,8 +277,8 @@ sequenceDiagram
     H->>H: accept
     BR->>H: auth frame with token
     H->>H: authenticate_stream_websocket, close 1008 if invalid
-    H->>H: get_broadcaster_from_websocket
-    Note over H: Fails today, the agent has no get_context_for_type (issue 1)
+    H->>H: await_broadcaster, context frame_broadcaster from agent.contexts
+    Note over H: waits up to 10 s for the agent's startup hooks, then closes 1011
     H->>FB: get_subscription_(slot, H264EncoderConfig())
     FB->>EN: create if no encoder for (slot, config), store in _encoders
     FB->>EN: astart() if not running
@@ -303,7 +303,7 @@ sequenceDiagram
     end
 
     BR--xH: disconnect (LivePlane unmounts, e.g. live view stopped)
-    Note over H: noticed only when the next send_bytes fails (issue 3)
+    Note over H: noticed only when the next send_bytes fails (issue 1)
     H->>FB: arelease_subscription(subscription)
     FB->>EN: aunsubscribe, astop() if it was the last subscriber
     EN->>FF: kill
@@ -396,17 +396,12 @@ after `onopen` the hook sends the auth frame (`authFrame()`, the token). A close
 
 Tracked in `.claude/OpenPoints.md`.
 
-1. **The stream route crashes on every connection (OP #28).**
-   `get_broadcaster_from_websocket` (`liveview.py:75`) calls `agent.get_context_for_type(...)`,
-   which rekuest_next 2.3.1 does not have (it offers `agent.contexts[key]` /
-   `aget_context(key)`; the key is `frame_broadcaster`). The handler raises `AttributeError`
-   before `get_subscription_`. No encoder is ever created, and no image reaches the frontend.
-   Reproduced with camTest: 0 encoders and 0 bytes with a connected, authenticated client.
-   `tests/test_auth.py` only tests the rejected path.
-2. **ffmpeg's stderr is never read (OP #29).** `stderr=PIPE` (`h264_encoder.py:118`) without a
-   reader: ffmpeg writes progress lines continuously, and once the pipe buffer (about 64 KB) is
-   full, ffmpeg blocks and the stream freezes.
-3. **Further risks (OP #30):**
+Fixed on 2026-10-27: the stream route crashed on every connection (it called
+`agent.get_context_for_type`, which rekuest_next 2.3.1 does not have), and ffmpeg's unread
+stderr pipe froze the H.264 stream after a few minutes (ffmpeg now runs with
+`-loglevel error -nostats`, stderr discarded).
+
+1. **Further risks (OP #30):**
    - Thread safety. `encode_frame` runs on the worker thread: H.264 calls
      `StreamWriter.write` there, Zstd calls `asyncio.Queue.put_nowait`. Neither is thread-safe.
    - Dropped H.264 chunks. The queue keeps one 4096-byte chunk and drops the oldest. Dropping
@@ -423,7 +418,7 @@ Tracked in `.claude/OpenPoints.md`.
      `uint8` full frames (unused today).
    - Dead frontend code. `components/microscope/LiveView.tsx` is not mounted anywhere; its
      `StreamingView` connects to `VITE_WEBSOCKET_URL + "/video"`, a route that does not exist.
-4. **Frame rate limited by `koil.sleep` (OP #3).** The live loop's 10 ms pause takes about
+2. **Frame rate limited by `koil.sleep` (OP #3).** The live loop's 10 ms pause takes about
    140 ms, which limits the stream to about 7 fps.
 
 ---
@@ -442,4 +437,5 @@ Tracked in `.claude/OpenPoints.md`.
   `--verbose` is given.
 - **Browser side:** DevTools → Network → WS: is there a connection to `/stream/h264/<slot>`,
   on the right port, and with which close code? 1006 (no close frame) points to a
-  server-side exception, 1008 to a rejected token.
+  server-side exception, 1008 to a rejected token, 1011 to a FrameBroadcaster the agent did
+  not provide within 10 s (startup hooks failed or still running).

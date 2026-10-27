@@ -136,6 +136,7 @@ class FrameBroadcaster:
     def _schedule_encoder_frames(self, detector_slot: int, frame: np.ndarray) -> None:
         """Schedule frame encoding for active encoders of one detector slot."""
 
+        # print(f"Scheduling frame for detector slot {detector_slot} with shape {frame.shape}, dtype {frame.dtype}, max {frame.max()}, min {frame.min()}, encoders: {len(self._encoders.items())} ")
         for (slot, _), encoder in self._encoders.items():
             if slot != detector_slot:
                 continue
