@@ -15,6 +15,10 @@ from newswitch.protocols.core import Frame
 class AcquistionManager(Manager, Protocol):
     """Protocol defining the interface for expanse managers."""
 
-    def acquire(self) -> list[Frame]:
-        """Acquire frames based on the current state of the detector and illumination."""
+    def acquire(self, save_to_disk: bool = False) -> list[Frame]:
+        """Acquire frames based on the current state of the detector and illumination.
+
+        Args:
+            save_to_disk: Also write each detector's snapshot to disk.
+        """
         ...

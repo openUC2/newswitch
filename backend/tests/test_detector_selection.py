@@ -42,7 +42,6 @@ CAMERA_DOC: dict[str, Any] = {
                 "cam": {
                     "type": "usb3-vision-camera",
                     "id": 0,
-                    "store_image_data": False,
                     "vendor_options": {"sensor_width": 64, "sensor_height": 48},
                 }
             },

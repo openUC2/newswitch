@@ -89,7 +89,9 @@ class Detector:
     buffer_size: Optional[int] = None
     """Images (slots) in the ring buffer."""
     store_image_data: Optional[bool] = None
-    """Record every acquired image to disk."""
+    """True while every acquired image is also written to disk (see `recording_file`);
+    switched by `start_acquire_live` / `capture_image` with ``save_to_disk``. None: no
+    camera behind the detector."""
 
     # --- sensor
     pixel_format: Optional[str] = None
@@ -213,16 +215,21 @@ class DetectorManager(Manager, Protocol):
     state: CameraState
     broadcaster: "FrameBroadcaster"
 
-    def capture_image(self, slot: int) -> DetectorFrame:
+    def capture_image(self, slot: int, save_to_disk: bool = False) -> DetectorFrame:
         """Capture a single image from a specific detector.
 
         A snapshot: the image is exposed after the call.
 
         Args:
             slot: Detector slot number.
+            save_to_disk: Also write the image to disk (`Detector.recording_file`).
 
         Returns:
             The image with its timing.
+
+        Raises:
+            NotImplementedError: ``save_to_disk`` on a detector that cannot record.
+            OSError: Recording to disk cannot start (directory, free space).
         """
         ...
 
@@ -321,10 +328,26 @@ class DetectorManager(Manager, Protocol):
         """
         ...
 
+    def start_acquire_live(self, save_to_disk: bool = False) -> None:
+        """Start the live stream: set `CameraState.is_acquiring`.
+
+        Args:
+            save_to_disk: The active detectors also write every image to disk, until
+                `stop_acquire_live` or until the detector is deactivated. False while
+                the stream runs with it switches the writing off.
+
+        Raises:
+            NotImplementedError: ``save_to_disk`` on a detector that cannot record.
+            OSError: Recording to disk cannot start (directory, free space); the live
+                stream is then not started.
+        """
+        ...
+
     def stop_acquire_live(self) -> None:
         """Stop the live stream now: clear `CameraState.is_acquiring`, end its acquisition.
 
-        `acquire_live` keeps running and streams again once `is_acquiring` is set.
+        Writing to disk ends with it. `acquire_live` keeps running and streams again once
+        the live stream is started.
         """
         ...
 

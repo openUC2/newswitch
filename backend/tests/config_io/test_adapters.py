@@ -300,7 +300,6 @@ def test_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     entry = {
         "serial_number": "SN-42",
         "buffer_size": 8,
-        "store_image_data": False,
         "vendor_options": {"sensor_width": 320, "mode": "fast"},
     }
     doc = _camera_doc(minimal_doc, {"protocol": "gige-vision"}, entry)
@@ -313,7 +312,7 @@ def test_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     assert (camera.slot, camera.key, camera.name) == (1, "cam", "Cam")
     assert (camera.manufacturer, camera.connection_type) == ("SomeVendor", "GigE")
     assert (camera.serial_number, camera.device_index) == ("SN-42", None)
-    assert (camera.buffer_size, camera.store_image_data) == (8, False)
+    assert (camera.buffer_size, camera.store_image_data) == (8, None)  # set when opened
     assert vendor_options == {1: {"sensor_width": 320, "mode": "fast"}}
     assert camera.current_exposure_time == pytest.approx(0.01)
     assert (camera.current_gain, camera.current_frame_rate) == (2.5, 30.0)
@@ -373,6 +372,22 @@ def test_cameras_skip_other_detectors(
     assert "'diode' is not mapped to a camera controller" in caplog.text
 
 
+@pytest.mark.parametrize("value", [True, False, "yes"])
+def test_store_image_data_is_ignored(
+    write_doc: DocWriter,
+    minimal_doc: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+    value: object,
+) -> None:
+    """The former key store_image_data is ignored with a warning, whatever its value."""
+    doc = _camera_doc(minimal_doc, {"protocol": "usb3-vision"}, {"store_image_data": value})
+    found = adapters.cameras(load_config(write_doc(doc)).config)
+    assert found is not None
+    (camera,), _ = found
+    assert camera.store_image_data is None
+    assert "devices.cam-sdk.mapping.cam.store_image_data is ignored" in caplog.text
+
+
 def test_no_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
     """A detector behind a non-camera controller (here: simulated) is no camera."""
     assert adapters.cameras(load_config(write_doc(minimal_doc)).config) is None
@@ -386,7 +401,6 @@ def test_no_cameras(write_doc: DocWriter, minimal_doc: dict[str, Any]) -> None:
         ({}, {"index": -1}, "index: must be an integer >= 0"),
         ({}, {"index": True}, "index: must be an integer >= 0"),
         ({}, {"buffer_size": 1}, "buffer_size: must be an integer >= 2"),
-        ({}, {"store_image_data": "yes"}, "store_image_data: must be true or false"),
         ({}, {"vendor_options": [1, 2]}, "vendor_options: must be a mapping"),
         ({}, {"serial_number": "SN-1", "index": 0}, "serial_number and index both"),
         ({"serial_number": "SN-1", "index": 0}, {}, "serial_number and index both"),

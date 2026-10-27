@@ -29,8 +29,13 @@ class AcquistionManager:
         self.light_path_manager = light_path_manager
         self.cache_manager = cache_manager
 
-    def acquire(self) -> list[Frame]:
-        """Add a frame to the expanse state."""
+    def acquire(self, save_to_disk: bool = False) -> list[Frame]:
+        """Add a frame of every active detector to the expanse state.
+
+        Args:
+            save_to_disk: Also write each snapshot to disk (see
+                `DetectorManager.capture_image`).
+        """
 
         frames: list[Frame] = []
 
@@ -40,7 +45,9 @@ class AcquistionManager:
                 f"Acquiring image from detector slot {detector.slot} with exposure time {detector.current_exposure_time} ms {detector.is_active}"
             )
             if detector.is_active:
-                image_data = self.detector_manager.capture_image(slot=detector.slot).data
+                image_data = self.detector_manager.capture_image(
+                    slot=detector.slot, save_to_disk=save_to_disk
+                ).data
 
                 light_path = self.light_path_manager.get_light_path_for_detector(
                     detector_slot=detector.slot

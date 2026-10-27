@@ -404,9 +404,6 @@ def _camera_problems(extras: dict[str, Any], where: str) -> list[str]:
     buffer_size = extras.get("buffer_size")
     if buffer_size is not None and (not _is_int(buffer_size) or buffer_size < 2):
         problems.append(f"{where}.buffer_size: must be an integer >= 2")
-    store = extras.get("store_image_data")
-    if store is not None and not isinstance(store, bool):
-        problems.append(f"{where}.store_image_data: must be true or false")
     options = extras.get("vendor_options")
     if options is not None and not isinstance(options, dict):
         problems.append(f"{where}.vendor_options: must be a mapping")
@@ -434,7 +431,6 @@ def _set_camera(
     detector.serial_number = serial
     detector.device_index = index
     detector.buffer_size = extras.get("buffer_size")
-    detector.store_image_data = extras.get("store_image_data")
 
 
 def cameras(
@@ -453,11 +449,14 @@ def cameras(
     ``serial_number`` / ``index``
         Which camera to open (not both); without them the connection's selector is used,
         and without that the first camera.
-    ``buffer_size``, ``store_image_data``
-        Ring-buffer size in images, and whether every image is recorded to disk.
+    ``buffer_size``
+        Ring-buffer size in images.
     ``vendor_options``
         Mapping of vendor-specific options, passed on unchanged. They are returned beside
         the detectors: a detector is shared state, these options are not.
+
+    ``store_image_data`` is no longer read (a warning says so): writing to disk is switched
+    by the actions ``start_live_view_and_save_to_disk`` / ``capture_image_and_save_to_disk``.
 
     The slot is the detector's position among all detectors (as in `detectors`).
 
@@ -485,6 +484,12 @@ def cameras(
             continue
         controller_key, entry = found
         where = f"devices.{controller_key}.mapping.{key}"
+        if "store_image_data" in entry.extras:
+            logger.warning(
+                "%s.store_image_data is ignored: writing to disk is switched by the actions "
+                "start_live_view_and_save_to_disk / capture_image_and_save_to_disk",
+                where,
+            )
         invalid = _camera_problems(entry.extras, where)
         if invalid:
             problems.extend(invalid)

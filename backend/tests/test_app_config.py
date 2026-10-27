@@ -6,6 +6,7 @@ test decides the content itself.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -163,3 +164,74 @@ def test_environment_is_ignored(write_base: BaseWriter, monkeypatch: pytest.Monk
     write_base()
     monkeypatch.setenv("DB_PATH", "from-env.db")
     assert ImswitchConfig().db_path == "agent_data.db"
+
+
+# ---------------------------------------------------------------------------
+# load_app_config: NEWSWITCH_CONFIG
+# ---------------------------------------------------------------------------
+
+
+def test_load_app_config_without_variable(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without NEWSWITCH_CONFIG, or with it empty, the base config alone applies."""
+    write_base()
+    monkeypatch.delenv("NEWSWITCH_CONFIG", raising=False)
+    assert app_module.load_app_config().use_virtual_microscope is True
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "")
+    assert app_module.load_app_config().use_virtual_microscope is True
+
+
+def test_load_app_config_relative_path(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A relative path is taken from the base config's folder, not the working directory."""
+    base = write_base()
+    boot = base.parent / "boot" / "real.json"
+    boot.parent.mkdir()
+    boot.write_text(
+        json.dumps(
+            {
+                "_comment": "dropped",
+                "use_virtual_microscope": False,
+                "static_config_path": "cam.yaml",
+            }
+        ),
+        encoding="utf-8",
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "boot/real.json")
+    config = app_module.load_app_config()
+    assert config.use_virtual_microscope is False
+    assert config.config_file == base.parent / "configs" / "cam.yaml"
+
+
+def test_load_app_config_absolute_path(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An absolute path is used as given; its values override the base config."""
+    write_base()
+    boot = tmp_path / "boot.json"
+    boot.write_text(json.dumps({"db_path": "boot.db"}), encoding="utf-8")
+    monkeypatch.setenv("NEWSWITCH_CONFIG", str(boot))
+    assert app_module.load_app_config().db_path == "boot.db"
+
+
+def test_load_app_config_missing_file(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file that does not exist is an error, not a silent fallback to the base config."""
+    write_base()
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "no/such.json")
+    with pytest.raises(FileNotFoundError):
+        app_module.load_app_config()
+
+
+def test_shipped_camtest_config_loads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped camTest boot file switches to real hardware and its own device file."""
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "configs/camTest.json")
+    config = app_module.load_app_config()
+    assert config.use_virtual_microscope is False
+    assert config.config_file == BASE_CONFIG_FILE.parent / "configs" / "camTest_config.yaml"

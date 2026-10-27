@@ -23,9 +23,8 @@ devices:
         type: usb3-vision-camera
         id: 0
         buffer_size: 8
-        # true records every image to camera_recording_dir; with camera_debug_window the
-        # camera acquires all the time (about 12 MB/s here)
-        store_image_data: false
+        # writing to camera_recording_dir is switched by the actions
+        # start_live_view_and_save_to_disk / capture_image_and_save_to_disk (about 12 MB/s here)
         # passed to uc2_cam_py unchanged; options of its simulated camera
         vendor_options:
           sensor_width: 640

@@ -1001,7 +1001,7 @@ requires-dist = [
     { name = "ruamel-yaml", specifier = ">=0.18" },
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "tifffile", specifier = ">=2026.1.28" },
-    { name = "uc2-cam-py", marker = "python_full_version == '3.12.*' and sys_platform == 'linux' and extra == 'camera'", git = "https://github.com/openUC2/UC2_cam_py.git?rev=ccfb0e9dd00930d959e918a6a7dd6635c31ef142" },
+    { name = "uc2-cam-py", marker = "python_full_version == '3.12.*' and sys_platform == 'linux' and extra == 'camera'", git = "https://github.com/openUC2/UC2_cam_py.git?rev=3437793848fb57d7269edec8f34855a6e2d0e1f5" },
     { name = "uc2-rest", marker = "extra == 'uc2'", git = "https://github.com/openUC2/UC2-REST.git?rev=60f15bfc543baf41e46996cd149b298419de5eac" },
     { name = "uc2canopen", marker = "extra == 'uc2'", specifier = ">=0.2.0" },
     { name = "useq-schema", specifier = ">=0.8.1" },
@@ -2127,8 +2127,8 @@ wheels = [
 
 [[package]]
 name = "uc2-cam-py"
-version = "0.2.0"
-source = { git = "https://github.com/openUC2/UC2_cam_py.git?rev=ccfb0e9dd00930d959e918a6a7dd6635c31ef142#ccfb0e9dd00930d959e918a6a7dd6635c31ef142" }
+version = "1.0.1"
+source = { git = "https://github.com/openUC2/UC2_cam_py.git?rev=3437793848fb57d7269edec8f34855a6e2d0e1f5#3437793848fb57d7269edec8f34855a6e2d0e1f5" }
 dependencies = [
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
 ]

@@ -54,6 +54,8 @@ FRAME_RATE_RANGE = (0.1, 100.0)
 IDLE_INTERVAL_S = 0.1
 #: Lock that guards the `Detector` state.
 CAMERA_LOCK = "camera_parameters"
+#: Why ``save_to_disk`` fails here.
+NO_DISK_RECORDING = "the virtual detector cannot record to disk"
 
 
 @dataclass
@@ -866,7 +868,7 @@ class VirtualDetectorManager:
         """
         return self._get_active_detectors()
 
-    def capture_image(self, slot: int | None = None) -> DetectorFrame:
+    def capture_image(self, slot: int | None = None, save_to_disk: bool = False) -> DetectorFrame:
         """
         Capture a single image from a specific detector.
 
@@ -874,13 +876,17 @@ class VirtualDetectorManager:
 
         Args:
             slot: Detector slot number; None = the first active detector.
+            save_to_disk: Not supported by the virtual detector.
 
         Returns:
             The image (region of interest, binned) with its timing.
 
         Raises:
             ValueError: If the detector slot is not active.
+            NotImplementedError: ``save_to_disk``.
         """
+        if save_to_disk:
+            raise NotImplementedError(NO_DISK_RECORDING)
         detector = self._get_active_detector(slot)
         if detector is None:
             raise ValueError(f"No active detector found with slot {slot}")
@@ -1006,11 +1012,26 @@ class VirtualDetectorManager:
                 wait_s = min(wait_s, max(0.0, remaining_s))
         return wait_s
 
+    def start_acquire_live(self, save_to_disk: bool = False) -> None:
+        """
+        Start the live stream: set `CameraState.is_acquiring` (protocol method).
+
+        Args:
+            save_to_disk: Not supported by the virtual detector.
+
+        Raises:
+            NotImplementedError: ``save_to_disk``; the live stream is then not started.
+        """
+        if save_to_disk:
+            raise NotImplementedError(NO_DISK_RECORDING)
+        with self._lock:
+            self.state.is_acquiring = True
+
     def stop_acquire_live(self) -> None:
         """
         Stop the live stream now: clear `CameraState.is_acquiring`, end the live sessions.
 
-        `acquire_live` keeps running and streams again once `is_acquiring` is set.
+        `acquire_live` keeps running and streams again once the live stream is started.
         """
         with self._lock:
             self.state.is_acquiring = False

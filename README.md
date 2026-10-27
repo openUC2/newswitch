@@ -119,9 +119,10 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 **Prerequisites:**
 
 - Linux with a graphical session (X11, or Wayland with XWayland: `DISPLAY` must be set).
-- The MVS SDK in `/opt/MVS`, or `MVCAM_SDK_PATH` pointing to it. uc2_cam_py needs it to build,
-  also for the simulated camera.
-- Python 3.12.
+- Python 3.12 and a C++ compiler: uc2_cam_py is built from source.
+- For HikRobot cameras only: the MVS SDK at the path `MVS_ROOT` names in `backend/pyproject.toml`
+  (`[tool.uv] config-settings-package`, `/opt/MVS`). Without it uc2_cam_py builds with the
+  simulated camera only, which is all this guide needs.
 - The extra installed: `just install` (it syncs `--all-extras`) or `cd backend && uv sync --extra camera`.
   Check it with:
 
@@ -129,7 +130,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
   cd backend && uv run python -c "import uc2_cam_py; print(uc2_cam_py.vendors())"
   ```
 
-  It should print `['HikRobot', 'Simulated']`.
+  It prints `['HikRobot', 'Simulated']` with the SDK, `['Simulated']` without.
 
 **Steps** (paths are relative to `backend/`):
 
@@ -159,12 +160,38 @@ to the image in a debug window; no camera hardware and no frontend are needed.
    illumination looking for a UC2 board that is not there; they do not affect the camera.
 5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
    browser, next to the debug window.
-6. Optional: record to disk. Set `store_image_data: true` for `sim-cam` in
-   `configs/camTest_config.yaml` and restart. Each acquisition session is written as a `.uc2rb`
-   file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
-   the camera running, this records continuously, about 12 MB/s here.
+6. Optional: record to disk. Call the action `start_live_view_and_save_to_disk` (there is no
+   button yet; the frontend hook is `useStartLiveViewAndSaveToDisk`), e.g. with a token from
+   `/auth/login`:
+
+   ```bash
+   TOKEN=$(curl -s -u <user>:<password> -X POST http://localhost:8069/auth/login \
+     | python3 -c "import json, sys; print(json.load(sys.stdin)['token'])")
+   curl -s -X POST http://localhost:8069/start_live_view_and_save_to_disk \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"args": {}, "cached": false, "log": true, "capture": false, "ephemeral": false}'
+   ```
+
+   The images are written as a `.uc2rb` file plus a `.json` sidecar to
+   `backend/data/recordings/`, about 12 MB/s here, until `stop_live_view` (same call). A
+   single saved snapshot: `capture_image_and_save_to_disk`.
 7. Stop with Ctrl+C. The window closes and the runtime values are saved to
    `configs/camTest_config.persistent.yaml`; the main persistent file is not touched.
+
+**Without frontend and `curl`:** the debug console starts the backend like `main.py` and drives
+the detectors from the terminal (status, activate/deactivate, start/stop, exposure, gain, frame
+rate, binning, ROI). It calls only the registered actions, as the frontend does:
+
+```bash
+cd backend
+NEWSWITCH_CONFIG=configs/camTest.json BACKEND_PORT=8069 uv run -q python backend_cli.py
+```
+
+`BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099, as for
+`python main.py`). The login is asked for, or taken from `NEWSWITCH_CLI_USER` /
+`NEWSWITCH_CLI_PASSWORD`. Everything the backend itself prints goes to
+`backend/data/backend_cli.log` (follow it with `tail -f`); `--verbose` shows it in the terminal
+instead. `-q` keeps uv's own warnings out.
 
 **A real camera:**
 
@@ -187,7 +214,8 @@ Keys and options are described in `backend/configs/README.md`, section "Cameras"
 | --- | --- |
 | No window, and an error `debug_window=True: no X11 display available` | No display (headless session, or `DISPLAY` not set). The camera works anyway. |
 | No window, and an error `this build has no X11 support` | uc2_cam_py was built without the X11 headers. Install `libX11-devel` (Fedora) or `libx11-dev` (Debian/Ubuntu), then `uv sync --extra camera --reinstall-package uc2-cam-py`. |
-| Warning `uc2_cam_py cannot be imported`, virtual detector used | The extra is not installed, or the MVS runtime libraries are missing. |
+| Warning `uc2_cam_py cannot be imported`, virtual detector used | The extra is not installed, e.g. after a `uv sync` without `--extra camera` / `--all-extras`. |
+| Warning `HikRobot cameras are not available`, `vendors()` only `['Simulated']` | uc2_cam_py was built without the MVS SDK: nothing usable at `MVS_ROOT` (`backend/pyproject.toml`). Install the SDK there, then `uv sync --all-extras --reinstall-package uc2-cam-py`. |
 | No window and no warning | `use_virtual_microscope` is still `true`; check that `NEWSWITCH_CONFIG` reached the backend. |
 | `camera_debug_window` should stay off | Set it to `false` in `backend/base_config.yaml`, e.g. on headless machines. |
 

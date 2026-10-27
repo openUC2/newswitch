@@ -64,6 +64,26 @@ export const UpdateDetectorArgsSchema = z.object({
     .optional(),
   /** Gain value (optional) */
   gain: z.number().describe('Gain value (optional)').nullable().optional(),
+  /** Frame rate in frames per second, 0 removes the limit (optional) */
+  frame_rate: z
+    .number()
+    .describe('Frame rate in frames per second, 0 removes the limit (optional)')
+    .nullable()
+    .optional(),
+  /** Symmetric binning factor, snapped to an allowed one (optional) */
+  binning: z
+    .number()
+    .describe('Symmetric binning factor, snapped to an allowed one (optional)')
+    .nullable()
+    .optional(),
+  /** [x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional) */
+  roi: z
+    .array(z.number())
+    .describe(
+      '[x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional)',
+    )
+    .nullable()
+    .optional(),
 });
 export const UpdateDetectorReturnSchema = z.object({
   /** Shared state for detector parameters. */
@@ -83,14 +103,15 @@ export const UpdateDetectorDefinition: ActionDefinition<
 > = {
   name: 'update_detector',
   appKey: 'default',
-  description: 'Update detector settings.',
+  description:
+    'Update detector settings; a value left out is kept. The detector clamps to its ranges.',
   argsSchema: UpdateDetectorArgsSchema,
   returnSchema: UpdateDetectorReturnSchema,
   lockKeys: ['camera_parameters'],
 };
 
 /**
- * Update detector settings.
+ * Update detector settings; a value left out is kept. The detector clamps to its ranges.
  */
 export const useUpdateDetector = () => {
   return useAction(UpdateDetectorDefinition);

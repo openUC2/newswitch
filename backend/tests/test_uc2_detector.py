@@ -26,13 +26,18 @@ from newswitch.protocols.detector import FULL_SENSOR, Colormap, Detector  # noqa
 
 #: Vendor options of the simulated camera: small and fast.
 VENDOR_OPTIONS: dict[str, Any] = {"sensor_width": 400, "sensor_height": 200, "frame_rate": 100.0}
+#: Bytes of one image of that camera (uint16).
+FRAME_BYTES = 400 * 200 * 2
+#: uc2_cam_py's ``.uc2rb`` layout: a session header, then a frame header plus payload per image.
+SESSION_HEADER_BYTES = 8448
+FRAME_HEADER_BYTES = 64
 
 #: ``make_manager(*cameras, broadcaster=None, debug_window=False)``
 ManagerFactory = Callable[..., UC2DetectorManager]
 
 
 def camera(**values: Any) -> Detector:  # noqa: ANN401
-    """A fresh detector for a small, fast simulated camera that does not record.
+    """A fresh detector for a small, fast simulated camera.
 
     A detector becomes part of the state of the manager it is given to, so every manager
     gets its own.
@@ -47,7 +52,6 @@ def camera(**values: Any) -> Detector:  # noqa: ANN401
         is_active=True,
         manufacturer="Simulated",
         buffer_size=8,
-        store_image_data=False,
         current_exposure_time=0.01,
         current_gain=0.0,
     )
@@ -139,12 +143,28 @@ def camera_records(manager: UC2DetectorManager) -> bool:
     return manager._cameras[1].camera.is_recording
 
 
-def start_live(manager: UC2DetectorManager) -> threading.Thread:
-    """Run `acquire_live` in a daemon thread and set `is_acquiring`, as the app does."""
+def start_live(manager: UC2DetectorManager, save_to_disk: bool = False) -> threading.Thread:
+    """Run `acquire_live` in a daemon thread and start the live stream, as the app does."""
     live = threading.Thread(target=manager.acquire_live, daemon=True)
     live.start()
-    manager.state.is_acquiring = True
+    manager.start_acquire_live(save_to_disk=save_to_disk)
     return live
+
+
+def stores(manager: UC2DetectorManager) -> bool:
+    """Whether the camera in slot 1 writes to disk, asked uc2_cam_py directly."""
+    return manager._cameras[1].camera.store_image_data
+
+
+def recordings(recording_dir: Path) -> list[Path]:
+    """The ``.uc2rb`` files in the recording folder, by name (= opening time)."""
+    return sorted(recording_dir.glob("*.uc2rb")) if recording_dir.exists() else []
+
+
+def images_in(recording: Path) -> int:
+    """Number of images a ``.uc2rb`` file of the test camera holds."""
+    size = recording.stat().st_size - SESSION_HEADER_BYTES
+    return size // (FRAME_HEADER_BYTES + FRAME_BYTES)
 
 
 # ---------------------------------------------------------------------------
@@ -331,24 +351,121 @@ def test_image_info(manager: UC2DetectorManager) -> None:
     assert info.recording_file is None  # not storing
 
 
+def test_opened_without_writing_to_disk(manager: UC2DetectorManager, recording_dir: Path) -> None:
+    """Cameras open with writing to disk off (uc2_cam_py's default is on)."""
+    assert not stores(manager)
+    assert manager.state.get_detector_for_slot(1).store_image_data is False
+    manager.capture_image(1)
+    assert recordings(recording_dir) == []
+
+
 def test_recording(make_manager: ManagerFactory, recording_dir: Path) -> None:
-    """With store_image_data the live stream is recorded; stopping it completes the file."""
+    """Live with save_to_disk records the stream; stopping it completes the file."""
     broadcaster = RecordingBroadcaster()
-    manager = make_manager(camera(store_image_data=True), broadcaster=broadcaster)
-    start_live(manager)
+    manager = make_manager(broadcaster=broadcaster)
+    start_live(manager, save_to_disk=True)
     wait_until(lambda: len(broadcaster.sent) >= 3)
     detector = manager.state.get_detector_for_slot(1)
-    assert detector.is_recording and detector.recording_file is not None
+    assert detector.is_recording and detector.store_image_data
+    assert detector.recording_file is not None
     manager.stop_acquire_live()
     assert not is_recording(manager)  # stopped before stop_acquire_live returned
-    assert not camera_records(manager)
+    assert not camera_records(manager) and not stores(manager)
+    assert detector.store_image_data is False
     info = manager.get_image_info(1)
     assert info is not None and info.recording_file is not None
     assert detector.recording_file == info.recording_file  # the last session's file
     recording = Path(info.recording_file)
     assert recording.parent == recording_dir and recording.suffix == ".uc2rb"
-    assert recording.stat().st_size > 0
+    assert recordings(recording_dir) == [recording]
+    assert images_in(recording) >= 3
     assert recording.with_suffix(".json").is_file()
+
+
+def test_live_without_saving_writes_nothing(
+    make_manager: ManagerFactory, recording_dir: Path
+) -> None:
+    """The plain live stream writes no file."""
+    broadcaster = RecordingBroadcaster()
+    manager = make_manager(broadcaster=broadcaster)
+    start_live(manager)
+    wait_until(lambda: len(broadcaster.sent) >= 3)
+    assert not stores(manager)
+    manager.stop_acquire_live()
+    assert recordings(recording_dir) == []
+
+
+def test_saving_switched_off_while_live(make_manager: ManagerFactory, recording_dir: Path) -> None:
+    """Starting the plain live stream during live + save ends the file, the stream goes on."""
+    broadcaster = RecordingBroadcaster()
+    manager = make_manager(broadcaster=broadcaster)
+    start_live(manager, save_to_disk=True)
+    wait_until(lambda: len(broadcaster.sent) >= 3)
+    manager.start_acquire_live(save_to_disk=False)
+    assert not stores(manager) and camera_records(manager)  # no restart
+    (recording,) = recordings(recording_dir)
+    size = recording.stat().st_size
+    sent = len(broadcaster.sent)
+    wait_until(lambda: len(broadcaster.sent) >= sent + 3)
+    assert recording.stat().st_size == size  # closed: nothing more written
+    manager.stop_acquire_live()
+
+
+def test_deactivating_ends_saving(make_manager: ManagerFactory, recording_dir: Path) -> None:
+    """A detector leaving live + save stops writing; activated again it writes a new file."""
+    broadcaster = RecordingBroadcaster()
+    manager = make_manager(broadcaster=broadcaster)
+    start_live(manager, save_to_disk=True)
+    wait_until(lambda: len(broadcaster.sent) >= 3)
+    manager.deactivate_detector(1)
+    assert not stores(manager) and not camera_records(manager)
+    assert len(recordings(recording_dir)) == 1
+    manager.activate_detector(1)  # the live stream still saves: the camera joins in
+    wait_until(lambda: stores(manager) and camera_records(manager))
+    manager.stop_acquire_live()
+    assert len(recordings(recording_dir)) == 2
+
+
+def test_snapshot_saved_to_disk(manager: UC2DetectorManager, recording_dir: Path) -> None:
+    """A snapshot with save_to_disk is in a file of its own; the camera stops again."""
+    frame = manager.capture_image(1, save_to_disk=True)
+    assert not camera_records(manager) and not stores(manager)
+    (recording,) = recordings(recording_dir)
+    assert images_in(recording) >= 1
+    assert manager.state.get_detector_for_slot(1).recording_file == str(recording)
+    assert frame.data.shape == (200, 400)
+
+
+def test_snapshot_during_saving_live_keeps_the_file(
+    make_manager: ManagerFactory, recording_dir: Path
+) -> None:
+    """A saved snapshot during live + save neither opens nor closes a file."""
+    broadcaster = RecordingBroadcaster()
+    manager = make_manager(broadcaster=broadcaster)
+    start_live(manager, save_to_disk=True)
+    wait_until(lambda: len(broadcaster.sent) >= 3)
+    (recording,) = recordings(recording_dir)
+    manager.capture_image(1, save_to_disk=True)
+    assert stores(manager) and recordings(recording_dir) == [recording]
+    size = recording.stat().st_size
+    wait_until(lambda: recording.stat().st_size > size)  # the live file goes on
+    manager.stop_acquire_live()
+
+
+def test_saving_that_cannot_start_starts_nothing(
+    make_manager: ManagerFactory, recording_dir: Path
+) -> None:
+    """If writing cannot start, the live stream does not start either."""
+    recording_dir.parent.mkdir(parents=True, exist_ok=True)
+    recording_dir.write_text("a file where the recording folder should be")
+    manager = make_manager()
+    with pytest.raises(OSError):
+        manager.start_acquire_live(save_to_disk=True)
+    assert not manager.state.is_acquiring
+    assert not stores(manager) and manager._cameras[1].storers == set()
+    with pytest.raises(OSError):
+        manager.capture_image(1, save_to_disk=True)
+    assert not camera_records(manager)
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +486,7 @@ def test_live_stream(make_manager: ManagerFactory) -> None:
     manager.capture_image(1)  # a snapshot during live keeps the camera running
     assert is_recording(manager)
 
-    manager.state.is_acquiring = False  # what the action stop_live_view does
+    manager.state.is_acquiring = False  # the loop follows the flag
     wait_until(lambda: not is_recording(manager))
 
     manager.state.is_acquiring = True  # the loop kept running: live starts again
