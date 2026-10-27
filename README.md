@@ -177,6 +177,21 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 7. Stop with Ctrl+C. The window closes and the runtime values are saved to
    `configs/camTest_config.persistent.yaml`; the main persistent file is not touched.
 
+**Without frontend and `curl`:** the debug console starts the backend like `main.py` and drives
+the detectors from the terminal (status, activate/deactivate, start/stop, exposure, gain, frame
+rate, binning, ROI). It calls only the registered actions, as the frontend does:
+
+```bash
+cd backend
+NEWSWITCH_CONFIG=configs/camTest.json BACKEND_PORT=8069 uv run -q python backend_cli.py
+```
+
+`BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099, as for
+`python main.py`). The login is asked for, or taken from `NEWSWITCH_CLI_USER` /
+`NEWSWITCH_CLI_PASSWORD`. Everything the backend itself prints goes to
+`backend/data/backend_cli.log` (follow it with `tail -f`); `--verbose` shows it in the terminal
+instead. `-q` keeps uv's own warnings out.
+
 **A real camera:**
 
 1. Copy the two camTest files and point the controller at the hardware: `protocol: gige-vision` or

@@ -48,7 +48,7 @@ uc2 = [
 # (/opt/MVS) to build, also for the simulated camera, and Python 3.12 - hence the markers,
 # and CI leaves this extra out.
 camera = [
-    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@f37014bb3bedb2ac79ea389f3b8cf0ff5dcaf3f7 ; sys_platform == 'linux' and python_version == '3.12'",
+    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@e6ca7ad50bb9c8f26dccdf830d2b44465a544610 ; sys_platform == 'linux' and python_version == '3.12'",
 ]
 
 [tool.uv]
@@ -69,6 +69,9 @@ dev-dependencies =  [
     "opencv-python-headless>=4.13.0.90",
     "scipy-stubs>=1.17.1.0",
 ]
+
+# This is to define the root of the MVS SDK for uc2-cam-py, which is a C++ extension that needs to be built.
+config-settings-package = { uc2-cam-py = { "cmake.define.MVS_ROOT" = "/opt/MVS" } }
 
 
 [tool.ruff.lint]

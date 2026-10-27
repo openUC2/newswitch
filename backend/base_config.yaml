@@ -24,11 +24,12 @@ persistent_config_path: newswitch-config.persistent.yaml
 load_from_static_config_path: true
 
 # Folder the cameras (uc2_cam_py, extra "camera") record into; relative to this file's
-# folder. Recording is switched on per camera (store_image_data in its mapping entry).
+# folder. Cameras write to disk only through the actions start_live_view_and_save_to_disk
+# and capture_image_and_save_to_disk.
 camera_recording_dir: data/recordings
 
 # Debug view without the frontend: every camera (real hardware only) opens a window that
-# shows its newest image, and acquires from startup on so the window always has one (with
-# store_image_data that means recording all the time). Without an X11 display only an
+# shows its newest image. The cameras acquire from startup on, before anyone logs in, so
+# the window always has one; this writes nothing to disk. Without an X11 display only an
 # error is logged. Set false on headless machines.
 camera_debug_window: true

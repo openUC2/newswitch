@@ -297,9 +297,10 @@ Bulk pixels never travel through the state system. The detector background
 loop pushes frames into the **`FrameBroadcaster`** (`backend/newswitch/broadcasters/`),
 which owns shared encoders (zstd, H.264) keyed by `(slot, config)`. Browsers
 open `WS /stream/zstd/{slot}` or `/stream/h264/{slot}`
-(`backend/newswitch/routes/ws/liveview.py`) and decode with `fzstd`/`jmuxer`
-(`frontend/src/components/liveview/StreamingView.tsx`). Scan/acquisition code
-can broadcast into additional slots (e.g. stitched-map tiles).
+(`backend/newswitch/routes/ws/liveview.py`); the stage view decodes H.264 with
+`jmuxer` (`LivesPlane` → `frontend/src/components/stage/hooks/useH264LiveTexture.tsx`).
+Scan/acquisition code can broadcast into additional slots (e.g. stitched-map tiles).
+The whole chain, with diagrams and known issues: [LIVE-IMAGE-PIPELINE.md](LIVE-IMAGE-PIPELINE.md).
 
 ---
 

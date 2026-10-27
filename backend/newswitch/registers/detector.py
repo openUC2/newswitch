@@ -116,13 +116,19 @@ def update_detector(
     slot: int,
     exposure_time: float | None = None,
     gain: float | None = None,
+    frame_rate: float | None = None,
+    binning: int | None = None,
+    roi: list[int] | None = None,
 ) -> Detector:
     """
-    Update detector settings.
+    Update detector settings; a value left out is kept. The detector clamps to its ranges.
 
     Args:
         slot: Detector slot number
         exposure_time: Exposure time in seconds (optional)
         gain: Gain value (optional)
+        frame_rate: Frame rate in frames per second, 0 removes the limit (optional)
+        binning: Symmetric binning factor, snapped to an allowed one (optional)
+        roi: [x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional)
     """
-    return detector.update_detector(slot, exposure_time, gain)
+    return detector.update_detector(slot, exposure_time, gain, frame_rate, binning, roi)
