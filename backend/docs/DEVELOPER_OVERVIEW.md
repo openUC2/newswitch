@@ -111,9 +111,10 @@ is the detector's `manufacturer`, passed on unchanged; vendor-specific options c
 mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section "Cameras".
 
 - uc2_cam_py (https://github.com/openUC2/UC2_cam_py, pinned to a commit in the extra
-  `camera`) is a C++ extension; building it needs the MVS SDK (`/opt/MVS`) and Python 3.12,
-  also for its simulated camera: `uv sync --extra camera`. CI leaves the extra out; the
-  camera tests skip there.
+  `camera`) is a C++ extension built from source, for Python 3.12: `uv sync --extra camera`.
+  With the MVS SDK at `MVS_ROOT` (`[tool.uv] config-settings-package` in `pyproject.toml`,
+  `/opt/MVS`) it supports HikRobot cameras; without it, only the simulated camera. CI leaves
+  the extra out; the camera tests skip there.
 - A camera acquires while anyone holds it (live stream, snapshot, debug window); every
   start is a new session.
 - Writing to disk (a `.uc2rb` file in `camera_recording_dir`, `base_config.yaml`) is off

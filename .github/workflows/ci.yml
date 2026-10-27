@@ -10,8 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# The backend syncs leave out the extra "camera": building uc2_cam_py needs the MVS SDK
-# (/opt/MVS), which the runners do not have. Its tests skip without it.
+# The backend syncs leave out the extra "camera" (uc2_cam_py, a C++ extension built from
+# source); its tests skip without it. Since uc2_cam_py 1.0.1 it also builds without the MVS
+# SDK (simulated camera only), so it could be enabled - not tried on the runners yet.
 
 jobs:
   changes:

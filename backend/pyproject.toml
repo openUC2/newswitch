@@ -44,11 +44,11 @@ uc2 = [
     "uc2canopen>=0.2.0",
 ]
 # Cameras through uc2_cam_py (newswitch.managers.uc2.uc2_detector), pinned to a commit;
-# to update, enter the new SHA and run `uv lock`. Its C++ extension needs the MVS SDK
-# (/opt/MVS) to build, also for the simulated camera, and Python 3.12 - hence the markers,
-# and CI leaves this extra out.
+# to update, enter the new SHA and run `uv lock`. A C++ extension built from source, for
+# Python 3.12 only - hence the markers. With the MVS SDK (MVS_ROOT, see [tool.uv] below) it
+# supports HikRobot cameras, without it only the simulated camera. CI leaves this extra out.
 camera = [
-    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@e6ca7ad50bb9c8f26dccdf830d2b44465a544610 ; sys_platform == 'linux' and python_version == '3.12'",
+    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@3437793848fb57d7269edec8f34855a6e2d0e1f5 ; sys_platform == 'linux' and python_version == '3.12'",
 ]
 
 [tool.uv]
@@ -70,7 +70,9 @@ dev-dependencies =  [
     "scipy-stubs>=1.17.1.0",
 ]
 
-# This is to define the root of the MVS SDK for uc2-cam-py, which is a C++ extension that needs to be built.
+# Root of the MVS SDK that uc2-cam-py (a C++ extension built from source) builds against for
+# HikRobot support. A path without a fitting SDK is no error: uc2-cam-py then builds with
+# the simulated camera only.
 config-settings-package = { uc2-cam-py = { "cmake.define.MVS_ROOT" = "/opt/MVS" } }
 
 

@@ -119,9 +119,10 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 **Prerequisites:**
 
 - Linux with a graphical session (X11, or Wayland with XWayland: `DISPLAY` must be set).
-- The MVS SDK in `/opt/MVS`, or `MVCAM_SDK_PATH` pointing to it. uc2_cam_py needs it to build,
-  also for the simulated camera.
-- Python 3.12.
+- Python 3.12 and a C++ compiler: uc2_cam_py is built from source.
+- For HikRobot cameras only: the MVS SDK at the path `MVS_ROOT` names in `backend/pyproject.toml`
+  (`[tool.uv] config-settings-package`, `/opt/MVS`). Without it uc2_cam_py builds with the
+  simulated camera only, which is all this guide needs.
 - The extra installed: `just install` (it syncs `--all-extras`) or `cd backend && uv sync --extra camera`.
   Check it with:
 
@@ -129,7 +130,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
   cd backend && uv run python -c "import uc2_cam_py; print(uc2_cam_py.vendors())"
   ```
 
-  It should print `['HikRobot', 'Simulated']`.
+  It prints `['HikRobot', 'Simulated']` with the SDK, `['Simulated']` without.
 
 **Steps** (paths are relative to `backend/`):
 
@@ -213,7 +214,8 @@ Keys and options are described in `backend/configs/README.md`, section "Cameras"
 | --- | --- |
 | No window, and an error `debug_window=True: no X11 display available` | No display (headless session, or `DISPLAY` not set). The camera works anyway. |
 | No window, and an error `this build has no X11 support` | uc2_cam_py was built without the X11 headers. Install `libX11-devel` (Fedora) or `libx11-dev` (Debian/Ubuntu), then `uv sync --extra camera --reinstall-package uc2-cam-py`. |
-| Warning `uc2_cam_py cannot be imported`, virtual detector used | The extra is not installed, or the MVS runtime libraries are missing. |
+| Warning `uc2_cam_py cannot be imported`, virtual detector used | The extra is not installed, e.g. after a `uv sync` without `--extra camera` / `--all-extras`. |
+| Warning `HikRobot cameras are not available`, `vendors()` only `['Simulated']` | uc2_cam_py was built without the MVS SDK: nothing usable at `MVS_ROOT` (`backend/pyproject.toml`). Install the SDK there, then `uv sync --all-extras --reinstall-package uc2-cam-py`. |
 | No window and no warning | `use_virtual_microscope` is still `true`; check that `NEWSWITCH_CONFIG` reached the backend. |
 | `camera_debug_window` should stay off | Set it to `false` in `backend/base_config.yaml`, e.g. on headless machines. |
 
