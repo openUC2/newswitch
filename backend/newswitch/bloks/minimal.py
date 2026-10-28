@@ -11,20 +11,21 @@ from newswitch.bloks.fluorescence import ACQUIRE_OR_CALIBRATE
 from newswitch.config_io import BlokEntry
 
 MINIMAL_UI = f"""
+<Html>
 <Resizable direction="row" className="h-full w-full">
-    <ResizablePanel defaultSize="70">
+    <ResizablePanel defaultSize={{70}}>
         <div className="flex h-full flex-col gap-3 p-4">
             <div className="flex gap-2 past:hidden">
-                <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
-                <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
+                <Button icon="play" onClick={{self.start_live_view()}}>Start live view</Button>
+                <Button icon="square" variant="outline" onClick={{self.stop_live_view()}}>Stop</Button>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
                 <LiveView className="h-full" />
             </div>
         </div>
     </ResizablePanel>
-    <ResizableHandle withHandle="true" />
-    <ResizablePanel defaultSize="30" minSize="20" maxSize="45">
+    <ResizableHandle withHandle={{true}} />
+    <ResizablePanel defaultSize={{30}} minSize={{20}} maxSize={{45}}>
         <ScrollArea className="h-full">
             <div className="p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
@@ -33,6 +34,7 @@ MINIMAL_UI = f"""
         </ScrollArea>
     </ResizablePanel>
 </Resizable>
+</Html>
 """
 
 

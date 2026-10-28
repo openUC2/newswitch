@@ -31,12 +31,12 @@ blok's component tree:
     model = optikit_dsn.build("fluorescence.dsn")
     MODEL.write_bytes(model.glb)
     app.register_asset("microscope", MODEL.name)
-    app.blok("microscope-3d", bsx(optikit_dsn.scene(
+    app.blok("microscope-3d", optikit_dsn.scene(
         model, asset="microscope",
-        joints={"sample-x": optikit_dsn.Bind("@self.Stage.x", unit="um")},
-        glow={"blue-laser": "@self.Laser.on"},
+        joints={"sample-x": optikit_dsn.Bind("self.Stage.x", unit="um")},
+        glow={"blue-laser": "self.Laser.on"},
         open={"camera": "microscope-camera"},
-    )), context="scene")
+    ))
 
 ``simplify(model.glb, keep=0.05)`` cuts the meshes down for a viewer (CAD exports are
 millions of triangles) and leaves everything a blok binds as it was.
@@ -1217,7 +1217,7 @@ def triangles(glb: bytes) -> int:
 
 @dataclass
 class Bind:
-    """A state value that drives an input: ``value`` is a blok path (``@self.Stage.x``).
+    """A state value that drives an input: ``value`` is a blok expression (``self.Stage.x``).
 
     ``unit`` is the unit the state holds the value in (``um``, ``mm``, ``deg``, ``rad`` ...);
     without it the value is taken to be in the input's own units. ``gain`` exaggerates
@@ -1231,7 +1231,7 @@ class Bind:
 
 @dataclass
 class Glow:
-    """A component that glows while ``on`` (a blok path) is true."""
+    """A component that glows while ``on`` (a blok expression) is true, in ``color`` (a colour role)."""
 
     on: str
     color: str | None = None
@@ -1239,6 +1239,7 @@ class Glow:
 
 
 def _attribute(value: str, what: str) -> str:
+    """A literal attribute value (``attr="..."``): it cannot hold a double quote."""
     if '"' in value:
         raise ValueError(f"{what}: {value!r} cannot contain a double quote")
     return value
@@ -1275,11 +1276,11 @@ def scene(
 ) -> str:
     """The scene blok's component tree (BSX) for a model, with the app's bindings.
 
-    * ``joints``: input name -> ``Bind`` (or just a blok path) that drives it;
-    * ``glow``: component path -> ``Glow`` (or just a blok path that is true while it glows);
+    * ``joints``: input name -> ``Bind`` (or just a blok expression) that drives it;
+    * ``glow``: component path -> ``Glow`` (or just a blok expression true while it glows);
     * ``open``: component path -> a blok of this app that a click on it opens, in a popout that is a card
       already (so the blok should not be one);
-    * ``click``: component path -> an action call (``@self.toggle_laser()``) a click runs;
+    * ``click``: component path -> an action call (``self.toggle_laser()``) a click runs;
     * ``children``: more components for inside the ``Model`` (beams, popouts, ...).
     """
     if not asset.isidentifier():
@@ -1291,15 +1292,15 @@ def scene(
                 f"the model has no joint for input {name!r}; it has {sorted(model.joints)}"
             )
         binding = Bind(binding) if isinstance(binding, str) else binding
-        value = _attribute(binding.value, f"joint {name}")
+        value = binding.value
         for joint in model.joints[name]:
             tag = "Move" if joint.kind == "prismatic" else "Rotate"
             scale = _factor(binding.unit, joint) * joint.per_unit
             offset = -joint.rest * joint.per_unit
-            gain = f' gain="{_number(binding.gain)}"' if binding.gain is not None else ""
+            gain = f" gain={{{_number(binding.gain)}}}" if binding.gain is not None else ""
             parts.append(
-                f'<{tag} node="{joint.node}" axis="{" ".join(_number(v) for v in joint.axis)}" value="{value}" '
-                f'scale="{_number(scale)}" offset="{_number(offset)}"{gain} />'
+                f'<{tag} node="{joint.node}" axis="{" ".join(_number(v) for v in joint.axis)}" value={{{value}}} '
+                f"scale={{{_number(scale)}}} offset={{{_number(offset)}}}{gain} />"
             )
 
     def component(path: str, what: str) -> str:
@@ -1313,11 +1314,9 @@ def scene(
         binding = Glow(binding) if isinstance(binding, str) else binding
         extra = f' color="{_attribute(binding.color, path)}"' if binding.color else ""
         extra += (
-            f' intensity="{_number(binding.intensity)}"' if binding.intensity is not None else ""
+            f" intensity={{{_number(binding.intensity)}}}" if binding.intensity is not None else ""
         )
-        parts.append(
-            f'<Glow node="{component(path, "glow")}" on="{_attribute(binding.on, path)}"{extra} />'
-        )
+        parts.append(f'<Glow node="{component(path, "glow")}" on={{{binding.on}}}{extra} />')
     both = set(open or {}) & set(click or {})
     if both:
         raise ValueError(
@@ -1328,16 +1327,14 @@ def scene(
             f'<OnClick node="{component(path, "open")}" open="{_attribute(blok, path)}" />'
         )
     for path, call in (click or {}).items():
-        parts.append(
-            f'<OnClick node="{component(path, "click")}" onClick="{_attribute(call, path)}" />'
-        )
+        parts.append(f'<OnClick node="{component(path, "click")}" onClick={{{call}}} />')
 
     inner = "".join(f"\n        {part}" for part in parts) + (
         f"\n        {children.strip()}" if children.strip() else ""
     )
     return f"""
 <Scene camera="{camera}" height="{height}">
-    <Model id="{asset}" src="@self.assets.{asset}">{inner}
+    <Model src={{self.assets.{asset}}}>{inner}
     </Model>
 </Scene>"""
 

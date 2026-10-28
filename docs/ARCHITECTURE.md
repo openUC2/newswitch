@@ -316,18 +316,20 @@ device configuration, checked against the catalog the frontend publishes
 built in): it fetches them when it connects, and again on reconnect, and renders
 them with its blok renderer.
 
-A blok's Tailwind classes are compiled **in the browser** (`@tailwindcss/browser`, fed
-the app's tokens from `frontend/src/theme.css`), since the build never sees them. Bloks
+A blok's Tailwind classes are compiled **in the browser** (`lib/blok/tailwind`, the
+Tailwind compiler fed the app's tokens and variants from `frontend/src/theme.css`), since
+the build never sees them. Bloks
 can style by situation with three variants:
 - `past:` / `live:` — the app shows the replay timeline, or the live microscope;
 - `locked:` — a control (or a microscope panel) whose action a held lock keeps from
   running now, e.g. `<StageControl className="locked:opacity-60" />` during a move.
   A locked control is marked, not disabled. The UI is the device configuration's `ui`
 section (`backend/configs/README.md`); one built from an optikit design (the microscope in
-3D, see `newswitch.design`) is written by `just build-design`. Bloks can bind to states
-(`@self.ObjectiveState.mounted_lenses`), loop (`<foreach>`), and invoke actions
-(`onClick="@self.switch_objective(lens.slot)"`). Use them for small panels that
-shouldn't require a frontend build.
+3D, see `newswitch.design`) is written by `just build-design`. Bloks are written in blok
+language v2: they bind to states (`{self.ObjectiveState.mounted_lenses}`), loop
+(`<foreach>`), and invoke actions (`onClick={self.switch_objective(slot: lens.slot)}`).
+The backend serves their source, and the frontend parses it (`lib/blok/bsx`). Use them for
+small panels that shouldn't require a frontend build.
 
 ---
 

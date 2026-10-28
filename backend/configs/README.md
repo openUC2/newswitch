@@ -51,24 +51,35 @@ Further top-level sections: `ui` (required to run newswitch in FastAPI mode), `a
 (required in agent mode, see below) and `assets` (optional):
 
 ```yaml
-assets:                   # files the bloks read as @self.assets.<name>, relative to newswitch/
+assets:                   # files the bloks read as self.assets.<name>, relative to newswitch/
   design: assets/design/f59c2fb9bf4105e5-c1.glb
 ui:                       # the bloks this microscope shows, and nothing else
-  catalog: newswitch@1      # the catalog version the bloks were written against
+  catalog: newswitch@2      # the module version the bloks were written against
   bloks:
     view-3d:
       description: "3D: ..."   # a view's description starts with its tab label
       default: true            # the blok shown first
-      bsx: |                   # the blok's tree, exactly as the frontend gets it
-        <div className="h-full w-full">...</div>
+      bsx: |                   # the blok's source (blok language v2), as the frontend gets it
+        <Html>
+          <div className="h-full w-full">...</div>
+        </Html>
 ```
 
-The UI is the configuration's: newswitch declares exactly these bloks, checked against the
-catalog the frontend publishes (`newswitch/bloks/newswitch-catalog.json`, written by
-`cd frontend && yarn catalog:export`); one the catalog refuses stops the backend. A file
+The bloks are written in blok language v2 (arkitekt-spec 4): the root names where a blok
+renders (`<Html>` for a panel, `<Scene>` for a 3D view), an attribute in braces is an
+expression (`value={self.StageState.x}`, `min={0}`), a call names its arguments
+(`onClick={self.switch_objective(slot: lens.slot)}`), text goes between the tags
+(`<span>{light.wavelength} nm</span>`), and colours are the theme's roles (`bg-success`,
+`text-spectrum-cyan`), never palette colours. `arkitekt_spec.blok.prompt.syntax()` prints
+the whole language.
+
+The UI is the configuration's: newswitch declares exactly these bloks, drawn with the
+spec's catalogs (`ui@1`, `scene@1`, ...) and the module the frontend publishes for what it
+draws beyond them (`newswitch/bloks/newswitch-catalog.json`, written by
+`cd frontend && yarn catalog:export`); a blok the spec refuses stops the backend. A file
 without `ui` does not start.
 
-The catalog is versioned: `NEWSWITCH_CATALOG_VERSION` in the frontend
+The module is versioned: `NEWSWITCH_CATALOG_VERSION` in the frontend
 (`src/lib/blok/microscope/catalog.tsx`), bumped with every change to it (`yarn
 catalog:export` refuses a changed catalog under the old version). `ui.catalog` names the
 version the bloks were written against. A newer version than the frontend's is refused; an
@@ -88,8 +99,8 @@ extra `design`), or startup stops with the missing asset.
 
 `ui` is the UI of FastAPI mode (`main_fastapi`, the newswitch frontend). Served as an arkitekt
 agent (`python main_arkitekt.py`, `just agent`), newswitch shows the optional top-level
-`agent_ui` instead: same shape (`catalog` + `bloks`), but written against Orkestrator's
-standard catalog, the one arkitekt ships:
+`agent_ui` instead: same shape (`catalog` + `bloks`), but drawn with the spec's catalogs and
+Orkestrator's module, the ones arkitekt ships:
 
 ```yaml
 agent_ui:
@@ -99,16 +110,18 @@ agent_ui:
       description: 'Microscope: the camera streams, live view and acquiring.'
       default: true
       bsx: |
+        <Html>
         <div className="flex flex-col gap-4 p-4">
             ...
-            <foreach items="@self.CameraStreams.streams" let="#stream">
-                <StructureDisplay value="@stream" />
+            <foreach items={self.CameraStreams.streams} let="stream">
+                <StructureDisplay value={stream} />
             </foreach>
             ...
         </div>
+        </Html>
 ```
 
-The bloks are checked strictly, offline, against that catalog and against what the registry
+The bloks are checked strictly, offline, against those catalogs and against what the registry
 registered (`newswitch.bloks.declare_agent_ui`). Another catalog than `orkestrator` is
 refused; another release is checked against the shipped one, with a warning. A file
 without `agent_ui` does not start in agent mode (FastAPI mode ignores the section). Agent

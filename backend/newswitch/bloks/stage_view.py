@@ -12,8 +12,9 @@ from newswitch.bloks.fluorescence import ACQUIRE_OR_CALIBRATE
 from newswitch.config_io import BlokEntry
 
 STAGE_UI = f"""
+<Html>
 <Resizable direction="row" className="h-full w-full">
-    <ResizablePanel defaultSize="70">
+    <ResizablePanel defaultSize={{70}}>
         <div className="flex h-full flex-col overflow-hidden bg-muted/30">
             <StageView className="flex-1">
                 <StageScene>
@@ -33,8 +34,8 @@ STAGE_UI = f"""
             </StageView>
         </div>
     </ResizablePanel>
-    <ResizableHandle withHandle="true" />
-    <ResizablePanel defaultSize="30" minSize="20" maxSize="45">
+    <ResizableHandle withHandle={{true}} />
+    <ResizablePanel defaultSize={{30}} minSize={{20}} maxSize={{45}}>
         <ScrollArea className="h-full">
             <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                 <StageControl className="locked:opacity-60" />
@@ -44,6 +45,7 @@ STAGE_UI = f"""
         </ScrollArea>
     </ResizablePanel>
 </Resizable>
+</Html>
 """
 
 

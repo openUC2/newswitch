@@ -665,9 +665,10 @@ def create_fastapi_registry(devices: NewswitchConfig | None) -&gt; App:
         <strong>at run time</strong>, nothing about the UI is built in, then rendered by the frontend’s blok
         renderer. They are not written in Python: they are the <code>ui</code> section of the device
         configuration, checked against the catalog the frontend publishes
-        (<code>newswitch/bloks/newswitch-catalog.json</code>, versioned as <code>newswitch@&lt;n&gt;</code>). Bloks can bind to states
-        (<code>@self.ObjectiveState.mounted_lenses</code>), loop (<code>&lt;foreach&gt;</code>) and invoke
-        actions (<code>onClick="@self.switch_objective(lens.slot)"</code>). Use them for small panels that
+        (<code>newswitch/bloks/newswitch-catalog.json</code>, versioned as <code>newswitch@&lt;n&gt;</code>). Written in blok
+        language v2, bloks can bind to states (<code>{self.ObjectiveState.mounted_lenses}</code>), loop
+        (<code>&lt;foreach&gt;</code>) and invoke actions
+        (<code>onClick={self.switch_objective(slot: lens.slot)}</code>). Use them for small panels that
         should not require a frontend build.</p>
     </section>
 

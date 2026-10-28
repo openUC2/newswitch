@@ -23,7 +23,7 @@ from newswitch.config_io.devices import LightsourceConfig
 from newswitch.design.model import build_model
 from newswitch.optikit import dsn as optikit
 
-#: The model's asset name: a blok reads it as ``@self.assets.design``.
+#: The model's asset name: a blok reads it as ``self.assets.design``.
 MODEL_ASSET = "design"
 #: A UI the design brings along, in its folder.
 DESIGN_UI_FILE = "newswitch-ui.bsx"
@@ -35,13 +35,13 @@ LASER_CARD = "design-laser"
 #: Starting and stopping the live view: the camera glows while it streams, and the stream
 #: floats at it.
 LIVE_BUTTONS = """<div className="flex gap-2 past:hidden">
-                    <Button label="Start live view" icon="play" onClick="@self.start_live_view()" />
-                    <Button label="Stop" icon="square" variant="outline" onClick="@self.stop_live_view()" />
+                    <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                    <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
                 </div>"""
 
 #: The live view floating at the camera while it acquires.
 LIVE_POPOUT = """
-<Popout node="{node}" open="@self.CameraState.is_acquiring">
+<Popout node="{node}" open={{self.CameraState.is_acquiring}}>
     <div className="aspect-video w-[360px] overflow-hidden rounded-md"><LiveView /></div>
 </Popout>"""
 
@@ -89,7 +89,7 @@ def scene_tree(
     in_model = [path for paths in kinds.values() for path in paths if path in model.components]
 
     joints: dict[str, optikit.Bind | str] = {
-        name: optikit.Bind(f"@self.StageState.{label}", unit="um")
+        name: optikit.Bind(f"self.StageState.{label}", unit="um")
         for name, label in _axis_inputs(config).items()
         if name in model.joints
     }
@@ -102,14 +102,15 @@ def scene_tree(
     ]
     for index, path in enumerate(kinds.get("laser", [])):
         if path in in_model and index < len(sources):
-            on = f"$state.self.IlluminationState.illuminations.{index}.is_active"
-            glow[path] = optikit.Glow(on, color="#38bdf8", intensity=0.6)
+            source = f"list.at(value: self.IlluminationState.illuminations, index: {index})"
+            on = f'obj.get(value: {source}, key: "is_active")'
+            glow[path] = optikit.Glow(on, color="info", intensity=0.6)
             if "laser" in cards:
                 opens[path] = cards["laser"]
     for path in kinds.get("camera", [])[:1]:
         if path in in_model:
             glow[path] = optikit.Glow(
-                "@self.CameraState.is_acquiring", color="#22c55e", intensity=0.5
+                "self.CameraState.is_acquiring", color="success", intensity=0.5
             )
             if "camera" in cards:
                 opens[path] = cards["camera"]
@@ -130,8 +131,10 @@ def design_ui(dsn: Path, model: optikit.Model, config: NewswitchConfig) -> str:
     `STAGE_CARD`), and the live view floats at the camera while it acquires.
     """
     return f"""
+<Html>
 <div className="h-full w-full overflow-hidden bg-muted/30">{scene_tree(dsn, model, config)}
 </div>
+</Html>
 """
 
 
@@ -150,22 +153,26 @@ def bloks(dsn: Path, config: NewswitchConfig) -> tuple[dict[str, str], dict[str,
 
     cards = {
         CAMERA_CARD: (
-            f"""<div className="flex w-[380px] flex-col gap-3 past:opacity-80 past:grayscale">
+            f"""<Html>
+            <div className="flex w-[380px] flex-col gap-3 past:opacity-80 past:grayscale">
                 {fluorescence.DETECTION}
                 {LIVE_BUTTONS}
                 <div className="aspect-video w-full overflow-hidden rounded-md past:hidden"><LiveView /></div>
-            </div>""",
+            </div>
+            </Html>""",
             adapters.detectors(config),
         ),
         LASER_CARD: (
-            f"""<div className="w-[360px] past:opacity-80">{fluorescence.EXCITATION}</div>""",
+            f"""<Html><div className="w-[360px] past:opacity-80">{fluorescence.EXCITATION}</div></Html>""",
             adapters.illuminations(config),
         ),
         STAGE_CARD: (
-            f"""<div className="flex w-[400px] flex-col gap-3 past:opacity-80 past:grayscale">
+            f"""<Html>
+            <div className="flex w-[400px] flex-col gap-3 past:opacity-80 past:grayscale">
                 {fluorescence.ACQUIRE_OR_CALIBRATE}
                 <StageControl className="locked:opacity-60" />
-            </div>""",
+            </div>
+            </Html>""",
             adapters.motion_stage(config),
         ),
     }
