@@ -54,7 +54,6 @@
           {
             "key": "x",
             "label": "x",
-            "kind": "FLOAT",
             "description": "X position (micrometers)",
             "identifier": null,
             "nullable": true,
@@ -67,12 +66,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "y",
             "label": "y",
-            "kind": "FLOAT",
             "description": "Y position (micrometers)",
             "identifier": null,
             "nullable": true,
@@ -85,12 +84,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "z",
             "label": "z",
-            "kind": "FLOAT",
             "description": "Z position (micrometers)",
             "identifier": null,
             "nullable": true,
@@ -103,12 +102,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "a",
             "label": "a",
-            "kind": "FLOAT",
             "description": "A (rotation) position",
             "identifier": null,
             "nullable": true,
@@ -121,12 +120,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "is_absolute",
             "label": "is_absolute",
-            "kind": "BOOL",
             "description": "If True, move to absolute position; if False, relative move",
             "identifier": null,
             "nullable": true,
@@ -139,12 +138,12 @@
             "validators": [],
             "default": false,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "BOOL"
           },
           {
             "key": "step_size",
             "label": "step_size",
-            "kind": "FLOAT",
             "description": "Step size in micrometers for movement simulation (default: 1.0)",
             "identifier": null,
             "nullable": true,
@@ -157,7 +156,8 @@
             "validators": [],
             "default": 1.0,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           }
         ],
         "returns": [],
@@ -262,7 +262,6 @@
           {
             "key": "intensity",
             "label": "intensity",
-            "kind": "FLOAT",
             "description": "Light intensity value",
             "identifier": null,
             "nullable": false,
@@ -275,12 +274,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "channel",
             "label": "channel",
-            "kind": "INT",
             "description": "Illumination channel number (default 1)",
             "identifier": null,
             "nullable": true,
@@ -293,7 +292,8 @@
             "validators": [],
             "default": 1,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [
@@ -352,7 +352,6 @@
           {
             "key": "channel",
             "label": "channel",
-            "kind": "INT",
             "description": "Illumination channel number (default 1)",
             "identifier": null,
             "nullable": true,
@@ -365,12 +364,12 @@
             "validators": [],
             "default": 1,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "intensity",
             "label": "intensity",
-            "kind": "FLOAT",
             "description": "Optional intensity to set. Uses current/default if not provided.",
             "identifier": null,
             "nullable": true,
@@ -383,7 +382,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           }
         ],
         "returns": [
@@ -444,7 +444,6 @@
           {
             "key": "channel",
             "label": "channel",
-            "kind": "INT",
             "description": "Illumination channel number to turn off",
             "identifier": null,
             "nullable": false,
@@ -457,7 +456,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [
@@ -2550,7 +2550,6 @@
           {
             "key": "slot",
             "label": "slot",
-            "kind": "INT",
             "description": "Detector slot number to activate",
             "identifier": null,
             "nullable": false,
@@ -2563,7 +2562,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [],
@@ -2605,7 +2605,6 @@
           {
             "key": "slot",
             "label": "slot",
-            "kind": "INT",
             "description": "Detector slot number to deactivate",
             "identifier": null,
             "nullable": false,
@@ -2618,7 +2617,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [
@@ -2677,7 +2677,6 @@
           {
             "key": "slot",
             "label": "slot",
-            "kind": "INT",
             "description": "Detector slot number",
             "identifier": null,
             "nullable": false,
@@ -2690,12 +2689,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "exposure_time",
             "label": "exposure_time",
-            "kind": "FLOAT",
             "description": "Exposure time in seconds (optional)",
             "identifier": null,
             "nullable": true,
@@ -2708,12 +2707,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "gain",
             "label": "gain",
-            "kind": "FLOAT",
             "description": "Gain value (optional)",
             "identifier": null,
             "nullable": true,
@@ -2726,7 +2725,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           }
         ],
         "returns": [
@@ -2860,7 +2860,7 @@
                 "label": null,
                 "kind": "ENUM",
                 "description": "Enumeration of colormap options.",
-                "identifier": "@newswitch.models.devices/colormap",
+                "identifier": "@newswitch/colormap",
                 "nullable": false,
                 "effects": [],
                 "choices": [
@@ -3512,7 +3512,6 @@
           {
             "key": "slot",
             "label": "slot",
-            "kind": "INT",
             "description": "Objective slot number",
             "identifier": null,
             "nullable": false,
@@ -3525,7 +3524,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [],
@@ -3607,7 +3607,6 @@
           {
             "key": "slot",
             "label": "slot",
-            "kind": "INT",
             "description": "Filter slot number",
             "identifier": null,
             "nullable": false,
@@ -3620,7 +3619,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [
@@ -3930,7 +3930,6 @@
           {
             "key": "axes",
             "label": "axes",
-            "kind": "LIST",
             "description": "Axes to home (subset of X/Y/Z/A). Default: Z, X, Y.",
             "identifier": null,
             "nullable": true,
@@ -3943,7 +3942,6 @@
               {
                 "key": "...",
                 "label": null,
-                "kind": "STRING",
                 "description": null,
                 "identifier": null,
                 "nullable": false,
@@ -3956,13 +3954,15 @@
                 "validators": [],
                 "default": null,
                 "widget": null,
-                "requires": null
+                "requires": null,
+                "kind": "STRING"
               }
             ],
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "LIST"
           }
         ],
         "returns": [],
@@ -4004,7 +4004,6 @@
           {
             "key": "axis",
             "label": null,
-            "kind": "STRING",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4017,7 +4016,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "STRING"
           }
         ],
         "returns": [],
@@ -4057,7 +4057,6 @@
           {
             "key": "r",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4070,12 +4069,12 @@
             "validators": [],
             "default": 255,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "g",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4088,12 +4087,12 @@
             "validators": [],
             "default": 255,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "b",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4106,7 +4105,8 @@
             "validators": [],
             "default": 255,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [],
@@ -4184,7 +4184,6 @@
           {
             "key": "timeout",
             "label": null,
-            "kind": "FLOAT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4197,7 +4196,8 @@
             "validators": [],
             "default": 3.0,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           }
         ],
         "returns": [
@@ -4309,7 +4309,6 @@
           {
             "key": "x",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": false,
@@ -4322,12 +4321,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "y",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": false,
@@ -4340,7 +4339,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [],
@@ -4382,7 +4382,6 @@
           {
             "key": "x_min",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4395,12 +4394,12 @@
             "validators": [],
             "default": 500,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "x_max",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4413,12 +4412,12 @@
             "validators": [],
             "default": 3500,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "y_min",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4431,12 +4430,12 @@
             "validators": [],
             "default": 500,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "y_max",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4449,12 +4448,12 @@
             "validators": [],
             "default": 3500,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "nx",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4467,12 +4466,12 @@
             "validators": [],
             "default": 256,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "ny",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4485,12 +4484,12 @@
             "validators": [],
             "default": 256,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "pixel_dwell_us",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4503,12 +4502,12 @@
             "validators": [],
             "default": 1,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "trigger_mode",
             "label": null,
-            "kind": "INT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4521,12 +4520,12 @@
             "validators": [],
             "default": 1,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "bidirectional",
             "label": null,
-            "kind": "BOOL",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -4539,7 +4538,8 @@
             "validators": [],
             "default": false,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "BOOL"
           }
         ],
         "returns": [],
@@ -4747,7 +4747,6 @@
           {
             "key": "z_range",
             "label": "z_range",
-            "kind": "FLOAT",
             "description": "Total sweep range in micrometers, centered on the current Z.",
             "identifier": null,
             "nullable": true,
@@ -4760,12 +4759,12 @@
             "validators": [],
             "default": 20.0,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "steps",
             "label": "steps",
-            "kind": "INT",
             "description": "Number of Z planes to score (>= 3).",
             "identifier": null,
             "nullable": true,
@@ -4778,12 +4777,12 @@
             "validators": [],
             "default": 11,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "detector_slot",
             "label": "detector_slot",
-            "kind": "INT",
             "description": "Detector to read frames from.",
             "identifier": null,
             "nullable": true,
@@ -4796,12 +4795,12 @@
             "validators": [],
             "default": 1,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           },
           {
             "key": "metric",
             "label": "metric",
-            "kind": "STRING",
             "description": "\"laplacian_variance\" (default) or \"intensity_variance\".",
             "identifier": null,
             "nullable": true,
@@ -4814,7 +4813,8 @@
             "validators": [],
             "default": "laplacian_variance",
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "STRING"
           }
         ],
         "returns": [
@@ -5047,9 +5047,8 @@
           {
             "key": "scan_order",
             "label": null,
-            "kind": "ENUM",
             "description": "Defines the order in which stage positions are visited during acquisition.",
-            "identifier": "@newswitch.models.acquisition/scanorder",
+            "identifier": "@newswitch/scanorder",
             "nullable": false,
             "effects": [],
             "choices": [
@@ -5085,12 +5084,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "ENUM"
           },
           {
             "key": "start_x",
             "label": null,
-            "kind": "FLOAT",
             "description": null,
             "identifier": null,
             "nullable": false,
@@ -5103,12 +5102,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "start_y",
             "label": null,
-            "kind": "FLOAT",
             "description": null,
             "identifier": null,
             "nullable": false,
@@ -5121,12 +5120,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "end_x",
             "label": null,
-            "kind": "FLOAT",
             "description": null,
             "identifier": null,
             "nullable": false,
@@ -5139,12 +5138,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "end_y",
             "label": null,
-            "kind": "FLOAT",
             "description": null,
             "identifier": null,
             "nullable": false,
@@ -5157,12 +5156,12 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "overlap",
             "label": null,
-            "kind": "FLOAT",
             "description": null,
             "identifier": null,
             "nullable": true,
@@ -5175,12 +5174,12 @@
             "validators": [],
             "default": 0.1,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "FLOAT"
           },
           {
             "key": "detector_slot",
             "label": null,
-            "kind": "INT",
             "description": "The detector to calculate the FOV for (all other detectors will follow). If None, use the first active detector.",
             "identifier": null,
             "nullable": true,
@@ -5193,7 +5192,8 @@
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "INT"
           }
         ],
         "returns": [
@@ -7122,7 +7122,6 @@
           {
             "key": "config",
             "label": null,
-            "kind": "MODEL",
             "description": "Configuration for a multidimensional acquisition.",
             "identifier": "@newswitch/multidimensional_acquisition",
             "nullable": false,
@@ -7135,7 +7134,6 @@
               {
                 "key": "timepoints",
                 "label": null,
-                "kind": "LIST",
                 "description": "List of timepoints to acquire, each with its own stage positions and hooks",
                 "identifier": null,
                 "nullable": false,
@@ -7148,7 +7146,6 @@
                   {
                     "key": "...",
                     "label": null,
-                    "kind": "MODEL",
                     "description": "Represents a timepoint in a temporal sequence.",
                     "identifier": "@newswitch/timepoint",
                     "nullable": false,
@@ -7161,7 +7158,6 @@
                       {
                         "key": "time",
                         "label": null,
-                        "kind": "DATE",
                         "description": "Absolute time to acquire this timepoint (e.g., '2024-01-01T12:00:00') or None to acquire immediately after the previous timepoint",
                         "identifier": null,
                         "nullable": true,
@@ -7174,12 +7170,12 @@
                         "validators": [],
                         "default": null,
                         "widget": null,
-                        "requires": null
+                        "requires": null,
+                        "kind": "DATE"
                       },
                       {
                         "key": "positions",
                         "label": null,
-                        "kind": "LIST",
                         "description": "List of stage positions to acquire at this timepoint",
                         "identifier": null,
                         "nullable": false,
@@ -7192,7 +7188,6 @@
                           {
                             "key": "...",
                             "label": null,
-                            "kind": "MODEL",
                             "description": "Represents a position in 3D space.",
                             "identifier": "@newswitch/position",
                             "nullable": false,
@@ -7205,7 +7200,6 @@
                               {
                                 "key": "x",
                                 "label": null,
-                                "kind": "FLOAT",
                                 "description": null,
                                 "identifier": null,
                                 "nullable": false,
@@ -7218,12 +7212,12 @@
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "FLOAT"
                               },
                               {
                                 "key": "y",
                                 "label": null,
-                                "kind": "FLOAT",
                                 "description": null,
                                 "identifier": null,
                                 "nullable": false,
@@ -7236,12 +7230,12 @@
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "FLOAT"
                               },
                               {
                                 "key": "z",
                                 "label": null,
-                                "kind": "FLOAT",
                                 "description": null,
                                 "identifier": null,
                                 "nullable": false,
@@ -7254,12 +7248,12 @@
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "FLOAT"
                               },
                               {
                                 "key": "stacks",
                                 "label": null,
-                                "kind": "LIST",
                                 "description": null,
                                 "identifier": null,
                                 "nullable": false,
@@ -7272,7 +7266,6 @@
                                   {
                                     "key": "...",
                                     "label": null,
-                                    "kind": "MODEL",
                                     "description": "Represents a stack of images at different z-slices.",
                                     "identifier": "@newswitch/stack",
                                     "nullable": false,
@@ -7285,7 +7278,6 @@
                                       {
                                         "key": "z_offset",
                                         "label": null,
-                                        "kind": "FLOAT",
                                         "description": null,
                                         "identifier": null,
                                         "nullable": false,
@@ -7298,12 +7290,12 @@
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "FLOAT"
                                       },
                                       {
                                         "key": "z_slices",
                                         "label": null,
-                                        "kind": "LIST",
                                         "description": null,
                                         "identifier": null,
                                         "nullable": false,
@@ -7316,7 +7308,6 @@
                                           {
                                             "key": "...",
                                             "label": null,
-                                            "kind": "FLOAT",
                                             "description": null,
                                             "identifier": null,
                                             "nullable": false,
@@ -7329,18 +7320,19 @@
                                             "validators": [],
                                             "default": null,
                                             "widget": null,
-                                            "requires": null
+                                            "requires": null,
+                                            "kind": "FLOAT"
                                           }
                                         ],
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "LIST"
                                       },
                                       {
                                         "key": "z_step",
                                         "label": null,
-                                        "kind": "FLOAT",
                                         "description": null,
                                         "identifier": null,
                                         "nullable": false,
@@ -7353,12 +7345,12 @@
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "FLOAT"
                                       },
                                       {
                                         "key": "channels",
                                         "label": null,
-                                        "kind": "LIST",
                                         "description": null,
                                         "identifier": null,
                                         "nullable": false,
@@ -7371,7 +7363,6 @@
                                           {
                                             "key": "...",
                                             "label": null,
-                                            "kind": "MODEL",
                                             "description": "Represents which channels to acquire at each position.",
                                             "identifier": "@newswitch/streams",
                                             "nullable": false,
@@ -7384,7 +7375,6 @@
                                               {
                                                 "key": "detector",
                                                 "label": null,
-                                                "kind": "STRING",
                                                 "description": "Name or slot of the detector to use for this stream (e.g., 'Camera1' or '1')",
                                                 "identifier": null,
                                                 "nullable": false,
@@ -7397,12 +7387,12 @@
                                                 "validators": [],
                                                 "default": null,
                                                 "widget": null,
-                                                "requires": null
+                                                "requires": null,
+                                                "kind": "STRING"
                                               },
                                               {
                                                 "key": "mapping",
                                                 "label": null,
-                                                "kind": "STRING",
                                                 "description": "Mapping name for this stream (e.g., 'GFP', 'RFP') to be used in file naming and metadata",
                                                 "identifier": null,
                                                 "nullable": false,
@@ -7415,12 +7405,12 @@
                                                 "validators": [],
                                                 "default": null,
                                                 "widget": null,
-                                                "requires": null
+                                                "requires": null,
+                                                "kind": "STRING"
                                               },
                                               {
                                                 "key": "illuminations",
                                                 "label": null,
-                                                "kind": "LIST",
                                                 "description": "List of illuminations to use for this stream (e.g., [{'source': 'LED1', 'wavelength': 488, 'intensity': 0.8}])",
                                                 "identifier": null,
                                                 "nullable": false,
@@ -7433,7 +7423,6 @@
                                                   {
                                                     "key": "...",
                                                     "label": null,
-                                                    "kind": "MODEL",
                                                     "description": "Represents an illumination channel to acquire.",
                                                     "identifier": "@newswitch/stream_illumination",
                                                     "nullable": false,
@@ -7446,7 +7435,6 @@
                                                       {
                                                         "key": "source",
                                                         "label": null,
-                                                        "kind": "STRING",
                                                         "description": null,
                                                         "identifier": null,
                                                         "nullable": false,
@@ -7459,12 +7447,12 @@
                                                         "validators": [],
                                                         "default": null,
                                                         "widget": null,
-                                                        "requires": null
+                                                        "requires": null,
+                                                        "kind": "STRING"
                                                       },
                                                       {
                                                         "key": "wavelength",
                                                         "label": null,
-                                                        "kind": "FLOAT",
                                                         "description": null,
                                                         "identifier": null,
                                                         "nullable": false,
@@ -7477,12 +7465,12 @@
                                                         "validators": [],
                                                         "default": null,
                                                         "widget": null,
-                                                        "requires": null
+                                                        "requires": null,
+                                                        "kind": "FLOAT"
                                                       },
                                                       {
                                                         "key": "intensity",
                                                         "label": null,
-                                                        "kind": "FLOAT",
                                                         "description": null,
                                                         "identifier": null,
                                                         "nullable": false,
@@ -7495,13 +7483,15 @@
                                                         "validators": [],
                                                         "default": null,
                                                         "widget": null,
-                                                        "requires": null
+                                                        "requires": null,
+                                                        "kind": "FLOAT"
                                                       }
                                                     ],
                                                     "validators": [],
                                                     "default": null,
                                                     "widget": null,
-                                                    "requires": null
+                                                    "requires": null,
+                                                    "kind": "MODEL"
                                                   }
                                                 ],
                                                 "validators": [
@@ -7550,24 +7540,26 @@
                                                 ],
                                                 "default": null,
                                                 "widget": null,
-                                                "requires": null
+                                                "requires": null,
+                                                "kind": "LIST"
                                               }
                                             ],
                                             "validators": [],
                                             "default": null,
                                             "widget": null,
-                                            "requires": null
+                                            "requires": null,
+                                            "kind": "MODEL"
                                           }
                                         ],
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "LIST"
                                       },
                                       {
                                         "key": "z_hooks",
                                         "label": null,
-                                        "kind": "LIST",
                                         "description": "List of hooks to execute at each z-slice (e.g., 'autofocus', 'z_calibration')",
                                         "identifier": null,
                                         "nullable": false,
@@ -7580,7 +7572,6 @@
                                           {
                                             "key": "...",
                                             "label": null,
-                                            "kind": "UNION",
                                             "description": null,
                                             "identifier": null,
                                             "nullable": false,
@@ -7593,7 +7584,6 @@
                                               {
                                                 "key": "0",
                                                 "label": null,
-                                                "kind": "MODEL",
                                                 "description": "Refocus by software: sweep Z around the current position, move to the sharpest plane.",
                                                 "identifier": "@newswitch/software_autofocus_hook",
                                                 "nullable": false,
@@ -7606,7 +7596,6 @@
                                                   {
                                                     "key": "z_range",
                                                     "label": null,
-                                                    "kind": "FLOAT",
                                                     "description": null,
                                                     "identifier": null,
                                                     "nullable": false,
@@ -7619,12 +7608,12 @@
                                                     "validators": [],
                                                     "default": 20.0,
                                                     "widget": null,
-                                                    "requires": null
+                                                    "requires": null,
+                                                    "kind": "FLOAT"
                                                   },
                                                   {
                                                     "key": "steps",
                                                     "label": null,
-                                                    "kind": "INT",
                                                     "description": null,
                                                     "identifier": null,
                                                     "nullable": false,
@@ -7637,18 +7626,19 @@
                                                     "validators": [],
                                                     "default": 11,
                                                     "widget": null,
-                                                    "requires": null
+                                                    "requires": null,
+                                                    "kind": "INT"
                                                   }
                                                 ],
                                                 "validators": [],
                                                 "default": null,
                                                 "widget": null,
-                                                "requires": null
+                                                "requires": null,
+                                                "kind": "MODEL"
                                               },
                                               {
                                                 "key": "1",
                                                 "label": null,
-                                                "kind": "MODEL",
                                                 "description": "Data class representing a z-calibration hook to be executed during acquisition.",
                                                 "identifier": "@newswitch/z_calibration_hook",
                                                 "nullable": false,
@@ -7661,7 +7651,6 @@
                                                   {
                                                     "key": "calibration_points",
                                                     "label": null,
-                                                    "kind": "INT",
                                                     "description": null,
                                                     "identifier": null,
                                                     "nullable": false,
@@ -7674,42 +7663,47 @@
                                                     "validators": [],
                                                     "default": 5,
                                                     "widget": null,
-                                                    "requires": null
+                                                    "requires": null,
+                                                    "kind": "INT"
                                                   }
                                                 ],
                                                 "validators": [],
                                                 "default": null,
                                                 "widget": null,
-                                                "requires": null
+                                                "requires": null,
+                                                "kind": "MODEL"
                                               }
                                             ],
                                             "validators": [],
                                             "default": null,
                                             "widget": null,
-                                            "requires": null
+                                            "requires": null,
+                                            "kind": "UNION"
                                           }
                                         ],
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "LIST"
                                       }
                                     ],
                                     "validators": [],
                                     "default": null,
                                     "widget": null,
-                                    "requires": null
+                                    "requires": null,
+                                    "kind": "MODEL"
                                   }
                                 ],
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "LIST"
                               },
                               {
                                 "key": "p_hooks",
                                 "label": null,
-                                "kind": "LIST",
                                 "description": "List of hooks to execute at each position (e.g., 'autofocus', 'z_calibration')",
                                 "identifier": null,
                                 "nullable": false,
@@ -7722,7 +7716,6 @@
                                   {
                                     "key": "...",
                                     "label": null,
-                                    "kind": "UNION",
                                     "description": null,
                                     "identifier": null,
                                     "nullable": false,
@@ -7735,7 +7728,6 @@
                                       {
                                         "key": "0",
                                         "label": null,
-                                        "kind": "MODEL",
                                         "description": "Refocus by software: sweep Z around the current position, move to the sharpest plane.",
                                         "identifier": "@newswitch/software_autofocus_hook",
                                         "nullable": false,
@@ -7748,7 +7740,6 @@
                                           {
                                             "key": "z_range",
                                             "label": null,
-                                            "kind": "FLOAT",
                                             "description": null,
                                             "identifier": null,
                                             "nullable": false,
@@ -7761,12 +7752,12 @@
                                             "validators": [],
                                             "default": 20.0,
                                             "widget": null,
-                                            "requires": null
+                                            "requires": null,
+                                            "kind": "FLOAT"
                                           },
                                           {
                                             "key": "steps",
                                             "label": null,
-                                            "kind": "INT",
                                             "description": null,
                                             "identifier": null,
                                             "nullable": false,
@@ -7779,18 +7770,19 @@
                                             "validators": [],
                                             "default": 11,
                                             "widget": null,
-                                            "requires": null
+                                            "requires": null,
+                                            "kind": "INT"
                                           }
                                         ],
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "MODEL"
                                       },
                                       {
                                         "key": "1",
                                         "label": null,
-                                        "kind": "MODEL",
                                         "description": "Data class representing a z-calibration hook to be executed during acquisition.",
                                         "identifier": "@newswitch/z_calibration_hook",
                                         "nullable": false,
@@ -7803,7 +7795,6 @@
                                           {
                                             "key": "calibration_points",
                                             "label": null,
-                                            "kind": "INT",
                                             "description": null,
                                             "identifier": null,
                                             "nullable": false,
@@ -7816,44 +7807,49 @@
                                             "validators": [],
                                             "default": 5,
                                             "widget": null,
-                                            "requires": null
+                                            "requires": null,
+                                            "kind": "INT"
                                           }
                                         ],
                                         "validators": [],
                                         "default": null,
                                         "widget": null,
-                                        "requires": null
+                                        "requires": null,
+                                        "kind": "MODEL"
                                       }
                                     ],
                                     "validators": [],
                                     "default": null,
                                     "widget": null,
-                                    "requires": null
+                                    "requires": null,
+                                    "kind": "UNION"
                                   }
                                 ],
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "LIST"
                               }
                             ],
                             "validators": [],
                             "default": null,
                             "widget": null,
-                            "requires": null
+                            "requires": null,
+                            "kind": "MODEL"
                           }
                         ],
                         "validators": [],
                         "default": null,
                         "widget": null,
-                        "requires": null
+                        "requires": null,
+                        "kind": "LIST"
                       },
                       {
                         "key": "position_order",
                         "label": null,
-                        "kind": "ENUM",
                         "description": "Order in which to visit stage positions (e.g., 'sequential', 'random')",
-                        "identifier": "@newswitch.models.acquisition/positionorder",
+                        "identifier": "@newswitch/positionorder",
                         "nullable": false,
                         "effects": [],
                         "choices": [
@@ -7877,12 +7873,12 @@
                         "validators": [],
                         "default": "SEQUENTIAL",
                         "widget": null,
-                        "requires": null
+                        "requires": null,
+                        "kind": "ENUM"
                       },
                       {
                         "key": "t_hooks",
                         "label": null,
-                        "kind": "LIST",
                         "description": "List of hooks to execute at each timepoint (e.g., 'autofocus', 'z_calibration')",
                         "identifier": null,
                         "nullable": false,
@@ -7895,7 +7891,6 @@
                           {
                             "key": "...",
                             "label": null,
-                            "kind": "UNION",
                             "description": null,
                             "identifier": null,
                             "nullable": false,
@@ -7908,7 +7903,6 @@
                               {
                                 "key": "0",
                                 "label": null,
-                                "kind": "MODEL",
                                 "description": "Refocus by software: sweep Z around the current position, move to the sharpest plane.",
                                 "identifier": "@newswitch/software_autofocus_hook",
                                 "nullable": false,
@@ -7921,7 +7915,6 @@
                                   {
                                     "key": "z_range",
                                     "label": null,
-                                    "kind": "FLOAT",
                                     "description": null,
                                     "identifier": null,
                                     "nullable": false,
@@ -7934,12 +7927,12 @@
                                     "validators": [],
                                     "default": 20.0,
                                     "widget": null,
-                                    "requires": null
+                                    "requires": null,
+                                    "kind": "FLOAT"
                                   },
                                   {
                                     "key": "steps",
                                     "label": null,
-                                    "kind": "INT",
                                     "description": null,
                                     "identifier": null,
                                     "nullable": false,
@@ -7952,18 +7945,19 @@
                                     "validators": [],
                                     "default": 11,
                                     "widget": null,
-                                    "requires": null
+                                    "requires": null,
+                                    "kind": "INT"
                                   }
                                 ],
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "MODEL"
                               },
                               {
                                 "key": "1",
                                 "label": null,
-                                "kind": "MODEL",
                                 "description": "Data class representing a z-calibration hook to be executed during acquisition.",
                                 "identifier": "@newswitch/z_calibration_hook",
                                 "nullable": false,
@@ -7976,7 +7970,6 @@
                                   {
                                     "key": "calibration_points",
                                     "label": null,
-                                    "kind": "INT",
                                     "description": null,
                                     "identifier": null,
                                     "nullable": false,
@@ -7989,31 +7982,36 @@
                                     "validators": [],
                                     "default": 5,
                                     "widget": null,
-                                    "requires": null
+                                    "requires": null,
+                                    "kind": "INT"
                                   }
                                 ],
                                 "validators": [],
                                 "default": null,
                                 "widget": null,
-                                "requires": null
+                                "requires": null,
+                                "kind": "MODEL"
                               }
                             ],
                             "validators": [],
                             "default": null,
                             "widget": null,
-                            "requires": null
+                            "requires": null,
+                            "kind": "UNION"
                           }
                         ],
                         "validators": [],
                         "default": null,
                         "widget": null,
-                        "requires": null
+                        "requires": null,
+                        "kind": "LIST"
                       }
                     ],
                     "validators": [],
                     "default": null,
                     "widget": null,
-                    "requires": null
+                    "requires": null,
+                    "kind": "MODEL"
                   }
                 ],
                 "validators": [
@@ -8062,12 +8060,12 @@
                 ],
                 "default": null,
                 "widget": null,
-                "requires": null
+                "requires": null,
+                "kind": "LIST"
               },
               {
                 "key": "file_name",
                 "label": null,
-                "kind": "STRING",
                 "description": "Base file name for acquired images (e.g., 'experiment1')",
                 "identifier": null,
                 "nullable": false,
@@ -8080,12 +8078,12 @@
                 "validators": [],
                 "default": "acquisition",
                 "widget": null,
-                "requires": null
+                "requires": null,
+                "kind": "STRING"
               },
               {
                 "key": "file_format",
                 "label": null,
-                "kind": "STRING",
                 "description": "File format for saving acquired images (e.g., 'TIFF', 'PNG')",
                 "identifier": null,
                 "nullable": false,
@@ -8098,12 +8096,12 @@
                 "validators": [],
                 "default": "TIFF",
                 "widget": null,
-                "requires": null
+                "requires": null,
+                "kind": "STRING"
               },
               {
                 "key": "m_hooks",
                 "label": null,
-                "kind": "LIST",
                 "description": "List of hooks to execute at the start of the acquisition (e.g., 'autofocus', 'z_calibration')",
                 "identifier": null,
                 "nullable": false,
@@ -8116,7 +8114,6 @@
                   {
                     "key": "...",
                     "label": null,
-                    "kind": "UNION",
                     "description": null,
                     "identifier": null,
                     "nullable": false,
@@ -8129,7 +8126,6 @@
                       {
                         "key": "0",
                         "label": null,
-                        "kind": "MODEL",
                         "description": "Refocus by software: sweep Z around the current position, move to the sharpest plane.",
                         "identifier": "@newswitch/software_autofocus_hook",
                         "nullable": false,
@@ -8142,7 +8138,6 @@
                           {
                             "key": "z_range",
                             "label": null,
-                            "kind": "FLOAT",
                             "description": null,
                             "identifier": null,
                             "nullable": false,
@@ -8155,12 +8150,12 @@
                             "validators": [],
                             "default": 20.0,
                             "widget": null,
-                            "requires": null
+                            "requires": null,
+                            "kind": "FLOAT"
                           },
                           {
                             "key": "steps",
                             "label": null,
-                            "kind": "INT",
                             "description": null,
                             "identifier": null,
                             "nullable": false,
@@ -8173,18 +8168,19 @@
                             "validators": [],
                             "default": 11,
                             "widget": null,
-                            "requires": null
+                            "requires": null,
+                            "kind": "INT"
                           }
                         ],
                         "validators": [],
                         "default": null,
                         "widget": null,
-                        "requires": null
+                        "requires": null,
+                        "kind": "MODEL"
                       },
                       {
                         "key": "1",
                         "label": null,
-                        "kind": "MODEL",
                         "description": "Data class representing a z-calibration hook to be executed during acquisition.",
                         "identifier": "@newswitch/z_calibration_hook",
                         "nullable": false,
@@ -8197,7 +8193,6 @@
                           {
                             "key": "calibration_points",
                             "label": null,
-                            "kind": "INT",
                             "description": null,
                             "identifier": null,
                             "nullable": false,
@@ -8210,31 +8205,36 @@
                             "validators": [],
                             "default": 5,
                             "widget": null,
-                            "requires": null
+                            "requires": null,
+                            "kind": "INT"
                           }
                         ],
                         "validators": [],
                         "default": null,
                         "widget": null,
-                        "requires": null
+                        "requires": null,
+                        "kind": "MODEL"
                       }
                     ],
                     "validators": [],
                     "default": null,
                     "widget": null,
-                    "requires": null
+                    "requires": null,
+                    "kind": "UNION"
                   }
                 ],
                 "validators": [],
                 "default": null,
                 "widget": null,
-                "requires": null
+                "requires": null,
+                "kind": "LIST"
               }
             ],
             "validators": [],
             "default": null,
             "widget": null,
-            "requires": null
+            "requires": null,
+            "kind": "MODEL"
           }
         ],
         "returns": [

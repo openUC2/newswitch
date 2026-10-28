@@ -10,9 +10,10 @@ more sections, so running the microscope needs nothing but this file:
 * ``ui``: every blok the microscope shows, as BSX source: the 3D view and the cards its
   devices open, the fluorescence, stage and minimal views; with the catalog version they
   were written against (``catalog: newswitch@<version>``);
-* ``agent_ui``: the bloks Orkestrator shows in agent mode (`newswitch.bloks.agent`), in
-  its standard catalog (``catalog: orkestrator@<release>``): the camera streams, and the
-  design's 3D view (a scene, ``view-3d``) with the cards its devices open.
+* ``agent_ui``: the bloks Orkestrator shows in agent mode (`newswitch.bloks.agent`), drawn
+  with the spec's catalogs and Orkestrator's module (``catalog: orkestrator@<release>``):
+  the camera streams, and the design's 3D view (a ``<Scene>``, ``view-3d``) with the
+  cards its devices open.
 
 Nothing is composed when newswitch starts: it reads the bloks as they are written here
 (and checks them against the catalog). Rebuild after changing the design or the blok
@@ -51,8 +52,6 @@ def _blok_entry(entry: BlokEntry) -> dict[str, Any]:
     data: dict[str, Any] = {"description": entry.description}
     if entry.default:
         data["default"] = True
-    if entry.context != "html":
-        data["context"] = entry.context
     data["bsx"] = LiteralScalarString(entry.bsx.strip() + "\n")
     return data
 

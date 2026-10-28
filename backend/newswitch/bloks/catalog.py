@@ -1,9 +1,13 @@
-"""The newswitch blok catalog: what the frontend renders, as the frontend publishes it.
+"""The newswitch blok module: what the frontend draws beyond the spec's catalogs.
 
-``newswitch-catalog.json`` is the frontend's whole catalog (its standard components, the
-scene's and the microscope's, every function as an operation), written by the frontend
+A blok (language v2) is drawn with base, the standard catalogs (``ui@1``, ``scene@1``, ...)
+and the Orkestrator's module, which the spec ships, and one module of the app's own.
+``newswitch-catalog.json`` is that module: the components the newswitch frontend draws that
+none of those hold (the microscope's, the stage's), written by the frontend
 (``cd frontend && yarn catalog:export``; its tests fail when the file is stale). The backend
-adds nothing to it: a blok checked against it is one the frontend can draw.
+adds nothing to it. The Orkestrator's module is part of every view the spec checks, so a
+component only Orkestrator draws (``MikroScene``) passes here although the newswitch
+frontend does not draw it.
 
 The catalog is versioned (``NEWSWITCH_CATALOG_VERSION`` in the frontend, bumped on every
 change): a configuration's ``ui`` names the one its bloks were written against as
@@ -14,7 +18,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from arkitekt import App, bsx
+from arkitekt import App
 from arkitekt_spec.declare.catalogs import Catalog, parse_ui_catalog
 
 from newswitch.config_io import BlokEntry
@@ -54,7 +58,7 @@ def load_catalog(path: Path = CATALOG_FILE) -> PublishedCatalog:
 
 
 def declare_catalog(app: App, published: PublishedCatalog) -> None:
-    """Declare the catalog the frontend publishes on `app`, as it is."""
+    """Declare the module the frontend publishes on `app`, as it is."""
     app.ui_catalog(
         CATALOG_NAME,
         components=list(published.catalog.components),
@@ -64,13 +68,12 @@ def declare_catalog(app: App, published: PublishedCatalog) -> None:
 
 
 def declare_blok(app: App, name: str, entry: BlokEntry) -> None:
-    """Declare a blok in the newswitch catalog; anything the catalog refuses is an error."""
+    """Declare a blok drawn with the newswitch module; anything the spec refuses is an error."""
     app.blok(
         name,
-        bsx(entry.bsx),
+        entry.bsx,
         description=entry.description,
-        catalog=CATALOG_NAME,
-        context=entry.context,
+        module=CATALOG_NAME,
         default=entry.default,
         mode="strict",
     )

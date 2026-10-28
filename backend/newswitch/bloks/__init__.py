@@ -20,7 +20,7 @@ design (``python -m newswitch.tools.build_design``).
 import warnings
 from pathlib import Path
 
-from arkitekt import App, bsx
+from arkitekt import App
 from arkitekt_spec.declare.catalogs import STANDARD_CATALOG_NAME, standard_catalog_release
 
 from newswitch.bloks.catalog import (
@@ -129,8 +129,8 @@ def check_agent_catalog(ui: UiConfig) -> None:
 def declare_agent_ui(app: App, devices: NewswitchConfig | None) -> None:
     """Declare the ``agent_ui`` bloks of `devices`, in Orkestrator's catalog (agent mode).
 
-    Orkestrator renders them, so they are checked strictly against its standard catalog
-    (no catalog of newswitch's own is declared) and against what `app` registered.
+    Orkestrator renders them, so they are checked strictly against the spec's catalogs and
+    Orkestrator's module (no module of newswitch's own) and against what `app` registered.
 
     Raises:
         FileNotFoundError: An asset of the configuration is missing.
@@ -143,10 +143,8 @@ def declare_agent_ui(app: App, devices: NewswitchConfig | None) -> None:
     for name, entry in devices.agent_ui.bloks.items():
         app.blok(
             name,
-            bsx(entry.bsx),
+            entry.bsx,
             description=entry.description,
-            catalog=STANDARD_CATALOG_NAME,
-            context=entry.context,
             default=entry.default,
             mode="strict",
         )

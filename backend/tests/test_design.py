@@ -150,7 +150,7 @@ def test_a_built_configuration_carries_the_design_ui(tmp_path: Path) -> None:
     assert "<Model" in loaded.ui.bloks["view-3d"].bsx
 
     bloks = {
-        k: [b.catalog, b.default]
+        k: [b.module, b.default]
         for k, b in create_fastapi_registry(loaded).registry.get_declared_bloks().items()
     }
     assert bloks["view-3d"] == ["newswitch", True]
@@ -174,4 +174,4 @@ def test_the_fluorescence_fragments_are_bloks() -> None:
         assert bsx(fragment)
     choice = json.dumps(bsx(fluorescence.ACQUIRE_OR_CALIBRATE), default=str)
     assert "calibrate_light_path" in choice and "capture_image" in choice
-    assert "list.isEmpty" in choice
+    assert "val.is_empty" in choice

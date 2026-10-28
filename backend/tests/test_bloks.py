@@ -1,10 +1,10 @@
-"""The UI the backend declares: the frontend's catalog, and the bloks of the configuration."""
+"""The UI the backend declares: the frontend's module, and the bloks of the configuration."""
 
 import dataclasses
 from pathlib import Path
 
 import pytest
-from arkitekt import App, bsx
+from arkitekt import App
 
 from newswitch import config_io
 from main_fastapi import create_app
@@ -19,8 +19,8 @@ ASSETS = Path(__file__).parent.parent / "newswitch"
 
 
 def bloks_of(app: App) -> dict[str, list]:
-    """Name -> [catalog, default] of every blok declared on `app`."""
-    return {k: [b.catalog, b.default] for k, b in app.registry.get_declared_bloks().items()}
+    """Name -> [module, default] of every blok declared on `app`."""
+    return {k: [b.module, b.default] for k, b in app.registry.get_declared_bloks().items()}
 
 
 def configuration(name: str) -> config_io.NewswitchConfig:
@@ -86,19 +86,21 @@ def test_a_configuration_without_ui_does_not_start(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "tree, finding",
     [
-        ("<StageView><NoSuchThing /></StageView>", "NoSuchThing"),
+        ("<Html><StageView><NoSuchThing /></StageView></Html>", "NoSuchThing"),
         # A scene layer draws into a canvas: it only stands inside a StageScene.
-        ("<div><FramesLayer /></div>", "FramesLayer"),
-        ("<SettingsPanel colour='red' />", "colour"),
-        # Orkestrator renders it; the newswitch frontend does not.
-        ("<MikroScene />", "MikroScene"),
+        ("<Html><div><FramesLayer /></div></Html>", "FramesLayer"),
+        ('<Html><SettingsPanel colour="red" /></Html>', "colour"),
+        # A blok picks a colour role, never a palette colour.
+        ('<Html><div className="bg-red-500" /></Html>', "bg-red-500"),
+        # Orkestrator's module is part of every view (the spec draws a module over it), so
+        # a component only Orkestrator renders (MikroScene) is not refused here.
     ],
 )
 def test_a_blok_the_frontend_cannot_render_is_refused(tree: str, finding: str) -> None:
     """Strict checking refuses unknown components and props, and misplaced scene layers."""
     app = create_fastapi_registry(None)
     with pytest.raises(ValueError, match=finding):
-        app.blok("broken", bsx(tree), catalog=CATALOG_NAME, mode="strict")
+        app.blok("broken", tree, module=CATALOG_NAME, mode="strict")
     assert "broken" not in app.registry.get_declared_bloks()
 
 
@@ -141,14 +143,14 @@ def test_the_published_catalog_is_versioned() -> None:
         assert ui is not None and ui.catalog == current
 
 
-# --- agent mode: the agent_ui bloks, in Orkestrator's catalog -------------------------
+# --- agent mode: the agent_ui bloks, drawn with Orkestrator's module -------------------
 
 
 @pytest.mark.parametrize(
     "name", ["newswitch-config.yaml", "camTest_config.yaml", "newswitch-config.fluorescence.yaml"]
 )
 def test_agent_mode_shows_the_agent_ui(name: str) -> None:
-    """Every shipped configuration has an agent_ui that passes Orkestrator's catalog."""
+    """Every shipped configuration has an agent_ui that passes the spec and Orkestrator's module."""
     pytest.importorskip("lovekit")
     from main_arkitekt import create_arkitekt_registry
 
@@ -158,7 +160,7 @@ def test_agent_mode_shows_the_agent_ui(name: str) -> None:
     # A design-built configuration also has the design's 3D view and the cards it opens.
     designed = {"view-3d", "agent-camera", "agent-laser", "agent-stage"}
     assert set(declared) == {"view-microscope"} | (designed if "fluorescence" in name else set())
-    assert all(blok.catalog == "orkestrator" for blok in declared.values())
+    assert all(blok.module is None for blok in declared.values())
     assert declared["view-microscope"].default
     if "fluorescence" in name:
         assert declared["view-3d"].context == "SCENE"
@@ -172,7 +174,7 @@ def test_agent_mode_refuses_a_newswitch_component() -> None:
 
     app = create_arkitekt_registry(None)
     with pytest.raises(ValueError, match="StageControl"):
-        app.blok("broken", bsx("<StageControl />"), catalog="orkestrator", mode="strict")
+        app.blok("broken", "<Html><StageControl /></Html>", mode="strict")
 
 
 def test_the_agent_ui_names_orkestrators_catalog() -> None:

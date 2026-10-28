@@ -378,8 +378,9 @@ class BlokEntry:
     description: str | None = Field(
         default=None, description="Shown in the bottom bar; a view's starts with its tab label"
     )
-    default: bool = Field(default=False, description="The blok shown first")
-    context: str = Field(default="html", description="Where the blok renders")
+    default: bool = Field(
+        default=False, description="The blok shown first (per context: its root, <Html> or <Scene>)"
+    )
 
 
 @dataclass(kw_only=True, config=STRICT)
@@ -401,7 +402,7 @@ class NewswitchConfig:
     devices: dict[str, Device] = Field(description="All devices, keyed by their identifier")
     assets: dict[str, str] = Field(
         default_factory=dict,
-        description="Files the bloks read as @self.assets.<name>, relative to newswitch/",
+        description="Files the bloks read as self.assets.<name>, relative to newswitch/",
     )
     ui: UiConfig | None = Field(
         default=None,

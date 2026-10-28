@@ -107,13 +107,8 @@ $defs:
       default:
         type: boolean
         default: false
-        description: The blok shown first
+        description: 'The blok shown first (per context: its root, <Html> or <Scene>)'
         title: Default
-      context:
-        default: html
-        description: Where the blok renders
-        title: Context
-        type: string
     required:
     - bsx
     title: BlokEntry
@@ -1473,7 +1468,7 @@ properties:
   assets:
     additionalProperties:
       type: string
-    description: Files the bloks read as @self.assets.<name>, relative to newswitch/
+    description: Files the bloks read as self.assets.<name>, relative to newswitch/
     title: Assets
     type: object
   ui:
