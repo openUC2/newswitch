@@ -47,12 +47,15 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       globals: true,
       // CSS is stubbed out in tests, `?raw` imports included. The stylesheets the
-      // runtime Tailwind compiler for bloks reads (lib/blok/tailwind) must be real
-      // text, so these alone are processed.
+      // runtime Tailwind compiler for bloks reads (@arkitektio/bsx/tailwind) must be
+      // real text, so these alone are processed.
       css: {
         include: [/tailwindcss\/(theme|utilities)\.css/, /src\/theme\.css/],
       },
       include: ["src/**/*.{test,spec}.{ts,tsx}"],
+      // @arkitektio/bsx is processed like this app's own source: its runtime Tailwind
+      // reads stylesheets as text (`?raw`) and its shadcn copies import CJS packages by name.
+      server: { deps: { inline: ["@arkitektio/bsx"] } },
     },
     // Listen on every interface and accept any Host header, so the dev server is reachable
     // by hostname / LAN IP / tailscale name, not just localhost. This turns off Vite's

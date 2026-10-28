@@ -31,9 +31,9 @@ export default defineConfig([
     },
   },
   {
-    // Ported blok renderer (from orkestrator-next). Its catalog modules export
-    // blok component *definitions* (objects wrapping a render function) and
-    // runtime hooks/contexts side by side, which is the point of a catalog -
+    // newswitch's own bloks (the renderer is @arkitektio/bsx). Its catalog modules
+    // export blok component *definitions* (objects wrapping a render function)
+    // and runtime hooks/contexts side by side, which is the point of a catalog -
     // fast refresh simply does a full reload for them.
     files: ["src/lib/blok/**"],
     rules: {

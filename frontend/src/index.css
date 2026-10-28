@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 
 @import "./theme.css";
+/* The blok renderer's own classes (@arkitektio/bsx: its shadcn copies, its layout):
+   Tailwind does not scan node_modules on its own. */
+@source "../node_modules/@arkitektio/bsx/dist";
 
 :root {
   --radius: 0.625rem;

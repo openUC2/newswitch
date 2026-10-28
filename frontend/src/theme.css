@@ -1,7 +1,7 @@
 /*
  * The app's Tailwind tokens and variants. Shared by the build (index.css imports
  * this) and by the runtime compiler that styles the bloks the backend serves
- * (lib/blok/tailwind/runtimeTailwind.ts reads it raw), so both mean the same by `bg-muted`
+ * (@arkitektio/bsx/tailwind, handed it raw by lib/blok/platform.ts), so both mean the same by `bg-muted`
  * or `past:`.
  */
 
@@ -87,7 +87,7 @@
    marks itself data-locked="true"/"false", so "false" does not count. */
 @custom-variant locked (&:where([data-locked]:not([data-locked="false"]), [data-locked]:not([data-locked="false"]) *));
 /* A control whose task is running, a value that is stale; an inactive tab or item.
-   shadcn's `data-open:` & co. come from the runtime compiler (lib/blok/tailwind). */
+   shadcn's `data-open:` & co. come from the runtime compiler (@arkitektio/bsx/tailwind). */
 @custom-variant data-busy (&:where([data-busy]:not([data-busy="false"])));
 @custom-variant data-stale (&:where([data-stale]:not([data-stale="false"])));
 @custom-variant data-inactive (&:where([data-state="inactive"]));

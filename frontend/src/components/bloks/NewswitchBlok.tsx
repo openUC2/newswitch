@@ -5,12 +5,12 @@ import { useShallow } from "zustand/react/shallow";
 import { appDefinition } from "@/apps/default/app";
 import { authFetch } from "@/lib/auth/authFetch";
 import { useBackendUi } from "@/lib/blok/backendUi";
-import type { BlokAsset, BlokAssetHost } from "@/lib/blok/renderer/assets";
-import { BlokAssetHostProvider } from "@/lib/blok/renderer/assets";
+import type { BlokAsset, BlokAssetHost } from "@arkitektio/bsx/renderer/assets";
+import { BlokAssetHostProvider } from "@arkitektio/bsx/renderer/assets";
 import {
   BlokSceneHostProvider,
   type BlokSceneHost,
-} from "@/lib/blok/renderer/bloks/scene";
+} from "@arkitektio/bsx/renderer/bloks/scene/index";
 import { selectAppIsLive, useAppStateStore } from "@/lib/arkitekt/app-state";
 import {
   getBlockingLock,
@@ -35,13 +35,13 @@ import {
   taskUpdateOf,
   type NewswitchBlokDeclaration,
 } from "@/lib/blok/newswitch";
-import BlokRenderer from "@/lib/blok/renderer/BlokRenderer";
+import BlokRenderer from "@arkitektio/bsx/renderer/BlokRenderer";
 import { newswitchBlokCatalog } from "@/lib/blok/microscope/catalog";
 import {
   lockedActionKey,
   type BlokDispatchActionHandler,
   type BlokRefuseActionHandler,
-} from "@/lib/blok/renderer/runtime";
+} from "@arkitektio/bsx/renderer/runtime/index";
 
 const APP_KEY = appDefinition.key;
 

@@ -27,12 +27,9 @@ import {
   useValue,
   type BlokComponentDefinition,
   type BlokNodeErrorProps,
-} from "@/lib/blok/renderer/runtime";
-import { renderChildList } from "@/lib/blok/renderer/bloks/shared/render";
-import {
-  childListSchema,
-  classNameSchema,
-} from "@/lib/blok/renderer/bloks/shared/schemas";
+} from "@arkitektio/bsx/renderer/runtime/index";
+import { renderChildList } from "@arkitektio/bsx/renderer/bloks/shared/render";
+import { childListSchema, classNameSchema } from "@arkitektio/bsx/catalogs";
 import { cn } from "@/lib/utils";
 import { useIsLive } from "./locks";
 

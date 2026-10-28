@@ -25,8 +25,8 @@ import {
   useBlok,
   useValue,
   type BlokComponentDefinition,
-} from "@/lib/blok/renderer/runtime";
-import { classNameSchema } from "@/lib/blok/renderer/bloks/shared/schemas";
+} from "@arkitektio/bsx/renderer/runtime/index";
+import { classNameSchema } from "@arkitektio/bsx/catalogs";
 import { PAST_REASON, useIsLive, usePanelLocked } from "./locks";
 
 /**

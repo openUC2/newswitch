@@ -314,10 +314,11 @@ device configuration, checked against the catalog the frontend publishes
 (`newswitch/bloks/newswitch-catalog.json`, versioned as `newswitch@<n>`). Bloks are served at
 `/schemas/bloks` and read by the frontend **at run time** (nothing about the UI is
 built in): it fetches them when it connects, and again on reconnect, and renders
-them with its blok renderer.
+them with its blok renderer (`@arkitektio/bsx`).
 
-A blok's Tailwind classes are compiled **in the browser** (`lib/blok/tailwind`, the
-Tailwind compiler fed the app's tokens and variants from `frontend/src/theme.css`), since
+A blok's Tailwind classes are compiled **in the browser** (`@arkitektio/bsx/tailwind`, the
+Tailwind compiler fed the app's tokens and variants from `frontend/src/theme.css` by
+`src/lib/blok/platform.ts`), since
 the build never sees them. Bloks
 can style by situation with three variants:
 - `past:` / `live:` — the app shows the replay timeline, or the live microscope;
@@ -328,7 +329,7 @@ section (`backend/configs/README.md`); one built from an optikit design (the mic
 3D, see `newswitch.design`) is written by `just build-design`. Bloks are written in blok
 language v2: they bind to states (`{self.ObjectiveState.mounted_lenses}`), loop
 (`<foreach>`), and invoke actions (`onClick={self.switch_objective(slot: lens.slot)}`).
-The backend serves their source, and the frontend parses it (`lib/blok/bsx`). Use them for
+The backend serves their source, and the frontend parses it (`@arkitektio/bsx`). Use them for
 small panels that shouldn't require a frontend build.
 
 ---

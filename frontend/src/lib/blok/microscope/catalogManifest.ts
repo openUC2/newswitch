@@ -14,13 +14,9 @@ import type {
   BlokCatalog,
   BlokComponentContext,
   BlokComponentDefinition,
-} from "@/lib/blok/renderer/runtime";
-import {
-  baseCatalog,
-  orkestratorModule,
-  standardCatalogs,
-} from "@/lib/blok/spec/catalogs";
-import { isActionSchema } from "@/lib/blok/renderer/runtime/schemas";
+} from "@arkitektio/bsx/renderer/runtime/index";
+import { baseCatalog, standardCatalogs } from "@arkitektio/bsx/spec/catalogs";
+import { isActionSchema } from "@arkitektio/bsx/renderer/runtime/schemas";
 
 type ValueKind =
   | "STRING"
@@ -197,8 +193,8 @@ export const toUiCatalogComponent = (
 };
 
 /**
- * The module: every component of `catalog` that base, the standard catalogs
- * and the Orkestrator's module do not hold, by name.
+ * The module: every component of `catalog` that base and the global catalogs
+ * (shadcn@1 among them) do not hold, by name.
  */
 export const toModuleJson = (
   name: string,
@@ -207,8 +203,8 @@ export const toModuleJson = (
   catalog: BlokCatalog,
 ): UiCatalogJson => {
   const provided = new Set(
-    [baseCatalog(), ...standardCatalogs(), orkestratorModule()].flatMap(
-      (source) => source.components.map((component) => component.name),
+    [baseCatalog(), ...standardCatalogs()].flatMap((source) =>
+      source.components.map((component) => component.name),
     ),
   );
   return {

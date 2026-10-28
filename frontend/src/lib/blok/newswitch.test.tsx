@@ -14,10 +14,11 @@ import {
   taskUpdateOf,
   type NewswitchBlokDeclaration,
 } from "./newswitch";
-import BlokRenderer from "./renderer/BlokRenderer";
+import BlokRenderer from "@arkitektio/bsx/renderer/BlokRenderer";
 import { locksOf } from "./microscope/locks";
-import { lockedActionKey } from "./renderer/runtime";
-import { type BlokDispatchActionHandler } from "./renderer/runtime";
+import { newswitchBlokCatalog } from "./microscope/catalog";
+import { lockedActionKey } from "@arkitektio/bsx/renderer/runtime/index";
+import { type BlokDispatchActionHandler } from "@arkitektio/bsx/renderer/runtime/index";
 
 // The jonda blok exactly as the backend serves it at /schemas/bloks (blok language v2).
 const jonda = jondaPayload as unknown as NewswitchBlokDeclaration;
@@ -111,6 +112,7 @@ describe("the jonda blok", () => {
     const dispatchAction = vi.fn<BlokDispatchActionHandler>();
     render(
       <BlokRenderer
+        catalog={newswitchBlokCatalog}
         uiComponents={jondaRoots}
         initialState={mergeLiveState(jondaModel, {
           ObjectiveState: {
@@ -146,6 +148,7 @@ describe("locked controls", () => {
   const renderJonda = (lockedActions?: ReadonlyMap<string, string>) =>
     render(
       <BlokRenderer
+        catalog={newswitchBlokCatalog}
         uiComponents={jondaRoots}
         initialState={mergeLiveState(jondaModel, {
           ObjectiveState: {

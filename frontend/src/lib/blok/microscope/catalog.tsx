@@ -4,12 +4,19 @@
  * against it; `catalogManifest` publishes the microscope part to the backend
  * as the `newswitch` module, which the backend validates those bloks with.
  */
+import { threeScene } from "@arkitektio/bsx/scene";
 import {
-  createBlokCatalog,
+  shadcnExtras,
+  shadcnHtml,
+  shadcnLogo,
+  shadcnUi,
+} from "@arkitektio/bsx/shadcn";
+import {
+  declareBlokUi,
+  ownBlokCatalog,
   type BlokCatalog,
   type BlokComponentDefinition,
-} from "@/lib/blok/renderer/runtime";
-import { defaultBlokCatalog } from "@/lib/blok/renderer/catalog";
+} from "@arkitektio/bsx/runtime";
 import { microscopeBlokComponents } from "./microscope";
 import { sceneBlokComponents } from "./scene";
 import { stageBlokComponents } from "./stage";
@@ -31,8 +38,28 @@ export const newswitchBlokComponents: BlokComponentDefinition[] = [
   ...sceneBlokComponents,
 ];
 
-export const newswitchBlokCatalog: BlokCatalog = createBlokCatalog(
-  NEWSWITCH_CATALOG_NAME,
-  [...defaultBlokCatalog.components.values(), ...newswitchBlokComponents],
-  defaultBlokCatalog.functionDefinitions,
+/** The microscope's own catalog, `newswitch@<version>`: its contract and its implementation, both newswitch's. */
+export const newswitchMicroscope = ownBlokCatalog(
+  {
+    name: NEWSWITCH_CATALOG_NAME,
+    version: NEWSWITCH_CATALOG_VERSION,
+    description:
+      "The newswitch microscope: its stage, its scene and its controls.",
+  },
+  newswitchBlokComponents,
 );
+
+/** newswitch's UI with the microscope: the global catalogs and its own. */
+export const newswitchBlokUi = declareBlokUi({
+  name: NEWSWITCH_CATALOG_NAME,
+  implements: [
+    shadcnUi,
+    shadcnHtml,
+    shadcnLogo,
+    shadcnExtras,
+    threeScene,
+    newswitchMicroscope,
+  ],
+});
+
+export const newswitchBlokCatalog: BlokCatalog = newswitchBlokUi.catalog;

@@ -11,7 +11,7 @@ import { appDefinition } from "@/apps/default/app";
 import { authFetch } from "@/lib/auth/authFetch";
 import { useTransport } from "@/lib/arkitekt/transport/transport-context";
 import type { NewswitchBlokDeclaration } from "@/lib/blok/newswitch";
-import type { BlokAssetKind } from "@/lib/blok/renderer/assets";
+import type { BlokAssetKind } from "@arkitektio/bsx/renderer/assets";
 
 /** A blok as `/schemas/bloks` serves it. */
 export type BackendBlok = NewswitchBlokDeclaration & {

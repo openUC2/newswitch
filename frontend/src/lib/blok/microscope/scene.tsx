@@ -16,7 +16,7 @@ import { CurrentLightPathPlane } from "@/components/stage/planes/lightpath/Light
 import {
   createBlokComponent,
   type BlokComponentDefinition,
-} from "@/lib/blok/renderer/runtime";
+} from "@arkitektio/bsx/renderer/runtime/index";
 import { useIsLive } from "./locks";
 
 /**

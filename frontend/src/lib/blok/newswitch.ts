@@ -9,12 +9,15 @@
  * dependencies are assigned as tasks of the app.
  */
 import { z } from "zod";
-import { parseBsx } from "./bsx/parse";
-import { demoModel, parseBlokDeclarations } from "./renderer/declarations";
+import { parseBsx } from "@arkitektio/bsx/bsx/parse";
+import {
+  demoModel,
+  parseBlokDeclarations,
+} from "@arkitektio/bsx/renderer/declarations";
 import {
   normalizeBlokComponentTree,
   type BlokTaskUpdate,
-} from "./renderer/runtime";
+} from "@arkitektio/bsx/renderer/runtime/index";
 import type { Task } from "@/lib/arkitekt/transport/types";
 
 /** The dependency key under which a blok addresses the app it is served by. */
