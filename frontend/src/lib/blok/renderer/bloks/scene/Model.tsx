@@ -23,6 +23,7 @@ import { actionProp, describedString } from "../shared/schemas";
 import {
   ModelProvider,
   useSceneModelKey,
+  useSceneOwner,
   useSceneNotice,
   useSceneOverlay,
   useSceneStoreApi,
@@ -46,16 +47,14 @@ import {
   useBlokReady,
   type BlokReadiness,
 } from "@/lib/blok/preview/snapshotMode";
+import { isExplicitId } from "@/lib/blok/spec/vocabulary";
 
 const modelShape = {
   src: z
     .string()
     .describe(
-      'The 3D model to show: an asset its app registered, as in "@self.assets.scope".',
+      "The 3D model to show: an asset its app registered, as in `{self.assets.scope}`.",
     ),
-  id: describedString(
-    'A name other models in the scene address this one by, as in to="arm:tool0".',
-  ),
   origin: describedString(
     'Where the model sits in the scene, as "x y z" in meters.',
   ),
@@ -521,6 +520,15 @@ const LoadedModel = ({
     return () => store.getState().setModel(key, null);
   }, [id, instance, modelKey, store]);
 
+  // Who the model stands for (an agent, in a space): an overlay anchored there binds to it.
+  const owner = useSceneOwner();
+  const ownedKey = React.useId();
+  React.useEffect(() => {
+    if (!owner) return;
+    store.getState().setOwnedModel(owner, ownedKey, model);
+    return () => store.getState().setOwnedModel(owner, ownedKey, null);
+  }, [model, owner, ownedKey, store]);
+
   const placedKey = React.useId();
   React.useEffect(() => {
     store.getState().setPlaced(placedKey, instance.root);
@@ -619,7 +627,8 @@ const ModelBody = ({
   robot,
 }: Pick<BlokRenderArgs, "component" | "buildChild"> & { robot: boolean }) => {
   const blok = useBlok(component, modelSchema);
-  const id = useValue(blok.id);
+  // Other models address this one by its explicit node id, as in to="arm:tool0".
+  const id = isExplicitId(component.id) ? component.id : undefined;
   const origin = parseVector(useValue(blok.origin)) ?? [0, 0, 0];
   const rotation = parseVector(useValue(blok.rotation)) ?? [0, 0, 0];
   const scale = useValue(blok.scale) ?? 1;
@@ -653,7 +662,7 @@ const ModelBody = ({
   const current = load && loaded.reference === reference ? loaded : undefined;
   const reason =
     asset === null
-      ? 'A model names an asset its app registered: src="@self.assets.<name>".'
+      ? "A model names an asset its app registered: src={self.assets.<name>}."
       : asset.status === "unknown"
         ? asset.reason
         : asset.status === "awaited"

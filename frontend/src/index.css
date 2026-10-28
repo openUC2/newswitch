@@ -36,6 +36,55 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* The blok language's roles (vocabulary theme.colour_roles), as Orkestrator
+     defines them for a neutral theme: status (success, warning, info), the
+     spectrum (a fluorophore's or a laser's own colour) and the brand accent. */
+  --brand-hue: 237;
+  --brand-chroma: 0.15;
+  --status-chroma: 0.15;
+  --success: oklch(0.6 var(--status-chroma) 150);
+  --success-foreground: oklch(0.985 calc(var(--status-chroma) * 0.15) 150);
+  --success-soft: oklch(0.95 calc(var(--status-chroma) * 0.35) 150);
+  --warning: oklch(0.7 var(--status-chroma) 75);
+  --warning-foreground: oklch(0.24 calc(var(--status-chroma) * 0.4) 60);
+  --warning-soft: oklch(0.96 calc(var(--status-chroma) * 0.35) 85);
+  --info: oklch(0.6 var(--status-chroma) 240);
+  --info-foreground: oklch(0.985 calc(var(--status-chroma) * 0.15) 240);
+  --info-soft: oklch(0.95 calc(var(--status-chroma) * 0.35) 240);
+  --spectrum-chroma: clamp(0.1, calc(var(--brand-chroma) * 1.1), 0.2);
+  --spectrum-violet: oklch(0.55 var(--spectrum-chroma) 300);
+  --spectrum-violet-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 300);
+  --spectrum-blue: oklch(0.58 var(--spectrum-chroma) 260);
+  --spectrum-blue-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 260);
+  --spectrum-cyan: oklch(0.68 var(--spectrum-chroma) 215);
+  --spectrum-cyan-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 215);
+  --spectrum-green: oklch(0.64 var(--spectrum-chroma) 145);
+  --spectrum-green-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 145);
+  --spectrum-yellow: oklch(0.8 var(--spectrum-chroma) 100);
+  --spectrum-yellow-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 100);
+  --spectrum-orange: oklch(0.7 var(--spectrum-chroma) 60);
+  --spectrum-orange-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 60);
+  --spectrum-red: oklch(0.6 var(--spectrum-chroma) 27);
+  --spectrum-red-soft: oklch(0.95 calc(var(--spectrum-chroma) * 0.35) 27);
+  /* The pens a logo blok paints with (vocabulary theme.logo_pens). */
+  --logo-ink: var(--foreground);
+  --logo-muted: var(--muted-foreground);
+  --logo-brand: oklch(0.55 var(--brand-chroma) var(--brand-hue));
+  --logo-brand-strong: oklch(0.36 var(--brand-chroma) var(--brand-hue));
+  --logo-brand-soft: oklch(
+    0.84 calc(var(--brand-chroma) * 0.5) var(--brand-hue)
+  );
+  --logo-surface: var(--card);
+  --logo-success: var(--success);
+  --logo-warning: var(--warning);
+  --logo-info: var(--info);
+  --logo-spectrum-violet: var(--spectrum-violet);
+  --logo-spectrum-blue: var(--spectrum-blue);
+  --logo-spectrum-cyan: var(--spectrum-cyan);
+  --logo-spectrum-green: var(--spectrum-green);
+  --logo-spectrum-yellow: var(--spectrum-yellow);
+  --logo-spectrum-orange: var(--spectrum-orange);
+  --logo-spectrum-red: var(--spectrum-red);
 }
 
 .dark {
@@ -70,6 +119,50 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --success: oklch(0.72 var(--status-chroma) 150);
+  --success-foreground: oklch(0.18 calc(var(--status-chroma) * 0.4) 150);
+  --success-soft: oklch(0.3 calc(var(--status-chroma) * 0.45) 150);
+  --warning: oklch(0.8 var(--status-chroma) 75);
+  --warning-foreground: oklch(0.2 calc(var(--status-chroma) * 0.4) 60);
+  --warning-soft: oklch(0.32 calc(var(--status-chroma) * 0.45) 75);
+  --info: oklch(0.72 var(--status-chroma) 240);
+  --info-foreground: oklch(0.18 calc(var(--status-chroma) * 0.4) 240);
+  --info-soft: oklch(0.3 calc(var(--status-chroma) * 0.45) 240);
+  --spectrum-violet: oklch(0.7 var(--spectrum-chroma) 300);
+  --spectrum-violet-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 300);
+  --spectrum-blue: oklch(0.72 var(--spectrum-chroma) 260);
+  --spectrum-blue-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 260);
+  --spectrum-cyan: oklch(0.8 var(--spectrum-chroma) 215);
+  --spectrum-cyan-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 215);
+  --spectrum-green: oklch(0.78 var(--spectrum-chroma) 145);
+  --spectrum-green-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 145);
+  --spectrum-yellow: oklch(0.88 var(--spectrum-chroma) 100);
+  --spectrum-yellow-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 100);
+  --spectrum-orange: oklch(0.8 var(--spectrum-chroma) 60);
+  --spectrum-orange-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 60);
+  --spectrum-red: oklch(0.72 var(--spectrum-chroma) 27);
+  --spectrum-red-soft: oklch(0.3 calc(var(--spectrum-chroma) * 0.45) 27);
+  /* The pens a logo blok paints with (vocabulary theme.logo_pens). */
+  --logo-ink: var(--foreground);
+  --logo-muted: var(--muted-foreground);
+  --logo-brand: oklch(0.72 var(--brand-chroma) var(--brand-hue));
+  --logo-brand-strong: oklch(
+    0.87 calc(var(--brand-chroma) * 0.75) var(--brand-hue)
+  );
+  --logo-brand-soft: oklch(
+    0.42 calc(var(--brand-chroma) * 0.6) var(--brand-hue)
+  );
+  --logo-surface: var(--card);
+  --logo-success: var(--success);
+  --logo-warning: var(--warning);
+  --logo-info: var(--info);
+  --logo-spectrum-violet: var(--spectrum-violet);
+  --logo-spectrum-blue: var(--spectrum-blue);
+  --logo-spectrum-cyan: var(--spectrum-cyan);
+  --logo-spectrum-green: var(--spectrum-green);
+  --logo-spectrum-yellow: var(--spectrum-yellow);
+  --logo-spectrum-orange: var(--spectrum-orange);
+  --logo-spectrum-red: var(--spectrum-red);
 }
 
 @layer base {

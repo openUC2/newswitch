@@ -1,4 +1,3 @@
-import { controlBlokComponents } from "./control";
 import { dataBlokComponents } from "./data";
 import { feedbackBlokComponents } from "./feedback";
 import { formBlokComponents } from "./forms";
@@ -7,6 +6,7 @@ import { iconBlokComponents } from "./icons";
 import { layoutBlokComponents } from "./layout";
 import { navigationBlokComponents } from "./navigation";
 import { overlayBlokComponents } from "./overlays";
+import { toastBlokComponents } from "./toast";
 import { typographyBlokComponents } from "./typography";
 
 /**
@@ -25,11 +25,10 @@ export const shadcnComposableComponents = [
   ...feedbackBlokComponents,
   ...dataBlokComponents,
   ...iconBlokComponents,
-  ...controlBlokComponents,
+  ...toastBlokComponents,
 ];
 
 export {
-  controlBlokComponents,
   dataBlokComponents,
   feedbackBlokComponents,
   formBlokComponents,
@@ -38,5 +37,6 @@ export {
   layoutBlokComponents,
   navigationBlokComponents,
   overlayBlokComponents,
+  toastBlokComponents,
   typographyBlokComponents,
 };

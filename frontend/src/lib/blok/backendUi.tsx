@@ -18,7 +18,9 @@ export type BackendBlok = NewswitchBlokDeclaration & {
   description?: string | null;
   context?: string | null;
   default?: boolean | null;
-  catalog?: string | null;
+  /** The module it is drawn with besides the spec's catalogs (`newswitch`). */
+  module?: string | null;
+  catalogs?: readonly string[] | null;
 };
 
 /** An asset as `/schemas/assets` lists it: the file is at `/assets/<name>`. */

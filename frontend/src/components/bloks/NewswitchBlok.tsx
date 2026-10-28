@@ -26,6 +26,8 @@ import type { Task } from "@/lib/arkitekt/transport/types";
 import {
   SELF_DEPENDENCY,
   actionArgOrder,
+  blokModel,
+  blokRoots,
   foreignDependencyKeys,
   mapActionArguments,
   mergeLiveState,
@@ -37,7 +39,6 @@ import BlokRenderer from "@/lib/blok/renderer/BlokRenderer";
 import { newswitchBlokCatalog } from "@/lib/blok/microscope/catalog";
 import {
   lockedActionKey,
-  normalizeBlokComponentTree,
   type BlokDispatchActionHandler,
   type BlokRefuseActionHandler,
 } from "@/lib/blok/renderer/runtime";
@@ -87,19 +88,25 @@ type NewswitchBlokProps = Omit<
 /**
  * A blok the newswitch backend declares, drawn against the live app.
  *
- * - `@self.<State>` reads the app's live state of that name (the blok's demo
- *   state stands in until it has loaded).
- * - `@self.<action>(...)` assigns the app's action of that name as a task;
- *   positional arguments are named by the blok's demand on the action.
- * - Pure function calls go through the standard blok function catalog.
+ * - `self.<State>` reads the app's live state of that name (the blok's demo
+ *   stands in until it has loaded).
+ * - `self.<action>(...)` assigns the app's action of that name as a task.
+ * - Pure function calls go through the vocabulary's functions (blok language v2).
  */
 export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
   const blokKey = blok.key;
 
-  const roots = useMemo(
-    () => normalizeBlokComponentTree(blok.components).roots,
-    [blok],
-  );
+  // The served source, parsed; one that does not parse is shown, not thrown.
+  const parsed = useMemo((): { roots: unknown[]; error: string | null } => {
+    try {
+      return { roots: blokRoots(blok), error: null };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Blok ${blok.key}: ${message}`);
+      return { roots: [], error: message };
+    }
+  }, [blok]);
+  const roots = parsed.roots;
 
   // --- State reads -------------------------------------------------------
   const stateKeys = useMemo(() => selfStateKeys(blok), [blok]);
@@ -118,9 +125,10 @@ export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
     }
   }, [stateContext, stateKeys]);
 
+  const model = useMemo(() => blokModel(blok, roots), [blok, roots]);
   const initialState = useMemo(
-    () => mergeLiveState(blok.demoState, live),
-    [blok, live],
+    () => mergeLiveState(model, live),
+    [model, live],
   );
 
   // --- Availability ------------------------------------------------------
@@ -265,6 +273,14 @@ export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
     [blok, blokKey, lockStoreApi, taskApi],
   );
 
+  if (parsed.error) {
+    return (
+      <div className="m-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        The blok {blokKey} does not parse: {parsed.error}
+      </div>
+    );
+  }
+
   return (
     <NewswitchHosts>
       {/* For the blok's `past:` / `live:` variants: whether it shows the past (replay). */}
@@ -291,7 +307,7 @@ export function NewswitchBlok({ blok, ...rendererProps }: NewswitchBlokProps) {
 const loadingAsset: BlokAsset = { status: "loading" };
 
 /**
- * The backend's assets, for a blok's `@self.assets.<name>`: listed by `/schemas/assets`
+ * The backend's assets, for a blok's `self.assets.<name>`: listed by `/schemas/assets`
  * (with the hash a model is checked against) and served at `/assets/<name>`.
  */
 const assetHost: BlokAssetHost = {

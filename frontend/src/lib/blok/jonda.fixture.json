@@ -1,414 +1,210 @@
 {
-  "args": null,
-  "catalog": null,
-  "components": [
-    {
-      "children": [
-        {
-          "children": [
-            {
-              "children": null,
-              "component": "CardTitle",
-              "id": "opentrons-controller/CardHeader[0]/CardTitle[0]",
-              "props": [
-                {
-                  "agentCall": null,
-                  "declaresValue": null,
-                  "dynamicValue": null,
-                  "key": "text",
-                  "staticValue": "Newswitch Handler",
-                  "utilCall": null
-                }
-              ]
-            },
-            {
-              "children": null,
-              "component": "CardDescription",
-              "id": "opentrons-controller/CardHeader[0]/CardDescription[0]",
-              "props": [
-                {
-                  "agentCall": null,
-                  "declaresValue": null,
-                  "dynamicValue": null,
-                  "key": "text",
-                  "staticValue": "Bene don't look at this yet, this is just a placeholder",
-                  "utilCall": null
-                }
-              ]
-            }
-          ],
-          "component": "CardHeader",
-          "id": "opentrons-controller/CardHeader[0]",
-          "props": null
-        },
-        {
-          "children": [
-            {
-              "children": [
-                {
-                  "children": null,
-                  "component": "span",
-                  "id": "opentrons-controller/CardContent[0]/div[0]/span[0]",
-                  "props": [
-                    {
-                      "agentCall": null,
-                      "declaresValue": null,
-                      "dynamicValue": null,
-                      "key": "className",
-                      "staticValue": "text-sm font-medium text-slate-700",
-                      "utilCall": null
-                    },
-                    {
-                      "agentCall": null,
-                      "declaresValue": null,
-                      "dynamicValue": null,
-                      "key": "text",
-                      "staticValue": "Deck Status",
-                      "utilCall": null
-                    }
-                  ]
-                },
-                {
-                  "children": null,
-                  "component": "span",
-                  "id": "opentrons-controller/CardContent[0]/div[0]/span[1]",
-                  "props": [
-                    {
-                      "agentCall": null,
-                      "declaresValue": null,
-                      "dynamicValue": null,
-                      "key": "className",
-                      "staticValue": "text-xs font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-1 rounded-full",
-                      "utilCall": null
-                    },
-                    {
-                      "agentCall": null,
-                      "declaresValue": null,
-                      "dynamicValue": null,
-                      "key": "text",
-                      "staticValue": "Idle",
-                      "utilCall": null
-                    }
-                  ]
-                }
-              ],
-              "component": "div",
-              "id": "opentrons-controller/CardContent[0]/div[0]",
-              "props": [
-                {
-                  "agentCall": null,
-                  "declaresValue": null,
-                  "dynamicValue": null,
-                  "key": "className",
-                  "staticValue": "flex items-center justify-between p-3 border rounded-md bg-slate-50",
-                  "utilCall": null
-                }
-              ]
-            },
-            {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "children": null,
-                      "component": "Button",
-                      "id": "opentrons-controller/CardContent[0]/div[1]/foreach[0]/Button[0]",
-                      "props": [
-                        {
-                          "agentCall": null,
-                          "declaresValue": null,
-                          "dynamicValue": {
-                            "literal": null,
-                            "path": "lens.name"
-                          },
-                          "key": "label",
-                          "staticValue": null,
-                          "utilCall": null
-                        },
-                        {
-                          "agentCall": {
-                            "arguments": [
-                              {
-                                "agentCall": null,
-                                "key": "0",
-                                "utilCall": null,
-                                "valueDict": null,
-                                "valueList": null,
-                                "valueLiteral": null,
-                                "valuePath": "lens.slot"
-                              }
-                            ],
-                            "dependency": "self",
-                            "operation": "switch_objective"
-                          },
-                          "declaresValue": null,
-                          "dynamicValue": null,
-                          "key": "onClick",
-                          "staticValue": null,
-                          "utilCall": null
-                        }
-                      ]
-                    }
-                  ],
-                  "component": "foreach",
-                  "id": "opentrons-controller/CardContent[0]/div[1]/foreach[0]",
-                  "props": [
-                    {
-                      "agentCall": null,
-                      "declaresValue": null,
-                      "dynamicValue": {
-                        "literal": null,
-                        "path": "self.ObjectiveState.mounted_lenses"
-                      },
-                      "key": "items",
-                      "staticValue": null,
-                      "utilCall": null
-                    },
-                    {
-                      "agentCall": null,
-                      "declaresValue": "lens",
-                      "dynamicValue": null,
-                      "key": "let",
-                      "staticValue": "lens",
-                      "utilCall": null
-                    }
-                  ]
-                }
-              ],
-              "component": "div",
-              "id": "opentrons-controller/CardContent[0]/div[1]",
-              "props": [
-                {
-                  "agentCall": null,
-                  "declaresValue": null,
-                  "dynamicValue": null,
-                  "key": "className",
-                  "staticValue": "grid grid-cols-2 gap-2 mt-2",
-                  "utilCall": null
-                }
-              ]
-            }
-          ],
-          "component": "CardContent",
-          "id": "opentrons-controller/CardContent[0]",
-          "props": [
-            {
-              "agentCall": null,
-              "declaresValue": null,
-              "dynamicValue": null,
-              "key": "className",
-              "staticValue": "grid gap-4",
-              "utilCall": null
-            }
-          ]
-        }
-      ],
-      "component": "Card",
-      "id": "opentrons-controller",
-      "props": [
-        {
-          "agentCall": null,
-          "declaresValue": null,
-          "dynamicValue": null,
-          "key": "className",
-          "staticValue": "w-[380px] border-blue-200 shadow-md",
-          "utilCall": null
-        }
-      ]
-    }
-  ],
-  "context": "HTML",
-  "default": false,
-  "demoState": {
-    "self": {
-      "ObjectiveState": {
-        "magnification": 0.0,
-        "mounted_lenses": [],
-        "name": "",
-        "slot": 0
-      }
-    }
-  },
+  "key": "jonda",
   "dependencies": [
     {
+      "key": "self",
+      "app": null,
+      "version": null,
+      "name": null,
+      "description": null,
+      "optional": false,
       "actionDependencies": [
         {
-          "allowInactive": true,
+          "key": "switch_objective",
+          "description": "Switch to a specific objective slot.",
           "demand": {
+            "hash": null,
+            "key": "switch_objective",
             "app": null,
+            "version": null,
+            "name": null,
             "argMatches": [
               {
                 "at": 0,
-                "children": null,
-                "descriptors": null,
-                "dimension": null,
-                "identifier": null,
                 "key": "slot",
                 "kind": "INT",
-                "nullable": false
+                "identifier": null,
+                "nullable": false,
+                "dimension": null,
+                "descriptors": null,
+                "children": null
               }
             ],
+            "returnMatches": null,
+            "protocols": null,
             "forceArgLength": null,
             "forceReturnLength": null,
-            "hash": null,
-            "idempotent": null,
-            "key": "switch_objective",
-            "name": null,
-            "protocols": null,
             "pure": null,
-            "returnMatches": null,
-            "stateful": null,
-            "version": null
+            "idempotent": null,
+            "stateful": null
           },
-          "description": "Switch to a specific objective slot.",
-          "key": "switch_objective",
-          "optional": false
+          "optional": false,
+          "allowInactive": true
         }
       ],
-      "app": null,
-      "autoResolvable": false,
-      "description": null,
-      "key": "self",
-      "maxViableInstances": null,
-      "minViableInstances": null,
-      "mutuallyExclusiveKeys": null,
-      "name": null,
-      "optional": false,
-      "preferedInstances": null,
       "stateDependencies": [
         {
-          "allowInactive": true,
+          "key": "ObjectiveState",
+          "description": null,
           "demand": {
-            "app": null,
             "hash": null,
             "key": "ObjectiveState",
+            "app": null,
             "matches": [
               {
                 "at": 0,
-                "children": null,
-                "descriptors": null,
-                "dimension": null,
-                "identifier": null,
                 "key": "slot",
                 "kind": "INT",
-                "nullable": false
+                "identifier": null,
+                "nullable": false,
+                "dimension": null,
+                "descriptors": null,
+                "children": null
               },
               {
                 "at": 1,
-                "children": null,
-                "descriptors": null,
-                "dimension": null,
-                "identifier": null,
                 "key": "magnification",
                 "kind": "FLOAT",
-                "nullable": false
+                "identifier": null,
+                "nullable": false,
+                "dimension": null,
+                "descriptors": null,
+                "children": null
               },
               {
                 "at": 2,
-                "children": null,
-                "descriptors": null,
-                "dimension": null,
-                "identifier": null,
                 "key": "name",
                 "kind": "STRING",
-                "nullable": false
+                "identifier": null,
+                "nullable": false,
+                "dimension": null,
+                "descriptors": null,
+                "children": null
               },
               {
                 "at": 3,
+                "key": "mounted_lenses",
+                "kind": "LIST",
+                "identifier": null,
+                "nullable": false,
+                "dimension": null,
+                "descriptors": null,
                 "children": [
                   {
                     "at": 0,
+                    "key": "...",
+                    "kind": "MODEL",
+                    "identifier": "@newswitch/objective_lens",
+                    "nullable": false,
+                    "dimension": null,
+                    "descriptors": null,
                     "children": [
                       {
                         "at": 0,
-                        "children": null,
-                        "descriptors": null,
-                        "dimension": null,
-                        "identifier": null,
                         "key": "slot",
                         "kind": "INT",
-                        "nullable": false
+                        "identifier": null,
+                        "nullable": false,
+                        "dimension": null,
+                        "descriptors": null,
+                        "children": null
                       },
                       {
                         "at": 1,
-                        "children": null,
-                        "descriptors": null,
-                        "dimension": null,
-                        "identifier": null,
                         "key": "name",
                         "kind": "STRING",
-                        "nullable": false
+                        "identifier": null,
+                        "nullable": false,
+                        "dimension": null,
+                        "descriptors": null,
+                        "children": null
                       },
                       {
                         "at": 2,
-                        "children": null,
-                        "descriptors": null,
-                        "dimension": null,
-                        "identifier": null,
                         "key": "magnification",
                         "kind": "FLOAT",
-                        "nullable": false
+                        "identifier": null,
+                        "nullable": false,
+                        "dimension": null,
+                        "descriptors": null,
+                        "children": null
                       },
                       {
                         "at": 3,
-                        "children": null,
-                        "descriptors": null,
-                        "dimension": null,
-                        "identifier": null,
                         "key": "numerical_aperture",
                         "kind": "FLOAT",
-                        "nullable": false
+                        "identifier": null,
+                        "nullable": false,
+                        "dimension": null,
+                        "descriptors": null,
+                        "children": null
                       },
                       {
                         "at": 4,
-                        "children": null,
-                        "descriptors": null,
-                        "dimension": null,
-                        "identifier": null,
                         "key": "working_distance",
                         "kind": "FLOAT",
-                        "nullable": false
+                        "identifier": null,
+                        "nullable": false,
+                        "dimension": null,
+                        "descriptors": null,
+                        "children": null
                       },
                       {
                         "at": 5,
-                        "children": null,
-                        "descriptors": null,
-                        "dimension": null,
-                        "identifier": null,
                         "key": "binning_factor",
                         "kind": "INT",
-                        "nullable": false
+                        "identifier": null,
+                        "nullable": false,
+                        "dimension": null,
+                        "descriptors": null,
+                        "children": null
                       }
-                    ],
-                    "descriptors": null,
-                    "dimension": null,
-                    "identifier": "@newswitch/objective_lens",
-                    "key": "...",
-                    "kind": "MODEL",
-                    "nullable": false
+                    ]
                   }
-                ],
-                "descriptors": null,
-                "dimension": null,
-                "identifier": null,
-                "key": "mounted_lenses",
-                "kind": "LIST",
-                "nullable": false
+                ]
               }
             ],
             "protocols": null
           },
-          "description": null,
-          "key": "ObjectiveState",
-          "optional": false
+          "optional": false,
+          "allowInactive": true
         }
       ],
-      "version": null
+      "autoResolvable": false,
+      "mutuallyExclusiveKeys": null,
+      "minViableInstances": null,
+      "maxViableInstances": null,
+      "preferedInstances": null
     }
   ],
+  "components": null,
+  "source": "<Html>\n<Card className=\"w-[380px] border-info/30 shadow-md\">\n    <CardHeader>\n        <CardTitle>Newswitch Handler</CardTitle>\n        <CardDescription>Bene don't look at this yet, this is just a placeholder</CardDescription>\n    </CardHeader>\n    <CardContent className=\"grid gap-4\">\n        <div className=\"flex items-center justify-between rounded-md border bg-muted/50 p-3\">\n            <span className=\"text-sm font-medium text-muted-foreground\">Deck Status</span>\n            <span className=\"rounded-full border border-info/30 bg-info/10 px-2 py-1 text-xs font-bold text-info\">Idle</span>\n        </div>\n        <div className=\"mt-2 grid grid-cols-2 gap-2\">\n            <foreach items={self.ObjectiveState.mounted_lenses} let=\"lens\" key={lens.slot}>\n                <Button onClick={self.switch_objective(slot: lens.slot)}>{lens.name}</Button>\n            </foreach>\n        </div>\n    </CardContent>\n</Card>\n</Html>",
+  "module": "newswitch",
   "description": null,
+  "context": "HTML",
+  "default": false,
   "forModel": null,
   "forNode": null,
-  "key": "jonda",
-  "source": null
+  "args": null,
+  "vocab": 2,
+  "catalogs": ["html@1", "ui@1"],
+  "locals": [],
+  "demo": {
+    "deps": {
+      "self": {
+        "ObjectiveState": {
+          "slot": 0,
+          "magnification": 0.0,
+          "name": "",
+          "mounted_lenses": []
+        }
+      }
+    },
+    "args": null,
+    "task": null,
+    "queries": null,
+    "subscriptions": null
+  },
+  "queries": [],
+  "subscriptions": []
 }

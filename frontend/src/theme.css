@@ -1,7 +1,7 @@
 /*
  * The app's Tailwind tokens and variants. Shared by the build (index.css imports
  * this) and by the runtime compiler that styles the bloks the backend serves
- * (lib/blok/runtimeTailwind.ts reads it raw), so both mean the same by `bg-muted`
+ * (lib/blok/tailwind/runtimeTailwind.ts reads it raw), so both mean the same by `bg-muted`
  * or `past:`.
  */
 
@@ -46,6 +46,38 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* The blok language's colour roles (values in index.css). The brand is an
+     accent on dark glass, at the lightness of sky-400 / sky-300 / sky-100. */
+  --color-brand: oklch(0.746 var(--brand-chroma) var(--brand-hue));
+  --color-brand-light: oklch(
+    0.83 calc(var(--brand-chroma) * 0.75) var(--brand-hue)
+  );
+  --color-brand-soft: oklch(
+    0.95 calc(var(--brand-chroma) * 0.25) var(--brand-hue)
+  );
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-spectrum-violet: var(--spectrum-violet);
+  --color-spectrum-violet-soft: var(--spectrum-violet-soft);
+  --color-spectrum-blue: var(--spectrum-blue);
+  --color-spectrum-blue-soft: var(--spectrum-blue-soft);
+  --color-spectrum-cyan: var(--spectrum-cyan);
+  --color-spectrum-cyan-soft: var(--spectrum-cyan-soft);
+  --color-spectrum-green: var(--spectrum-green);
+  --color-spectrum-green-soft: var(--spectrum-green-soft);
+  --color-spectrum-yellow: var(--spectrum-yellow);
+  --color-spectrum-yellow-soft: var(--spectrum-yellow-soft);
+  --color-spectrum-orange: var(--spectrum-orange);
+  --color-spectrum-orange-soft: var(--spectrum-orange-soft);
+  --color-spectrum-red: var(--spectrum-red);
+  --color-spectrum-red-soft: var(--spectrum-red-soft);
 }
 
 /* A blok shows the past (the replay timeline) or the live microscope. */
@@ -54,3 +86,8 @@
 /* A control (or panel) whose action a held lock keeps from running now. ActionButton
    marks itself data-locked="true"/"false", so "false" does not count. */
 @custom-variant locked (&:where([data-locked]:not([data-locked="false"]), [data-locked]:not([data-locked="false"]) *));
+/* A control whose task is running, a value that is stale; an inactive tab or item.
+   shadcn's `data-open:` & co. come from the runtime compiler (lib/blok/tailwind). */
+@custom-variant data-busy (&:where([data-busy]:not([data-busy="false"])));
+@custom-variant data-stale (&:where([data-stale]:not([data-stale="false"])));
+@custom-variant data-inactive (&:where([data-state="inactive"]));

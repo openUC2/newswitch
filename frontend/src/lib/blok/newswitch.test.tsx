@@ -5,6 +5,8 @@ import jondaPayload from "./jonda.fixture.json";
 import { SwitchObjectiveArgsSchema } from "@/apps/default/hooks/actions/switchObjective";
 import {
   actionArgOrder,
+  blokModel,
+  blokRoots,
   foreignDependencyKeys,
   mapActionArguments,
   mergeLiveState,
@@ -15,13 +17,12 @@ import {
 import BlokRenderer from "./renderer/BlokRenderer";
 import { locksOf } from "./microscope/locks";
 import { lockedActionKey } from "./renderer/runtime";
-import {
-  normalizeBlokComponentTree,
-  type BlokDispatchActionHandler,
-} from "./renderer/runtime";
+import { type BlokDispatchActionHandler } from "./renderer/runtime";
 
-// The jonda blok exactly as the backend serves it at /schemas/bloks.
+// The jonda blok exactly as the backend serves it at /schemas/bloks (blok language v2).
 const jonda = jondaPayload as unknown as NewswitchBlokDeclaration;
+const jondaRoots = blokRoots(jonda);
+const jondaModel = blokModel(jonda, jondaRoots);
 
 const lens = (slot: number, name: string) => ({
   slot,
@@ -40,7 +41,7 @@ describe("newswitch blok helpers", () => {
     expect(foreignDependencyKeys(jonda)).toEqual([]);
   });
 
-  it("names positional arguments by the blok's demand", () => {
+  it("names an argument spelled by position by the blok's demand", () => {
     const order = actionArgOrder(jonda, "switch_objective");
     expect(order).toEqual(["slot"]);
     expect(mapActionArguments({ "0": 2 }, order)).toEqual({
@@ -68,17 +69,26 @@ describe("newswitch blok helpers", () => {
     expect(mapActionArguments({ "0": 1, slot: 2 }, ["slot"]).ok).toBe(false);
   });
 
-  it("lays live state over the demo state", () => {
-    const live = { slot: 1, name: "a", magnification: 4, mounted_lenses: [] };
-    expect(mergeLiveState(jonda.demoState, { ObjectiveState: null })).toBe(
-      jonda.demoState,
+  it("draws the blok's demo until a state is live", () => {
+    expect(jondaModel).toMatchObject({
+      deps: { self: { ObjectiveState: { mounted_lenses: [] } } },
+    });
+    expect(mergeLiveState(jondaModel, { ObjectiveState: null })).toBe(
+      jondaModel,
     );
+  });
+
+  it("lays live state over the demo, under deps.self", () => {
+    const live = { slot: 1, name: "a", magnification: 4, mounted_lenses: [] };
     expect(
       mergeLiveState(
-        { self: { Other: 1 }, extra: true },
+        { deps: { self: { Other: 1 } }, extra: true },
         { ObjectiveState: live },
       ),
-    ).toEqual({ self: { Other: 1, ObjectiveState: live }, extra: true });
+    ).toEqual({
+      deps: { self: { Other: 1, ObjectiveState: live } },
+      extra: true,
+    });
   });
 
   it("translates newswitch task updates", () => {
@@ -99,12 +109,10 @@ describe("newswitch blok helpers", () => {
 describe("the jonda blok", () => {
   it("renders a button per mounted lens that switches to its slot", () => {
     const dispatchAction = vi.fn<BlokDispatchActionHandler>();
-    const { roots } = normalizeBlokComponentTree(jonda.components);
-
     render(
       <BlokRenderer
-        uiComponents={roots}
-        initialState={mergeLiveState(jonda.demoState, {
+        uiComponents={jondaRoots}
+        initialState={mergeLiveState(jondaModel, {
           ObjectiveState: {
             slot: 1,
             name: "10x",
@@ -138,8 +146,8 @@ describe("locked controls", () => {
   const renderJonda = (lockedActions?: ReadonlyMap<string, string>) =>
     render(
       <BlokRenderer
-        uiComponents={normalizeBlokComponentTree(jonda.components).roots}
-        initialState={mergeLiveState(jonda.demoState, {
+        uiComponents={jondaRoots}
+        initialState={mergeLiveState(jondaModel, {
           ObjectiveState: {
             slot: 1,
             name: "10x",

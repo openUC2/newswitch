@@ -133,13 +133,12 @@ const createOverlayRoot = (
           children: childListSchema.describe(
             "The trigger and content parts of this overlay.",
           ),
-          bind: bindSchema.describe("Data-model path holding the open state."),
           open: BlokPropSchemas.DynamicBoolean.optional().describe(
             "Controlled open state.",
           ),
           defaultOpen: boolSchema.describe("Open on mount when uncontrolled."),
           onOpenChange: actionProp(
-            "Runs when the surface opens or closes. May read $event.",
+            "Runs when the surface opens or closes. May read event.value.",
           ),
         })
         .describe(description),
@@ -147,7 +146,8 @@ const createOverlayRoot = (
     ({ buildChild, component, schema }) => {
       const blok = useBlok(component, schema);
       const children = useValue(blok.children);
-      const bind = useValue(blok.bind);
+      // Interaction state is the component's own (v2: no `bind` on a stateful component).
+      const bind = undefined;
       const open = useValue(blok.open);
       const defaultOpen = useValue(blok.defaultOpen);
       const onOpenChange = useEventAction(blok.onOpenChange);
@@ -739,7 +739,9 @@ const createMenuCheckboxItemBlok = (
           ),
           disabled: disabledSchema,
           className: classNameSchema,
-          onChange: actionProp("Runs on toggle. Arguments may read $event."),
+          onChange: actionProp(
+            "Runs on toggle. Arguments may read event.value.",
+          ),
         })
         .describe(description),
     },

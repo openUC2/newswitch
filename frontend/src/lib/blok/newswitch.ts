@@ -9,7 +9,12 @@
  * dependencies are assigned as tasks of the app.
  */
 import { z } from "zod";
-import type { BlokTaskUpdate } from "./renderer/runtime";
+import { parseBsx } from "./bsx/parse";
+import { demoModel, parseBlokDeclarations } from "./renderer/declarations";
+import {
+  normalizeBlokComponentTree,
+  type BlokTaskUpdate,
+} from "./renderer/runtime";
 import type { Task } from "@/lib/arkitekt/transport/types";
 
 /** The dependency key under which a blok addresses the app it is served by. */
@@ -17,11 +22,19 @@ export const SELF_DEPENDENCY = "self";
 
 type ArgMatch = { readonly at?: number | null; readonly key: string };
 
-/** The part of a generated blok entry the host reads. */
+/** The part of a generated blok entry the host reads (blok language v2). */
 export type NewswitchBlokDeclaration = {
   readonly key: string;
+  /** The parsed tree; a blok declared from source carries `source` instead. */
   readonly components: ReadonlyArray<unknown> | null;
-  readonly demoState?: unknown;
+  /** Its BSX source, which the frontend parses. */
+  readonly source?: string | null;
+  readonly vocab?: number | null;
+  /** What it is drawn with before anything is live: `{deps: {self: {<State>: ...}}, args, ...}`. */
+  readonly demo?: unknown;
+  readonly locals?: unknown;
+  readonly queries?: unknown;
+  readonly subscriptions?: unknown;
   readonly dependencies?: ReadonlyArray<{
     readonly key: string;
     readonly actionDependencies?: ReadonlyArray<{
@@ -88,8 +101,8 @@ const POSITIONAL = /^\d+$/;
 
 /**
  * Turns the arguments of a resolved agent call into the action's named args.
- * A blok spells positional arguments by index (`@self.switch_objective(2)`
- * arrives as `{"0": 2}`); they are named by `argOrder`. Named arguments pass
+ * A v2 blok names every argument (`self.switch_objective(slot: 2)`); one
+ * spelled by index (`{"0": 2}`) is named by `argOrder`. Named arguments pass
  * through. A positional argument beyond the known names is an error.
  */
 export const mapActionArguments = (
@@ -126,20 +139,57 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * The data model a blok is drawn against: its demo state, with every state of
- * the app it reads replaced by the live value once there is one.
+ * The blok's root nodes: its tree as served (checked by the renderer's
+ * preflight), else its source parsed here. Throws a `BsxSyntaxError` for a
+ * source that does not parse.
+ */
+export const blokRoots = (blok: NewswitchBlokDeclaration): unknown[] => {
+  if (blok.components && blok.components.length > 0) {
+    return normalizeBlokComponentTree(blok.components).roots;
+  }
+  return blok.source ? [parseBsx(blok.source).tree] : [];
+};
+
+/**
+ * The data model a blok is drawn with before anything is live: its declared
+ * locals at their defaults, its `into` records idle, and its `demo`
+ * (`deps.self.<State>` among it).
+ */
+export const blokModel = (
+  blok: NewswitchBlokDeclaration,
+  roots: ReadonlyArray<unknown>,
+): Record<string, unknown> =>
+  demoModel(
+    roots,
+    parseBlokDeclarations({
+      vocab: blok.vocab,
+      componentTree: blok.components,
+      locals: blok.locals,
+      demo: blok.demo,
+      queries: blok.queries,
+      subscriptions: blok.subscriptions,
+    }),
+  );
+
+/**
+ * The data model a blok is drawn against: `model` (`blokModel`), with every
+ * state of the app it reads (`deps.self.<State>`, which `self.<State>` reads)
+ * replaced by the live value once there is one.
  */
 export const mergeLiveState = (
-  demoState: unknown,
+  model: Record<string, unknown>,
   live: Readonly<Record<string, unknown>>,
-): unknown => {
+): Record<string, unknown> => {
   const present = Object.entries(live).filter(([, value]) => value != null);
-  if (present.length === 0) return demoState;
-  const base = isRecord(demoState) ? demoState : {};
-  const self = isRecord(base[SELF_DEPENDENCY]) ? base[SELF_DEPENDENCY] : {};
+  if (present.length === 0) return model;
+  const deps = isRecord(model.deps) ? model.deps : {};
+  const self = isRecord(deps[SELF_DEPENDENCY]) ? deps[SELF_DEPENDENCY] : {};
   return {
-    ...base,
-    [SELF_DEPENDENCY]: { ...self, ...Object.fromEntries(present) },
+    ...model,
+    deps: {
+      ...deps,
+      [SELF_DEPENDENCY]: { ...self, ...Object.fromEntries(present) },
+    },
   };
 };
 

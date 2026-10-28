@@ -7,9 +7,9 @@ import {
   newswitchBlokCatalog,
   newswitchBlokComponents,
 } from "./catalog";
-import { toUiCatalogComponent, toUiCatalogJson } from "./catalogManifest";
+import { toModuleJson, toUiCatalogComponent } from "./catalogManifest";
 
-/** The backend validates the bloks of its configuration against this file, and nothing else. */
+/** The backend declares this file as the `newswitch` module its bloks render against. */
 // Vitest runs from the frontend's root.
 const BACKEND_CATALOG = resolve(
   process.cwd(),
@@ -17,19 +17,12 @@ const BACKEND_CATALOG = resolve(
 );
 
 const manifest = () =>
-  toUiCatalogJson(
+  toModuleJson(
     NEWSWITCH_CATALOG_NAME,
     NEWSWITCH_CATALOG_VERSION,
-    "What the newswitch frontend renders: the standard components, the scene's and the microscope's.",
+    "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
     newswitchBlokCatalog,
   );
-
-const byName = <T extends { name: string }>(items: T[], name: string): T => {
-  const found = items.find((item) => item.name === name);
-  if (!found) throw new Error(`${name} is not in the catalog`);
-  return found;
-};
-const byOperation = byName;
 
 /** A catalog that differs from the committed one carries a higher version. */
 const expectVersioned = () => {
@@ -81,24 +74,15 @@ describe("newswitch catalog manifest", () => {
     ).toBeTruthy();
   });
 
-  it("is the whole catalog: standard components and every function", () => {
+  it("is the module: only what the spec's catalogs do not hold", () => {
     const { components, operations } = manifest();
     const names = new Set(components.map((component) => component.name));
-    for (const name of [
-      "div",
-      "span",
-      "if",
-      "foreach",
-      "Button",
-      "Model",
-      "StageControl",
-    ]) {
-      expect(names).toContain(name);
+    expect(names).toContain("StageControl");
+    expect(names).toContain("LiveView");
+    for (const name of ["div", "if", "foreach", "Button", "Model"]) {
+      expect(names).not.toContain(name);
     }
-    expect(byOperation(operations, "compare.lt").returns).toBe("BOOL");
-    expect(byName(components, "Model").props).toContainEqual(
-      expect.objectContaining({ key: "src", kind: "ASSET" }),
-    );
+    expect(operations).toEqual([]);
   });
 
   it("is versioned: a changed catalog gets a new version", () => {

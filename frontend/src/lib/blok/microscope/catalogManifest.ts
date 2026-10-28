@@ -1,22 +1,25 @@
 /**
- * The newswitch blok catalog as the backend reads it: the `blok-catalog.json`
- * shape Orkestrator publishes its catalog in, which
- * `arkitekt_spec.declare.catalogs.parse_ui_catalog` parses.
+ * The newswitch module as the backend reads it (blok language v2): the
+ * `blok-catalog.json` shape, which `arkitekt_spec.declare.catalogs.parse_ui_catalog`
+ * parses, and the backend declares with `app.ui_catalog("newswitch", ...)`.
  *
- * It is the whole catalog this frontend renders and evaluates: the standard
- * components, the scene's, the microscope's, and every function as an
- * operation. The backend imports nothing else: it checks the bloks of its
- * device configuration (`ui:`) against exactly this, so a blok that validates
- * there is one this frontend can draw.
+ * A v2 blok is drawn with base, the standard catalogs (`ui@1`, `scene@1`, ...)
+ * and the Orkestrator's module, which the spec ships, plus one module of the
+ * app's own. This is that module: the components this frontend draws that none
+ * of those hold (the microscope's, the stage's). Functions are the vocabulary's,
+ * so it adds no operations.
  */
 import type * as z from "zod";
 import type {
   BlokCatalog,
   BlokComponentContext,
   BlokComponentDefinition,
-  BlokFunctionDefinition,
-  BlokFunctionReturnType,
 } from "@/lib/blok/renderer/runtime";
+import {
+  baseCatalog,
+  orkestratorModule,
+  standardCatalogs,
+} from "@/lib/blok/spec/catalogs";
 import { isActionSchema } from "@/lib/blok/renderer/runtime/schemas";
 
 type ValueKind =
@@ -35,6 +38,8 @@ export type UiCatalogField = {
   kind: ValueKind;
   required: boolean;
   description: string | null;
+  /** For a `STRING` prop, the closed set of literals it takes. */
+  values?: string[];
 };
 
 export type UiCatalogComponent = {
@@ -72,6 +77,7 @@ type ZodDef = {
   in?: z.ZodType;
   options?: z.ZodType[];
   values?: unknown[];
+  entries?: Record<string, unknown>;
   shape?: Record<string, z.ZodType>;
 };
 const defOf = (schema: z.ZodType) =>
@@ -92,7 +98,18 @@ const unwrap = (schema: z.ZodType): z.ZodType => {
   return current;
 };
 
-const kindOf = (schema: z.ZodType): ValueKind => {
+/** The closed set of strings a `z.enum` prop takes, through its wrappers; null for any other schema. */
+export const zodEnumValues = (schema: z.ZodType): string[] | null => {
+  const def = defOf(unwrap(schema));
+  if (def.type !== "enum" || !def.entries) return null;
+  const values = Object.values(def.entries);
+  return values.every((value): value is string => typeof value === "string")
+    ? values
+    : null;
+};
+
+/** The catalog kind of a zod schema; unknown shapes are `ANY`. */
+export const zodToCatalogKind = (schema: z.ZodType): ValueKind => {
   if (isActionSchema(schema) || isActionSchema(unwrap(schema))) {
     return "CALLBACK";
   }
@@ -124,7 +141,7 @@ const kindOf = (schema: z.ZodType): ValueKind => {
     case "map":
       return "DICT";
     case "union": {
-      const kinds = new Set((def.options ?? []).map(kindOf));
+      const kinds = new Set((def.options ?? []).map(zodToCatalogKind));
       return kinds.size === 1 ? [...kinds][0] : "ANY";
     }
     default:
@@ -132,12 +149,16 @@ const kindOf = (schema: z.ZodType): ValueKind => {
   }
 };
 
-const field = (key: string, schema: z.ZodType): UiCatalogField => ({
-  key,
-  kind: kindOf(schema),
-  required: !schema.safeParse(undefined).success,
-  description: schema.description ?? null,
-});
+const field = (key: string, schema: z.ZodType): UiCatalogField => {
+  const values = zodEnumValues(schema);
+  return {
+    key,
+    kind: zodToCatalogKind(schema),
+    required: !schema.safeParse(undefined).success,
+    description: schema.description ?? null,
+    ...(values ? { values } : {}),
+  };
+};
 
 const byKey = <T extends { key: string }>(items: T[]): T[] =>
   [...items].sort((a, b) => a.key.localeCompare(b.key));
@@ -175,75 +196,29 @@ export const toUiCatalogComponent = (
   };
 };
 
-const RETURNS: Record<BlokFunctionReturnType, ValueKind> = {
-  string: "STRING",
-  number: "FLOAT",
-  boolean: "BOOL",
-  list: "LIST",
-  object: "DICT",
-  unknown: "ANY",
-  void: "ANY",
-};
-
-const operationArguments = (fn: BlokFunctionDefinition): UiCatalogField[] =>
-  fn.variadic
-    ? [
-        {
-          key: "values",
-          kind: "LIST",
-          required: false,
-          description:
-            "Positional values; bare numeric argument keys (0, 1, …) are accepted as well.",
-        },
-      ]
-    : byKey(
-        Object.entries(shapeOf(fn.schema)).map(([key, schema]) =>
-          field(key, schema),
-        ),
-      );
-
-const operationDescription = (fn: BlokFunctionDefinition, alias?: string) => {
-  const parts = [
-    alias ? `Alias of ${fn.name}. ${fn.description}` : fn.description,
-  ];
-  if (fn.deprecated) parts.push(`Deprecated: ${fn.deprecated}`);
-  if (fn.purity === "effect")
-    parts.push("Has side effects; only valid in action position.");
-  return parts.join(" ");
-};
-
-/** A function as an operation, and once more under each of its aliases. */
-export const toUiCatalogOperations = (
-  fn: BlokFunctionDefinition,
-): UiCatalogOperation[] => {
-  const base = {
-    arguments: operationArguments(fn),
-    returns: RETURNS[fn.returnType],
-  };
-  return [
-    { name: fn.name, description: operationDescription(fn), ...base },
-    ...fn.aliases.map((alias) => ({
-      name: alias,
-      description: operationDescription(fn, alias),
-      ...base,
-    })),
-  ];
-};
-
-/** The whole catalog: every component it draws, every function it evaluates. */
-export const toUiCatalogJson = (
+/**
+ * The module: every component of `catalog` that base, the standard catalogs
+ * and the Orkestrator's module do not hold, by name.
+ */
+export const toModuleJson = (
   name: string,
   version: number,
   description: string,
   catalog: BlokCatalog,
-): UiCatalogJson => ({
-  name,
-  version,
-  description,
-  components: [...catalog.components.values()]
-    .map(toUiCatalogComponent)
-    .sort((a, b) => a.name.localeCompare(b.name)),
-  operations: catalog.functionDefinitions
-    .flatMap(toUiCatalogOperations)
-    .sort((a, b) => a.name.localeCompare(b.name)),
-});
+): UiCatalogJson => {
+  const provided = new Set(
+    [baseCatalog(), ...standardCatalogs(), orkestratorModule()].flatMap(
+      (source) => source.components.map((component) => component.name),
+    ),
+  );
+  return {
+    name,
+    version,
+    description,
+    components: [...catalog.components.values()]
+      .filter((definition) => !provided.has(definition.name))
+      .map(toUiCatalogComponent)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    operations: [],
+  };
+};

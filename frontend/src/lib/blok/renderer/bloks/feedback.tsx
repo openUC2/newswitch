@@ -20,6 +20,7 @@ import {
   BlokPropSchemas,
   createBlokComponent,
   useBlok,
+  useBlokDataAttributes,
   useValue,
 } from "../runtime";
 import { iconNameSchema, renderIcon } from "./icons";
@@ -66,8 +67,14 @@ export const Alert = createBlokComponent(
     const variant = useValue(blok.variant);
     const className = useValue(blok.className);
 
+    const attributes = useBlokDataAttributes();
+
     return (
-      <ShadAlert variant={variant ?? "default"} className={className}>
+      <ShadAlert
+        {...attributes}
+        variant={variant ?? "default"}
+        className={className}
+      >
         {renderIcon(icon)}
         {title ? <ShadAlertTitle>{title}</ShadAlertTitle> : null}
         {description ? (
@@ -100,8 +107,14 @@ export const Badge = createBlokComponent(
     const className = useValue(blok.className);
     const variant = useValue(blok.variant);
 
+    const attributes = useBlokDataAttributes();
+
     return (
-      <ShadBadge variant={variant ?? "default"} className={className}>
+      <ShadBadge
+        {...attributes}
+        variant={variant ?? "default"}
+        className={className}
+      >
         {renderIcon(icon, "size-3")}
         {renderContent(children ?? text, buildChild)}
       </ShadBadge>
@@ -129,8 +142,11 @@ export const Progress = createBlokComponent(
     const resolvedMax = max ?? 100;
     const percent = resolvedMax > 0 ? ((value ?? 0) / resolvedMax) * 100 : 0;
 
+    const attributes = useBlokDataAttributes();
+
     return (
       <ShadProgress
+        {...attributes}
         value={Math.max(0, Math.min(100, percent))}
         className={className}
       />

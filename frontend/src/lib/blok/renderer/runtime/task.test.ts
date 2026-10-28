@@ -1,19 +1,42 @@
 import { describe, expect, it } from "vitest";
 
+import { loadVocabulary } from "../../spec/vocabulary";
 import { createBlokRuntimeStore } from "./context";
-import { applyTaskUpdate, bindTask, idleTaskRecord } from "./task";
+import {
+  applyTaskUpdate,
+  bindTask,
+  idleTaskRecord,
+  withTaskStatus,
+} from "./task";
 
 const recordAt = (
   store: ReturnType<typeof createBlokRuntimeStore>,
   name: string,
 ) => (store.getState().dataModel as Record<string, unknown>)[name];
 
+describe("the task record", () => {
+  it("starts as the vocabulary says an idle task looks", () => {
+    expect(idleTaskRecord()).toEqual(loadVocabulary().records.task.idle);
+  });
+
+  it("carries the flags beside the status", () => {
+    expect(withTaskStatus(idleTaskRecord(), "asking")).toMatchObject({
+      status: "asking",
+      running: true,
+      done: false,
+      failed: false,
+    });
+    expect(withTaskStatus(idleTaskRecord(), "queued").running).toBe(true);
+    expect(withTaskStatus(idleTaskRecord(), "cancelled")).toMatchObject({
+      running: false,
+      done: false,
+      failed: false,
+    });
+  });
+});
+
 describe("applyTaskUpdate", () => {
-  const running = {
-    ...idleTaskRecord(),
-    status: "running" as const,
-    running: true,
-  };
+  const running = withTaskStatus(idleTaskRecord(), "running");
 
   it("folds progress and its message in, clamped to a percentage", () => {
     expect(
@@ -26,27 +49,48 @@ describe("applyTaskUpdate", () => {
     expect(applyTaskUpdate(running, { progress: 140 }).progress).toBe(100);
   });
 
-  it("takes the first return as the result and keeps them all by key", () => {
+  it("keeps the latest yield by return port key", () => {
     const next = applyTaskUpdate(running, {
-      returns: { return0: { object: "7" }, return1: 3 },
+      returns: { arrived: true, at: 3 },
     });
+    expect(next.returns).toEqual({ arrived: true, at: 3 });
+  });
 
-    expect(next.result).toEqual({ object: "7" });
-    expect(next.returns).toEqual({ return0: { object: "7" }, return1: 3 });
+  it("learns its id, an ask, and the answer", () => {
+    const asked = applyTaskUpdate(running, {
+      id: "t1",
+      status: "asking",
+      ask: { question: "Which?", form: {} },
+    });
+    expect(asked).toMatchObject({
+      id: "t1",
+      status: "asking",
+      running: true,
+      ask: { question: "Which?" },
+    });
+    const answered = applyTaskUpdate(asked, {
+      status: "running",
+      ask: null,
+      answer: { pick: 2 },
+    });
+    expect(answered).toMatchObject({
+      status: "running",
+      ask: null,
+      answer: { pick: 2 },
+    });
   });
 
   it("ends done at 100, keeping what was returned", () => {
     const next = applyTaskUpdate(
-      { ...running, result: "x", progress: 92 },
+      { ...running, returns: { x: 1 }, progress: 92 },
       { end: "done" },
     );
-
     expect(next).toMatchObject({
       status: "done",
       done: true,
       running: false,
       progress: 100,
-      result: "x",
+      returns: { x: 1 },
     });
   });
 
@@ -68,59 +112,64 @@ describe("applyTaskUpdate", () => {
 });
 
 describe("bindTask", () => {
-  it("replaces the record with a running one, then follows the task", () => {
+  it("replaces the record with a queued one holding its args, then follows the task", () => {
     const store = createBlokRuntimeStore({
       initialDataModel: {
-        job: { ...idleTaskRecord(), status: "done", done: true, result: "old" },
+        move: {
+          ...withTaskStatus(idleTaskRecord(), "done"),
+          returns: { old: 1 },
+        },
       },
     });
 
-    const { observe } = bindTask(store, "job");
-    expect(recordAt(store, "job")).toEqual({
-      ...idleTaskRecord(),
-      status: "running",
-      running: true,
+    const { observe } = bindTask(store, "move", { position: 3 });
+    expect(recordAt(store, "move")).toEqual({
+      ...withTaskStatus(idleTaskRecord(), "queued"),
+      args: { position: 3 },
     });
 
+    observe({ id: "t7", status: "running" });
     observe({ progress: 50, message: "halfway" });
-    observe({ returns: { return0: "new" } });
+    observe({ returns: { arrived: true } });
     observe({ end: "done" });
 
-    expect(recordAt(store, "job")).toMatchObject({
+    expect(recordAt(store, "move")).toMatchObject({
+      id: "t7",
       status: "done",
       progress: 100,
       message: "halfway",
-      result: "new",
+      args: { position: 3 },
+      returns: { arrived: true },
     });
   });
 
   it("drops what a superseded run reports", () => {
     const store = createBlokRuntimeStore({ initialDataModel: {} });
 
-    const first = bindTask(store, "job");
-    const second = bindTask(store, "job");
-    first.observe({ returns: { return0: "stale" }, end: "done" });
+    const first = bindTask(store, "move");
+    const second = bindTask(store, "move");
+    first.observe({ returns: { at: "stale" }, end: "done" });
 
-    expect(recordAt(store, "job")).toMatchObject({
-      status: "running",
-      result: null,
+    expect(recordAt(store, "move")).toMatchObject({
+      status: "queued",
+      returns: {},
     });
 
-    second.observe({ returns: { return0: "fresh" }, end: "done" });
-    expect(recordAt(store, "job")).toMatchObject({
+    second.observe({ returns: { at: "fresh" }, end: "done" });
+    expect(recordAt(store, "move")).toMatchObject({
       status: "done",
-      result: "fresh",
+      returns: { at: "fresh" },
     });
   });
 
   it("ignores anything reported after the end", () => {
     const store = createBlokRuntimeStore({ initialDataModel: {} });
 
-    const { observe } = bindTask(store, "job");
+    const { observe } = bindTask(store, "move");
     observe({ end: "failed", error: "boom" });
     observe({ progress: 80 });
 
-    expect(recordAt(store, "job")).toMatchObject({
+    expect(recordAt(store, "move")).toMatchObject({
       status: "failed",
       progress: 0,
       error: "boom",
@@ -130,13 +179,13 @@ describe("bindTask", () => {
   it("goes back to idle when the host follows no task, unless it said why", () => {
     const store = createBlokRuntimeStore({ initialDataModel: {} });
 
-    bindTask(store, "job").release();
-    expect(recordAt(store, "job")).toEqual(idleTaskRecord());
+    bindTask(store, "move").release();
+    expect(recordAt(store, "move")).toEqual(idleTaskRecord());
 
-    const refused = bindTask(store, "job");
+    const refused = bindTask(store, "move");
     refused.observe({ end: "failed", error: "not bound to an agent" });
     refused.release();
-    expect(recordAt(store, "job")).toMatchObject({
+    expect(recordAt(store, "move")).toMatchObject({
       status: "failed",
       error: "not bound to an agent",
     });
@@ -147,12 +196,12 @@ describe("bindTask", () => {
 
     const blur = bindTask(store, "blurred");
     bindTask(store, "objects");
-    blur.observe({ returns: { return0: "b" }, end: "done" });
+    blur.observe({ returns: { image: "b" }, end: "done" });
 
     expect(recordAt(store, "blurred")).toMatchObject({
       status: "done",
-      result: "b",
+      returns: { image: "b" },
     });
-    expect(recordAt(store, "objects")).toMatchObject({ status: "running" });
+    expect(recordAt(store, "objects")).toMatchObject({ status: "queued" });
   });
 });

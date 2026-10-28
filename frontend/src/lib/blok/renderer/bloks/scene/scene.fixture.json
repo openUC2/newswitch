@@ -1,7 +1,17 @@
 [
   {
-    "id": "Scene",
+    "id": "main",
     "component": "Scene",
+    "props": [
+      {
+        "key": "camera",
+        "static_value": "front"
+      },
+      {
+        "key": "persist",
+        "static_value": true
+      }
+    ],
     "children": [
       {
         "id": "scope",
@@ -9,9 +19,7 @@
         "props": [
           {
             "key": "src",
-            "static_value": null,
             "dynamic_value": {
-              "literal": null,
               "path": "self.assets.scope"
             }
           }
@@ -50,15 +58,15 @@
             ]
           },
           {
-            "id": "scope/Show[0]",
-            "component": "Show",
+            "id": "scope/Visible[0]",
+            "component": "Visible",
             "props": [
               {
                 "key": "node",
                 "static_value": "incubator"
               },
               {
-                "key": "when",
+                "key": "on",
                 "dynamic_value": {
                   "path": "self.Stage.mounted"
                 }
@@ -125,9 +133,7 @@
         "props": [
           {
             "key": "src",
-            "static_value": null,
             "dynamic_value": {
-              "literal": null,
               "path": "self.assets.arm"
             }
           },
@@ -143,11 +149,11 @@
               "arguments": [
                 {
                   "key": "name",
-                  "value_path": "$event.name"
+                  "value_path": "event.name"
                 },
                 {
                   "key": "position",
-                  "value_path": "$event.value"
+                  "value_path": "event.value"
                 }
               ]
             }
@@ -183,7 +189,7 @@
                 "static_value": "scope:stage_x"
               },
               {
-                "key": "when",
+                "key": "on",
                 "dynamic_value": {
                   "path": "self.Stage.mounted"
                 }

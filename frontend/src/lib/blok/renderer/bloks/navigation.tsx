@@ -55,7 +55,6 @@ import {
   asBoolean,
   asString,
   asStringList,
-  bindSchema,
   boolSchema,
   childListSchema,
   classNameSchema,
@@ -82,9 +81,6 @@ export const Tabs = createBlokComponent(
         children: childListSchema.describe(
           "A TabsList plus one TabsContent per tab.",
         ),
-        bind: bindSchema.describe(
-          "Data-model path holding the active tab value.",
-        ),
         value: BlokPropSchemas.DynamicString.optional().describe(
           "Controlled active tab.",
         ),
@@ -93,7 +89,7 @@ export const Tabs = createBlokComponent(
         ),
         className: classNameSchema,
         onChange: actionProp(
-          "Runs when the active tab changes. May read $event.",
+          "Runs when the active tab changes. May read event.value.",
         ),
       })
       .describe("A tabbed surface."),
@@ -101,7 +97,8 @@ export const Tabs = createBlokComponent(
   ({ buildChild, component, schema }) => {
     const blok = useBlok(component, schema);
     const children = useValue(blok.children);
-    const bind = useValue(blok.bind);
+    // Interaction state is the component's own (v2: no `bind` on a stateful component).
+    const bind = undefined;
     const value = useValue(blok.value);
     const defaultValue = useValue(blok.defaultValue);
     const className = useValue(blok.className);
@@ -219,9 +216,6 @@ export const Accordion = createBlokComponent(
     schema: z
       .object({
         children: childListSchema.describe("AccordionItem children."),
-        bind: bindSchema.describe(
-          "Data-model path holding the open item value(s).",
-        ),
         multiple: boolSchema.describe(
           "Allow more than one section open at a time.",
         ),
@@ -233,7 +227,7 @@ export const Accordion = createBlokComponent(
         ),
         className: classNameSchema,
         onChange: actionProp(
-          "Runs when the open sections change. May read $event.",
+          "Runs when the open sections change. May read event.value.",
         ),
       })
       .describe("A stack of collapsible sections."),
@@ -241,7 +235,8 @@ export const Accordion = createBlokComponent(
   ({ buildChild, component, schema }) => {
     const blok = useBlok(component, schema);
     const children = useValue(blok.children);
-    const bind = useValue(blok.bind);
+    // Interaction state is the component's own (v2: no `bind` on a stateful component).
+    const bind = undefined;
     const multiple = useValue(blok.multiple);
     const defaultValue = useValue(blok.defaultValue);
     const collapsible = useValue(blok.collapsible);
@@ -389,20 +384,22 @@ export const Collapsible = createBlokComponent(
         children: childListSchema.describe(
           "A CollapsibleTrigger and a CollapsibleContent.",
         ),
-        bind: bindSchema.describe("Data-model path holding the open state."),
         open: BlokPropSchemas.DynamicBoolean.optional().describe(
           "Controlled open state.",
         ),
         defaultOpen: boolSchema.describe("Open on mount when uncontrolled."),
         className: classNameSchema,
-        onChange: actionProp("Runs when it opens or closes. May read $event."),
+        onChange: actionProp(
+          "Runs when it opens or closes. May read event.value.",
+        ),
       })
       .describe("A single region that can be shown or hidden."),
   },
   ({ buildChild, component, schema }) => {
     const blok = useBlok(component, schema);
     const children = useValue(blok.children);
-    const bind = useValue(blok.bind);
+    // Interaction state is the component's own (v2: no `bind` on a stateful component).
+    const bind = undefined;
     const open = useValue(blok.open);
     const defaultOpen = useValue(blok.defaultOpen);
     const className = useValue(blok.className);

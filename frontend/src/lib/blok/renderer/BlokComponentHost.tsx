@@ -52,9 +52,11 @@ export const canHostBlokComponent = (
   props: readonly unknown[],
   catalog: BlokCatalog = defaultBlokCatalog,
 ): boolean =>
-  preflightBlokDocument(hostedDocument(component, props), catalog).nodes.has(
-    NODE_ID,
-  );
+  preflightBlokDocument(
+    hostedDocument(component, props),
+    catalog,
+    "v1",
+  ).nodes.has(NODE_ID);
 
 /**
  * One catalog component on its own, outside a blok: what renders a CUSTOM
@@ -87,6 +89,7 @@ export const BlokComponentHost = ({
       preflightBlokDocument(
         hostedDocument(component, JSON.parse(propsKey) as unknown[]),
         catalog,
+        "v1",
       ),
     [component, propsKey, catalog],
   );
@@ -96,6 +99,8 @@ export const BlokComponentHost = ({
       initialDataModel: data,
       invokeFunction: (name, args, options) =>
         catalog.invokeFunction(name, args, options),
+      // A port's widget is base@1, not a blok: its literals decode and its functions are v1.
+      decodeLiterals: true,
     }),
   );
 

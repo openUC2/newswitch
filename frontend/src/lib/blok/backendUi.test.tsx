@@ -38,7 +38,7 @@ const blok = (key: string, extra: Partial<BackendBlok> = {}): BackendBlok =>
     key,
     components: [],
     dependencies: [],
-    demoState: {},
+    demo: {},
     ...extra,
   }) as BackendBlok;
 
