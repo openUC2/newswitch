@@ -4,6 +4,7 @@ They drive no hardware; they exercise the agent (progress and pause points, a fa
 action that must release its locks, a critical failure, a function that never ends).
 """
 
+import logging
 import koil
 from rekuest_next import pausepoint, progress
 from rekuest_next.register import register
@@ -17,6 +18,8 @@ from newswitch.protocols import (
     StageManager,
     StageState,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @register
@@ -56,8 +59,7 @@ def dump_states_to_stdin(
     expanse_state: protocols.ExpanseState,
 ) -> None:
     """Dump the current states of all managers for debugging purposes."""
-    print("Dumping states to JSON:")
-    print(len(expanse_state.current_frames))
+    logger.info("Dumping states to JSON: %d current frames", len(expanse_state.current_frames))
 
 
 @register

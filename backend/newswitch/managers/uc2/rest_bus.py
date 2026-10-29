@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from rekuest_next import model
 
+from newswitch.logging_setup import log_prints, route_to_root
 from newswitch.managers.uc2.event_broker import UC2EventBroker
 from newswitch.protocols.uc2 import (
     BusError,
@@ -146,13 +147,20 @@ class UC2RestBus:
             ) from exc
 
         self._broker.bind_loop()
-        client = await AsyncUC2Client.create(
-            serialport=self.config.serialport,
-            baudrate=self.config.baudrate,
-            identity=self.config.identity,
-            device_id=self.config.device_id,
-            requireMaster=self.config.require_master,
-        )
+        # uc2rest prints while it builds the client, and attaches a DEBUG handler of its own
+        # to its logger every time (its records would bypass our levels and repeat). What it
+        # logs before the handler is taken away still reaches the terminal.
+        try:
+            with log_prints(logger, logging.DEBUG):
+                client = await AsyncUC2Client.create(
+                    serialport=self.config.serialport,
+                    baudrate=self.config.baudrate,
+                    identity=self.config.identity,
+                    device_id=self.config.device_id,
+                    requireMaster=self.config.require_master,
+                )
+        finally:
+            route_to_root("uc2rest.logger", "uc2rest.mserial")
         if not client.is_connected:
             # uc2rest degrades to a MockSerial dummy when no board answers;
             # treat that as a connection failure so the backoff loop keeps

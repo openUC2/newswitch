@@ -58,6 +58,20 @@ A device kind missing from the file, or `config_file=None` (the tests), keeps th
 built-in virtual defaults. On shutdown exposure, gain, wheel positions and stage position
 are written back; comments stay intact. Details: `backend/configs/README.md`.
 
+### Logging (`newswitch/logging_setup.py`)
+
+The backend does not print; every module logs through `logging.getLogger(__name__)` (ruff
+rule T20; only the command-line tools `newswitch/cli.py`, `newswitch/config_io/__main__.py`
+and `scripts/` print their results). `base_config.yaml` sets one level for the terminal
+(`log_to_terminal`) and one for the log file (`log_to_file`): `fatal`, `error`, `warn`,
+`info`, `debug` or `none`. The file (`log_file_path`, relative to the working directory) is
+appended to and rotated at 10 MB; if it cannot be opened, `backend.log` is used with a
+warning. `configure_logging` runs in the entry points (`main.py`, `newswitch.app.main`,
+`backend_cli.py`), not in `create_app`, so tests write no log files. It also takes away
+uvicorn's own handlers; `route_to_root` and `log_prints` do the same for libraries that
+attach handlers or print (uc2rest in `managers/uc2/rest_bus.py`). Not covered: uvicorn's
+reloader process under `--reload`, prints of other libraries, native output.
+
 ### Registered functions
 
 Everything the frontend can call lives in `newswitch/registers/`: one module per device

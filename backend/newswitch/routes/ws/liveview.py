@@ -2,11 +2,14 @@
 WebSocket routes for live video streaming.
 """
 
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 from rekuest_next.agents.context import get_context_name
 from newswitch.auth import Authenticator
 from newswitch.broadcasters import FrameBroadcaster, ZstdEncoderConfig, H264EncoderConfig
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -145,8 +148,8 @@ async def stream_zstd(websocket: WebSocket, detector_slot: int) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"Stream error: {e}")
+    except Exception:
+        logger.exception("Stream error")
     finally:
         await broadcaster.arelease_subscription(subscription)
 
@@ -193,7 +196,7 @@ async def stream_h264(websocket: WebSocket, detector_slot: int) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"Stream error: {e}")
+    except Exception:
+        logger.exception("Stream error")
     finally:
         await broadcaster.arelease_subscription(subscription)

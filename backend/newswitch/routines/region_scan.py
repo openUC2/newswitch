@@ -1,5 +1,6 @@
 """Routine for scanning a rectangular region as a tiled grid of stage positions."""
 
+import logging
 import math
 from enum import Enum
 from typing import Annotated
@@ -8,6 +9,8 @@ from rekuest_next.annotations import Description
 
 from newswitch import protocols
 from newswitch.protocols.core import Image
+
+logger = logging.getLogger(__name__)
 
 
 class ScanOrder(str, Enum):
@@ -48,8 +51,13 @@ def scan_region(
         list[AcquiredImage]: List of acquired images with metadata.
     """
 
-    print(
-        f"Scanning region from ({start_x}, {start_y}) to ({end_x}, {end_y}) in {scan_order} order."
+    logger.info(
+        "Scanning region from (%s, %s) to (%s, %s) in %s order.",
+        start_x,
+        start_y,
+        end_x,
+        end_y,
+        scan_order,
     )
 
     # 1. Calculate FOV for the current objective and detector configuration
@@ -73,8 +81,10 @@ def scan_region(
         metadata.affine_matrix[1][1] * current_detector.height
     )  # Placeholder: e.g., pixel_size_y * sensor_height
     # Placeholder: e.g., pixel_size_y * sensor_height
-    print(
-        f"Calculated FOV: {fov_width:.2f} x {fov_height:.2f} (um) based on current configuration."
+    logger.info(
+        "Calculated FOV: %.2f x %.2f (um) based on current configuration.",
+        fov_width,
+        fov_height,
     )
 
     # 2. Define Region Bounds, ensuring min/max are correctly assigned regardless of drag direction
@@ -124,8 +134,11 @@ def scan_region(
                 y = start_grid_y + actual_r * step_y
                 path_points.append((x, y))
 
-    print(
-        f"Calculated {cols} cols and {rows} rows ({len(path_points)} total points) based on FOV and overlap."
+    logger.info(
+        "Calculated %d cols and %d rows (%d total points) based on FOV and overlap.",
+        cols,
+        rows,
+        len(path_points),
     )
 
     acquired_images: list[Image] = []
@@ -134,7 +147,9 @@ def scan_region(
 
     # 5. Execute Moves and Acquisitions
     for i, (tgt_x, tgt_y) in enumerate(path_points):
-        print(f"Moving to position {i + 1}/{len(path_points)} -> X: {tgt_x:.2f}, Y: {tgt_y:.2f}")
+        logger.debug(
+            "Moving to position %d/%d -> X: %.2f, Y: %.2f", i + 1, len(path_points), tgt_x, tgt_y
+        )
         pausepoint()
 
         progress(int((i / total_len) * 100), f"Moving to point {i + 1}/{total_len}")

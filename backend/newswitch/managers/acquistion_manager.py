@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 
+import logging
 from newswitch.protocols import MetadataManager
 from newswitch.protocols.core import ArrayMetadata, Frame, Scale
 from newswitch.protocols.expanse import ExpanseManager
 from newswitch.protocols.detector import DetectorManager
 from newswitch.protocols.light_path import LightPathManager
 from newswitch.protocols.cache import CacheManager
+
+logger = logging.getLogger(__name__)
 
 
 class AcquistionManager:
@@ -41,8 +44,11 @@ class AcquistionManager:
 
         for detector in self.detector_manager.state.detectors:
             # Simulate image acquisition from the detector
-            print(
-                f"Acquiring image from detector slot {detector.slot} with exposure time {detector.current_exposure_time} ms {detector.is_active}"
+            logger.debug(
+                "Acquiring image from detector slot %s with exposure time %s s, active: %s",
+                detector.slot,
+                detector.current_exposure_time,
+                detector.is_active,
             )
             if detector.is_active:
                 image_data = self.detector_manager.capture_image(
@@ -75,7 +81,7 @@ class AcquistionManager:
                     ),
                 )
 
-                print("Added frame to expanse state with ID:", frame.id)
+                logger.debug("Added frame to expanse state with ID: %s", frame.id)
                 self.expanse_manager.add_frame(frame)
                 frames.append(frame)
 

@@ -56,6 +56,7 @@ from newswitch.protocols.illumination import Illumination
 from newswitch.protocols.objective import ObjectiveLens
 from newswitch.protocols.uc2 import UC2BusManager, UC2State
 from newswitch import registers  # noqa: F401  (registration side effects: every action)
+from newswitch.logging_setup import LogLevel, configure_logging
 from newswitch.managers.expanse_manager import ExpanseManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.protocols import (
@@ -162,6 +163,13 @@ class ImswitchConfig(BaseSettings):
     camera_debug_window: bool = False
     """Show every camera's newest image in a window of uc2_cam_py (debugging without the
     frontend); the cameras then acquire from startup on."""
+
+    log_to_terminal: LogLevel = "none"
+    """Lowest level of the log records written to the terminal (see `logging_setup`)."""
+    log_to_file: LogLevel = "debug"
+    """Lowest level of the log records written to `log_file_path`."""
+    log_file_path: Optional[str] = "backend.log"
+    """Log file, relative to the working directory. Missing or not openable: backend.log."""
 
     # UC2 hardware transport (used when use_virtual_microscope is False).
     # "canopen" (preferred, multi-node CAN bus) or "rest" (single ESP32 master
@@ -361,21 +369,21 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
         app_context = ImswitchConfig()
 
     mode = "virtual" if app_context.use_virtual_microscope else "real hardware"
-    print(f"Initializing {mode} microscope managers")
-    print(f"UC2 transport: {app_context.uc2_transport}")
+    logger.info("Initializing %s microscope managers", mode)
+    logger.info("UC2 transport: %s", app_context.uc2_transport)
     if app_context.uc2_transport == "canopen":
-        print(
-            "CAN interface: "
-            f"{app_context.uc2_can_interface}, "
-            f"channel={app_context.uc2_can_channel}, "
-            f"port={app_context.uc2_can_port}"
+        logger.info(
+            "CAN interface: %s, channel=%s, port=%s",
+            app_context.uc2_can_interface,
+            app_context.uc2_can_channel,
+            app_context.uc2_can_port,
         )
 
     frame_broadcaster = FrameBroadcaster()
 
     config = app_context
     if config.use_virtual_microscope:
-        print("Using virtual microscope managers.")
+        logger.info("Using virtual microscope managers.")
 
     illumination_state = IlluminationState()
 
@@ -529,7 +537,7 @@ async def provide_managers(  # TODO: can we make this adaptive so that we read t
     hook_manager.register_hook(protocols.SoftwareAutofocusHook, software_autofocus_hook)
     hook_manager.register_hook(
         protocols.ZCalibrationHook,
-        lambda hook, context: print("Z-calibration hook executed"),
+        lambda hook, context: logger.info("Z-calibration hook executed"),
     )
 
     expanse_state = protocols.ExpanseState()
@@ -626,9 +634,9 @@ def save_device_config(
         adapters.sync_runtime_state(
             cfg_file.config, camera_state, objective_state, filter_bank_state, stage_state
         )
-        print(f"Saved device configuration to {cfg_file.save()}")
+        logger.info("Saved device configuration to %s", cfg_file.save())
     except config_io.ConfigError as exc:
-        print(f"Device configuration not saved: {exc}")
+        logger.warning("Device configuration not saved: %s", exc)
 
 
 @shutdown
@@ -758,11 +766,14 @@ def main() -> None:
     settings come from `load_app_config`, so ``NEWSWITCH_CONFIG`` applies as for main.py.
     """
     config = load_app_config()
+    configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
     app = create_app(config)
+    # log_config=None: uvicorn would otherwise put its own handlers back
     uvicorn.run(
         app,
         host=os.environ.get("BACKEND_HOST", "0.0.0.0"),
         port=int(os.environ.get("BACKEND_PORT", "8099")),
+        log_config=None,
     )
 
 

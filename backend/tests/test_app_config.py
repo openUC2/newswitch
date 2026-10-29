@@ -135,6 +135,28 @@ def test_camera_debug_window(write_base: BaseWriter) -> None:
     assert ImswitchConfig().camera_debug_window is True
 
 
+def test_logging_settings(write_base: BaseWriter) -> None:
+    """Without the keys nothing goes to the terminal and everything to backend.log."""
+    write_base()
+    settings = ImswitchConfig()
+    assert settings.log_to_terminal == "none"
+    assert settings.log_to_file == "debug"
+    assert settings.log_file_path == "backend.log"
+
+    write_base(log_to_terminal="warn", log_to_file="none", log_file_path="logs/x.log")
+    settings = ImswitchConfig()
+    assert settings.log_to_terminal == "warn"
+    assert settings.log_to_file == "none"
+    assert settings.log_file_path == "logs/x.log"
+
+
+def test_unknown_log_level_is_an_error(write_base: BaseWriter) -> None:
+    """Only fatal, error, warn, info, debug and none are accepted."""
+    write_base(log_to_terminal="warning")
+    with pytest.raises(ValidationError, match="log_to_terminal"):
+        ImswitchConfig()
+
+
 def test_unknown_key_is_an_error(write_base: BaseWriter) -> None:
     """A misspelled key is reported instead of silently ignored."""
     write_base(use_virutal_microscope=True)
