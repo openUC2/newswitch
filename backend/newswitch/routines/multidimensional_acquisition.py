@@ -1,5 +1,6 @@
 "Routine for performing a multidimensional acquisition with multiple timepoints, positions, z-stacks, and channels."
 
+import logging
 from datetime import datetime
 import random
 from enum import Enum
@@ -13,6 +14,8 @@ from rekuest_next.scalars import ValidatorFunction
 from rekuest_next.structures.model import model_field
 import time
 from rekuest_next import pausepoint
+
+logger = logging.getLogger(__name__)
 
 
 class PositionOrder(str, Enum):
@@ -153,11 +156,11 @@ def acquire_multidimensional_acquisition(
         list[AcquiredImage]: List of acquired images with metadata.
     """
     acquired: list[Frame] = []
-    print(f"Starting acquisition with config: {config}")
+    logger.info("Starting acquisition with config: %s", config)
 
     hook_manager.execute_all(config.m_hooks or [])
 
-    print(f"Executing acquisition hooks: {config.m_hooks}")
+    logger.info("Executing acquisition hooks: %s", config.m_hooks)
 
     # Calculate total number of images to acquire for progress tracking
     total_images = 0
@@ -184,8 +187,11 @@ def acquire_multidimensional_acquisition(
         if timepoint.position_order == PositionOrder.RANDOM:
             positions = random.sample(positions, k=len(positions))
 
-        print(
-            f"Acquiring timepoint {time_index} with positions: {positions} and hooks: {timepoint.t_hooks}"
+        logger.info(
+            "Acquiring timepoint %s with positions: %s and hooks: %s",
+            time_index,
+            positions,
+            timepoint.t_hooks,
         )
 
         for position_index, position in enumerate(positions):
@@ -238,7 +244,7 @@ def acquire_multidimensional_acquisition(
                             f"Acquired image {current_image}/{total_images} (T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}, Stream{stream_index + 1})",
                         )
 
-                        print("streaming acquired image data...")
+                        logger.debug("streaming acquired image data...")
                         for channel in channels_to_disable:
                             illumination_manager.turn_off_channel(channel)
 

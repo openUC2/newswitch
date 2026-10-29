@@ -16,20 +16,29 @@ which ``python -m newswitch.app`` uses as well). Ready-made setups live in backe
 
 Run directly (``python main.py``, e.g. in the debugger) the app serves on BACKEND_HOST /
 BACKEND_PORT from the environment, like `newswitch.app.main`.
+
+Logging follows log_to_terminal / log_to_file / log_file_path of the settings. Under
+``uvicorn main:app`` uvicorn sets up its own logging first and imports this module afterwards,
+so the settings win.
 """
 
 import os
 
 from newswitch.app import create_app, load_app_config
+from newswitch.logging_setup import configure_logging
 
-app = create_app(load_app_config())
+config = load_app_config()
+configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
+app = create_app(config)
 
 
 if __name__ == "__main__":
     import uvicorn
 
+    # log_config=None: uvicorn would otherwise put its own handlers back
     uvicorn.run(
         app,
         host=os.environ.get("BACKEND_HOST", "0.0.0.0"),
         port=int(os.environ.get("BACKEND_PORT", "8099")),
+        log_config=None,
     )

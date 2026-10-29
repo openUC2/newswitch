@@ -678,11 +678,17 @@ def start_backend(host: str, port: int) -> tuple[uvicorn.Server, threading.Threa
         SystemExit: The server stopped before it was up (e.g. the port is taken).
     """
     from newswitch.app import create_app, load_app_config
+    from newswitch.logging_setup import configure_logging
 
-    app = create_app(load_app_config())
+    config = load_app_config()
+    configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
+    app = create_app(config)
     # No access log: every call of the console would add a line (with --verbose: to its menu).
+    # log_config=None: uvicorn would otherwise put its own handlers back.
     server = uvicorn.Server(
-        uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False)
+        uvicorn.Config(
+            app, host=host, port=port, log_level="warning", access_log=False, log_config=None
+        )
     )
     thread = threading.Thread(target=server.run, name="backend", daemon=True)
     thread.start()

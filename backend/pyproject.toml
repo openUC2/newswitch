@@ -77,7 +77,14 @@ config-settings-package = { uc2-cam-py = { "cmake.define.MVS_ROOT" = "/opt/MVS" 
 
 
 [tool.ruff.lint]
-extend-select = ["ANN", "D1", "F401"]
+# T20: no print in the backend, it logs (newswitch.logging_setup)
+extend-select = ["ANN", "D1", "F401", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+# Command-line tools: what they print is their result
+"newswitch/cli.py" = ["T20"]
+"newswitch/config_io/__main__.py" = ["T20"]
+"scripts/*" = ["T20"]
 
 [tool.ruff]
 

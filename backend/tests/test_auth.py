@@ -7,8 +7,9 @@ the credential check itself.
 """
 
 import base64
+import time
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 import pytest
 import yaml
@@ -323,6 +324,31 @@ def test_stream_websocket_rejects_a_wrong_token(client: TestClient) -> None:
             websocket.send_json({"type": "auth", "token": "nope"})
             websocket.receive_bytes()
     assert excinfo.value.code == 1008
+
+
+def test_stream_websocket_accepts_an_in_band_token(
+    authed_app: FastAPI, client: TestClient, token: str
+) -> None:
+    """An accepted auth frame subscribes the socket to a shared encoder.
+
+    Zstd rather than H.264, so the test needs no ffmpeg. The encoder is checked rather
+    than received bytes: frames only flow while a live view runs.
+    """
+    contexts = authed_app.state.agent.contexts
+    with client.websocket_connect("/stream/zstd/1") as websocket:
+        websocket.send_json({"type": "auth", "token": token})
+        assert wait_until(lambda: "frame_broadcaster" in contexts)
+        assert wait_until(lambda: contexts["frame_broadcaster"].encoder_count == 1)
+
+
+def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> bool:
+    """Poll `condition` until it holds; the server side runs on the client's portal."""
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+    return True
 
 
 # ---------------------------------------------------------------- authenticator

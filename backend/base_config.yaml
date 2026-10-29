@@ -4,7 +4,7 @@
 # Host and port are not set here. They come from BACKEND_HOST / BACKEND_PORT in the
 # repository's root .env (deployment via docker is still an open point).
 
-use_virtual_microscope: true
+use_virtual_microscope: false
 # SQLite file of the rekuest agent (state history); relative to the working directory
 db_path: agent_data.db
 available_cubes: [cube1, cube2, cube3]
@@ -15,8 +15,8 @@ schema_dir: configs/schemas
 
 # Device configuration; bare names are resolved against config_dir.
 # newswitch never writes static_config_path; changes always go into persistent_config_path.
-static_config_path: newswitch-config.yaml
-persistent_config_path: newswitch-config.persistent.yaml
+static_config_path: camTest_config.yaml
+persistent_config_path:  camTest_config.persistent.yaml
 # true:  read  static_config_path; on shutdown persistent_config_path is overwritten
 #        with it plus the runtime changes
 # false: read (and write back) persistent_config_path; on first start it is created
@@ -33,3 +33,12 @@ camera_recording_dir: data/recordings
 # the window always has one; this writes nothing to disk. Without an X11 display only an
 # error is logged. Set false on headless machines.
 camera_debug_window: true
+
+# Logging of the backend (the frontend logs in the browser). Each output gets records from
+# its level up: fatal | error | warn | info | debug, or none for no output at all.
+log_to_terminal: none
+log_to_file: debug
+# Log file, relative to the backend's working directory (backend/ with `just dev`). It is
+# appended to and rotated at 10 MB (backend.log.1 ... .3 are kept). Missing, or not openable
+# (e.g. its folder does not exist): backend.log is used, with a warning in it.
+log_file_path: backend.log

@@ -1,11 +1,14 @@
 """Registered functions for the detectors (cameras). Importing this module registers them."""
 
+import logging
 from rekuest_next.register import register
 
 from newswitch import protocols
 from newswitch.protocols import DetectorManager
 from newswitch.protocols.core import Frame
 from newswitch.protocols.detector import Detector
+
+logger = logging.getLogger(__name__)
 
 
 @register
@@ -52,7 +55,7 @@ def start_live_view(detector: DetectorManager) -> str:
     Call this to begin streaming frames captured by the detector
     to connected video clients.
     """
-    print("Starting live view broadcasting...")
+    logger.info("Starting live view broadcasting...")
     detector.start_acquire_live(save_to_disk=False)
     return "Broadcasting started. Frames will now be sent to video clients."
 
@@ -66,7 +69,7 @@ def start_live_view_and_save_to_disk(detector: DetectorManager) -> str:
     stop_live_view or until the detector is deactivated. The virtual detector cannot
     record and fails.
     """
-    print("Starting live view broadcasting with saving to disk...")
+    logger.info("Starting live view broadcasting with saving to disk...")
     detector.start_acquire_live(save_to_disk=True)
     return "Broadcasting started. Frames are sent to video clients and written to disk."
 
@@ -79,7 +82,7 @@ def stop_live_view(detector: DetectorManager) -> str:
     Call this to stop streaming frames captured by the detector
     to connected video clients. Writing to disk ends with it.
     """
-    print("Stopping live view broadcasting...")
+    logger.info("Stopping live view broadcasting...")
     detector.stop_acquire_live()
     return "Broadcasting stopped. No frames will be sent to video clients."
 
@@ -92,7 +95,7 @@ def activate_detector(detector: DetectorManager, slot: int) -> None:
     Args:
         slot: Detector slot number to activate
     """
-    print(f"Activating detector in slot {slot}...")
+    logger.info("Activating detector in slot %s...", slot)
     detector.activate_detector(slot)
     return None
 
@@ -105,7 +108,7 @@ def deactivate_detector(detector: DetectorManager, slot: int) -> str:
     Args:
         slot: Detector slot number to deactivate
     """
-    print(f"Deactivating detector in slot {slot}...")
+    logger.info("Deactivating detector in slot %s...", slot)
     detector.deactivate_detector(slot)
     return f"Detector slot {slot} deactivated"
 
