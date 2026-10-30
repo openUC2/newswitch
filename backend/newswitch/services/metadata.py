@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 from typing import Any, Dict, Protocol
 
@@ -39,6 +41,21 @@ from newswitch.states.filter_bank import FilterBankState
 from newswitch.states.illumination import IlluminationState
 from newswitch.states.objective import ObjectiveState
 from newswitch.states.stage import StageState
+
+
+#: Part of what is hashed: a change in what the hashes cover invalidates what they key.
+HASH_VERSION = 1
+
+
+def _digest(payload: dict[str, Any]) -> str:
+    """A stable hash of `payload`, whatever the order of its keys."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.blake2b(encoded, digest_size=16).hexdigest()
+
+
+def _rest_pose(affine_matrix: AffineMatrix) -> list[list[float]]:
+    """A kube's pose, rounded so that a rounding error is not a different optical setup."""
+    return [[round(value, 2) for value in row] for row in affine_matrix]
 
 
 class KubeLike(Protocol):
@@ -81,7 +98,12 @@ class MetadataManager:
         self._calibration_state = calibration_state
 
     def _create_light_path_state(self, light_path: LightPath) -> LightPathSnapshot:
-        affine_matrix_hash = ""
+        # What the optics do to a pixel: the calibration of a light path is keyed by this.
+        # Where the sample is (stage position, focus) is deliberately not part of it, or no
+        # calibration would be found twice.
+        transform: dict[str, Any] = {"version": HASH_VERSION}
+        # The rest of the optical setup: what else tells one image from another.
+        setup: dict[str, Any] = {"sources": [], "filters": []}
 
         light_kube_states: list[KubeState] = []
         for kube in light_path.kubes:
@@ -96,7 +118,8 @@ class MetadataManager:
                             **with_kube_metadata(kube),
                         )
                     )
-                    # light does not transform from the source, so we can skip adding to the transformation hash
+                    if source.is_active:
+                        setup["sources"].append([source.slot, source.wavelength])
                 case FilterBankKube():
                     filter = self._filter_bank_state.get_active_filter()
                     light_kube_states.append(
@@ -108,7 +131,7 @@ class MetadataManager:
                             slot_id=filter.slot,
                         )
                     )
-                # filters do not transform the affine matrix
+                    setup["filters"].append([filter.slot, filter.name])
                 case DichroicKube():
                     light_kube_states.append(
                         DichroicKubeState(
@@ -122,8 +145,7 @@ class MetadataManager:
                             **with_kube_metadata(kube),
                         )
                     )
-                    # The stage of course affects the transformation from sample to pixel coordinates, so we add its affine matrix to the hash
-                    affine_matrix_hash += str(kube.affine_matrix)
+                    transform["stage"] = _rest_pose(kube.affine_matrix)
                 case ObjectiveTurretKube():
                     objective = self._objective_state.get_active_objective()
                     light_kube_states.append(
@@ -132,8 +154,7 @@ class MetadataManager:
                             **with_kube_metadata(kube),
                         )
                     )
-                    # The stage of course affects the transformation from sample to pixel coordinates, so we add its affine matrix to the hash
-                    affine_matrix_hash += str(objective.slot)
+                    transform["objective"] = [objective.slot, objective.name]
                 case ObjectiveKube():
                     light_kube_states.append(
                         ObjectiveKubeState(
@@ -141,7 +162,7 @@ class MetadataManager:
                             **with_kube_metadata(kube),
                         )
                     )
-                    affine_matrix_hash += str(kube.slot_id)
+                    transform["objective"] = [kube.slot_id, kube.model_name]
                 case FilterKube():
                     filter = self._filter_bank_state.get_active_filter()
                     light_kube_states.append(
@@ -150,7 +171,7 @@ class MetadataManager:
                             wavelength=filter.center_wavelength,
                         )
                     )
-                    affine_matrix_hash += str(filter.slot)
+                    setup["filters"].append([filter.slot, filter.name])
                 case DetectorKube():
                     detector = self._camera_state.get_detector_for_slot(kube.slot_id)
                     light_kube_states.append(
@@ -160,8 +181,11 @@ class MetadataManager:
                             **with_kube_metadata(kube),
                         )
                     )
-                    # The stage of course affects the transformation from sample to pixel coordinates, so we add its affine matrix to the hash
-                    affine_matrix_hash += str(kube.slot_id)
+                    transform["detector"] = [
+                        detector.key or detector.slot,
+                        detector.current_binning,
+                        detector.current_roi,
+                    ]
                 case GenericKube():
                     light_kube_states.append(
                         GenericKubeState(
@@ -169,7 +193,10 @@ class MetadataManager:
                         )
                     )
 
+        transformation_hash = _digest(transform)
         return LightPathSnapshot(
+            hash=_digest({**setup, "transform": transformation_hash}),
+            transformation_hash=transformation_hash,
             kubes=light_kube_states,
             edges=[
                 LightEdgeState(
@@ -231,7 +258,7 @@ class MetadataManager:
             magnification = self._objective_state.get_active_objective().magnification or 1.0
         pixel_um = detector.pixel_size_um / magnification
         return CalibratedLightPath(
-            light_path_state_hash=light_path_state.hash,
+            light_path_state_hash=light_path_state.transformation_hash,
             affine_matrix=[
                 [pixel_um, 0.0, 0.0, 0.0],
                 [0.0, pixel_um, 0.0, 0.0],

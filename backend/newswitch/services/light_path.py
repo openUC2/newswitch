@@ -6,7 +6,6 @@ import math
 
 from kaffine import Affine
 
-from newswitch.models.devices import Detector, Filter, ObjectiveLens
 from newswitch.models.light_path import (
     DetectorKube,
     DichroicKube,
@@ -64,14 +63,6 @@ class LightPathManager:
         self.filter_bank_state = filter_bank_state
         self.camera_state = camera_state
         self.illumination_state = illumination_state
-
-    def _calculate_kube_hash(
-        self, objective: ObjectiveLens, detector: Detector, filter: Filter
-    ) -> str:
-        """Calculate a unique hash for the current light path configuration."""
-        # Placeholder logic to calculate a hash based on the objective and camera states
-        # In a real implementation, this would involve more complex logic based on the microscope's optical configuration
-        return f"hash_{objective.slot}_{detector.slot}_{filter.slot}"
 
     def calculate_possible_light_paths(self) -> list[LightPath]:
         """The light path to each detector, through the parts the microscope has.

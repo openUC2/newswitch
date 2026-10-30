@@ -14,5 +14,10 @@ class CalibrationManager:
         self.state = calibration_state
 
     def set_calibrated_state(self, calibrated_light_path: CalibratedLightPath) -> None:
-        """Set the calibrated state for a given light path configuration."""
-        self.state.calibrated_light_paths.append(calibrated_light_path)
+        """Set the calibrated state for a light path configuration, replacing an earlier one."""
+        key = calibrated_light_path.light_path_state_hash
+        self.state.calibrated_light_paths = [
+            known
+            for known in self.state.calibrated_light_paths
+            if known.light_path_state_hash != key
+        ] + [calibrated_light_path]

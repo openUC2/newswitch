@@ -24,5 +24,5 @@ class CalibratedLightPath:
     fov_height: float = model_field(default=10.0, description="Field of view height in micrometers")
     light_path_state_hash: str = model_field(
         default="",
-        description="Hash of the light path configuration this affine matrix corresponds to",
+        description="The transformation hash of the light path configuration this affine matrix corresponds to",
     )

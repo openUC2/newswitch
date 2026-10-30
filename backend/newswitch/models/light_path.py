@@ -226,33 +226,6 @@ class LightPath:
         description="List of edges representing the light path from source to sample",
     )
 
-    def transformation_hash(self) -> str:
-        """Calculate a hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image."""
-        # Placeholder logic to calculate a hash based on the objective and camera states
-        # In a real implementation, this would involve more complex logic based on the microscope's optical configuration
-        objective = next(
-            (kube for kube in self.kubes if isinstance(kube, ObjectiveTurretKube)), None
-        )
-        detector = next(
-            (
-                kube
-                for kube in self.kubes
-                if isinstance(kube, DetectorKube) and kube.slot_id == self.detector
-            ),
-            None,
-        )
-        filter = next((kube for kube in self.kubes if isinstance(kube, FilterBankKubeState)), None)
-
-        start_hash: str = "hash"
-        if objective is not None:
-            start_hash += f"_obj{objective}"
-        if detector is not None:
-            start_hash += f"_det{detector.slot_id}"
-        if filter is not None:
-            start_hash += f"_filter{filter.slot_id}"
-
-        return start_hash
-
 
 @dataclass
 class ObjectiveKubeState:
@@ -468,7 +441,7 @@ class LightPathSnapshot:
 
     hash: str = model_field(
         default="",
-        description="Hash of the light path configuration, used to uniquely describe the optical path for this image",
+        description="Hash of the optical setup of this image: the transformation hash, the active light sources and the filters",
     )
     kubes: list[KubeState] = model_field(
         default_factory=list,
@@ -480,5 +453,5 @@ class LightPathSnapshot:
     )
     transformation_hash: str = model_field(
         default="",
-        description="Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image",
+        description="Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it",
     )

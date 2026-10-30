@@ -57,7 +57,7 @@ def calibrate_light_path(
 
         # Store the calculated affine matrix in the calibration manager's state
         calibrated_light_path = CalibratedLightPath(
-            light_path_state_hash=light_path_state.hash,
+            light_path_state_hash=light_path_state.transformation_hash,
             affine_matrix=affine_matrix,
             fov_width=fov_width,
             fov_height=fov_height,

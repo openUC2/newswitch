@@ -33,7 +33,7 @@ def calibrated(microscope: Microscope) -> Microscope:
     )
     microscope.calibration.set_calibrated_state(
         CalibratedLightPath(
-            light_path_state_hash=path.hash,
+            light_path_state_hash=path.transformation_hash,
             affine_matrix=[
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
