@@ -69,24 +69,24 @@ def create_app(
             cannot be switched off by a stray variable on a deployed machine.
     """
 
-    app = FastAPI(
+    fastapi = FastAPI(
         title="Virtual Microscope API",  # TODO: should we load this from config?
         description="Integrated virtual microscope controller with protocol-based managers based on arkitekt",
         version="2.0.0",
     )
 
     authenticator = authenticator or default_authenticator()
-    app.state.authenticator = authenticator
+    fastapi.state.authenticator = authenticator
 
     # Middleware order is load-bearing. `add_middleware` PREPENDS, so the LAST call
     # here ends up OUTERMOST: auth is added first and CORS wraps it. Reversed, a 401
     # would leave without CORS headers and the browser at :5173 would report an opaque
     # CORS failure instead of the 401 that tells the app to send the user to /login.
-    app.add_middleware(AuthMiddleware, authenticator=authenticator)
+    fastapi.add_middleware(AuthMiddleware, authenticator=authenticator)
 
     # Add CORS middleware
     # bceause CORS sucks
-    app.add_middleware(
+    fastapi.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         # Auth travels in an Authorization header or a query parameter, never a
@@ -103,7 +103,7 @@ def create_app(
 
     # Serve everything registered (actions, states, contexts, hooks, bloks)
     configure_fastapi(
-        app=app,
+        app=fastapi,
         app_registry=registry.registry,
         expand_user_from_request=make_expand_user_from_request(authenticator),
         app_context=config,
@@ -111,17 +111,17 @@ def create_app(
     )
 
     # Mount the public auth + health routes
-    app.include_router(auth_router)
+    fastapi.include_router(auth_router)
 
     # Mount account/role/audit management routes (admin-only except /auth/me)
-    app.include_router(users_router)
+    fastapi.include_router(users_router)
 
     # The live view, the files and the cache of the running agent
-    app.include_router(liveview_router, prefix="/stream")
-    app.include_router(files_router)
-    app.include_router(cache_router)
+    fastapi.include_router(liveview_router, prefix="/stream")
+    fastapi.include_router(files_router)
+    fastapi.include_router(cache_router)
 
-    return app
+    return fastapi
 
 
 def create() -> FastAPI:
