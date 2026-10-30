@@ -8,6 +8,8 @@ set dotenv-load := true
 BACKEND_HOST := env("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT := env("BACKEND_PORT", "8099")
 FRONTEND_PORT := env("FRONTEND_PORT", "5173")
+MIKRO_PORT := env("MIKRO_PORT", "6580")
+RUSTFS_PORT := env("RUSTFS_PORT", "6890")
 
 BACKEND_HEALTH := "http://localhost:" + BACKEND_PORT + "/health"
 
@@ -36,6 +38,14 @@ dev-backend:
 # Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
 dev-frontend:
     cd frontend && yarn dev
+
+# The mikro stack in docker: images and their metadata, for FastAPI mode
+mikro:
+    docker compose --profile mikro up -d mikro
+
+# Backend + frontend talking to the mikro stack (`just mikro` first)
+dev-mikro:
+    MIKRO_URL=http://localhost:{{MIKRO_PORT}} MIKRO_DATALAYER_URL=http://localhost:{{RUSTFS_PORT}} MIKRO_TOKEN=newswitch-dev just dev
 
 # Block until the backend's schema endpoints answer
 wait-backend url=BACKEND_HEALTH:

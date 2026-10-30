@@ -23,10 +23,10 @@ USER app
 
 # Dependency layer, cached across source edits
 COPY --chown=app:app pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --extra uc2
+RUN uv sync --frozen --no-install-project --extra uc2 --extra mikro
 
 COPY --chown=app:app . .
-RUN uv sync --frozen --extra uc2
+RUN uv sync --frozen --extra uc2 --extra mikro
 
 # Defaults matching the repo's root .env. compose overrides them per service, and
 # `docker run -e BACKEND_PORT=...` works too - CMD/HEALTHCHECK below both read them.

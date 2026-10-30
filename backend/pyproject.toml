@@ -22,7 +22,7 @@ dependencies = [
     "arkitekt==11.0.0",
     "arkitekt-fastapi==3.0.0",
     "arkitekt-runtime==7.0.0",
-    "arkitekt-spec==6.0.0",
+    "arkitekt-spec==6.1.0",
     "koil>=3.3.7",
     "pyyaml>=6",
     "scipy>=1.17.0",
@@ -60,9 +60,16 @@ design = [
     "pyvista>=0.48.4",
 ]
 # Running as an arkitekt agent (`python main_arkitekt.py`): connected to an arkitekt
-# server through rekuest, the cameras streamed through lovekit (newswitch.serving).
+# server through rekuest, the cameras streamed through lovekit (newswitch.serving), its images
+# and their metadata in the mikro that server provides.
 agent = [
     "arkitekt[rekuest,lovekit]==11.0.0",
+    "mikro==12.2.0",
+]
+# Talking to a mikro in FastAPI mode (`newswitch.services.mikro_connection`), where nothing
+# provides one: where it is comes from MIKRO_URL and friends.
+mikro = [
+    "mikro==12.2.0",
 ]
 camera = [
     "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@ccfb0e9dd00930d959e918a6a7dd6635c31ef142 ; sys_platform == 'linux' and python_version == '3.12'",

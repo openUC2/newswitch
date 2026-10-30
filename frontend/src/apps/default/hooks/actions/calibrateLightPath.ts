@@ -17,11 +17,11 @@ export const CalibratedLightPathSchema = z
     fov_width: z.number().describe('Field of view width in micrometers'),
     /** Field of view height in micrometers */
     fov_height: z.number().describe('Field of view height in micrometers'),
-    /** Hash of the light path configuration this affine matrix corresponds to */
+    /** The transformation hash of the light path configuration this affine matrix corresponds to */
     light_path_state_hash: z
       .string()
       .describe(
-        'Hash of the light path configuration this affine matrix corresponds to',
+        'The transformation hash of the light path configuration this affine matrix corresponds to',
       ),
   })
   .brand('@newswitch/calibrated_light_path')
@@ -60,7 +60,7 @@ export const CalibrateLightPathDefinition: ActionDefinition<
   name: 'calibrate_light_path',
   appKey: 'default',
   description:
-    'Calibrate the light path of every active detector: its pixel-to-stage transform.\n\nThe stage moves `CALIBRATION_STEP_UM` in x only, then in y only, at a fixed focus; the\nimage shifts give the pixel scale (rotation and flip included), stored per light path\nfor the frames acquired through it. The stage ends where it started.',
+    'Calibrate the light path of every active detector: its pixel-to-stage transform.\n\nThe stage moves in x only, then in y only, at a fixed focus, by as much as shifts the image\nby `SHIFT_OF_FRAME`; the image shifts give the pixel scale (rotation and flip included),\nstored per light path for the frames acquired through it. The stage ends where it started.',
   argsSchema: CalibrateLightPathArgsSchema,
   returnSchema: CalibrateLightPathReturnSchema,
   lockKeys: ['camera_parameters', 'stage_position'],
@@ -69,9 +69,9 @@ export const CalibrateLightPathDefinition: ActionDefinition<
 /**
  * Calibrate the light path of every active detector: its pixel-to-stage transform.
 
-The stage moves `CALIBRATION_STEP_UM` in x only, then in y only, at a fixed focus; the
-image shifts give the pixel scale (rotation and flip included), stored per light path
-for the frames acquired through it. The stage ends where it started.
+The stage moves in x only, then in y only, at a fixed focus, by as much as shifts the image
+by `SHIFT_OF_FRAME`; the image shifts give the pixel scale (rotation and flip included),
+stored per light path for the frames acquired through it. The stage ends where it started.
  */
 export const useCalibrateLightPath = () => {
   return useAction(CalibrateLightPathDefinition);

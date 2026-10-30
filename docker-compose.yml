@@ -21,6 +21,12 @@ services:
       # port uvicorn actually binds has to be handed over explicitly.
       BACKEND_HOST: "0.0.0.0"
       BACKEND_PORT: "${BACKEND_PORT:-8099}"
+      # FastAPI mode has no arkitekt to get a mikro from: these say where it is (empty: none).
+      # With the mikro profile: http://mikro, http://rustfs:9000 and the token in
+      # deploy/mikro/mikro.yaml. Agent mode ignores them: it uses the mikro arkitekt provides.
+      MIKRO_URL: "${MIKRO_URL:-}"
+      MIKRO_DATALAYER_URL: "${MIKRO_DATALAYER_URL:-}"
+      MIKRO_TOKEN: "${MIKRO_TOKEN:-}"
     healthcheck:
       # The probe reads BACKEND_PORT from the container's own environment (set above)
       # rather than baking a number in, so it follows the service it is probing.
@@ -52,6 +58,97 @@ services:
         # The UI talks to the backend; codegen does not need it (frontend/schemas/)
         condition: service_healthy
 
+  # --- mikro: images and their metadata, for FastAPI mode. Only with the profile:
+  #   docker compose --profile mikro up -d mikro     (or: just mikro)
+  mikro-redis:
+    profiles: [mikro]
+    image: redis:latest
+    networks:
+      default:
+        aliases: [redis]
+
+  mikro-db:
+    profiles: [mikro]
+    image: jhnnsrs/daten:latest
+    restart: always
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: mikro
+      POSTGRES_PASSWORD: hello_django
+      POSTGRES_USER: hello_django
+    volumes:
+      - mikro-db:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases: [db]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U hello_django -d mikro]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rustfs:
+    profiles: [mikro]
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_ACCESS_KEY: crappygreysetter
+      RUSTFS_SECRET_KEY: e8821a29d189789e39c9922a3bfcfb4a
+    ports:
+      # Published because a client talks to the object store itself, with what mikro grants it.
+      - "${RUSTFS_PORT:-6890}:9000"
+    volumes:
+      - mikro-rustfs:/data
+
+  # Once: the buckets and the user of the object store.
+  mikro-init:
+    profiles: [mikro]
+    image: jhnnsrs/init:latest
+    restart: on-failure:10
+    command: python init.py
+    depends_on:
+      rustfs:
+        condition: service_started
+    environment:
+      RUSTFS_HOST: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: crappygreysetter
+      RUSTFS_SECRET_KEY: e8821a29d189789e39c9922a3bfcfb4a
+    volumes:
+      - ./deploy/mikro/rustfs.yaml:/workspace/config.yaml:ro
+
+  # Once: brings the database to the image's release; the server's own start only serves.
+  mikro-migrate:
+    profiles: [mikro]
+    image: jhnnsrs/mikro:${MIKRO_SERVICE_TAG:-12}
+    command: arkitekt-service run migrate
+    depends_on:
+      mikro-db:
+        condition: service_healthy
+    volumes:
+      - ./deploy/mikro/mikro.yaml:/workspace/config.yaml:ro
+
+  mikro:
+    profiles: [mikro]
+    # The server the mikro client in backend/pyproject.toml is written against.
+    image: jhnnsrs/mikro:${MIKRO_SERVICE_TAG:-12}
+    command: arkitekt-service debug
+    stop_grace_period: 1s
+    ports:
+      - "${MIKRO_PORT:-6580}:80"
+    volumes:
+      - ./deploy/mikro/mikro.yaml:/workspace/config.yaml:ro
+    depends_on:
+      mikro-redis:
+        condition: service_started
+      mikro-db:
+        condition: service_healthy
+      mikro-init:
+        condition: service_completed_successfully
+      mikro-migrate:
+        condition: service_completed_successfully
+
 volumes:
   backend-venv:
   frontend-node-modules:
+  mikro-db:
+  mikro-rustfs:

@@ -17,11 +17,11 @@ export const CalibratedLightPathSchema = z
     fov_width: z.number().describe('Field of view width in micrometers'),
     /** Field of view height in micrometers */
     fov_height: z.number().describe('Field of view height in micrometers'),
-    /** Hash of the light path configuration this affine matrix corresponds to */
+    /** The transformation hash of the light path configuration this affine matrix corresponds to */
     light_path_state_hash: z
       .string()
       .describe(
-        'Hash of the light path configuration this affine matrix corresponds to',
+        'The transformation hash of the light path configuration this affine matrix corresponds to',
       ),
   })
   .brand('@newswitch/calibrated_light_path')

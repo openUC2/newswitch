@@ -400,11 +400,11 @@ export const LightPathSnapshotSchema = z
     __identifier: z
       .literal('@newswitch/light_path_snapshot')
       .default('@newswitch/light_path_snapshot'),
-    /** Hash of the light path configuration, used to uniquely describe the optical path for this image */
+    /** Hash of the optical setup of this image: the transformation hash, the active light sources and the filters */
     hash: z
       .string()
       .describe(
-        'Hash of the light path configuration, used to uniquely describe the optical path for this image',
+        'Hash of the optical setup of this image: the transformation hash, the active light sources and the filters',
       ),
     /** List of kubes representing the optical components in the light path (e.g., objective, detector) */
     kubes: z
@@ -418,11 +418,11 @@ export const LightPathSnapshotSchema = z
         'Data class representing the light path used for an image, including illumination settings.',
       ),
     ),
-    /** Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image */
+    /** Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it */
     transformation_hash: z
       .string()
       .describe(
-        'Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image',
+        'Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it',
       ),
   })
   .brand('@newswitch/light_path_snapshot')

@@ -510,6 +510,7 @@ startup hook that provides the `FrameSink` (`python main.py fastapi|arkitekt` pi
 | Registers | startup `provide_frame_broadcaster` → `Tuple[FrameSink]` | state `CameraStreams`, startup `provide_lovekit_sink` → `Tuple[FrameSink, CameraStreams]`, background `publish_camera_streams` (when there are detectors) |
 | UI | config `ui`, newswitch frontend's catalog (`declare_ui`) | config `agent_ui`, Orkestrator's standard catalog (`declare_agent_ui`) |
 | Frames | `WS /stream/...` (above) | lovekit streams, one per detector |
+| Mikro | Configured by hand: `MIKRO_URL`, `MIKRO_DATALAYER_URL`, `MIKRO_TOKEN` (`newswitch/services/mikro_connection.py`); unset runs without one. Compose has a stack for it: `just mikro` | `mikro_service`: the one the arkitekt server provides |
 | HTTP routes | auth, accounts, `newswitch/routes/`: live view, files, cache | none |
 
 `create_app` includes the module-level routers of `newswitch/routes/`:

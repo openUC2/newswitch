@@ -20,6 +20,7 @@ from typing import Tuple
 
 from arkitekt import App, run
 from lovekit import lovekit_service
+from mikro import mikro_service
 
 from main import load_devices
 from newswitch.bloks import declare_agent_ui
@@ -54,8 +55,9 @@ async def provide_lovekit_sink(app_context: Settings) -> Tuple[FrameSink, Camera
 
 
 def create_arkitekt_registry(devices: NewswitchConfig | None) -> App:
-    """Step 3: the registry of `devices` for Orkestrator: a lovekit stream per detector."""
-    app = create_registry(devices, services=(lovekit_service,))
+    """Step 3: the registry of `devices` for Orkestrator: a lovekit stream per detector, and
+    the mikro the server provides."""
+    app = create_registry(devices, services=(lovekit_service, mikro_service))
     app.register_state(CameraStreams)
     app.register_startup(provide_lovekit_sink)
     if cameras_of(devices):

@@ -39,6 +39,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -214,6 +216,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -257,6 +261,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -352,6 +358,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -449,6 +457,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -528,6 +538,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -848,7 +860,7 @@
                             "key": "hash",
                             "label": null,
                             "kind": "STRING",
-                            "description": "Hash of the light path configuration, used to uniquely describe the optical path for this image",
+                            "description": "Hash of the optical setup of this image: the transformation hash, the active light sources and the filters",
                             "identifier": null,
                             "nullable": false,
                             "effects": [],
@@ -2288,7 +2300,7 @@
                             "key": "transformation_hash",
                             "label": null,
                             "kind": "STRING",
-                            "description": "Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image",
+                            "description": "Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it",
                             "identifier": null,
                             "nullable": false,
                             "effects": [],
@@ -2455,6 +2467,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -2515,6 +2529,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -2575,6 +2591,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -2635,6 +2653,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -2712,6 +2732,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -3552,6 +3574,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -3614,6 +3638,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -3657,6 +3683,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -3833,6 +3861,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -3990,6 +4020,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4069,6 +4101,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4127,6 +4161,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4223,6 +4259,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4264,6 +4302,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4358,6 +4398,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4399,6 +4441,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4477,6 +4521,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4681,6 +4727,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4720,6 +4768,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4857,6 +4907,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -4990,12 +5042,14 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
     "calibrate_light_path": {
       "definition": {
-        "description": "Calibrate the light path of every active detector: its pixel-to-stage transform.\n\nThe stage moves `CALIBRATION_STEP_UM` in x only, then in y only, at a fixed focus; the\nimage shifts give the pixel scale (rotation and flip included), stored per light path\nfor the frames acquired through it. The stage ends where it started.",
+        "description": "Calibrate the light path of every active detector: its pixel-to-stage transform.\n\nThe stage moves in x only, then in y only, at a fixed focus, by as much as shifts the image\nby `SHIFT_OF_FRAME`; the image shifts give the pixel scale (rotation and flip included),\nstored per light path for the frames acquired through it. The stage ends where it started.",
         "collections": [],
         "key": "calibrate_light_path",
         "version": "1",
@@ -5120,7 +5174,7 @@
                     "key": "light_path_state_hash",
                     "label": null,
                     "kind": "STRING",
-                    "description": "Hash of the light path configuration this affine matrix corresponds to",
+                    "description": "The transformation hash of the light path configuration this affine matrix corresponds to",
                     "identifier": null,
                     "nullable": false,
                     "effects": [],
@@ -5162,11 +5216,13 @@
       "provenanceAudience": null,
       "effects": "UNKNOWN",
       "execution": "PLAIN",
-      "codeHash": "ef162f2a26aee3fa332682cd42148ee610976076d52b45e9c7bcb732a43003ab",
+      "codeHash": "ddc397175e470e6012eb13e178a2bb9f71cd2c767cb20a89764f28ae5885a675",
       "logo": null,
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -5639,7 +5695,7 @@
                             "key": "hash",
                             "label": null,
                             "kind": "STRING",
-                            "description": "Hash of the light path configuration, used to uniquely describe the optical path for this image",
+                            "description": "Hash of the optical setup of this image: the transformation hash, the active light sources and the filters",
                             "identifier": null,
                             "nullable": false,
                             "effects": [],
@@ -7079,7 +7135,7 @@
                             "key": "transformation_hash",
                             "label": null,
                             "kind": "STRING",
-                            "description": "Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image",
+                            "description": "Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it",
                             "identifier": null,
                             "nullable": false,
                             "effects": [],
@@ -7247,6 +7303,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     },
@@ -8685,7 +8743,7 @@
                             "key": "hash",
                             "label": null,
                             "kind": "STRING",
-                            "description": "Hash of the light path configuration, used to uniquely describe the optical path for this image",
+                            "description": "Hash of the optical setup of this image: the transformation hash, the active light sources and the filters",
                             "identifier": null,
                             "nullable": false,
                             "effects": [],
@@ -10125,7 +10183,7 @@
                             "key": "transformation_hash",
                             "label": null,
                             "kind": "STRING",
-                            "description": "Hash indicating if the kube is affecting the transformation from sample to pixel coordinates, which is used to determine if we can reuse the affine matrix from a previous image",
+                            "description": "Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it",
                             "identifier": null,
                             "nullable": false,
                             "effects": [],
@@ -10295,6 +10353,8 @@
       "asks": null,
       "informs": null,
       "dynamicAsks": null,
+      "fits": null,
+      "estimatedRuntime": null,
       "dynamicInforms": null,
       "dynamicCalls": null
     }

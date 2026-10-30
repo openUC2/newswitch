@@ -37,6 +37,7 @@ from newswitch.microscope.registry import create_registry
 from newswitch.routes.cache import router as cache_router
 from newswitch.routes.files import router as files_router
 from newswitch.routes.liveview import router as liveview_router
+from newswitch.services.mikro_connection import MikroConnection, register_mikro
 from newswitch.settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,20 @@ async def provide_frame_broadcaster(app_context: Settings) -> Tuple[FrameSink]:
     return (FrameBroadcaster(),)
 
 
-def create_fastapi_registry(devices: NewswitchConfig | None) -> App:
-    """Step 3: the registry of `devices` for the newswitch frontend."""
+def create_fastapi_registry(
+    devices: NewswitchConfig | None, mikro: MikroConnection | None = None
+) -> App:
+    """Step 3: the registry of `devices` for the newswitch frontend.
+
+    Args:
+        devices: The device configuration.
+        mikro: The mikro to talk to. Nothing provides one here, as arkitekt does in agent mode;
+            None runs without it.
+    """
     app = create_registry(devices)
     app.register_startup(provide_frame_broadcaster)
+    if mikro is not None:
+        register_mikro(app, mikro)
     declare_ui(app, devices)
     return app
 
@@ -99,7 +110,7 @@ def create_app(
 
     # The registry this app serves: created here, everything registered on it, with the
     # UI of the device configuration
-    registry = create_fastapi_registry(load_devices(config, "ui"))
+    registry = create_fastapi_registry(load_devices(config, "ui"), MikroConnection.from_env())
 
     # Serve everything registered (actions, states, contexts, hooks, bloks)
     configure_fastapi(
