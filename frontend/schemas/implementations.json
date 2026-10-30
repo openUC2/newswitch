@@ -35,7 +35,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "110827209fb38ba6f41c09c59bbd4945be01b9206f23bd99f7f92b6d513e65e3",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "move_stage": {
       "definition": {
@@ -205,7 +210,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "e0227bcc8ed015a21669764d8b969959a58495a6f04c574909a794ec4dc91569",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "move_home": {
       "definition": {
@@ -243,7 +253,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "bb56ae5ad29a13151ae8863ba952c02cacc43c27fe17b31a650242560984693d",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "set_illumination_intensity": {
       "definition": {
@@ -333,7 +348,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "07e4c0e4e52bdb89380a688ee7f826dab17311cc8dfb218dd42f0cc57d91e38f",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "turn_on_illumination": {
       "definition": {
@@ -425,7 +445,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "be524b97125fcce95e953cbc7294606bd30382053119d779657fe56f317aa258",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "turn_off_illumination_channel": {
       "definition": {
@@ -499,7 +524,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "7c5700a2114dce25a6aa71c4ad1547b1f0e6b039e387b1a1215d8897e170303c",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "capture_image": {
       "definition": {
@@ -2421,7 +2451,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "3e363b1e18bcf4d2485affffb9c59375d91b75f681a6cad781ec6e35a41aefad",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "start_live_view": {
       "definition": {
@@ -2476,7 +2511,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "d12eef55cb1d7655678cdb2b5babd15d0bc4c7f43213a89971cc88ff15d88473",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "stop_live_view": {
       "definition": {
@@ -2531,7 +2571,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "dc48d19125bfb741e353c300e9816f3792f6987deee5c1ad2c217c626ccca9c9",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "activate_detector": {
       "definition": {
@@ -2586,7 +2631,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "92adc7f53d3a3e057ddfc43805b39cd51bd10681e933ec5b6813eac40ddb9ff8",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "deactivate_detector": {
       "definition": {
@@ -2658,7 +2708,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "b4e40ea623e64c33444797b4d6801035c98993744fcd3c3f2e764635219668a9",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "update_detector": {
       "definition": {
@@ -3493,7 +3548,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "789a30d1407e0cafe681969cae2fef57ea7985dc8e10141a4f303d145d1d9be1",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "switch_objective": {
       "definition": {
@@ -3550,7 +3610,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "779b4bc014342011b9e8c7995c594259d3e5fe3eedc435c1ac55854cc74e28db",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "toggle_objective": {
       "definition": {
@@ -3588,7 +3653,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "d3cae3a6a0f8afc7fc3860b8e1e577758c6b3fae7cfe45725263435a9c107b79",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "switch_filter": {
       "definition": {
@@ -3759,7 +3829,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "36dcaf8bc5601481f7194203e9ab98be4eb2ea9c9c70446caa22546ede0a9c8f",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "toggle_filter": {
       "definition": {
@@ -3911,7 +3986,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "28fcb67b6ccbfb9414ef64c8b4cac094766d5f555d24f1ca7ec5157e21830a8a",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "home_stage": {
       "definition": {
@@ -3985,7 +4065,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "436594977fd7fbba09b58a162004b9e2629cfc061ca0354368b19346bdd8d98f",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "stop_stage": {
       "definition": {
@@ -4038,7 +4123,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "9424464014ff0384ce56c2aea071f09130dbddd29aef2923ce24922ff9ea50b1",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "led_matrix_fill": {
       "definition": {
@@ -4129,7 +4219,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "c6d2e8c7889403f3addfc77e4f1103a1a3538e210ad86b7185423ce1b7867e62",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "led_matrix_off": {
       "definition": {
@@ -4165,7 +4260,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "54c5925df0d362419541b2ed2eedeb992d0de021e4da9ba78e8633c64a054d81",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "uc2_scan_nodes": {
       "definition": {
@@ -4254,7 +4354,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "2e2f4daffbaf72ff902160a4c5ce8674116e1c5dd5fe85bfbcb14e3fcc28cc05",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "home_objective": {
       "definition": {
@@ -4290,7 +4395,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "c934c67bc5698eea8ef29ff67a14bff3a160c9d094c559bc073017e91b0fc843",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "galvo_set_position": {
       "definition": {
@@ -4363,7 +4473,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "2b49058e7095dcf8f17c82935d240c5a6dff177aa7ba6fae5046fafeb3990158",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "galvo_raster_scan": {
       "definition": {
@@ -4562,7 +4677,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "dcbcda2ab7627396c0e5310180013f92be35ba17ea9470a77c3682e7f04ee2cf",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "galvo_stop": {
       "definition": {
@@ -4596,7 +4716,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "94dfcec5528b55c23fe6624d85c597ea8b83b9fcb9c8c92f7aa532642b1d0622",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "galvo_get_status": {
       "definition": {
@@ -4728,7 +4853,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "570bd971e6040990789640409d025c7d0f54edc6f48a83170eba4c16d8ea9109",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "run_autofocus": {
       "definition": {
@@ -4856,7 +4986,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "eca017f545335b1644011a0278a5aa8f669e4236f895f004c44f1803d1c9d649",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "calibrate_light_path": {
       "definition": {
@@ -5028,7 +5163,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "ef162f2a26aee3fa332682cd42148ee610976076d52b45e9c7bcb732a43003ab",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "scan_region": {
       "definition": {
@@ -7103,7 +7243,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "6588f6b27b436e87c53f62d1fb78baeabbdcd4682715ac2c1b545cb453aaf7fa",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     },
     "acquire_multidimensional_acquisition": {
       "definition": {
@@ -10146,7 +10291,12 @@
       "effects": "UNKNOWN",
       "execution": "PLAIN",
       "codeHash": "bef4a159ac6c65d82abfd51a88572a90b7ce3b77e11f021b7c743c872656e2bd",
-      "logo": null
+      "logo": null,
+      "asks": null,
+      "informs": null,
+      "dynamicAsks": null,
+      "dynamicInforms": null,
+      "dynamicCalls": null
     }
   }
 }

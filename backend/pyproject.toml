@@ -19,10 +19,10 @@ dependencies = [
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
     "pystackreg>=0.2.8",
-    "arkitekt==9.0.0",
+    "arkitekt==11.0.0",
     "arkitekt-fastapi==3.0.0",
-    "arkitekt-runtime==6.0.0",
-    "arkitekt-spec==4.0.0",
+    "arkitekt-runtime==7.0.0",
+    "arkitekt-spec==6.0.0",
     "koil>=3.3.7",
     "pyyaml>=6",
     "scipy>=1.17.0",
@@ -62,7 +62,7 @@ design = [
 # Running as an arkitekt agent (`python main_arkitekt.py`): connected to an arkitekt
 # server through rekuest, the cameras streamed through lovekit (newswitch.serving).
 agent = [
-    "arkitekt[rekuest,lovekit]==9.0.0",
+    "arkitekt[rekuest,lovekit]==11.0.0",
 ]
 camera = [
     "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@ccfb0e9dd00930d959e918a6a7dd6635c31ef142 ; sys_platform == 'linux' and python_version == '3.12'",
