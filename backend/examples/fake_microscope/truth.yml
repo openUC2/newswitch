@@ -1,0 +1,11 @@
+# What the microscope really is: read by hardware.py alone. The compiler and the predictions must
+# never see this, or comparing them with the images would prove nothing. Each error exercises
+# something different.
+
+objective_focal_error: 1.02   # both objectives are 2% longer than their label: a scale error
+camera_rotation_deg:          # the cameras are mounted slightly turned: nominally nothing
+  camera-a: 1.5
+  camera-b: -0.7
+filter_wedge_px:              # filter 2 has a wedge and shifts the image: the model has no such effect
+  slot: 2
+  shift: [3.0, -2.0]

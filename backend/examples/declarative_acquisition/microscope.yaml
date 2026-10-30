@@ -1,0 +1,148 @@
+# A microscope described by what it is, not by what to do. Three rules decide who says what:
+#
+#   a cube       what it is, and what its variables impact (reusable: it knows no path)
+#   a path       how light connects the cubes
+#   the program  everything else: which actuator matters for which path, and what is stale
+#
+# Today the design format holds none of this (docs/OPTIKIT-INTEGRATION.md assumes a format that
+# does not exist yet), so it is written by hand here; a compiler would generate this file.
+#
+# How a variable impacts a quantity:
+#   selects  another value needs another calibration: the objective for the pixel size
+#   uses     the value goes into the calculation, the calibration still holds: x and y
+# and on a calibration, what makes it stale: `timeout_h`, `invalidated_by` and `depends_on`.
+
+microscope: fluorescence-demo
+
+# Coordinate systems besides the images: `stage` is where the sample is, in micrometres, and
+# `motors` is what the actuators are told. A system a position can be asked in needs a route to
+# `stage`; `registered_by` is the calibration that gives it one.
+systems:
+  stage: {unit: micrometer}
+  motors: {unit: steps}
+  plate-1: {unit: micrometer, registered_by: plate_registration}
+
+cubes:
+  laser-488:
+    kind: LASER
+    wavelength_nm: 488
+    variables:
+      "on": {initial: false}
+      power: {initial: 0.0, unit: mW}
+
+  dichroic:
+    kind: BEAM_SPLITTER
+
+  objective:
+    kind: OBJECTIVE
+    variables:
+      slot:
+        initial: 1
+        actuator: turret
+        values:
+          1: {name: 10x Air, magnification: 10, na: 0.3}
+          2: {name: 20x Air, magnification: 20, na: 0.45}
+    impacts:
+      pixel_to_sample: {selects: [slot]}
+      focus_plane: {selects: [slot]}
+      chromatic_shift: {selects: [slot]}
+      flat_field: {selects: [slot]}
+
+  sample-stage:
+    kind: SAMPLE
+    variables:
+      x: {initial: 0.0, unit: um, actuator: stg-x, axis: x, steps_per_um: 8.0}
+      y: {initial: 0.0, unit: um, actuator: stg-y, axis: y, steps_per_um: 8.0}
+      z: {initial: 0.0, unit: um, actuator: stg-z, axis: z, steps_per_um: 25.0, inverted: true}
+    impacts:
+      stage_zero: {}
+      focus_plane: {uses: [x, y]}  # the sample is tilted: z follows from x and y
+
+  emission-wheel:
+    kind: FILTER
+    variables:
+      slot:
+        initial: 1
+        actuator: wheel
+        values:
+          1: {name: Open}
+          2: {name: BP525/50}
+    impacts:
+      chromatic_shift: {selects: [slot]}
+      flat_field: {selects: [slot]}
+
+  camera:
+    kind: CCD
+    pixel_um: 6.5
+    width: 64
+    height: 48
+    variables:
+      exposure_ms: {initial: 100.0, unit: ms}
+      gain: {initial: 0.0}
+      binning: {initial: 1}
+    impacts:
+      pixel_to_sample: {selects: [binning]}
+      flat_field: {selects: [binning]}
+      dark: {selects: [exposure_ms, gain, binning]}
+
+# The role of a cube belongs to the path that uses it: the objective is in both arms.
+paths:
+  epi-488:
+    illumination: [laser-488, dichroic, objective, sample-stage]
+    detection: [sample-stage, objective, dichroic, emission-wheel, camera]
+
+channels:
+  gfp:
+    path: epi-488
+    set: {laser-488.on: true, laser-488.power: 20.0, emission-wheel.slot: 2}
+  reflection:
+    path: epi-488
+    set: {laser-488.on: true, laser-488.power: 1.0, emission-wheel.slot: 1}
+
+# Most of what an acquisition sets needs no order; what does is stated, not searched for.
+rules:
+  - moving: emission-wheel.slot
+    require: {laser-488.on: false}
+
+# `on_stale` is what happens to an acquisition that needs it: `repair` runs the routine and goes
+# on, `warn` goes on and says so, `block` refuses to start.
+calibrations:
+  stage_zero:
+    routine: home_stage
+    invalidated_by: [power-cycle]
+    on_stale: repair
+
+  pixel_to_sample:
+    routine: measure_pixel_scale
+    timeout_h: 720
+    on_stale: warn
+    nominal: true  # never measured: the pixel pitch through the magnification
+
+  focus_plane:
+    routine: autofocus
+    depends_on: [stage_zero]
+    timeout_h: 2
+    invalidated_by: [sample-changed]
+    on_stale: repair
+
+  chromatic_shift:
+    routine: measure_chromatic_shift
+    depends_on: [pixel_to_sample]
+    timeout_h: 168
+    on_stale: warn
+
+  flat_field:
+    routine: measure_flat_field
+    timeout_h: 168
+    on_stale: warn
+
+  dark:
+    routine: measure_dark
+    timeout_h: 24
+    on_stale: warn
+
+  plate_registration:
+    routine: register_plate
+    depends_on: [stage_zero]
+    invalidated_by: [sample-changed]
+    on_stale: block

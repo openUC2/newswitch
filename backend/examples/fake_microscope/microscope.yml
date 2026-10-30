@@ -1,0 +1,100 @@
+# What the designer believes the microscope is. A cube is housing around an optical element, and
+# an actuator does one of three things to that element: it moves it, swaps it, or tunes it.
+# Nothing here says what impacts what: `compiler.py` works that out by nudging each variable.
+#
+# The hidden truth about this microscope is in truth.yml, which only hardware.py may read.
+
+spec: newswitch/instrument/v0
+name: fake-microscope
+
+sample:
+  fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+  transmit: 0.9   # light going straight through (transmitted light)
+  reflect: 0.001  # light coming back the way it came (epi)
+
+cubes:
+  laser-488:
+    element: {kind: source, wavelength: 488 nm, width: 2 nm}
+    tunes:
+      power: {actuator: laser-dac, initial: 20.0, step: 1.0, units: mW}
+
+  led-625:
+    element: {kind: source, wavelength: 625 nm, width: 15 nm}
+    tunes:
+      power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
+
+  stage:
+    element: {kind: sample}
+    moves:
+      x: {actuator: stg-x, along: x, initial: 0.0, step: 10.0, units: um}
+      y: {actuator: stg-y, along: y, initial: 0.0, step: 10.0, units: um}
+      z: {actuator: stg-z, along: axis, initial: 0.0, step: 100.0, units: um}
+
+  objective:
+    swaps:
+      slot:
+        actuator: turret
+        initial: 1
+        slots:
+          1: {kind: lens, f: 50 mm, na: 0.1}
+          2: {kind: lens, f: 25 mm, na: 0.2}
+
+  dichroic:
+    element: {kind: dichroic, cut: 500 nm}
+
+  filter-wheel:
+    swaps:
+      slot:
+        actuator: wheel
+        initial: 1
+        slots:
+          1: {kind: filter}
+          2: {kind: filter, center: 525 nm, width: 50 nm}
+
+  splitter:
+    element: {kind: splitter, reflect: 0.5, transmit: 0.5}
+
+  tube-a:
+    # A real achromat, from its prescription; it can be focused.
+    element: {kind: lens, prescription: lenses/AC254-100-A.optiland, clear_radius: 6 mm}
+    moves:
+      dz: {actuator: tube-focus, along: axis, initial: 0.0, step: 1000.0, units: um}
+
+  camera-a:
+    element:
+      kind: sensor
+      axes: {x: {size: 256, pitch: 10 um}, y: {size: 256, pitch: 10 um}}
+    tunes:
+      exposure: {initial: 100.0, step: 10.0, units: ms}
+      binning: {initial: 1, step: 1}
+
+  tube-b:
+    # No prescription for this one: an ideal lens, so only its focal length is known.
+    element: {kind: lens, f: 200 mm}
+
+  camera-b:
+    element:
+      kind: sensor
+      axes: {x: {size: 256, pitch: 10 um}, y: {size: 256, pitch: 10 um}}
+    tunes:
+      exposure: {initial: 100.0, step: 10.0, units: ms}
+      binning: {initial: 1, step: 1}
+
+# How light connects the elements, each edge in the direction light travels. Routes are found by
+# walking these, so another detector is another few edges. `via` is how light leaves an element
+# with more than one way out; a distance of `focus` means the lens's own focal length.
+illumination:
+  - {from: laser-488, to: dichroic}
+  - {from: dichroic, via: reflect, to: objective}
+  - {from: objective, to: stage, side: epi}
+  - {from: led-625, to: stage, side: transmitted}
+
+detection:
+  - {from: stage, to: objective, distance: focus}
+  - {from: objective, to: dichroic, distance: 100 mm}
+  - {from: dichroic, via: transmit, to: filter-wheel, distance: 30 mm}
+  - {from: filter-wheel, to: splitter, distance: 30 mm}
+  - {from: splitter, via: transmit, to: tube-a, distance: 40 mm}
+  - {from: tube-a, to: camera-a, distance: 97.068 mm}
+  - {from: splitter, via: reflect, to: tube-b, distance: 40 mm}
+  - {from: tube-b, to: camera-b, distance: focus}
