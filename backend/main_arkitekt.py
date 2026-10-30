@@ -1,12 +1,12 @@
 """newswitch as an arkitekt agent, shown in Orkestrator (the steps: `main`).
 
-    NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just agent
+    NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent
     uv run --extra agent python main_arkitekt.py
 
 `create_arkitekt_registry` registers newswitch for Orkestrator: the microscope
 (`create_registry`, with the lovekit service), a `LovekitSink` as the detectors'
-`FrameSink`, published as one lovekit stream per detector, and the ``agent_ui`` bloks in
-Orkestrator's catalog. `main` logs in to the arkitekt server (fakts: ``--url`` or ``$FAKTS_URL``, else
+`FrameSink`, published as one lovekit stream per detector, and the description's ``agent_ui``
+bloks in Orkestrator's catalog. `main` logs in to the arkitekt server (fakts: ``--url`` or ``$FAKTS_URL``, else
 the public deployment) and provides it until stopped.
 
 An agent serves no HTTP routes: the files the IO manager writes and the frame cache
@@ -22,7 +22,6 @@ from arkitekt import App, run
 from lovekit import lovekit_service
 from mikro import mikro_service
 
-from main import load_devices
 from newswitch.bloks import declare_agent_ui
 from newswitch.broadcasters.lovekit import (
     CameraStream,
@@ -30,51 +29,50 @@ from newswitch.broadcasters.lovekit import (
     LovekitSink,
     publish_camera_streams,
 )
-from newswitch.config_io import NewswitchConfig
-from newswitch.config_io.devices import DetectorConfig
+from newswitch.instrument.spec import Instrument
 from newswitch.microscope.registry import create_registry
 from newswitch.broadcasters import FrameSink
-from newswitch.settings import Settings, load_settings
-from newswitch.settings import load_devices as load_configured_devices
+from newswitch.microscope.run import Run
+from newswitch.settings import load_settings
 
 
-def cameras_of(devices: NewswitchConfig | None) -> list[CameraStream]:
-    """A stream per detector, keyed by its configuration key (lovekit keeps a stream's id
-    by its key over restarts; slots follow the file order), titled by its name."""
-    if devices is None:
+def cameras_of(instrument: Instrument | None) -> list[CameraStream]:
+    """A stream per detector, keyed by its cube (lovekit keeps a stream's id by its key over
+    restarts; slots follow the description's order), titled by that too."""
+    if instrument is None:
         return []
     return [
-        CameraStream(slot=index + 1, key=key, title=detector.name or key)
-        for index, (key, detector) in enumerate(devices.keyed(DetectorConfig).items())
+        CameraStream(slot=index + 1, key=name, title=name)
+        for index, name in enumerate(instrument.detectors())
     ]
 
 
-async def provide_lovekit_sink(app_context: Settings) -> Tuple[FrameSink, CameraStreams]:
-    """Startup: the detectors stream to a lovekit sink, one stream per configured detector."""
-    return LovekitSink(cameras_of(load_configured_devices(app_context))), CameraStreams()
+async def provide_lovekit_sink(current: Run) -> Tuple[FrameSink, CameraStreams]:
+    """Startup: the detectors stream to a lovekit sink, one stream per detector."""
+    return LovekitSink(cameras_of(current.instrument)), CameraStreams()
 
 
-def create_arkitekt_registry(devices: NewswitchConfig | None) -> App:
-    """Step 3: the registry of `devices` for Orkestrator: a lovekit stream per detector, and
+def create_arkitekt_registry(instrument: Instrument | None) -> App:
+    """Step 3: the registry of `instrument` for Orkestrator: a lovekit stream per detector, and
     the mikro the server provides."""
-    app = create_registry(devices, services=(lovekit_service, mikro_service))
+    app = create_registry(instrument, services=(lovekit_service, mikro_service))
     app.register_state(CameraStreams)
     app.register_startup(provide_lovekit_sink)
-    if cameras_of(devices):
+    if cameras_of(instrument):
         app.register_background(publish_camera_streams)
-    declare_agent_ui(app, devices)
+    declare_agent_ui(app, instrument)
     return app
 
 
-def create(settings: Settings) -> App:
-    """Steps 2-3: the device configuration of `settings` (with an ``agent_ui``), registered."""
-    return create_arkitekt_registry(load_devices(settings, "agent_ui"))
+def create(current: Run) -> App:
+    """Step 3: the instrument of `current`, registered."""
+    return create_arkitekt_registry(current.instrument)
 
 
 def main() -> None:
     """Steps 1-4: settings, registry, then run until stopped."""
-    settings = load_settings()
-    run(create(settings), context=settings)
+    current = Run.of(load_settings())
+    run(create(current), context=current)
 
 
 if __name__ == "__main__":

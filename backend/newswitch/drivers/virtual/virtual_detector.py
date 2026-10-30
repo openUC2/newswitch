@@ -185,7 +185,7 @@ class VirtualDetectorManager:
             illumination_state: Shared state for illumination (affects brightness).
             config: Detector configuration. Uses defaults if not provided.
             filter_bank_state: Shared state for filter bank (affects spectral filtering).
-            detectors: Detectors to expose (e.g. from newswitch-config.yaml). Uses the
+            detectors: Detectors to expose (e.g. from an instrument). Uses the
                 built-in R/G/B channels if not provided.
         """
         self.state = camera_state

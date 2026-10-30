@@ -1,6 +1,6 @@
 {
  "instrument": "fake-microscope",
- "digest": "c5c5f1029a9f4850",
+ "digest": "d245dcb1448fe4ee",
  "states": {
   "filter-wheel.slot=1,objective.slot=1": {
    "camera-a": {

@@ -1,9 +1,6 @@
-"""Tests for the Wave-1 UC2 additions: reconnect, objective, filter, autofocus, converter."""
+"""Tests for the Wave-1 UC2 additions: reconnect, objective, filter, autofocus."""
 
 import asyncio
-import json
-import sys
-from pathlib import Path
 
 import pytest
 
@@ -15,11 +12,6 @@ from newswitch.models.uc2 import BusError
 from newswitch.states.filter_bank import FilterBankState
 from newswitch.states.objective import ObjectiveState
 from newswitch.states.uc2 import UC2State
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-from convert_imswitch_setup import convert_setup  # noqa: E402
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def make_virtual_bus() -> VirtualUC2Bus:
@@ -161,56 +153,3 @@ async def test_virtual_bus_scan_nodes() -> None:
     nodes = await bus.ascan_nodes()
     assert nodes == [11, 12, 13, 20, 21]
     assert bus.state.nodes_online == nodes
-
-
-# ---------------------------------------------------------------------------
-# WP5: ImSwitch setup converter
-# ---------------------------------------------------------------------------
-
-
-def test_convert_imswitch_rest_setup() -> None:
-    """example_uc2.json (ESP32 serial) converts to a valid rest-transport config."""
-    from newswitch.settings import Settings
-    from newswitch.drivers.uc2.rest_bus import UC2RestBusConfig
-
-    setup = json.loads((FIXTURES / "example_uc2.json").read_text())
-    config, skipped = convert_setup(setup)
-
-    validated = Settings.model_validate(config)
-    assert validated.uc2_transport == "rest"
-    assert validated.use_virtual_microscope is False
-    # COM3 is not portable -> autodetect
-    assert validated.uc2_serial_port is None
-
-    rest_cfg = UC2RestBusConfig(**{"serialport": validated.uc2_serial_port, **validated.uc2_rest})
-    # stepsizeX = -0.3125 um/step -> -3.2 steps/um (sign = axis inversion)
-    assert rest_cfg.steps_per_um_x == pytest.approx(-3.2)
-    assert rest_cfg.steps_per_um_z == pytest.approx(3.2)
-
-    sources = validated.uc2_illumination["sources"]
-    assert any(s["channel"] == 1 and s["wavelength"] == 532 for s in sources)
-    # The non-numeric "LED" channel is skipped with a note
-    assert any("LED" in note for note in skipped)
-
-
-def test_convert_imswitch_canopen_setup() -> None:
-    """canopen.json converts to a valid canopen-transport config."""
-    from newswitch.settings import Settings
-    from newswitch.drivers.uc2.canopen_bus import UC2CanBusConfig
-
-    setup = json.loads((FIXTURES / "canopen.json").read_text())
-    config, _ = convert_setup(setup)
-
-    validated = Settings.model_validate(config)
-    assert validated.uc2_transport == "canopen"
-    assert validated.uc2_can_interface == "socketcan"
-    assert validated.uc2_can_channel == "can0"
-
-    can_cfg = UC2CanBusConfig(
-        **{
-            "interface": validated.uc2_can_interface,
-            "channel": validated.uc2_can_channel,
-            **validated.uc2_can,
-        }
-    )
-    assert can_cfg.bitrate == 500000

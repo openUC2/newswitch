@@ -10,8 +10,8 @@ component only Orkestrator draws (``MikroScene``) passes here although the newsw
 frontend does not draw it.
 
 The catalog is versioned (``NEWSWITCH_CATALOG_VERSION`` in the frontend, bumped on every
-change): a configuration's ``ui`` names the one its bloks were written against as
-``newswitch@<version>`` (`PublishedCatalog.id`).
+change): a UI names the one its bloks were written against as ``newswitch@<version>``
+(`PublishedCatalog.id`).
 """
 
 import json
@@ -21,7 +21,7 @@ from pathlib import Path
 from arkitekt import App
 from arkitekt_spec.declare.catalogs import Catalog, parse_ui_catalog
 
-from newswitch.config_io import BlokEntry
+from newswitch.instrument.ui import BlokEntry
 
 #: Written by the frontend: ``cd frontend && yarn catalog:export``.
 CATALOG_FILE = Path(__file__).parent / "newswitch-catalog.json"
@@ -37,7 +37,7 @@ class PublishedCatalog:
 
     @property
     def id(self) -> str:
-        """The catalog a configuration names: ``newswitch@<version>``."""
+        """The catalog a UI names: ``newswitch@<version>``."""
         return f"{CATALOG_NAME}@{self.version}"
 
 

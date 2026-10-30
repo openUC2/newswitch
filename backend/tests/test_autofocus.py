@@ -1,4 +1,4 @@
-"""Unit tests for the software autofocus routine against the virtual microscope."""
+"""Unit tests for the software autofocus routine against the simulated microscope."""
 
 import numpy as np
 import pytest
@@ -23,24 +23,22 @@ def test_compute_focus_metric_prefers_sharp_images() -> None:
         compute_focus_metric(sharp, "no_such_metric")
 
 
-def test_autofocus_sweep_finds_focus_on_virtual_microscope(microscope: Microscope) -> None:
-    """The sweep finds the virtual detector's focal plane from a defocused start.
+def test_autofocus_sweep_finds_focus_on_simulated_microscope(microscope: Microscope) -> None:
+    """The sweep finds the focal plane from a defocused start.
 
-    The virtual detector blurs a frame with a Gaussian of sigma = 0.5 px per micrometre of
-    distance to its focal plane, so the sharpest plane of a sweep around it is that plane.
-    The reference microscope's first light source is on, so the frames carry signal; the
-    focal plane sits inside the stage's travel (z starts at 0).
+    The reference microscope's description is in focus at z = 0, and defocus blurs its image, so
+    the sharpest plane of a sweep around it is that plane. Its first light source is on, so the
+    frames carry signal.
     """
     assert microscope.stage is not None and microscope.detector is not None
-    microscope.detector.config.focal_plane_z = 50.0
-    microscope.stage.move(z=56.0, is_absolute=True)
+    microscope.stage.move(z=30.0, is_absolute=True)
 
-    z_positions = [44.0 + index * 1.0 for index in range(13)]
+    z_positions = [-30.0 + index * 5.0 for index in range(13)]
     best_z, metrics = autofocus_sweep(
         microscope.stage, microscope.detector, z_positions, detector_slot=1
     )
 
     assert len(metrics) == len(z_positions)
-    assert abs(best_z - 50.0) <= 1.0
+    assert abs(best_z) <= 5.0
     # Sharpness falls off on both sides of focus.
     assert metrics[0] < max(metrics) and metrics[-1] < max(metrics)

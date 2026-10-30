@@ -1,16 +1,13 @@
-"""An instrument as what the server runs on: the models its managers and states take.
-
-The counterpart of `newswitch.config_io.adapters`, with the same names, for a microscope described
-by its optical elements.
-"""
+"""An instrument as what the server runs on: the models its managers and states take."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
 
-from newswitch.config_io import BlokEntry, UiConfig
-from newswitch.instrument.spec import Cube, Instrument, Variable
+from newswitch.instrument.errors import SpecError
+from newswitch.instrument.hardware import CAMERA_PROTOCOLS, Actuator
+from newswitch.instrument.spec import Instrument, Move, Swap, Variable
 from newswitch.models.devices import Detector, Filter, Illumination, IlluminationKind, ObjectiveLens
 from newswitch.states.detector import CameraState
 from newswitch.states.filter_bank import FilterBankState
@@ -18,41 +15,23 @@ from newswitch.states.illumination import IlluminationState
 from newswitch.states.objective import ObjectiveState
 from newswitch.states.stage import StageState
 
-#: Every source's intensity runs from 0 to this, as in `config_io.adapters.FULL_INTENSITY`.
-FULL_INTENSITY = 100.0
-#: The tube lens an objective's magnification is conventionally stated against, in millimetres.
-#: What it really magnifies depends on the detector's own tube lens: see `predict.Answer`.
-REFERENCE_TUBE_MM = 200.0
-#: How often a detector streams unless told otherwise; rendering as fast as possible uses a core.
-DEFAULT_FRAME_RATE = 30.0
+
+def stage_moves(instrument: Instrument) -> dict[str, Move]:
+    """What moves the sample, by the stage's axis names."""
+    stage = instrument.parts.stage
+    return {} if stage is None else instrument.cubes[stage].moves
 
 
-def _swap_of(instrument: Instrument, kind: str) -> tuple[Cube, Variable] | None:
-    """The cube that swaps elements of `kind`, and its variable."""
-    for cube in instrument.cubes.values():
-        for variable in cube.variables.values():
-            if variable.verb == "swaps" and variable.slots:
-                if next(iter(variable.slots.values())).kind == kind:
-                    return cube, variable
-    return None
+def objective_swap(instrument: Instrument) -> Swap | None:
+    """The swap that changes objectives."""
+    objective = instrument.parts.objective
+    return None if objective is None else instrument.variables[objective.swap]
 
 
-def has_stage(instrument: Instrument) -> bool:
-    """Whether something moves the sample."""
-    return any(
-        variable.verb == "moves"
-        for variable in instrument.cubes[instrument.sample_cube()].variables.values()
-    )
-
-
-def has_objective(instrument: Instrument) -> bool:
-    """Whether there are objectives to choose from."""
-    return _swap_of(instrument, "lens") is not None
-
-
-def has_filters(instrument: Instrument) -> bool:
-    """Whether there are filters to choose from."""
-    return _swap_of(instrument, "filter") is not None
+def filter_swap(instrument: Instrument) -> Swap | None:
+    """The swap that changes filters."""
+    filters = instrument.parts.filters
+    return None if filters is None else instrument.variables[filters.swap]
 
 
 def sensor_size(instrument: Instrument) -> tuple[int, int]:
@@ -65,8 +44,7 @@ def sensor_size(instrument: Instrument) -> tuple[int, int]:
     for name in instrument.detectors():
         element = instrument.cubes[name].element
         assert element is not None
-        axes = element.properties["axes"]
-        sizes.add((axes["x"]["size"], axes["y"]["size"]))
+        sizes.add((element.axes["x"].size, element.axes["y"].size))
     if len(sizes) != 1:
         raise ValueError(f"{instrument.name}: its sensors differ in size: {sorted(sizes)}")
     return next(iter(sizes))
@@ -75,25 +53,23 @@ def sensor_size(instrument: Instrument) -> tuple[int, int]:
 def illuminations(instrument: Instrument) -> list[Illumination] | None:
     """One `Illumination` per source, its intensity the initial share of its maximum power."""
     found = []
-    for slot, name in enumerate(instrument.sources(), start=1):
-        cube = instrument.cubes[name]
+    for slot, part in sorted(instrument.parts.sources.items()):
+        cube = instrument.cubes[part.cube]
         element = cube.element
         assert element is not None
         power = cube.variables["power"].initial
         found.append(
             Illumination(
-                kind=IlluminationKind.LASER
-                if element.properties.get("coherent")
-                else IlluminationKind.LED,
+                kind=IlluminationKind.LASER if element.coherent else IlluminationKind.LED,
                 slot=slot,
-                wavelength=element.properties["wavelength"],
+                wavelength=element.wavelength,
                 channel=slot,
-                max_intensity=FULL_INTENSITY,
+                max_intensity=part.full_intensity,
                 min_intensity=0.0,
                 # A source that starts off comes on at full, not at the 0 it is off at.
-                intensity=FULL_INTENSITY * power / element.properties["max_power"]
+                intensity=part.full_intensity * power / element.max_power
                 if power > 0.0
-                else FULL_INTENSITY,
+                else part.full_intensity,
                 is_active=power > 0.0,
             )
         )
@@ -102,19 +78,19 @@ def illuminations(instrument: Instrument) -> list[Illumination] | None:
 
 def objective_lenses(instrument: Instrument) -> tuple[list[ObjectiveLens], int] | None:
     """The objectives, and the slot in use."""
-    found = _swap_of(instrument, "lens")
-    if found is None:
+    variable = objective_swap(instrument)
+    if variable is None:
         return None
-    _, variable = found
-    assert variable.slots is not None
+    assert instrument.parts.objective is not None
+    reference_tube = instrument.parts.objective.reference_tube
     return (
         [
             ObjectiveLens(
                 slot=slot,
-                name=element.properties.get("name", f"f{element.properties['f']:g}"),
-                magnification=REFERENCE_TUBE_MM / element.properties["f"],
-                numerical_aperture=element.properties["na"],
-                working_distance=element.properties.get("working_distance", 0.0),
+                name=element.name or f"f{element.f:g}",
+                magnification=reference_tube / element.f,
+                numerical_aperture=element.na,
+                working_distance=element.working_distance or 0.0,
             )
             for slot, element in variable.slots.items()
         ],
@@ -124,19 +100,17 @@ def objective_lenses(instrument: Instrument) -> tuple[list[ObjectiveLens], int] 
 
 def filters(instrument: Instrument) -> tuple[list[Filter], int] | None:
     """The filters, and the slot in use."""
-    found = _swap_of(instrument, "filter")
-    if found is None:
+    variable = filter_swap(instrument)
+    if variable is None:
         return None
-    _, variable = found
-    assert variable.slots is not None
     return (
         [
             Filter(
                 slot=slot,
-                name=element.properties.get("name", f"Slot {slot}"),
-                center_wavelength=element.properties.get("center", 0.0),
-                bandwidth=element.properties.get("width", 0.0),
-                transmission=element.properties.get("transmission", 1.0),
+                name=element.name or f"Slot {slot}",
+                center_wavelength=element.center or 0.0,
+                bandwidth=element.width or 0.0,
+                transmission=element.transmission,
             )
             for slot, element in variable.slots.items()
         ],
@@ -147,51 +121,158 @@ def filters(instrument: Instrument) -> tuple[list[Filter], int] | None:
 def detectors(instrument: Instrument) -> list[Detector] | None:
     """One `Detector` per sensor, all active. Its sizes come from the sensor's axes."""
     found = []
-    for slot, name in enumerate(instrument.detectors(), start=1):
+    for slot, part in sorted(instrument.parts.detectors.items()):
+        name = part.cube
         cube = instrument.cubes[name]
         element = cube.element
         assert element is not None
-        axes = element.properties["axes"]
+        axes = element.axes
         found.append(
             Detector(
                 slot=slot,
                 name=name,
                 key=name,
-                width=axes["x"]["size"],
-                height=axes["y"]["size"],
-                sensor_width=axes["x"]["size"],
-                sensor_height=axes["y"]["size"],
+                width=axes["x"].size,
+                height=axes["y"].size,
+                sensor_width=axes["x"].size,
+                sensor_height=axes["y"].size,
                 is_active=True,
-                pixel_size_um=axes["x"]["pitch"],
+                pixel_size_um=axes["x"].pitch,
                 current_exposure_time=cube.variables["exposure"].initial / 1000.0,
                 current_gain=cube.variables["gain"].initial,
                 current_binning=cube.variables["binning"].initial,
-                current_frame_rate=DEFAULT_FRAME_RATE,
+                current_frame_rate=part.frame_rate,
             )
         )
     return found or None
 
 
+def cameras(instrument: Instrument) -> tuple[list[Detector], dict[int, dict[str, Any]]] | None:
+    """The detectors to open as cameras, with their vendor options by slot.
+
+    The vendor is passed on unchanged: newswitch knows no vendor names, the camera library decides
+    which it supports. None when the description wires no camera.
+    """
+    found = []
+    vendor_options: dict[int, dict[str, Any]] = {}
+    for detector in detectors(instrument) or []:
+        camera = instrument.hardware.cameras.get(detector.name)
+        if camera is None:
+            continue
+        detector.manufacturer = camera.vendor
+        detector.connection_type = CAMERA_PROTOCOLS[camera.protocol]
+        detector.serial_number = camera.serial_number
+        detector.device_index = camera.index
+        detector.buffer_size = camera.buffer_size
+        detector.store_image_data = camera.store_image_data
+        found.append(detector)
+        vendor_options[detector.slot] = dict(camera.vendor_options)
+    return (found, vendor_options) if found else None
+
+
+def _wired(instrument: Instrument, variable: Variable) -> Actuator | None:
+    return instrument.hardware.actuators.get(variable.actuator or "")
+
+
+def stage_axes(instrument: Instrument) -> list[str]:
+    """The board's axes the sample moves along."""
+    return [
+        actuator.axis
+        for variable in stage_moves(instrument).values()
+        if (actuator := _wired(instrument, variable)) is not None and actuator.axis is not None
+    ]
+
+
+def source_channel(instrument: Instrument, source: str) -> Actuator | None:
+    """What a source's power is wired to."""
+    return _wired(instrument, instrument.cubes[source].variables["power"])
+
+
+def objective_actuator(instrument: Instrument) -> Actuator | None:
+    """What changes the objectives."""
+    swap = objective_swap(instrument)
+    return None if swap is None else _wired(instrument, swap)
+
+
+def filter_actuator(instrument: Instrument) -> Actuator | None:
+    """What changes the filters."""
+    swap = filter_swap(instrument)
+    return None if swap is None else _wired(instrument, swap)
+
+
+def check_wired(instrument: Instrument) -> None:
+    """Check real hardware can run what the server has a control for.
+
+    A move or swap that has no control (a tube lens's focus) stays where it is, and needs no wire.
+
+    Raises:
+        SpecError: A control's actuator or a sensor's camera is not wired; every one is listed.
+    """
+    controlled: list[Variable] = list(stage_moves(instrument).values())
+    controlled += [instrument.cubes[name].variables["power"] for name in instrument.sources()]
+    for swap in (objective_swap(instrument), filter_swap(instrument)):
+        if swap is not None:
+            controlled.append(swap)
+    problems = [
+        f"{variable.name} has no wired actuator (hardware.actuators)"
+        for variable in controlled
+        if _wired(instrument, variable) is None
+    ]
+    problems += [
+        f"the sensor {name} has no camera (hardware.cameras)"
+        for name in instrument.detectors()
+        if name not in instrument.hardware.cameras
+    ]
+    for name in instrument.sources():
+        actuator = source_channel(instrument, name)
+        if actuator is not None and actuator.channel is None:
+            problems.append(f"{name}.power: its actuator {actuator.name} has no channel")
+    pwm_max = {
+        actuator.pwm_max
+        for name in instrument.sources()
+        if (actuator := source_channel(instrument, name)) is not None
+        and actuator.pwm_max is not None
+    }
+    if len(pwm_max) > 1:
+        problems.append(f"its sources share one pwm_max on a board, not {sorted(pwm_max)}")
+    wheel = filter_swap(instrument)
+    if wheel is not None and (actuator := _wired(instrument, wheel)) is not None:
+        slots = sorted(wheel.slots)
+        if actuator.axis is None or sorted(actuator.positions or {}) != slots:
+            problems.append(
+                f"{wheel.name}: its actuator {actuator.name} needs an axis and a position "
+                f"for each of the slots {slots}"
+            )
+        elif slots != list(range(1, len(slots) + 1)):
+            problems.append(f"{wheel.name}: a wired wheel's slots count from 1, not {slots}")
+    board = instrument.hardware.board
+    turret = objective_actuator(instrument)
+    if (
+        board is not None
+        and turret is not None
+        and turret.positions is not None
+        and board.transport != "canopen"
+    ):
+        problems.append(
+            f"{turret.name}: only a canopen board takes positions, a {board.transport} board's "
+            "firmware keeps its own"
+        )
+    if problems:
+        raise SpecError(f"{instrument.name} cannot run on real hardware: " + "; ".join(problems))
+
+
 def apply_stage_limits(instrument: Instrument, stage_state: StageState) -> None:
     """Copy each move's travel into `stage_state`."""
-    stage = instrument.cubes[instrument.sample_cube()]
-    for short, variable in stage.variables.items():
-        if variable.verb != "moves":
-            continue
-        if variable.minimum is not None:
-            setattr(stage_state, f"min_{short}", variable.minimum)
-        if variable.maximum is not None:
-            setattr(stage_state, f"max_{short}", variable.maximum)
+    for short, variable in stage_moves(instrument).items():
+        if variable.min is not None:
+            setattr(stage_state, f"min_{short}", variable.min)
+        if variable.max is not None:
+            setattr(stage_state, f"max_{short}", variable.max)
 
 
 def stage_speed(instrument: Instrument) -> float | None:
     """How fast the simulated stage travels, in um/s: its slowest move; None if none says."""
-    stage = instrument.cubes[instrument.sample_cube()]
-    speeds = [
-        variable.speed
-        for variable in stage.variables.values()
-        if variable.verb == "moves" and variable.speed
-    ]
+    speeds = [variable.speed for variable in stage_moves(instrument).values() if variable.speed]
     return min(speeds) if speeds else None
 
 
@@ -209,24 +290,23 @@ def runtime_state(
     at its initial value.
     """
     state = instrument.initial_state()
-    stage = instrument.sample_cube()
-    for short in ("x", "y", "z"):
-        if f"{stage}.{short}" in state:
-            state[f"{stage}.{short}"] = getattr(stage_state, short)
+    for short, variable in stage_moves(instrument).items():
+        state[variable.name] = getattr(stage_state, short)
 
-    found = _swap_of(instrument, "lens")
-    if found is not None:
-        state[found[1].name] = objective_state.slot
-    found = _swap_of(instrument, "filter")
-    if found is not None:
-        state[found[1].name] = filter_bank_state.current_slot
+    swap = objective_swap(instrument)
+    if swap is not None:
+        state[swap.name] = objective_state.slot
+    swap = filter_swap(instrument)
+    if swap is not None:
+        state[swap.name] = filter_bank_state.current_slot
 
-    for slot, name in enumerate(instrument.sources(), start=1):
+    for slot, part in sorted(instrument.parts.sources.items()):
+        name = part.cube
         element = instrument.cubes[name].element
         assert element is not None
         source = illumination_state.get_illumination_by_slot(slot)
         share = source.intensity / source.max_intensity if source.is_active else 0.0
-        state[f"{name}.power"] = share * element.properties["max_power"]
+        state[f"{name}.power"] = share * element.max_power
 
     for detector in camera_state.detectors:
         name = instrument.detectors()[detector.slot - 1]
@@ -275,30 +355,3 @@ def nominal_pixel_scale(
         )
 
     return scale
-
-
-def ui_config(instrument: Instrument, catalog: str) -> UiConfig:
-    """The built-in views the description names, as bloks; the first is the default.
-
-    Raises:
-        ValueError: It names a view there is none of.
-    """
-    from newswitch.bloks import fluorescence, minimal, stage_view
-
-    makers: dict[str, tuple[str, Callable[[bool], BlokEntry]]] = {
-        "fluorescence": (
-            fluorescence.NAME,
-            lambda default: fluorescence.blok(
-                has_filters=has_filters(instrument), has_objectives=has_objective(instrument)
-            ),
-        ),
-        "stage": (stage_view.NAME, stage_view.blok),
-        "minimal": (minimal.NAME, minimal.blok),
-    }
-    bloks = {}
-    for index, view in enumerate(instrument.views):
-        if view not in makers:
-            raise ValueError(f"{instrument.name} names no view {view!r}; it has {sorted(makers)}")
-        name, make = makers[view]
-        bloks[name] = make(index == 0)
-    return UiConfig(catalog=catalog, bloks=bloks)

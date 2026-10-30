@@ -148,7 +148,7 @@ jobs:
 
   # The frontend's typed hooks are GENERATED from the schemas of a complete microscope,
   # which the backend exports into frontend/schemas/ (what a running backend registers
-  # depends on its device configuration, so the hooks are not generated from one). This
+  # depends on its instrument, so the hooks are not generated from one). This
   # job re-exports, regenerates, and fails if either result differs from what is
   # committed. It only works because both halves live in one repo at one commit.
   codegen-drift:

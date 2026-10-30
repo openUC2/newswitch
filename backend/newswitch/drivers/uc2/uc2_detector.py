@@ -186,7 +186,7 @@ class UC2DetectorManager:
 
         Args:
             camera_state: Shared camera state; its detectors are replaced.
-            cameras: One detector per camera (from `config_io.adapters.cameras`): how to
+            cameras: One detector per camera (from `instrument.parts.cameras`): how to
                 open it, the values to set and the name, colormap and exposure presets.
                 What the camera reports then replaces its values (identity, sensor, image
                 size, current settings, ranges); the detectors become the state.

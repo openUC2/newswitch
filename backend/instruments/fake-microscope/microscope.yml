@@ -10,9 +10,6 @@
 spec: newswitch/instrument/v0
 name: fake-microscope
 
-# Which of the built-in views the frontend shows, the first being the default.
-ui: {views: [fluorescence, stage, minimal]}
-
 sample:
   fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
   transmit: 0.9   # light going straight through (transmitted light)
@@ -106,3 +103,518 @@ detection:
   - {from: tube-a, to: camera-a, distance: 97.068 mm}
   - {from: splitter, via: reflect, to: tube-b, distance: 40 mm}
   - {from: tube-b, to: camera-b, distance: focus}
+
+# What the server has a control for, in which role, and by which slot. Nothing is inferred from the
+# optics: a sensor or source without a slot here is an error, and a swap with no role has no control.
+parts:
+  stage: stage
+  objective: {swap: objective.slot, reference_tube: 200 mm}
+  filters: {swap: filter-wheel.slot}
+  sources:
+    1: {cube: laser-488, full_intensity: 100.0}
+    2: {cube: led-625, full_intensity: 100.0}
+  detectors:
+    1: {cube: camera-a, frame_rate: 30 Hz}
+    2: {cube: camera-b, frame_rate: 30 Hz}
+
+# How it runs. Relative folders are taken relative to backend/; db_path to the working directory.
+settings:
+  use_virtual_microscope: true   # false: the real hardware of a `hardware` section
+  db_path: arkitekt_agent.db     # state history and journal of the arkitekt agent
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache   # cleared on every start
+  camera_recording_dir: data/recordings   # only cameras with store_image_data record
+  camera_debug_window: true      # real cameras only: a window per camera, acquiring from startup on
+
+# What the frontend shows: bloks in blok language v2, checked against the catalog the frontend
+# publishes (newswitch/bloks/newswitch-catalog.json). `catalog` names the version they were written
+# against; the blok marked default is shown first. A blok naming an action this microscope does not
+# have is refused at startup.
+ui:
+  catalog: newswitch@2
+  bloks:
+    view-fluorescence:
+      description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
+      default: true
+      bsx: |
+        <Html>
+        <div className="flex h-full w-full gap-4 overflow-hidden bg-gradient-to-br from-info/5 to-transparent p-4">
+            <ScrollArea className="h-full w-[380px] shrink-0">
+                <div className="flex flex-col gap-3 pb-4 pr-3">
+        <div className="flex flex-wrap gap-1.5">
+            <if when={list.contains(value: list.pluck(value: self.IlluminationState.illuminations, key: "is_active"), item: true)}>
+                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-info backdrop-blur">
+                    <span className="size-1.5 rounded-full bg-info shadow-[0_0_8px_2px] shadow-info/60" />
+                    <span>Lit</span>
+                </div>
+            <else>
+                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur">
+                    <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+                    <span>Dark</span>
+                </div>
+            </else>
+            </if>
+            <if when={self.CameraState.is_acquiring}>
+                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive backdrop-blur">
+                    <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
+                    <span>Streaming</span>
+                </div>
+            <else>
+                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur">
+                    <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+                    <span>Idle</span>
+                </div>
+            </else>
+            </if>
+            <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-warning backdrop-blur">
+                    <span className="size-1.5 rounded-full bg-warning" />
+                    <span>Uncalibrated</span>
+                </div>
+            <else>
+                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-success backdrop-blur">
+                    <span className="size-1.5 rounded-full bg-success" />
+                    <span>Calibrated</span>
+                </div>
+            </else>
+            </if>
+        </div>
+        <div className="flex flex-col gap-3">
+            <foreach items={self.IlluminationState.illuminations} let="light" key={light.slot}>
+        <if when={light.wavelength < 430}>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-violet/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-violet/5 blur-3xl"} />
+            <div className="relative flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-violet">DAPI · Hoechst</span>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
+                        <span className="text-sm text-muted-foreground">nm</span>
+                    </div>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                </div>
+                <div className="past:pointer-events-none past:opacity-50">
+                    <if when={light.is_active}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-violet" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <else>
+                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                    </else>
+                    </if>
+                </div>
+            </div>
+            <if when={light.is_active}>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5">
+                        <span className="size-2.5 rounded-full bg-spectrum-violet shadow-[0_0_14px_3px] shadow-spectrum-violet/70" />
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-violet to-spectrum-violet/30" />
+                        <span className="rounded-md border border-spectrum-violet/40 bg-spectrum-violet/10 px-1.5 py-0.5 text-[10px] text-foreground">sample</span>
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-blue/30 to-spectrum-blue" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-blue shadow-[0_0_14px_3px] shadow-spectrum-blue/70" />
+                        <span className="text-[10px] tabular-nums text-spectrum-blue">~460 nm</span>
+                    </div>
+                    <div className="mt-5 flex items-end justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-violet">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                    </div>
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-violet [&amp;_[data-slot=slider-thumb]]:border-spectrum-violet" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                </div>
+            <else>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5 opacity-40 grayscale">
+                        <span className="size-2.5 rounded-full bg-spectrum-violet" />
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">sample</span>
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-blue" />
+                    </div>
+                    <span className="mt-4 block text-xs text-muted-foreground">Shutter closed: the sample is dark and does not bleach.</span>
+                </div>
+            </else>
+            </if>
+        </div>
+        <else>
+        <if when={light.wavelength < 520}>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-cyan/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-cyan/5 blur-3xl"} />
+            <div className="relative flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-cyan">GFP · FITC</span>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
+                        <span className="text-sm text-muted-foreground">nm</span>
+                    </div>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                </div>
+                <div className="past:pointer-events-none past:opacity-50">
+                    <if when={light.is_active}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-cyan" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <else>
+                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                    </else>
+                    </if>
+                </div>
+            </div>
+            <if when={light.is_active}>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5">
+                        <span className="size-2.5 rounded-full bg-spectrum-cyan shadow-[0_0_14px_3px] shadow-spectrum-cyan/70" />
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-cyan to-spectrum-cyan/30" />
+                        <span className="rounded-md border border-spectrum-cyan/40 bg-spectrum-cyan/10 px-1.5 py-0.5 text-[10px] text-foreground">sample</span>
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-green/30 to-spectrum-green" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-green shadow-[0_0_14px_3px] shadow-spectrum-green/70" />
+                        <span className="text-[10px] tabular-nums text-spectrum-green">~510 nm</span>
+                    </div>
+                    <div className="mt-5 flex items-end justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-cyan">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                    </div>
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-cyan [&amp;_[data-slot=slider-thumb]]:border-spectrum-cyan" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                </div>
+            <else>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5 opacity-40 grayscale">
+                        <span className="size-2.5 rounded-full bg-spectrum-cyan" />
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">sample</span>
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-green" />
+                    </div>
+                    <span className="mt-4 block text-xs text-muted-foreground">Shutter closed: the sample is dark and does not bleach.</span>
+                </div>
+            </else>
+            </if>
+        </div>
+        <else>
+        <if when={light.wavelength < 600}>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-yellow/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-yellow/5 blur-3xl"} />
+            <div className="relative flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-yellow">mCherry · RFP</span>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
+                        <span className="text-sm text-muted-foreground">nm</span>
+                    </div>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                </div>
+                <div className="past:pointer-events-none past:opacity-50">
+                    <if when={light.is_active}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-yellow" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <else>
+                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                    </else>
+                    </if>
+                </div>
+            </div>
+            <if when={light.is_active}>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5">
+                        <span className="size-2.5 rounded-full bg-spectrum-yellow shadow-[0_0_14px_3px] shadow-spectrum-yellow/70" />
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-yellow to-spectrum-yellow/30" />
+                        <span className="rounded-md border border-spectrum-yellow/40 bg-spectrum-yellow/10 px-1.5 py-0.5 text-[10px] text-foreground">sample</span>
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-orange/30 to-spectrum-orange" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-orange shadow-[0_0_14px_3px] shadow-spectrum-orange/70" />
+                        <span className="text-[10px] tabular-nums text-spectrum-orange">~610 nm</span>
+                    </div>
+                    <div className="mt-5 flex items-end justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-yellow">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                    </div>
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-yellow [&amp;_[data-slot=slider-thumb]]:border-spectrum-yellow" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                </div>
+            <else>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5 opacity-40 grayscale">
+                        <span className="size-2.5 rounded-full bg-spectrum-yellow" />
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">sample</span>
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-orange" />
+                    </div>
+                    <span className="mt-4 block text-xs text-muted-foreground">Shutter closed: the sample is dark and does not bleach.</span>
+                </div>
+            </else>
+            </if>
+        </div>
+        <else>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-red/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-red/5 blur-3xl"} />
+            <div className="relative flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-red">Cy5 · far red</span>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
+                        <span className="text-sm text-muted-foreground">nm</span>
+                    </div>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                </div>
+                <div className="past:pointer-events-none past:opacity-50">
+                    <if when={light.is_active}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-red" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <else>
+                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                    </else>
+                    </if>
+                </div>
+            </div>
+            <if when={light.is_active}>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5">
+                        <span className="size-2.5 rounded-full bg-spectrum-red shadow-[0_0_14px_3px] shadow-spectrum-red/70" />
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-red to-spectrum-red/30" />
+                        <span className="rounded-md border border-spectrum-red/40 bg-spectrum-red/10 px-1.5 py-0.5 text-[10px] text-foreground">sample</span>
+                        <div className="h-0.5 flex-1 animate-pulse rounded-full bg-gradient-to-r from-spectrum-red/30 to-spectrum-red" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-red shadow-[0_0_14px_3px] shadow-spectrum-red/70" />
+                        <span className="text-[10px] tabular-nums text-spectrum-red">~670 nm</span>
+                    </div>
+                    <div className="mt-5 flex items-end justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-red">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                    </div>
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-red [&amp;_[data-slot=slider-thumb]]:border-spectrum-red" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                </div>
+            <else>
+                <div className="relative">
+                    <div className="mt-4 flex items-center gap-1.5 opacity-40 grayscale">
+                        <span className="size-2.5 rounded-full bg-spectrum-red" />
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">sample</span>
+                        <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                        <span className="size-2.5 rounded-sm bg-spectrum-red" />
+                    </div>
+                    <span className="mt-4 block text-xs text-muted-foreground">Shutter closed: the sample is dark and does not bleach.</span>
+                </div>
+            </else>
+            </if>
+        </div>
+        </else>
+        </if>
+        </else>
+        </if>
+        </else>
+        </if>
+            </foreach>
+        </div>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl flex flex-col gap-2 past:pointer-events-none">
+            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Objective</span>
+            <foreach items={self.ObjectiveState.mounted_lenses} let="lens" key={lens.slot}>
+                <if when={lens.slot == self.ObjectiveState.slot}>
+                    <div className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-3 py-2">
+                        <span className="size-2 rounded-full bg-success shadow-[0_0_10px_2px] shadow-success/60" />
+                        <span className="text-sm font-medium">{lens.name}</span>
+                    </div>
+                <else>
+                    <Button variant="ghost" fullWidth={true} className="justify-start rounded-xl" onClick={self.switch_objective(slot: lens.slot)}>{lens.name}</Button>
+                </else>
+                </if>
+            </foreach>
+        </div>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl flex flex-col gap-2 past:pointer-events-none">
+            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Emission filter</span>
+            <foreach items={self.FilterBankState.filters} let="filter" key={filter.slot}>
+                <if when={filter.slot == self.FilterBankState.current_slot}>
+                    <div className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-3 py-2">
+                        <span className="size-2 rounded-full bg-success shadow-[0_0_10px_2px] shadow-success/60" />
+                        <span className="text-sm font-medium">{filter.name}</span>
+                        <span className="ml-auto text-xs tabular-nums text-muted-foreground">{filter.center_wavelength}/{filter.bandwidth} nm</span>
+                    </div>
+                <else>
+                    <Button variant="ghost" fullWidth={true} className="justify-start rounded-xl" onClick={self.switch_filter(slot: filter.slot)}>{filter.name} · {filter.center_wavelength}/{filter.bandwidth} nm</Button>
+                </else>
+                </if>
+            </foreach>
+        </div>
+        <div className="flex flex-col gap-3">
+            <foreach items={self.CameraState.detectors} let="camera" key={camera.slot}>
+                <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+                    <div className="flex items-center gap-2">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Detection</span>
+                            <span className="truncate text-sm font-medium">{camera.name}</span>
+                        </div>
+                        <div className="ml-auto">
+                            <if when={self.CameraState.is_acquiring}>
+                                <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
+                                    <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
+                                    <span>Live</span>
+                                </div>
+                            <else>
+                                <div className="flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+                                    <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+                                    <span>Idle</span>
+                                </div>
+                            </else>
+                            </if>
+                        </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Exposure</span>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-2xl font-semibold tabular-nums">{fmt.number(value: math.mul(a: camera.current_exposure_time, b: 1000), digits: 1)}</span>
+                                <span className="text-xs text-muted-foreground">ms</span>
+                            </div>
+                            <Slider className="min-w-0 past:hidden" step={0.1} value={math.mul(a: camera.current_exposure_time, b: 1000)} min={math.mul(a: camera.min_exposure_time, b: 1000)} max={math.mul(a: camera.max_exposure_time, b: 1000)} onCommit={self.update_detector(slot: camera.slot, exposure_time: math.div(a: event.value, b: 1000))} />
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-2xl font-semibold tabular-nums">{fmt.number(value: camera.current_gain, digits: 1)}</span>
+                                <span className="text-xs text-muted-foreground">dB</span>
+                            </div>
+                            <Slider className="min-w-0 past:hidden" step={0.1} value={camera.current_gain} min={camera.min_gain} max={camera.max_gain} onCommit={self.update_detector(slot: camera.slot, gain: event.value)} />
+                        </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning/15 bg-warning/5 px-3 py-2">
+                        <span className="text-xs text-warning/80">Light per frame</span>
+                        <span className="ml-auto text-xs font-medium tabular-nums text-warning">{fmt.number(value: math.mul(a: camera.current_exposure_time, b: 1000), digits: 1)} ms at {fmt.percent(value: math.div(a: obj.get(value: list.first(value: self.IlluminationState.illuminations), key: "intensity"), b: obj.get(value: list.first(value: self.IlluminationState.illuminations), key: "max_intensity")))}</span>
+                    </div>
+                    <span className="mt-2 block text-[11px] text-muted-foreground">Longer and brighter collects more photons, and bleaches more.</span>
+                </div>
+            </foreach>
+        </div>
+                </div>
+            </ScrollArea>
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+                <div className="h-full past:opacity-40">
+                    <LiveView className="h-full" />
+                </div>
+                <div className="absolute bottom-5 right-4">
+        <div className="flex gap-1 rounded-full border border-border/60 bg-card/70 p-1 backdrop-blur past:hidden">
+            <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Live</Button>
+            <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
+        </div>
+                </div>
+                <div className="absolute bottom-5 left-1/2 w-[min(26rem,80%)] -translate-x-1/2">
+        <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+            <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-sm font-medium text-warning">Light path not calibrated</span>
+                    <span className="text-xs text-muted-foreground">Calibrate once: images then get their pixel size and their place on the stage.</span>
+                </div>
+                <Button icon="wand" size="sm" className="shrink-0 rounded-full bg-warning text-warning-foreground hover:bg-warning/80" onClick={self.calibrate_light_path()}>Calibrate</Button>
+            </div>
+        <else>
+            <Button icon="camera" size="lg" fullWidth={true} className="h-12 rounded-full text-base shadow-xl past:hidden" onClick={self.capture_image()}>Acquire</Button>
+        </else>
+        </if>
+                </div>
+            </div>
+        </div>
+        </Html>
+    view-stage:
+      description: 'Stage: the sample on the stage, with the images taken there.'
+      bsx: |
+        <Html>
+        <Resizable direction="row" className="h-full w-full">
+            <ResizablePanel defaultSize={70}>
+                <div className="flex h-full flex-col overflow-hidden bg-muted/30">
+                    <StageView className="flex-1">
+                        <StageScene>
+                            <StageAxis />
+                            <StagePlane />
+                            <FramesLayer />
+                            <ImagesLayer />
+                            <LivesLayer />
+                            <FrameLightPathLayer />
+                            <StagePositioner />
+                            <RectangleDrawer />
+                        </StageScene>
+                        <ScanRegionPanel />
+                        <ImageMetadataPanel />
+                        <FramePanel />
+                        <SceneOverlay />
+                    </StageView>
+                </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle={true} />
+            <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
+                <ScrollArea className="h-full">
+                    <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
+                        <StageControl className="locked:opacity-60" />
+
+        <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+            <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-sm font-medium text-warning">Light path not calibrated</span>
+                    <span className="text-xs text-muted-foreground">Calibrate once: images then get their pixel size and their place on the stage.</span>
+                </div>
+                <Button icon="wand" size="sm" className="shrink-0 rounded-full bg-warning text-warning-foreground hover:bg-warning/80" onClick={self.calibrate_light_path()}>Calibrate</Button>
+            </div>
+        <else>
+            <Button icon="camera" size="lg" fullWidth={true} className="h-12 rounded-full text-base shadow-xl past:hidden" onClick={self.capture_image()}>Acquire</Button>
+        </else>
+        </if>
+                        <CameraControl className="locked:opacity-60" />
+                    </div>
+                </ScrollArea>
+            </ResizablePanel>
+        </Resizable>
+        </Html>
+    view-minimal:
+      description: 'Minimal: the live image and the stage, nothing else.'
+      bsx: |
+        <Html>
+        <Resizable direction="row" className="h-full w-full">
+            <ResizablePanel defaultSize={70}>
+                <div className="flex h-full flex-col gap-3 p-4">
+                    <div className="flex gap-2 past:hidden">
+                        <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                        <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
+                        <LiveView className="h-full" />
+                    </div>
+                </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle={true} />
+            <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
+                <ScrollArea className="h-full">
+                    <div className="p-4 past:opacity-70 past:grayscale">
+                        <StageControl className="locked:opacity-60" />
+
+        <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+            <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-sm font-medium text-warning">Light path not calibrated</span>
+                    <span className="text-xs text-muted-foreground">Calibrate once: images then get their pixel size and their place on the stage.</span>
+                </div>
+                <Button icon="wand" size="sm" className="shrink-0 rounded-full bg-warning text-warning-foreground hover:bg-warning/80" onClick={self.calibrate_light_path()}>Calibrate</Button>
+            </div>
+        <else>
+            <Button icon="camera" size="lg" fullWidth={true} className="h-12 rounded-full text-base shadow-xl past:hidden" onClick={self.capture_image()}>Acquire</Button>
+        </else>
+        </if>
+                    </div>
+                </ScrollArea>
+            </ResizablePanel>
+        </Resizable>
+        </Html>
+
+# What Orkestrator shows in agent mode (just agent): bloks drawn with the spec's catalogs and
+# Orkestrator's module, the cameras as lovekit streams.
+agent_ui:
+  catalog: orkestrator@v4.2.1
+  bloks:
+    view-microscope:
+      description: 'Microscope: the camera streams, live view and acquiring.'
+      default: true
+      bsx: |
+        <Html>
+        <div className="flex flex-col gap-4 p-4">
+            <Card>
+                <CardHeader><CardTitle>Cameras</CardTitle></CardHeader>
+                <CardContent>
+                    <foreach items={self.CameraStreams.streams} let="stream">
+                        <StructureDisplay value={stream} />
+                    </foreach>
+                </CardContent>
+            </Card>
+            <div className="flex gap-2">
+                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                <Button icon="square" onClick={self.stop_live_view()}>Stop</Button>
+                <Button icon="camera" onClick={self.capture_image()}>Acquire</Button>
+                <Button icon="home" onClick={self.move_home()}>Home stage</Button>
+            </div>
+        </div>
+        </Html>

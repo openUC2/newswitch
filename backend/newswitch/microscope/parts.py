@@ -1,8 +1,7 @@
-"""The microscope newswitch runs: the managers and states of the configured devices.
+"""The microscope newswitch runs: the managers and states of what its instrument has.
 
-Data and functions, no object with behaviour. `configured_parts` says which parts a device
-configuration has (a `Parts` value); `build_microscope` builds their managers and states
-(a `Microscope` record):
+Data and functions, no object with behaviour. `build_microscope` builds the managers and states of
+what the instrument's ``parts`` section names (a `Microscope` record):
 
     ============ =========================================== ===============================
     part         when                                        provides
@@ -16,19 +15,15 @@ configuration has (a `Parts` value); `build_microscope` builds their managers an
                                                              AcquisitionManager
     objective    an objective                                ObjectiveManager, ObjectiveState
     filter bank  a filter                                    FilterBankManager, FilterBankState
-    uc2          a UC2 controller (uc2-rest or canopen)      UC2BusManager, UC2State
+    uc2          a board in its ``hardware`` section         UC2BusManager, UC2State
     focus        a stage and a detector                      AutofocusState
     ============ =========================================== ===============================
 
-`newswitch.microscope.registry.create_registry` registers one startup hook per part the
-configuration has. arkitekt hands a startup hook only the app context, and no hook sees
-what another returned; yet the parts depend on each other (the simulated detector reads
-the stage, objective, illumination and filter states; acquisition and hooks use several
-managers; the UC2 parts share one bus). So the hooks hand out the objects of one build,
-made on the first hook and kept in `create_registry` (never in a module): two apps share
-nothing.
+`newswitch.microscope.registry.create_registry` merges one registry per part the instrument
+has (`newswitch.microscope.apps`). Their startup hooks hand out the objects of one build, held
+by the app context (`newswitch.microscope.run.Run`, never in a module): two apps share nothing.
 
-A part the configuration lacks is not built: no manager exists for it (on hardware nothing
+A part the instrument lacks is not built: no manager exists for it (on hardware nothing
 talks to the bus for it), and the states the shared managers read of it (light path,
 metadata, the simulated detector) stay empty: no objectives, no filters, no light sources.
 """
@@ -37,10 +32,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from newswitch import config_io, models, protocols, states
+from newswitch import models, protocols, states
 from newswitch.settings import Settings
-from newswitch.config_io import adapters
-from newswitch.config_io.devices import ControllerConfig
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.filter_bank_manager import UC2FilterBankConfig, UC2FilterBankManager
 from newswitch.drivers.uc2.illumination_manager import (
@@ -55,7 +48,6 @@ from newswitch.drivers.virtual import (
     FilterBankConfig,
     LEDConfig,
     ObjectiveConfig,
-    VirtualDetectorManager,
     VirtualFilterBankManager,
     VirtualLEDManager,
     VirtualObjectiveManager,
@@ -64,9 +56,9 @@ from newswitch.drivers.virtual import (
 from newswitch.drivers.optics.detector import OpticsDetectorManager
 from newswitch.drivers.virtual import StageConfig as VirtualStageConfig
 from newswitch.instrument import parts as instrument_parts
-from newswitch.instrument.spec import Instrument
-from newswitch.models.devices import Filter as OpticalFilter
-from newswitch.models.devices import Illumination, ObjectiveLens
+from newswitch.instrument.errors import SpecError
+from newswitch.instrument.predict import NotCompiled
+from newswitch.instrument.spec import Instrument, Parts
 from newswitch.protocols import (
     DetectorManager,
     FilterBankManager,
@@ -97,51 +89,36 @@ from newswitch.states.uc2 import UC2State
 
 logger = logging.getLogger(__name__)
 
-#: Controller protocols that are a UC2 board.
-UC2_PROTOCOLS = ("uc2-rest", "canopen")
 
+def _driver_config(cls: type, options: dict[str, Any], where: str) -> Any:  # noqa: ANN401
+    """The driver's config from what the description states.
 
-#: What a microscope can be built from: a device configuration, or an instrument.
-Devices = config_io.NewswitchConfig | Instrument
-
-
-def _adapters(devices: Devices) -> Any:  # noqa: ANN401 - two modules with the same functions
-    """What turns `devices` into the models the managers take."""
-    return instrument_parts if isinstance(devices, Instrument) else adapters
+    Raises:
+        SpecError: An option is not one the driver has.
+    """
+    try:
+        return cls(**options)
+    except TypeError as exc:
+        raise SpecError(f"hardware: {where}: {exc}") from exc
 
 
 def build_detector_manager(
     config: Settings,
-    devices: Optional[Devices],
+    instrument: Instrument,
     camera_state: CameraState,
     stage_state: StageState,
     objective_state: ObjectiveState,
     illumination_state: IlluminationState,
     filter_bank_state: FilterBankState,
 ) -> DetectorManager:
-    """Choose the detector manager: real cameras through uc2_cam_py, else the virtual one.
+    """Choose the detector manager: real cameras through uc2_cam_py, else rendering from the optics.
 
-    Cameras are used on real hardware only (``use_virtual_microscope: false``) and when
-    the device configuration maps a detector to a camera controller (see
-    `adapters.cameras`). Without the extra "camera" (uc2_cam_py not importable) the
-    virtual detector stands in, with a warning. A camera that cannot be opened is an
-    error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
-
-    An instrument renders from its optics instead.
+    Cameras are used on real hardware only (``use_virtual_microscope: false``). Without the extra
+    "camera" (uc2_cam_py not importable) the optics stand in, with a warning. A camera that cannot
+    be opened is an error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window
+    per camera.
     """
-    if isinstance(devices, Instrument):
-        return OpticsDetectorManager(
-            instrument=devices,
-            camera_state=camera_state,
-            stage_state=stage_state,
-            objective_state=objective_state,
-            illumination_state=illumination_state,
-            filter_bank_state=filter_bank_state,
-            detectors=instrument_parts.detectors(devices) or [],
-        )
-    found = None
-    if not config.use_virtual_microscope and devices is not None:
-        found = adapters.cameras(devices)
+    found = None if config.use_virtual_microscope else instrument_parts.cameras(instrument)
     if found:
         cameras, vendor_options = found
         try:
@@ -149,7 +126,7 @@ def build_detector_manager(
         except ImportError as exc:
             logger.warning(
                 "%d camera(s) configured, but uc2_cam_py cannot be imported (%s); "
-                "using the virtual detector. Install the extra: uv sync --extra camera",
+                "rendering from the optics. Install the extra: uv sync --extra camera",
                 len(cameras),
                 exc,
             )
@@ -161,72 +138,14 @@ def build_detector_manager(
                 recording_dir=config.camera_recording_dir,
                 debug_window=config.camera_debug_window,
             )
-    configured_detectors = adapters.detectors(devices) if devices is not None else None
-    return VirtualDetectorManager(
+    return OpticsDetectorManager(
+        instrument=instrument,
         camera_state=camera_state,
         stage_state=stage_state,
-        illumination_state=illumination_state,
         objective_state=objective_state,
+        illumination_state=illumination_state,
         filter_bank_state=filter_bank_state,
-        detectors=configured_detectors,
-    )
-
-
-@dataclass(frozen=True)
-class Parts:
-    """Which parts a device configuration has (besides the core every microscope has)."""
-
-    stage: bool
-    illumination: bool
-    detector: bool
-    objective: bool
-    filter_bank: bool
-    uc2: bool
-
-    @property
-    def focus(self) -> bool:
-        """It can focus: a stage to move and a detector to see with."""
-        return self.stage and self.detector
-
-    def names(self) -> list[str]:
-        """The configured parts, by name."""
-        return [
-            name
-            for name, present in (
-                ("stage", self.stage),
-                ("illumination", self.illumination),
-                ("detector", self.detector),
-                ("objective", self.objective),
-                ("filter bank", self.filter_bank),
-                ("uc2", self.uc2),
-            )
-            if present
-        ]
-
-
-def configured_parts(devices: Optional[Devices]) -> Parts:
-    """The parts `devices` has; None (no configuration): none, the core only."""
-    if devices is None:
-        return Parts(False, False, False, False, False, False)
-    if isinstance(devices, Instrument):
-        return Parts(
-            stage=instrument_parts.has_stage(devices),
-            illumination=bool(devices.sources()),
-            detector=bool(devices.detectors()),
-            objective=instrument_parts.has_objective(devices),
-            filter_bank=instrument_parts.has_filters(devices),
-            uc2=False,
-        )
-    return Parts(
-        stage=adapters.motion_stage(devices) is not None,
-        illumination=adapters.illuminations(devices) is not None,
-        detector=adapters.detectors(devices) is not None,
-        objective=adapters.objective_lenses(devices) is not None,
-        filter_bank=adapters.filters(devices) is not None,
-        uc2=any(
-            controller.connection is not None and controller.connection.protocol in UC2_PROTOCOLS
-            for controller in devices.of_type(ControllerConfig)
-        ),
+        detectors=instrument_parts.detectors(instrument) or [],
     )
 
 
@@ -262,47 +181,46 @@ class Microscope:
     filter_bank: Optional[FilterBankManager]
 
 
-def build_microscope(settings: Settings, devices: Optional[Devices]) -> Microscope:
-    """Build the managers and states of every part `devices` has (see the module).
+def _nominal_scale(
+    instrument: Optional[Instrument],
+    hardware: bool,
+    *states_: Any,  # noqa: ANN401
+) -> Any:  # noqa: ANN401
+    """What the design predicts a detector's pixels are.
+
+    Real hardware can run without a compiled table, with a warning: images no calibration covers
+    then have no predicted pixel size. A simulation renders from the table, so it cannot.
+    """
+    if instrument is None:
+        return None
+    try:
+        return instrument_parts.nominal_pixel_scale(instrument, *states_)
+    except NotCompiled as exc:
+        if not hardware:
+            raise
+        logger.warning("No predicted pixel size until it is compiled: %s", exc)
+        return None
+
+
+def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Microscope:
+    """Build the managers and states of every part `instrument` has (see the module).
 
     Args:
-        settings: The app context: virtual or hardware, transports, folders.
-        devices: The device configuration; None: no devices, the core only.
+        settings: The app context: virtual or hardware, folders.
+        instrument: What to run; None: no devices, the core only.
 
     Raises:
-        config_io.ConfigError: On hardware, a part that needs a UC2 board has none, or the
-            microscope is an instrument, which does not yet say how to reach any hardware.
+        SpecError: On hardware, the description does not say how to reach something it has.
     """
-    parts = configured_parts(devices)
+    parts = instrument.parts if instrument is not None else Parts()
     hardware = not settings.use_virtual_microscope
-    if hardware and isinstance(devices, Instrument):
-        raise config_io.ConfigError(
-            f"{devices.name} is an instrument, which only runs simulated so far: "
-            "set use_virtual_microscope: true"
-        )
+    if hardware and instrument is not None:
+        instrument_parts.check_wired(instrument)
     logger.info(
         "Initializing %s microscope: %s",
         "real hardware" if hardware else "virtual",
-        ", ".join(parts.names()) or "no devices",
+        instrument.name if instrument is not None else "no devices",
     )
-    if hardware and not parts.uc2:
-        # On hardware these parts are driven through a UC2 board; without one in the
-        # configuration a bus would be built that nothing ever connects.
-        bus_parts = [
-            name
-            for name, present in (
-                ("stage", parts.stage),
-                ("illumination", parts.illumination),
-                ("objective", parts.objective),
-                ("filter bank", parts.filter_bank),
-            )
-            if present
-        ]
-        if bus_parts:
-            raise config_io.ConfigError(
-                f"on real hardware {', '.join(bus_parts)} need a UC2 board, but the "
-                "device configuration has no uc2-rest or canopen controller"
-            )
 
     stage_state = StageState()
     illumination_state = IlluminationState()
@@ -311,39 +229,37 @@ def build_microscope(settings: Settings, devices: Optional[Devices]) -> Microsco
     filter_bank_state = FilterBankState()
     uc2_state = UC2State()
 
-    uc2_bus = build_uc2_bus(settings, devices, uc2_state) if parts.uc2 else None
-    stage = (
-        build_stage(settings, devices, stage_state, uc2_bus)
-        if devices is not None and parts.stage
+    uc2_bus = (
+        build_uc2_bus(settings, instrument, uc2_state)
+        if instrument is not None and instrument.hardware.boards
         else None
     )
+    stage = build_stage(settings, instrument, stage_state, uc2_bus) if parts.stage else None
     illumination = (
-        build_illumination(settings, devices, illumination_state, uc2_bus)
-        if devices is not None and parts.illumination
+        build_illumination(settings, instrument, illumination_state, uc2_bus)
+        if parts.sources
         else None
     )
     objective = (
-        build_objective(settings, devices, objective_state, uc2_bus)
-        if devices is not None and parts.objective
-        else None
+        build_objective(settings, instrument, objective_state, uc2_bus) if parts.objective else None
     )
     filter_bank = (
-        build_filter_bank(settings, devices, filter_bank_state, uc2_bus)
-        if devices is not None and parts.filter_bank
+        build_filter_bank(settings, instrument, filter_bank_state, uc2_bus)
+        if parts.filters
         else None
     )
-    # Cameras (uc2_cam_py) on real hardware when configured, else the virtual detector
+    # Cameras (uc2_cam_py) on real hardware, else rendered from the optics
     detector = (
         build_detector_manager(
             settings,
-            devices,
+            instrument,
             camera_state=camera_state,
             stage_state=stage_state,
             objective_state=objective_state,
             illumination_state=illumination_state,
             filter_bank_state=filter_bank_state,
         )
-        if parts.detector
+        if parts.detectors
         else None
     )
 
@@ -378,7 +294,7 @@ def build_microscope(settings: Settings, devices: Optional[Devices]) -> Microsco
         illumination_state=illumination_state,
         filter_bank_state=filter_bank_state,
         camera_state=camera_state,
-        has_stage=parts.stage,
+        has_stage=parts.stage is not None,
     )
     metadata = MetadataManager(
         objective_state=objective_state,
@@ -387,16 +303,15 @@ def build_microscope(settings: Settings, devices: Optional[Devices]) -> Microsco
         illumination_state=illumination_state,
         camera_state=camera_state,
         calibration_state=calibration_state,
-        nominal_scale=instrument_parts.nominal_pixel_scale(
-            devices,
+        nominal_scale=_nominal_scale(
+            instrument,
+            hardware,
             camera_state,
             stage_state,
             objective_state,
             illumination_state,
             filter_bank_state,
-        )
-        if isinstance(devices, Instrument)
-        else None,
+        ),
     )
     # The light paths this microscope's parts allow
     light_path.calculate_possible_light_paths()
@@ -444,58 +359,47 @@ def build_microscope(settings: Settings, devices: Optional[Devices]) -> Microsco
     )
 
 
-def build_uc2_bus(
-    settings: Settings, devices: Optional[config_io.NewswitchConfig], uc2_state: UC2State
-) -> UC2BusManager:
-    """The UC2 bus: simulated on the virtual microscope, else REST or CANopen."""
+def build_uc2_bus(settings: Settings, instrument: Instrument, uc2_state: UC2State) -> UC2BusManager:
+    """The UC2 bus: simulated on the virtual microscope, else REST or CANopen, as its board says."""
     if settings.use_virtual_microscope:
         return VirtualUC2Bus(state=uc2_state)
-    logger.info("UC2 transport: %s", settings.uc2_transport)
-    if settings.uc2_transport == "rest":
-        rest_kwargs: dict[str, Any] = {
-            "serialport": settings.uc2_serial_port,
-            "baudrate": settings.uc2_baudrate,
-        }
-        # A uc2-rest controller in the device configuration wins over the flat
-        # convenience fields; nested per-component overrides win over both.
-        serial = adapters.serial_settings(devices) if devices is not None else None
-        if serial is not None:
-            rest_kwargs.update(serialport=serial.port, baudrate=serial.baudrate)
-        rest_kwargs.update(settings.uc2_rest)
-        return UC2RestBus(state=uc2_state, config=UC2RestBusConfig(**rest_kwargs))
-    logger.info(
-        "CAN interface: %s, channel=%s, port=%s",
-        settings.uc2_can_interface,
-        settings.uc2_can_channel,
-        settings.uc2_can_port,
-    )
-    can_kwargs: dict[str, Any] = {
-        "interface": settings.uc2_can_interface,
-        "channel": settings.uc2_can_channel,
-        "port": settings.uc2_can_port,
-        **settings.uc2_can,
-    }
-    return UC2CanBus(state=uc2_state, config=UC2CanBusConfig(**can_kwargs))
+    board = instrument.hardware.board
+    assert board is not None
+    logger.info("UC2 transport: %s", board.transport)
+    options = dict(board.options)
+    where = f"boards.{board.name}"
+    if board.transport == "rest":
+        options["serialport"] = board.resolved_port()
+        return UC2RestBus(state=uc2_state, config=_driver_config(UC2RestBusConfig, options, where))
+    options["port"] = board.resolved_port()
+    turret = instrument_parts.objective_actuator(instrument)
+    if turret is not None and turret.positions is not None:
+        options["objective_slot_positions_steps"] = [
+            turret.positions[slot] for slot in sorted(turret.positions)
+        ]
+    return UC2CanBus(state=uc2_state, config=_driver_config(UC2CanBusConfig, options, where))
 
 
 def build_stage(
     settings: Settings,
-    devices: Devices,
+    instrument: Instrument,
     stage_state: StageState,
     bus: Optional[UC2BusManager],
 ) -> StageManager:
-    """The motion stage: its limits from the configuration; UC2 on hardware, else simulated."""
-    _adapters(devices).apply_stage_limits(devices, stage_state)
-    if "design" in devices.assets:
-        # A design's stage (its configuration carries the design's model) travels
-        # millimetres: steps that show on its model.
-        stage_state.registered_step_sizes = [10.0, 100.0, 1000.0, 5000.0]
+    """The motion stage: its limits from the description; UC2 on hardware, else simulated."""
+    instrument_parts.apply_stage_limits(instrument, stage_state)
     if not settings.use_virtual_microscope:
         assert bus is not None
+        board = instrument.hardware.board
+        assert board is not None
         return UC2StageManager(
             stage_state=stage_state,
             bus=bus,
-            config=UC2StageConfig(**settings.uc2_stage) if settings.uc2_stage else None,
+            config=_driver_config(
+                UC2StageConfig,
+                {**board.stage, "axes": instrument_parts.stage_axes(instrument)},
+                f"boards.{board.name}.stage",
+            ),
         )
     config = VirtualStageConfig(
         min_x=stage_state.min_x,
@@ -507,29 +411,35 @@ def build_stage(
         min_a=stage_state.min_a,
         max_a=stage_state.max_a,
     )
-    # The simulated stage travels at the slowest configured axis speed.
-    config.speed_um_per_s = _adapters(devices).stage_speed(devices)
+    # The simulated stage travels at the slowest axis speed.
+    config.speed_um_per_s = instrument_parts.stage_speed(instrument)
     return VirtualStageManager(stage=stage_state, config=config)
 
 
 def build_illumination(
     settings: Settings,
-    devices: Devices,
+    instrument: Instrument,
     illumination_state: IlluminationState,
     bus: Optional[UC2BusManager],
 ) -> IlluminationManager:
     """The light sources: UC2 on hardware, else simulated LEDs."""
+    sources = instrument_parts.illuminations(instrument)
     if not settings.use_virtual_microscope:
-        assert bus is not None
-        kwargs = dict(settings.uc2_illumination)
-        if "sources" in kwargs:
-            kwargs["sources"] = [Illumination(**source) for source in kwargs["sources"]]
+        assert bus is not None and sources is not None
+        options: dict[str, Any] = {}
+        for source, name in zip(sources, instrument.sources()):
+            actuator = instrument_parts.source_channel(instrument, name)
+            assert actuator is not None and actuator.channel is not None
+            source.channel = actuator.channel
+            # Nothing turned it on yet, whatever power it is described to start from.
+            source.is_active = False
+            if actuator.pwm_max is not None:
+                options["pwm_max"] = actuator.pwm_max
         return UC2IlluminationManager(
             illumination_state=illumination_state,
             bus=bus,
-            config=UC2IlluminationConfig(**kwargs) if kwargs else None,
+            config=UC2IlluminationConfig(sources=sources, **options),
         )
-    sources = _adapters(devices).illuminations(devices)
     return VirtualLEDManager(
         illumination_state=illumination_state,
         config=LEDConfig(sources=sources) if sources is not None else None,
@@ -538,23 +448,20 @@ def build_illumination(
 
 def build_objective(
     settings: Settings,
-    devices: Devices,
+    instrument: Instrument,
     objective_state: ObjectiveState,
     bus: Optional[UC2BusManager],
 ) -> ObjectiveManager:
     """The objectives: UC2 on hardware, else simulated."""
+    lenses = instrument_parts.objective_lenses(instrument)
+    assert lenses is not None
     if not settings.use_virtual_microscope:
         assert bus is not None
-        kwargs = dict(settings.uc2_objective)
-        if "lenses" in kwargs:
-            kwargs["lenses"] = [ObjectiveLens(**lens) for lens in kwargs["lenses"]]
         return UC2ObjectiveManager(
             objective_state=objective_state,
             bus=bus,
-            config=UC2ObjectiveConfig(**kwargs) if kwargs else None,
+            config=UC2ObjectiveConfig(lenses=lenses[0]),
         )
-    lenses = _adapters(devices).objective_lenses(devices)
-    assert lenses is not None
     return VirtualObjectiveManager(
         objective_state=objective_state,
         config=ObjectiveConfig(objectives=lenses[0], default_slot=lenses[1]),
@@ -563,52 +470,27 @@ def build_objective(
 
 def build_filter_bank(
     settings: Settings,
-    devices: Devices,
+    instrument: Instrument,
     filter_bank_state: FilterBankState,
     bus: Optional[UC2BusManager],
 ) -> FilterBankManager:
     """The filters: UC2 on hardware, else simulated."""
+    filters = instrument_parts.filters(instrument)
+    assert filters is not None
     if not settings.use_virtual_microscope:
         assert bus is not None
-        kwargs = dict(settings.uc2_filter_bank)
-        if "filters" in kwargs:
-            kwargs["filters"] = [OpticalFilter(**item) for item in kwargs["filters"]]
+        wheel = instrument_parts.filter_actuator(instrument)
+        assert wheel is not None and wheel.axis is not None and wheel.positions is not None
         return UC2FilterBankManager(
             filter_bank_state=filter_bank_state,
             bus=bus,
-            config=UC2FilterBankConfig(**kwargs) if kwargs else None,
+            config=UC2FilterBankConfig(
+                filters=filters[0],
+                axis=wheel.axis,
+                slot_positions=[wheel.positions[slot] for slot in sorted(wheel.positions)],
+            ),
         )
-    filters = _adapters(devices).filters(devices)
-    assert filters is not None
     return VirtualFilterBankManager(
         filter_bank_state=filter_bank_state,
         config=FilterBankConfig(filters=filters[0], default_slot=filters[1]),
     )
-
-
-def save_device_config(settings: Settings, microscope: Microscope) -> None:
-    """Write runtime values (exposure, gain, wheel positions, stage position) back.
-
-    They always go into the persistent file; the static one is never written. The
-    source file is re-read rather than kept from startup, so edits made while newswitch
-    was running are preserved; only the runtime values are merged in. A part the
-    configuration lacks has nothing to write back.
-    """
-    if not settings.config_file:
-        return
-    try:
-        cfg_file = config_io.open_config(
-            settings.static_config_path,
-            settings.persistent_config_path,
-            from_static=settings.load_from_static_config_path,
-        )
-        adapters.sync_runtime_state(
-            cfg_file.config,
-            microscope.camera_state,
-            microscope.objective_state,
-            microscope.filter_bank_state,
-            microscope.stage_state,
-        )
-        logger.info("Saved device configuration to %s", cfg_file.save())
-    except config_io.ConfigError as exc:
-        logger.warning("Device configuration not saved: %s", exc)

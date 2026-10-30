@@ -11,9 +11,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from main_fastapi import provide_frame_broadcaster
-from newswitch import config_io
 from newswitch.broadcasters import FrameBroadcaster, FrameSink
-from newswitch.settings import Settings
+from newswitch.instrument import spec
+from newswitch.microscope.run import Run
+from tests.conftest import run_settings
 
 pytest.importorskip("lovekit")
 
@@ -28,7 +29,7 @@ from newswitch.broadcasters.lovekit import (  # noqa: E402
     publish_camera_streams,
 )
 
-CONFIGS = Path(__file__).parent.parent / "configs"
+CAM_TEST = Path(__file__).parent.parent / "instruments" / "cam-test"
 
 
 class FakeTrack:
@@ -118,16 +119,12 @@ def test_the_newest_frame_is_sent_per_stream_key() -> None:
 
 
 def test_the_agent_publishes_the_detectors(tmp_path: Path) -> None:
-    """The agent's sink: a lovekit stream per detector, keyed by its configuration key."""
-    settings = Settings(
-        static_config_path=CONFIGS / "camTest_config.yaml",
-        persistent_config_path=tmp_path / "persistent.yaml",
-        load_from_static_config_path=True,
-    )
-    sink, streams = asyncio.run(provide_lovekit_sink(settings))
+    """The agent's sink: a lovekit stream per detector, keyed by its cube."""
+    current = Run.of(run_settings(tmp_path, instrument=CAM_TEST))
+    sink, streams = asyncio.run(provide_lovekit_sink(current))
     assert isinstance(sink, LovekitSink) and isinstance(streams, CameraStreams)
     assert [(c.slot, c.key) for c in sink.cameras] == [(1, "sim-cam")]
-    app = create_arkitekt_registry(config_io.load_config(settings.config_file).config)
+    app = create_arkitekt_registry(spec.load(CAM_TEST))
     assert "CameraStreams" in app.registry.snapshot().states
 
 
@@ -152,24 +149,31 @@ def test_fastapi_serves_files_and_cache_of_its_agent(virtual_microscope_app: Fas
 
 def test_fastapi_streams_over_the_websocket(tmp_path: Path) -> None:
     """FastAPI: each start gives the detectors a broadcaster of its own, for the live view."""
-    settings = Settings(config_file=None)
-    (first,), (second,) = (
-        asyncio.run(provide_frame_broadcaster(settings)),
-        asyncio.run(provide_frame_broadcaster(settings)),
+    current = Run.of(run_settings(tmp_path))
+    first, second = (
+        asyncio.run(provide_frame_broadcaster(current)),
+        asyncio.run(provide_frame_broadcaster(current)),
     )
     assert isinstance(first, FrameBroadcaster) and first is not second
 
 
-def test_the_agent_needs_an_agent_ui(tmp_path: Path) -> None:
-    """The agent's UI is the configuration's agent_ui: without one it does not start."""
+def test_the_agent_runs_any_instrument(tmp_path: Path) -> None:
+    """Agent mode needs nothing of a description but the description."""
     from main_arkitekt import create
 
-    config = tmp_path / "newswitch-config.yaml"
-    config.write_text("newswitch_version: v1.0.2\ndevices: {}\n")
-    settings = Settings(
-        static_config_path=config,
-        persistent_config_path=tmp_path / "persistent.yaml",
-        load_from_static_config_path=True,
-    )
-    with pytest.raises(config_io.ConfigError, match="no agent_ui section"):
-        create(settings)
+    app = create(Run.of(run_settings(tmp_path, instrument=CAM_TEST)))
+    assert "view-microscope" in app.registry.get_declared_bloks()
+
+
+def test_the_agent_reads_the_instrument_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its hook takes what the run holds, so the file cannot change between two reads."""
+    current = Run.of(run_settings(tmp_path, instrument=CAM_TEST))
+
+    def nothing_reads(*_: object) -> None:
+        raise AssertionError("the description was read again")
+
+    monkeypatch.setattr(spec, "load", nothing_reads)
+    sink, _ = asyncio.run(provide_lovekit_sink(current))
+    assert isinstance(sink, LovekitSink) and [c.key for c in sink.cameras] == ["sim-cam"]

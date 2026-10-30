@@ -1,11 +1,11 @@
 """newswitch served by FastAPI, to the newswitch frontend (the steps: `main`).
 
-    NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just dev
+    NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev
     uv run uvicorn main_fastapi:create --factory --reload
 
 `create_fastapi_registry` registers newswitch for the newswitch frontend: the microscope
 (`create_registry`), a `FrameBroadcaster` as the detectors' `FrameSink` (the websocket live
-view streams from it), and the ``ui`` bloks checked against the frontend's catalog. `create_app`
+view streams from it), and the description's ``ui`` bloks checked against the frontend's catalog. `create_app`
 serves that registry through arkitekt-fastapi, with auth, accounts, live view, files and
 the cache beside it. There is no module-level app: uvicorn calls `create` (``--factory``), on every
 reload again.
@@ -13,7 +13,6 @@ reload again.
 
 import logging
 import os
-from typing import Tuple
 
 import uvicorn
 from arkitekt import App
@@ -21,7 +20,6 @@ from arkitekt_fastapi import configure_fastapi
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from main import load_devices
 from newswitch.accounts.auth import (
     Authenticator,
     AuthMiddleware,
@@ -32,38 +30,38 @@ from newswitch.accounts.auth import router as auth_router
 from newswitch.accounts.routes import router as users_router
 from newswitch.bloks import declare_ui
 from newswitch.broadcasters import FrameBroadcaster, FrameSink
-from newswitch.config_io import NewswitchConfig
 from newswitch.instrument.spec import Instrument
 from newswitch.microscope.registry import create_registry
 from newswitch.routes.cache import router as cache_router
 from newswitch.routes.files import router as files_router
 from newswitch.routes.liveview import router as liveview_router
-from newswitch.services.mikro_connection import MikroConnection, register_mikro
+from newswitch.microscope.run import Run
+from newswitch.services.mikro_connection import MikroConnection
 from newswitch.settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
 
 
-async def provide_frame_broadcaster(app_context: Settings) -> Tuple[FrameSink]:
+async def provide_frame_broadcaster(run: Run) -> FrameSink:
     """Startup: the detectors stream to a broadcaster, which the live view encodes."""
-    return (FrameBroadcaster(),)
+    return FrameBroadcaster()
 
 
-def create_fastapi_registry(
-    devices: NewswitchConfig | Instrument | None, mikro: MikroConnection | None = None
-) -> App:
-    """Step 3: the registry of `devices` for the newswitch frontend.
+def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = False) -> App:
+    """Step 3: the registry of `instrument` for the newswitch frontend.
 
     Args:
-        devices: The device configuration.
-        mikro: The mikro to talk to. Nothing provides one here, as arkitekt does in agent mode;
-            None runs without it.
+        instrument: What to run; None: no devices, the core only.
+        with_mikro: Provide the client of the run's mikro. Nothing provides one here, as arkitekt
+            does in agent mode.
     """
-    app = create_registry(devices)
+    app = create_registry(instrument)
     app.register_startup(provide_frame_broadcaster)
-    if mikro is not None:
-        register_mikro(app, mikro)
-    declare_ui(app, devices)
+    if with_mikro:
+        from newswitch.services import mikro_app  # needs the extra mikro
+
+        app.registry.merge(mikro_app.app.registry)
+    declare_ui(app, instrument)
     return app
 
 
@@ -110,15 +108,16 @@ def create_app(
     )
 
     # The registry this app serves: created here, everything registered on it, with the
-    # UI of the device configuration
-    registry = create_fastapi_registry(load_devices(config, "ui"), MikroConnection.from_env())
+    # views of the instrument
+    run = Run.of(config, MikroConnection.from_env())
+    registry = create_fastapi_registry(run.instrument, with_mikro=run.mikro is not None)
 
     # Serve everything registered (actions, states, contexts, hooks, bloks)
     configure_fastapi(
         app=fastapi,
         app_registry=registry.registry,
         expand_user_from_request=make_expand_user_from_request(authenticator),
-        app_context=config,
+        app_context=run,
         db_file=config.db_path,
     )
 

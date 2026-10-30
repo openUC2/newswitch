@@ -1,8 +1,8 @@
 """The detectors' frames as lovekit streams (arkitekt agent, ``main_arkitekt.py``).
 
-Every configured detector is a lovekit `VideoStream`, keyed by its key in the device
-configuration (lovekit keeps a stream's id by its key over restarts; slots change with
-the file order), titled by its name. The detectors hand their frames to a `LovekitSink`
+Every detector is a lovekit `VideoStream`, keyed by its cube in the instrument
+(lovekit keeps a stream's id by its key over restarts; slots change with
+the description's order), titled by its name. The detectors hand their frames to a `LovekitSink`
 from their own threads; it keeps the newest one per detector, and the background hook
 `publish_camera_streams` sends what is new, at most `MAX_FPS` per stream, from the event
 loop. The declared streams are held in the state `CameraStreams`, which the ``agent_ui``

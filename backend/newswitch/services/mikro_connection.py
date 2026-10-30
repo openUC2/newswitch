@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from arkitekt import App
     from mikro import Mikro
 
 
@@ -87,31 +86,3 @@ class MikroConnection:
                 middlewares=[UploadMiddleware(datalayer=datalayer)],
             ),
         )
-
-
-def register_mikro(app: App, connection: MikroConnection) -> None:
-    """Provide `connection`'s client to the actions of `app`, for as long as the agent runs."""
-    from typing import Tuple
-
-    from mikro import Mikro
-
-    from newswitch.settings import Settings
-
-    app.register_context(Mikro)
-
-    async def provide_mikro(app_context: Settings) -> Tuple[Mikro]:
-        """Startup: enter the client. It connects with its first call, so a mikro that is down
-        does not keep the microscope from starting."""
-        client = connection.client()
-        await client.__aenter__()
-        return (client,)
-
-    async def close_mikro(mikro: Mikro) -> None:
-        """Shutdown: leave the client."""
-        await mikro.__aexit__(None, None, None)
-
-    # The annotations above are strings here (`from __future__`); the registry reads them.
-    provide_mikro.__annotations__ = {"app_context": Settings, "return": Tuple[Mikro]}
-    close_mikro.__annotations__ = {"mikro": Mikro, "return": None}
-    app.register_startup(provide_mikro)
-    app.register_shutdown(close_mikro)

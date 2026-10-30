@@ -1,4 +1,4 @@
-"""The UI the backend declares: the frontend's module, and the bloks of the configuration."""
+"""The UI the backend declares: the frontend's module, and the views of the instrument."""
 
 import dataclasses
 from pathlib import Path
@@ -6,16 +6,15 @@ from pathlib import Path
 import pytest
 from arkitekt import App
 
-from newswitch import config_io
-from main_fastapi import create_app
 from main_fastapi import create_fastapi_registry
-from newswitch.accounts.auth import AllowAllAuthenticator
 from newswitch.bloks import CATALOG_NAME, PublishedCatalog, check_catalog, load_catalog
-from newswitch.settings import Settings
-from newswitch.config_io import UiConfig
+from newswitch.instrument import spec
+from newswitch.instrument.ui import UiConfig
+from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
 
-CONFIGS = Path(__file__).parent.parent / "configs"
-ASSETS = Path(__file__).parent.parent / "newswitch"
+INSTRUMENTS = Path(__file__).parent.parent / "instruments"
+FAKE = INSTRUMENTS / "fake-microscope"
+CAM_TEST = INSTRUMENTS / "cam-test"
 
 
 def bloks_of(app: App) -> dict[str, list]:
@@ -23,64 +22,36 @@ def bloks_of(app: App) -> dict[str, list]:
     return {k: [b.module, b.default] for k, b in app.registry.get_declared_bloks().items()}
 
 
-def configuration(name: str) -> config_io.NewswitchConfig:
-    """A shipped device configuration."""
-    return config_io.load_config(CONFIGS / name).config
-
-
-def fluorescence() -> config_io.NewswitchConfig:
-    """The fluorescence configuration; skipped where its model is not built."""
-    devices = configuration("newswitch-config.fluorescence.yaml")
-    if not all((ASSETS / path).is_file() for path in devices.assets.values()):
-        pytest.skip("the design's model is not built here: just build-design")
-    return devices
-
-
-def test_the_default_configuration_shows_the_standard_view_first() -> None:
-    """Its bloks pass the catalog; the frontend shows `view-standard` first, Minimal beside it."""
-    assert bloks_of(create_fastapi_registry(configuration("newswitch-config.yaml"))) == {
-        "view-standard": [CATALOG_NAME, True],
+def test_the_bloks_are_the_ones_its_description_holds() -> None:
+    """They pass the catalog; the frontend shows the one marked default first."""
+    assert bloks_of(create_fastapi_registry(spec.load(FAKE))) == {
+        "view-fluorescence": [CATALOG_NAME, True],
+        "view-stage": [CATALOG_NAME, False],
         "view-minimal": [CATALOG_NAME, False],
     }
 
 
-def test_the_camera_configuration_shows_its_camera() -> None:
-    """One camera and no stage: a camera view, nothing that needs a stage."""
-    assert bloks_of(create_fastapi_registry(configuration("camTest_config.yaml"))) == {
+def test_a_camera_alone_shows_its_camera() -> None:
+    """One camera and no stage: a view of it, nothing that needs a stage."""
+    assert bloks_of(create_fastapi_registry(spec.load(CAM_TEST))) == {
         "view-camera": [CATALOG_NAME, True],
     }
 
 
-def test_the_fluorescence_configuration_shows_its_microscope() -> None:
-    """The configuration built from the fluorescence design: the 3D view first."""
-    bloks = bloks_of(create_fastapi_registry(fluorescence()))
-    assert bloks["view-3d"] == [CATALOG_NAME, True]
-    assert {"view-fluorescence", "view-stage", "view-minimal", "design-camera"} <= set(bloks)
-
-
 def test_two_apps_in_one_process_share_nothing() -> None:
     """Each registry is created fresh: what one declares never shows up in another."""
-    standard = create_fastapi_registry(configuration("newswitch-config.yaml"))
-    microscope = create_fastapi_registry(fluorescence())
+    fake = create_fastapi_registry(spec.load(FAKE))
+    camera = create_fastapi_registry(spec.load(CAM_TEST))
     bare = create_fastapi_registry(None)
 
-    assert set(bloks_of(standard)) == {"view-standard", "view-minimal"}
-    assert "view-3d" in bloks_of(microscope) and "view-standard" not in bloks_of(microscope)
+    assert "view-stage" in bloks_of(fake) and "view-stage" not in bloks_of(camera)
     assert bloks_of(bare) == {}
-    assert standard.registry is not microscope.registry
+    assert fake.registry is not camera.registry
 
 
-def test_a_configuration_without_ui_does_not_start(tmp_path: Path) -> None:
-    """The UI is the configuration's: without a ui section there is nothing to show."""
-    config = tmp_path / "newswitch-config.yaml"
-    config.write_text("newswitch_version: v1.0.2\ndevices: {}\n")
-    settings = Settings(
-        static_config_path=config,
-        persistent_config_path=tmp_path / "persistent.yaml",
-        load_from_static_config_path=True,
-    )
-    with pytest.raises(config_io.ConfigError, match="no ui section"):
-        create_app(settings, AllowAllAuthenticator())
+def test_a_description_without_bloks_has_none() -> None:
+    """No blok comes from anywhere else; the reference microscope is there for its actions."""
+    assert bloks_of(create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT))) == {}
 
 
 @pytest.mark.parametrize(
@@ -131,40 +102,36 @@ def test_an_older_catalog_version_is_checked_with_a_warning() -> None:
         check_catalog(UiConfig(catalog="newswitch@2", bloks={}), published(3))
 
 
-def test_the_published_catalog_is_versioned() -> None:
-    """The frontend writes the version into the catalog file; the shipped configurations name it."""
+def test_the_shipped_bloks_name_the_published_catalog() -> None:
+    """The frontend writes the version into the catalog file; the descriptions name it."""
     current = load_catalog().id
-    for name in (
-        "newswitch-config.yaml",
-        "camTest_config.yaml",
-        "newswitch-config.fluorescence.yaml",
-    ):
-        ui = configuration(name).ui
+    for instrument in (FAKE, CAM_TEST):
+        ui = spec.load(instrument).ui
         assert ui is not None and ui.catalog == current
 
 
 # --- agent mode: the agent_ui bloks, drawn with Orkestrator's module -------------------
 
 
-@pytest.mark.parametrize(
-    "name", ["newswitch-config.yaml", "camTest_config.yaml", "newswitch-config.fluorescence.yaml"]
-)
-def test_agent_mode_shows_the_agent_ui(name: str) -> None:
-    """Every shipped configuration has an agent_ui that passes the spec and Orkestrator's module."""
+@pytest.mark.parametrize("instrument", [FAKE, CAM_TEST])
+def test_agent_mode_shows_the_agent_ui(instrument: Path) -> None:
+    """Every shipped instrument has an agent_ui that passes the spec and Orkestrator's module."""
     pytest.importorskip("lovekit")
     from main_arkitekt import create_arkitekt_registry
 
-    devices = fluorescence() if "fluorescence" in name else configuration(name)
-    app = create_arkitekt_registry(devices)
-    declared = app.registry.get_declared_bloks()
-    # A design-built configuration also has the design's 3D view and the cards it opens.
-    designed = {"view-3d", "agent-camera", "agent-laser", "agent-stage"}
-    assert set(declared) == {"view-microscope"} | (designed if "fluorescence" in name else set())
-    assert all(blok.module is None for blok in declared.values())
+    declared = create_arkitekt_registry(spec.load(instrument)).registry.get_declared_bloks()
+    assert set(declared) == {"view-microscope"}
+    assert declared["view-microscope"].module is None
     assert declared["view-microscope"].default
-    if "fluorescence" in name:
-        assert declared["view-3d"].context == "SCENE"
-        assert declared["view-3d"].default
+
+
+def test_agent_mode_without_an_agent_ui_shows_nothing() -> None:
+    """No blok comes from anywhere else."""
+    pytest.importorskip("lovekit")
+    from main_arkitekt import create_arkitekt_registry
+
+    app = create_arkitekt_registry(spec.load(REFERENCE_INSTRUMENT))
+    assert app.registry.get_declared_bloks() == {}
 
 
 def test_agent_mode_refuses_a_newswitch_component() -> None:

@@ -21,7 +21,7 @@ Run `just` on its own to see every recipe. Both ports come from the committed ro
 ## The one rule: re-export the schemas when the API changes
 
 The frontend's typed hooks are **generated from the backend's schemas** — but not from a running backend.
-What a backend registers depends on its device configuration (`create_registry` in
+What a backend registers depends on its instrument (`create_registry` in
 `backend/newswitch/microscope/registry.py`), while the hooks must cover everything newswitch can do. So the
 schemas come from a committed export of a *complete* microscope:
 
@@ -30,16 +30,16 @@ just export-schemas   # = cd backend && uv run python -m newswitch.tools.export_
 ```
 
 builds the app registry in-process on the reference microscope
-`backend/newswitch/reference/complete-microscope.yaml` (every part, devices only, no `ui`; it refuses a
-configuration missing any part), takes a snapshot of it — nothing is started — and writes exactly what a
+`backend/newswitch/reference/complete-microscope/` (every part, no bloks; it refuses an
+instrument missing any part), takes a snapshot of it — nothing is started — and writes exactly what a
 FastAPI backend on it serves at `/schemas/implementations`, `/schemas/states` and `/schemas/locks` into
 `frontend/schemas/{implementations,states,locks}.json`. It is the mirror of the blok catalog, which the
 frontend exports for the backend.
 
 On every `vite dev` and `vite build`, the plugin at `frontend/plugins/generate-app.ts` reads only those files
 (paths set in `frontend/vite.config.ts`) and regenerates the typed hooks in `frontend/src/apps/default/**`.
-No backend is needed for codegen, so `just dev` works on any device
-configuration (e.g. `NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just dev`) without
+No backend is needed for codegen, so `just dev` works on any instrument
+(e.g. `NEWSWITCH_CONFIG=instruments/cam-test just dev`) without
 rewriting the generated hooks. A missing export file fails the build and points at `just export-schemas`.
 
 > **After changing an action, state or lock, run `just export-schemas`** — otherwise the frontend keeps
@@ -79,15 +79,15 @@ just agent                    # serve as an arkitekt agent instead (see below)
 ### Two ways to serve: FastAPI or arkitekt agent
 
 newswitch can be served two ways, each its own entry file. Both read the same settings and
-device configuration (`load_devices` in `backend/main.py`) and call
-`create_registry(devices, services=())`, which registers the context `FrameSink` the detectors
+instrument (`load_devices` in `backend/newswitch/settings.py`) and call
+`create_registry(instrument, services=())`, which registers the context `FrameSink` the detectors
 send their frames to; each entry file then registers on the returned app a startup hook that
 provides that sink, how the frames are watched and the UI.
 
 | Entry file | Run | Registry | Frames | UI | HTTP routes |
 | --- | --- | --- | --- | --- | --- |
-| `backend/main_fastapi.py` | `uvicorn main_fastapi:create --factory`, `just dev` | `create_fastapi_registry` | `FrameBroadcaster` → websocket live view `/stream/...` | config `ui`, in the newswitch frontend's catalog | auth, accounts, live view, files, cache |
-| `backend/main_arkitekt.py` | `python main_arkitekt.py`, `just agent` | `create_arkitekt_registry` | `LovekitSink` → one lovekit `VideoStream` per detector | config `agent_ui`, in Orkestrator's standard catalog | none |
+| `backend/main_fastapi.py` | `uvicorn main_fastapi:create --factory`, `just dev` | `create_fastapi_registry` | `FrameBroadcaster` → websocket live view `/stream/...` | the description's `ui`, in the newswitch frontend's catalog | auth, accounts, live view, files, cache |
+| `backend/main_arkitekt.py` | `python main_arkitekt.py`, `just agent` | `create_arkitekt_registry` | `LovekitSink` → one lovekit `VideoStream` per detector | the description's `agent_ui`, in Orkestrator's standard catalog | none |
 
 Serving as an agent is new: newswitch runs as an arkitekt agent (`arkitekt.run`), logs in to the arkitekt
 server fakts finds (`--url` or `$FAKTS_URL`) and is shown in Orkestrator. It needs the extra `agent`
@@ -95,11 +95,10 @@ server fakts finds (`--url` or `$FAKTS_URL`) and is shown in Orkestrator. It nee
 
 ```bash
 cd backend && uv sync --extra agent
-NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just agent   # extra args go to the agent, e.g. --url
+NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent   # extra args go to the agent, e.g. --url
 ```
 
-A configuration without an `agent_ui` section does not start as an agent (see
-`backend/configs/README.md`). The agent serves no HTTP routes: the files and the frame cache that
+The agent serves no HTTP routes: the files and the frame cache that
 `main_fastapi.py` serves (`/files/...`, `/cache/...`) are not reachable from Orkestrator yet. The agent is
 tested offline only, against a fake lovekit client; it has not been run against a real arkitekt
 server, lovekit or LiveKit yet.
@@ -146,18 +145,18 @@ complete runtime configuration.
 ### End-to-end test for camera
 
 Cameras are driven through [uc2_cam_py](https://github.com/openUC2/UC2_cam_py) (extra `camera`).
-This walkthrough tests the whole chain with its simulated camera, from loading the configuration
+This walkthrough tests the whole chain with its simulated camera, from loading the description
 to the image in a debug window; no camera hardware and no frontend are needed.
 
 **What happens on the way:**
 
-1. `backend/base_config.yaml` is read. `camera_debug_window: true` asks for a window per camera,
-   and `camera_recording_dir` sets where recordings go.
-2. `NEWSWITCH_CONFIG=configs/camTest.json` overrides two settings:
-   `use_virtual_microscope: false` (cameras are only used on real hardware) and the device file
-   `configs/camTest_config.yaml`.
-3. `config_io` validates that file, and `adapters.cameras()` finds the camera: a detector
-   (`manufacturer: Simulated`) mapped by a `usb3-vision` controller.
+1. `NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml` names the instrument, and `spec.load`
+   reads it. Everything below comes from that one file.
+2. Its `settings` section has `use_virtual_microscope: false` (cameras are only used on real
+   hardware), `camera_debug_window: true` (a window per camera) and `camera_recording_dir` (where
+   recordings go).
+3. `parts.cameras()` finds the camera: the entry of
+   its sensor in `hardware.cameras` (`protocol: usb3-vision`, `vendor: Simulated`).
 4. `build_detector_manager()` creates the `UC2DetectorManager`, which calls
    `uc2_cam_py.create_camera(..., debug_window=True)`.
 5. The debug window keeps the camera acquiring, so the window shows the live image from startup.
@@ -179,45 +178,46 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 **Steps** (paths are relative to `backend/`):
 
-1. Validate the device file:
+1. Validate the description:
 
    ```bash
-   uv run python -m newswitch.config_io configs/camTest_config.yaml
+   uv run python -c "from newswitch.instrument import spec; print(spec.load('instruments/cam-test').detectors())"
    ```
 
-   It should list the controller and the detector `sim-cam` without errors.
+   It should print `['sim-cam']`.
 2. Run the automated camera tests. They use the same simulated camera and never open a window:
 
    ```bash
-   uv run pytest tests/test_uc2_detector.py tests/test_detector_selection.py tests/config_io/test_adapters.py
+   uv run pytest tests/test_uc2_detector.py tests/test_detector_selection.py tests/test_instrument_hardware.py
    ```
 
-3. Start the backend with the camera configuration, from the repository root:
+3. Start the backend on that instrument, from the repository root:
 
    ```bash
-   NEWSWITCH_CONFIG=configs/camTest.json just dev-backend
+   NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml just dev-backend
    ```
 
 4. A window **"uc2_cam_py debug - Simulated UC2-SIM SN SIM-0001"** opens. It shows a bright
    Gaussian spot that walks row by row over a 5 × 4 grid of the 640 × 480 sensor, 20 images per
-   second. The configuration has only the camera, so only the detector is built: no stage,
+   second. The instrument has only the camera, so only the detector is built: no stage,
    illumination or UC2 bus is started for it.
 5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
    browser, next to the debug window. Capturing works too: the light path holds only the parts
    the microscope has (here just the detector).
 6. Optional: record to disk. Set `store_image_data: true` for `sim-cam` in
-   `configs/camTest_config.yaml` and restart. Each acquisition session is written as a `.uc2rb`
+   `instruments/cam-test/microscope.yml` and restart. Each acquisition session is written as a `.uc2rb`
    file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
    the camera running, this records continuously, about 12 MB/s here.
-7. Stop with Ctrl+C. The window closes and the runtime values are saved to
-   `configs/camTest_config.persistent.yaml`; the main persistent file is not touched.
+7. Stop with Ctrl+C. The window closes. Nothing is written back: the next start begins from the
+   description's initial values again.
 
 **A real camera:**
 
-1. Copy the two camTest files and point the controller at the hardware: `protocol: gige-vision` or
-   `usb3-vision`. In the detector, set the vendor as uc2_cam_py names it, e.g.
-   `manufacturer: HikRobot`.
-2. Select the camera with `serial_number` in its mapping entry. List the connected cameras with:
+1. Copy `instruments/cam-test` and change its camera in `hardware.cameras`: `protocol:
+   gige-vision` or `usb3-vision`, and the vendor as uc2_cam_py names it, e.g. `vendor: HikRobot`.
+   Set the sensor's size and pitch in its cube, then compile the folder:
+   `uv run --with optiland python -m newswitch.tools.compile_instrument instruments/<name>`.
+2. Select the camera with `serial_number` in its entry. List the connected cameras with:
 
    ```bash
    uv run python -c "import uc2_cam_py; print(uc2_cam_py.list_devices())"
@@ -225,7 +225,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 3. Remove the `vendor_options`; they are options of the simulated camera only.
 
-Keys and options are described in `backend/configs/README.md`, section "Cameras".
+Keys and options are described in `backend/instruments/README.md`.
 
 **Troubleshooting:**
 
@@ -233,9 +233,9 @@ Keys and options are described in `backend/configs/README.md`, section "Cameras"
 | --- | --- |
 | No window, and an error `debug_window=True: no X11 display available` | No display (headless session, or `DISPLAY` not set). The camera works anyway. |
 | No window, and an error `this build has no X11 support` | uc2_cam_py was built without the X11 headers. Install `libX11-devel` (Fedora) or `libx11-dev` (Debian/Ubuntu), then `uv sync --extra camera --reinstall-package uc2-cam-py`. |
-| Warning `uc2_cam_py cannot be imported`, virtual detector used | The extra is not installed, or the MVS runtime libraries are missing. |
+| Warning `uc2_cam_py cannot be imported`, rendered from the optics | The extra is not installed, or the MVS runtime libraries are missing. |
 | No window and no warning | `use_virtual_microscope` is still `true`; check that `NEWSWITCH_CONFIG` reached the backend. |
-| `camera_debug_window` should stay off | Set it to `false` in `backend/base_config.yaml`, e.g. on headless machines. |
+| `camera_debug_window` should stay off | Set it to `false` in the `settings` section of the instrument's `microscope.yml`, e.g. on headless machines. |
 
 ### Commits
 
@@ -356,8 +356,9 @@ VITE_BACKEND_URL=http://my-lab-box:${BACKEND_PORT:-8099}
 VITE_WEBSOCKET_URL=ws://my-lab-box:${BACKEND_PORT:-8099}/ws
 ```
 
-Apart from `BACKEND_HOST` / `BACKEND_PORT`, the backend reads no `.env` — the rest is configured in
-`backend/base_config.yaml`, read by `Settings` (`backend/main_fastapi.py`).
+Apart from `BACKEND_HOST`, `BACKEND_PORT` and `NEWSWITCH_CONFIG` (which microscope to run, by default the
+fake one), the backend reads no `.env`: everything about a microscope, how it runs included, is in its
+`microscope.yml` (`backend/instruments/README.md`).
 
 ## Releases
 

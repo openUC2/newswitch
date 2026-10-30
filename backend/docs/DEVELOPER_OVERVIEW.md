@@ -5,7 +5,7 @@ This document gives a high-level description of how this project is used, how th
 ## High-level usage
 
 - This project provides a **virtual microscope** stack with a FastAPI server and an embedded arkitekt agent (`arkitekt`, `arkitekt-runtime`, `arkitekt-spec`, `arkitekt-fastapi`, pinned in `pyproject.toml`).
-- Core functionality is exposed through **actions** registered on an app registry that `create_registry` (`newswitch/microscope/registry.py`) creates fresh for every app, that operate on shared **state objects** (camera, stage, illumination, objective, IO). Modules only declare plain functions and plain `@dataclass` models/states; nothing registers itself on import, and `create_registry` registers everything explicitly, by name, according to the device configuration.
+- Core functionality is exposed through **actions** registered on an app registry that `create_registry` (`newswitch/microscope/registry.py`) creates fresh for every app, that operate on shared **state objects** (camera, stage, illumination, objective, IO). Modules only declare plain functions and plain `@dataclass` models/states; nothing registers itself on import, and `create_registry` registers everything explicitly, by name, according to the instrument description.
 - The application can stream live video frames via WebSocket and serves captured image files via HTTP.
 - It is served one of two ways, each its own entry file: **FastAPI** (`main_fastapi.py`, the newswitch frontend) or as an **arkitekt agent** (`main_arkitekt.py`, Orkestrator, cameras over lovekit). See "Two ways to serve" below.
 
@@ -15,50 +15,49 @@ Files: backend/main_fastapi.py, newswitch/microscope/registry.py, newswitch/micr
 
 ### What it does
 
-- `settings.py` (`load_settings`, `load_devices`) reads `base_config.yaml` (or the file `NEWSWITCH_CONFIG` names) and the device configuration; both entrypoints use it (`main.load_settings` no longer exists).
-- `main.py` is where to start: the steps every way of serving shares (settings → `load_devices(config, "ui" | "agent_ui")`, which raises `ConfigError` for a configuration without that UI section → registry → serve; `python main.py fastapi|arkitekt`). `main_fastapi.py` (`create_fastapi_registry`, `create_app`, the uvicorn factory `create`, `main`) bootstraps the FastAPI app, reads the device configuration (`load_devices(config, "ui")`), creates its registry (`create_fastapi_registry(devices)` → `App`: `create_registry(devices)`, the module-level startup hook `provide_frame_broadcaster(app_context: Settings) -> Tuple[FrameSink]`, which provides a new `FrameBroadcaster` as the detectors' `FrameSink`, then `declare_ui`) and serves it through arkitekt-fastapi:
+- `settings.py` (`load_settings`, `load_devices`) reads the `settings` section of the instrument `NEWSWITCH_CONFIG` names, and that instrument; both entrypoints use it.
+- `main.py` is where to start: the steps every way of serving shares (settings → `load_devices(config)`, the instrument or None → registry → serve; `python main.py fastapi|arkitekt`). `main_fastapi.py` (`create_fastapi_registry`, `create_app`, the uvicorn factory `create`, `main`) bootstraps the FastAPI app, reads the instrument (`load_devices(config)`), creates its registry (`create_fastapi_registry(instrument)` → `App`: `create_registry(instrument)`, the module-level startup hook `provide_frame_broadcaster(run: Run) -> FrameSink`, which provides a new `FrameBroadcaster` as the detectors' `FrameSink`, then `declare_ui`) and serves it through arkitekt-fastapi:
   `configure_fastapi(app=..., app_registry=registry.registry, app_context=config, db_file=config.db_path, ...)`, then adds the auth and account routes (`accounts/`) and the module-level routers of `newswitch/routes/` (`liveview.router` at `/stream`, `files.router`, `cache.router`).
-  The agent's journal and task history go into `arkitekt_agent.db` (`db_path` in `base_config.yaml`).
-- `microscope/registry.py::create_registry(devices, services=())` creates a fresh `App("newswitch", app_context=Settings, services=services)` and registers, explicitly and by name: the models always (`register_models`); the core (io, hooks, expanse, calibration, light path, metadata, cache, the context `FrameSink`, the action `clear_expanse`); one group per configured part — stage, illumination, detector, objective, filter bank, UC2 board (a uc2-rest or canopen controller) — each with its states, contexts, startup hook, actions and background tasks; what needs several parts: the focus group (stage + detector, `parts.focus`: the state `AutofocusState` provided by `provide_focus`, and `run_autofocus`, `calibrate_light_path`, `scan_region`), `acquire_multidimensional_acquisition` (stage + detector + illumination) and `run_uc2_event_dispatch` (UC2 board + stage). The `FrameSink` context (a runtime-checkable protocol, `newswitch.broadcasters.FrameSink`: where the detectors send their frames) is registered here but provided by the entry file, with a startup hook of its own; the `services` come from the entry file too, which then registers how the frames are watched and the UI (`declare_ui` for `ui`, `declare_agent_ui` for `agent_ui`) on the returned app. Without a configuration only the models and the core are registered, so `clear_expanse` is the only action (beside the core states). The configuration's UI bloks are validated strictly against what was registered: a blok calling an action whose device is absent is refused.
-- `microscope/parts.py` is data and functions: `configured_parts(devices)` says which parts there are (a `Parts` value); `build_microscope(settings, devices)` creates the **state objects** and the **manager implementations** of the configured parts and returns them as a `Microscope` record (no sink: detector managers take none; `DetectorManager.acquire_live(sink)` streams to the sink it is given).
-- `create_registry` defines one startup hook per part as a closure next to its registration; they hand the agent the objects of one `build_microscope` (made on the first hook: hooks see only the app context, and the parts depend on each other), as dependency-injection tuples used by registered functions.
-- `actions/` holds the plain action, background and shutdown functions `create_registry` registers, one module per part: `core.py` (`clear_expanse`), `stage.py`, `illumination.py`, `detector.py` (also `run_detector_loop`, `close_detector`), `objective.py`, `filter_bank.py`, `uc2.py` (also `run_uc2_bus`, `run_uc2_event_dispatch`). The routines needing several parts live in `routines/`.
+  The agent's journal and task history go into `arkitekt_agent.db` (`db_path` in the description's `settings`).
+- `microscope/registry.py::create_registry(instrument, services=())` creates a fresh `App("newswitch", app_context=Run, services=services)` and merges the part registries of `microscope/apps/` the instrument has: `core` (the models, io, hooks, expanse, calibration, light path, metadata, cache, the context `FrameSink`, the action `clear_expanse`); one per part — stage, illumination, detector, objective, filter bank, UC2 board (one in the instrument's `hardware` section) — each with its states, contexts, startup hook, actions and background tasks; what needs several parts: `focus` (stage + detector: the state `AutofocusState` provided by `provide_focus`, and `run_autofocus`, `calibrate_light_path`, `scan_region`), `acquisition` (`acquire_multidimensional_acquisition`, stage + detector + illumination) and `uc2_stage` (`run_uc2_event_dispatch`, UC2 board + stage). A part merges the parts it names things of, so what reaches an app through two parts counts once. The `FrameSink` context (a runtime-checkable protocol, `newswitch.broadcasters.FrameSink`: where the detectors send their frames) is declared by the core but provided by the entry file, with a startup hook of its own; the `services` come from the entry file too, which then registers how the frames are watched and the UI (`declare_ui` for the description's `ui` bloks; `declare_agent_ui` for its `agent_ui` bloks) on the returned app. Without an instrument only the core is merged, so `clear_expanse` is the only action (beside the core states). The views' bloks are validated strictly against what was registered: a blok calling an action whose device is absent is refused.
+- `microscope/parts.py` is data and functions: `build_microscope(settings, instrument)` creates the **state objects** and the **manager implementations** of the configured parts and returns them as a `Microscope` record (no sink: detector managers take none; `DetectorManager.acquire_live(sink)` streams to the sink it is given).
+- `microscope/run.py::Run` is the app context: the settings, instrument and mikro of one run, and its one `build_microscope` (`Run.microscope`, made on the first hook: hooks see only the app context, and the parts depend on each other). Each part's startup hook in `microscope/apps/` is a plain module-level function handing out what that build made, as dependency-injection tuples used by registered functions.
+- `actions/` holds the plain action, background and shutdown functions the registries of `microscope/apps/` register, one module per part: `core.py` (`clear_expanse`), `stage.py`, `illumination.py`, `detector.py` (also `run_detector_loop`, `close_detector`), `objective.py`, `filter_bank.py`, `uc2.py` (also `run_uc2_bus`, `run_uc2_event_dispatch`). The routines needing several parts live in `routines/`.
 
 ### Key pieces
 
-- **States** (`newswitch/states/`, one module per state) are created once at startup (a part the configuration lacks keeps an empty state that shared managers read): `StageState`, `IlluminationState`, `CameraState`, `ObjectiveState`, `FilterBankState`, `IOState`, `HookState`, `ExpanseState`, `CalibrationState`, `LightPathState`, `AutofocusState`, `UC2State`. The values they hold and the actions exchange are the models in `newswitch/models/`.
+- **States** (`newswitch/states/`, one module per state) are created once at startup (a part the instrument lacks keeps an empty state that shared managers read): `StageState`, `IlluminationState`, `CameraState`, `ObjectiveState`, `FilterBankState`, `IOState`, `HookState`, `ExpanseState`, `CalibrationState`, `LightPathState`, `AutofocusState`, `UC2State`. The values they hold and the actions exchange are the models in `newswitch/models/`.
 - **Managers** are concrete implementations of the protocol interfaces (`newswitch/protocols/`):
-  - drivers (`newswitch/drivers/`): `VirtualStageManager`, `VirtualLEDManager`, `VirtualDetectorManager` (or `UC2DetectorManager` for real cameras, see below), `VirtualObjectiveManager`, `VirtualFilterBankManager`; on UC2 hardware the bus-based managers in `drivers/uc2/`
+  - drivers (`newswitch/drivers/`): `VirtualStageManager`, `VirtualLEDManager`, `OpticsDetectorManager` (or `UC2DetectorManager` for real cameras, see below), `VirtualObjectiveManager`, `VirtualFilterBankManager`; on UC2 hardware the bus-based managers in `drivers/uc2/`
   - services (`newswitch/services/`): `AcquisitionManager`, `LocalCacheManager`, `CalibrationManager`, `ExpanseManager`, `LocalFileIOManager`, `LightPathManager`, `MetadataManager`, `PythonHookManager`
-- **FrameSink**: the context the detectors stream to, registered by `create_registry` and provided by the entry file's startup hook (`main_fastapi.py`: a `FrameBroadcaster`, which keeps the newest frame per detector for the websocket live view; `main_arkitekt.py`: a `LovekitSink`).
-- **Startup hooks** (`app.register_startup`, one per configured part): `provide_core`, `provide_stage`, `provide_illumination`, `provide_detector`, `provide_objective`, `provide_filter_bank`, `provide_uc2`, and `provide_focus` for the focus group — closures in `create_registry` with static `Tuple[...]` return annotations, each returning its part's managers and states to the agent. Startup hooks get only the app context injected (no states/contexts exist yet) and none sees another's result, which is why they share one `build_microscope`, made on the first hook; an absent part's manager is never constructed (on hardware nothing talks to the bus for it). The entry files add one module-level startup hook each that provides the `FrameSink` (`provide_frame_broadcaster`, `provide_lovekit_sink`).
-- **Shutdown hooks** (`app.register_shutdown`): `save_device_config` (if the microscope was started) writes runtime values back into the device config,
-  `close_detector` closes the detector manager (stops and releases the cameras, which
+- **FrameSink**: the context the detectors stream to, declared by the core registry and provided by the entry file's startup hook (`main_fastapi.py`: a `FrameBroadcaster`, which keeps the newest frame per detector for the websocket live view; `main_arkitekt.py`: a `LovekitSink`).
+- **Startup hooks** (`app.register_startup`, one per configured part): `provide_core`, `provide_stage`, `provide_illumination`, `provide_detector`, `provide_objective`, `provide_filter_bank`, `provide_uc2`, and `provide_focus` for the focus group — module-level functions in `microscope/apps/` with static return annotations, each returning its part's managers and states to the agent. Startup hooks get only the app context injected (no states/contexts exist yet) and none sees another's result, which is why they share one `build_microscope`, held by `Run`; an absent part's manager is never constructed (on hardware nothing talks to the bus for it). The entry files add one module-level startup hook each that provides the `FrameSink` (`provide_frame_broadcaster`, `provide_lovekit_sink`).
+- **Shutdown hooks** (`app.register_shutdown`): `close_detector` closes the detector manager (stops and releases the cameras, which
   completes their recordings).
 - **Background hooks** (`app.register_background`): `run_detector_loop(detector: DetectorManager, sink: FrameSink)` keeps acquisition running for live view (both contexts injected; it calls `detector.acquire_live(sink)`); `run_uc2_bus` and `run_uc2_event_dispatch` keep the UC2 bus connected and mirror its events into the states.
 
-### Device configuration (`newswitch/config_io/`)
+### The instrument (`newswitch/instrument/`)
 
-`Settings` (`newswitch/settings.py`, the app context of the registry) reads `backend/base_config.yaml` (no environment variables, unknown keys are
-errors). Besides the device configuration it names where the file IO writes (`image_dir`)
+`Settings` (`newswitch/settings.py`, the app context of the registry) is the `settings` section of the description (unknown keys are
+errors, and every key must be there). It says whether the run is simulated (`use_virtual_microscope`), the agent's database
+(`db_path`), the cameras' `camera_recording_dir` and `camera_debug_window`, where the file IO writes (`image_dir`)
 and where acquired frames are cached (`cache_dir`, cleared when the microscope starts).
-The device configuration is read from `static_config_path`
-(`configs/newswitch-config.yaml`) or, with `load_from_static_config_path: false`, from
-`persistent_config_path`, which is created as a copy of the static file on first start;
-bare names resolve against `config_dir` (`backend/configs/`). The static file is never
-written: every change goes into the persistent one. At startup `config_io.open_config()`
-validates the file (jsonschema per device type, pydantic, cross-device references) into one
-dataclass per device, and `config_io.adapters` turns those into the managers' dataclasses
-(`Illumination`, `Detector`, `ObjectiveLens`, `Filter`, stage limits, serial port;
+`load_settings` takes the instrument from `NEWSWITCH_CONFIG` (a file or folder; the root `.env` and the
+Dockerfile default it to `instruments/fake-microscope/microscope.yml`); unset, or anything but a valid description, is
+a `SpecError`. `load_devices(config)` reads the instrument, `Instrument | None`:
+a read-only description, `backend/instruments/<name>/microscope.yml` (`instrument/spec.py`), whose `parts` section
+states what the server has a control for, in which role and by which slot. newswitch never writes it: runtime values live only in the
+arkitekt states and restart from each variable's `initial`. `instrument/parts.py` turns it into the managers' dataclasses
+(`Illumination`, `Detector`, `ObjectiveLens`, `Filter`, stage limits;
 for cameras the `Detector` with its camera fields plus the vendor options).
-Connection data lives only in controllers, whose `mapping` assigns the other devices.
-A device kind missing from the file, or `config_file=None` (the tests), keeps the manager's
-built-in virtual defaults. On shutdown exposure, gain, wheel positions and stage position
-are written back; comments stay intact. Details: `backend/configs/README.md`.
+Its top-level `hardware:` section (`instrument/hardware.py`: boards, actuators, cameras; not part of the digest)
+says what the cubes' actuators are wired to. A simulated run ignores it, apart from a board giving it the UC2 actions
+on a `VirtualUC2Bus`; a real one reaches the board over its `transport` (`rest`, `canopen`) and refuses to start until
+everything with a control is wired (`check_wired`). Details: `backend/instruments/README.md`.
 
 ### Registered functions
 
-`create_registry` registers the actions of `newswitch/actions/<part>.py` (`app.register_action`, e.g., illumination control, detector settings, capture; the UC2 board's in `actions/uc2.py`) that receive **managers + state** injected by the agent; the routines in `newswitch/routines/` add more, each only when the parts it needs are configured. These actions are the primary API surface for automation or external systems. Long-running actions take an injected `task: Task` and call `task.progress(...)` / `task.pausepoint()`, passing the task down to managers that report progress (e.g. `StageManager.move(..., task=task)`); tests calling an action directly pass `Task.local()`.
+The registries of `microscope/apps/` register the actions of `newswitch/actions/<part>.py` (`app.register_action`, e.g., illumination control, detector settings, capture; the UC2 board's in `actions/uc2.py`) that receive **managers + state** injected by the agent; the routines in `newswitch/routines/` add more, each only when the parts it needs are configured. These actions are the primary API surface for automation or external systems. Long-running actions take an injected `task: Task` and call `task.progress(...)` / `task.pausepoint()`, passing the task down to managers that report progress (e.g. `StageManager.move(..., task=task)`); tests calling an action directly pass `Task.local()`.
 
 ## Locking mechanism (action locks)
 
@@ -84,11 +83,14 @@ Managers are protocol implementations that mutate state and provide behavior:
   sigma 0.5 px per µm between the stage z and the detector's `focal_plane_z` (its
   `DetectorConfig`): the image is sharp only in focus. The autofocus scores a plane by the
   variance of its Laplacian of Gaussian (σ = 1).
+- **OpticsDetectorManager** (`drivers/optics/detector.py`) is the detector of a simulated run: a
+  `VirtualDetectorManager` whose images come from the instrument's compiled tables
+  (`drivers/optics/simulator.py`).
 - **UC2DetectorManager** (`drivers/uc2/uc2_detector.py`) drives real cameras through the
   camera library uc2_cam_py (extra `camera`, see below); acquisition sessions are recorded to
   `.uc2rb` files.
 
-Both implement `DetectorManager` (`protocols/detector.py`): besides activation, exposure and
+All implement `DetectorManager` (`protocols/detector.py`): besides activation, exposure and
 gain it covers frame rate, binning and ROI (`update_detector`; `frame_rate=0` removes the
 limit, `FULL_SENSOR` selects the complete sensor), snapshots with their timing
 (`capture_image` returns a `DetectorFrame`), the session metadata (`get_image_info`), the
@@ -104,8 +106,8 @@ records; the managers keep it up to date, so the frontend sees all of it.
 
 - **LightPathManager** (`services/light_path.py`) derives the light paths from the parts the
   microscope has: light sources (behind a dichroic), stage, objective turret and filter bank
-  appear only when configured, nothing is hardcoded. A detector-only configuration (e.g.
-  `camTest`) gets a path with just its detector, so capture works there too. The snapshot a frame carries is a `LightPathSnapshot`
+  appear only when configured, nothing is hardcoded. A detector-only instrument (e.g.
+  `cam-test`) gets a path with just its detector, so capture works there too. The snapshot a frame carries is a `LightPathSnapshot`
   (`models/light_path.py`); the state `LightPathState` holds the paths.
 - **`calibrate_light_path`** (`routines/calibration.py`) measures the pixel→stage transform
   of every active detector: at a fixed focus the stage moves `CALIBRATION_STEP_UM` (20 µm)
@@ -114,7 +116,8 @@ records; the managers keep it up to date, so the frontend sees all of it.
   (scale, rotation and flip included), stored per light path in `CalibrationState`. The
   stage ends where it started.
 - **MetadataManager** (`services/metadata.py`) places each frame with the calibrated affine of
-  its light path; without a calibration it falls back to the nominal pixel size (the
+  its light path; without a calibration it falls back to what the compiled tables predict
+  (`instrument.parts.nominal_pixel_scale`), and without those to the nominal pixel size (the
   detector's `pixel_size_um` / the objective's magnification).
 
 ### Hooks
@@ -136,11 +139,12 @@ position (the stack is then centred on the refocused z), and an autofocus among 
 ### Cameras (uc2_cam_py)
 
 `build_detector_manager` in `microscope/parts.py` picks the detector manager. With
-`use_virtual_microscope: false` every detector that the device configuration maps to a camera
-controller (`protocol: gige-vision` / `usb3-vision`) is opened through uc2_cam_py; otherwise
-(and when uc2_cam_py is not installed, with a warning) the virtual detector is used. The vendor
-is the detector's `manufacturer`, passed on unchanged; vendor-specific options come from the
-mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section "Cameras".
+`use_virtual_microscope: false` every sensor with a camera in the description's `hardware.cameras`
+(`protocol: gige-vision` / `usb3-vision`) is opened through uc2_cam_py (`UC2DetectorManager`; a sensor
+without one stops `check_wired`); otherwise
+(and when uc2_cam_py is not installed, with a warning) the `OpticsDetectorManager` is used. The vendor
+is the entry's `vendor`, passed on unchanged; vendor-specific options come from its
+`vendor_options`. Details: `backend/instruments/README.md`.
 
 - uc2_cam_py (https://github.com/openUC2/UC2_cam_py, pinned to a commit in the extra
   `camera`) is a C++ extension; building it needs the MVS SDK (`/opt/MVS`) and Python 3.12,
@@ -148,12 +152,12 @@ mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section 
   camera tests skip there.
 - A camera acquires while anyone holds it (live stream, snapshot, debug window); every
   start is a new session and, with `store_image_data`, a new `.uc2rb` file in
-  `camera_recording_dir` (`base_config.yaml`).
-- `camera_debug_window` (`base_config.yaml`, shipped `true`) passes `debug_window=True` to
+  `camera_recording_dir` (the description's `settings`).
+- `camera_debug_window` (the description's `settings`) passes `debug_window=True` to
   every `create_camera`: uc2_cam_py shows each camera's newest image in an X11 window, and the
   manager holds the cameras from startup so the window always has an image.
-- `backend/configs/camTest_config.yaml` is a simulated camera for trying it out; boot with
-  `NEWSWITCH_CONFIG=configs/camTest.json` (real-hardware mode, own persistent file). The
+- `backend/instruments/cam-test/` is a simulated camera for trying it out; boot with
+  `NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml` (real-hardware mode). The
   walkthrough is "End-to-end test for camera" in the root `README.md`.
 
 Managers are used in two places:
@@ -164,20 +168,20 @@ Managers are used in two places:
 
 Files: backend/main.py, backend/main_fastapi.py, backend/main_arkitekt.py, newswitch/broadcasters/sink.py, newswitch/broadcasters/lovekit.py
 
-- Both entry files start the same way (`main.py`: settings, then `load_devices(config, "ui" | "agent_ui")`, a `ConfigError` without that UI section), call `create_registry(devices, services=())`, then register on the returned app what is particular to them, among it a module-level startup hook that provides the `FrameSink`.
+- Both entry files start the same way (`main.py`: settings, then `load_devices(config)`, the instrument or None), call `create_registry(instrument, services=())`, then register on the returned app what is particular to them, among it a module-level startup hook that provides the `FrameSink`.
 - Detectors only know the `FrameSink` protocol: `start_broadcasting()` and `broadcast_sync(slot, frame)`, called from the detector's thread. It is a context `create_registry` registers; each entry file provides it its way.
 
 | | `main_fastapi.py` | `main_arkitekt.py` |
 |---|---|---|
 | Run | `uvicorn main_fastapi:create --factory`, `just dev` | `python main_arkitekt.py`, `just agent` |
-| Registry | `create_fastapi_registry(devices)` → `App` | `create_arkitekt_registry(devices)` → `App` |
-| Sink | `FrameBroadcaster`, provided as the `FrameSink` | `LovekitSink(cameras_of(devices))`, provided as the `FrameSink`; `services=(lovekit_service,)` |
-| Registers | startup `provide_frame_broadcaster` → `Tuple[FrameSink]` | state `CameraStreams`, startup `provide_lovekit_sink` → `Tuple[FrameSink, CameraStreams]`, background `publish_camera_streams` (when there are detectors) |
-| UI | config `ui`, newswitch frontend's catalog (`declare_ui`) | config `agent_ui`, Orkestrator's standard catalog (`declare_agent_ui`) |
+| Registry | `create_fastapi_registry(instrument)` → `App` | `create_arkitekt_registry(instrument)` → `App` |
+| Sink | `FrameBroadcaster`, provided as the `FrameSink` | `LovekitSink(cameras_of(instrument))`, provided as the `FrameSink`; `services=(lovekit_service, mikro_service)` |
+| Registers | startup `provide_frame_broadcaster` → `FrameSink` | state `CameraStreams`, startup `provide_lovekit_sink` → `Tuple[FrameSink, CameraStreams]`, background `publish_camera_streams` (when there are detectors) |
+| UI | the description's `ui`, newswitch frontend's catalog (`declare_ui`) | the description's `agent_ui`, the spec's catalogs and Orkestrator's module (`declare_agent_ui`) |
 | HTTP routes | auth, accounts, `newswitch/routes/` (live view, files, cache) | none |
 
 - **`main_fastapi.py`**: the websocket live view (`/stream/...`, below) subscribes to the `FrameBroadcaster` the startup hook `provide_frame_broadcaster` provides as the `FrameSink`, read off the running agent's contexts; `create_app` includes the module-level routers of `newswitch/routes/`.
-- **`main_arkitekt.py`** (extra `agent` = `arkitekt[rekuest,lovekit]`, `uv sync --extra agent`): runs via `arkitekt.run`, logging in to the arkitekt server fakts finds (`--url` / `$FAKTS_URL`). `create_arkitekt_registry(devices)` → `App` is `create_registry(devices, services=(lovekit_service,))`, the state `CameraStreams`, the startup hook `provide_lovekit_sink`, `publish_camera_streams` when there are detectors, and `declare_agent_ui`. Each configured detector becomes a lovekit `VideoStream` (`cameras_of(devices)` → `list[CameraStream]`), keyed by its device-config key (stable across restarts), titled by its name. `provide_lovekit_sink(app_context: Settings) -> Tuple[FrameSink, CameraStreams]` provides `LovekitSink(cameras_of(load_devices(app_context)))` (it takes its cameras in the constructor) and a `CameraStreams()`. `LovekitSink` keeps the newest frame per detector; the background hook `publish_camera_streams(lovekit, sink: FrameSink, live: CameraStreams)` (a `TypeError` for a sink that is not a `LovekitSink`) sends at most `MAX_FPS` (15) frames per stream, converting with `to_rgba` off the event loop (`asyncio.to_thread`, ~37 ms per 1920×1200 frame). The declared streams are held in the state `CameraStreams`. UI = the config's `agent_ui`, in Orkestrator's standard catalog (`orkestrator@v4.2.1`), checked strictly against it and the registry (`declare_agent_ui`, `check_agent_catalog`); a config without `agent_ui` does not start. Only `main_arkitekt.py` imports lovekit (`newswitch/broadcasters/lovekit.py`, not imported by the `broadcasters` package). Tested offline with a fake lovekit client only. The agent serves no HTTP routes: the files the IO manager writes and the frame cache are not reachable from Orkestrator, so a frame's cache id or a file handle points nowhere there (open).
+- **`main_arkitekt.py`** (extra `agent` = `arkitekt[rekuest,lovekit]`, `uv sync --extra agent`): runs via `arkitekt.run`, logging in to the arkitekt server fakts finds (`--url` / `$FAKTS_URL`). `create_arkitekt_registry(instrument)` → `App` is `create_registry(instrument, services=(lovekit_service, mikro_service))`, the state `CameraStreams`, the startup hook `provide_lovekit_sink`, `publish_camera_streams` when there are detectors, and `declare_agent_ui`. It runs on any instrument: each detector becomes a lovekit `VideoStream` (`cameras_of(instrument)` → `list[CameraStream]`), keyed by its sensor's cube (stable across restarts), titled by that too. `provide_lovekit_sink(current: Run) -> Tuple[FrameSink, CameraStreams]` provides `LovekitSink(cameras_of(load_devices(app_context)))` (it takes its cameras in the constructor) and a `CameraStreams()`. `LovekitSink` keeps the newest frame per detector; the background hook `publish_camera_streams(lovekit, sink: FrameSink, live: CameraStreams)` (a `TypeError` for a sink that is not a `LovekitSink`) sends at most `MAX_FPS` (15) frames per stream, converting with `to_rgba` off the event loop (`asyncio.to_thread`, ~37 ms per 1920×1200 frame). The declared streams are held in the state `CameraStreams`. UI = the description's `agent_ui` bloks, checked strictly against the spec's catalogs, Orkestrator's module and the registry (`declare_agent_ui`); a description without the section shows nothing there. Only `main_arkitekt.py` imports lovekit (`newswitch/broadcasters/lovekit.py`, not imported by the `broadcasters` package). Tested offline with a fake lovekit client only. The agent serves no HTTP routes: the files the IO manager writes and the frame cache are not reachable from Orkestrator, so a frame's cache id or a file handle points nowhere there (open).
 
 ## Routes: HTTP vs WebSocket
 
@@ -207,7 +211,7 @@ File: newswitch/routes/liveview.py
 - Actions, background and shutdown functions: newswitch/actions/ (one module per part); routines: newswitch/routines/
 - Locks: newswitch/microscope/locks.py
 - Manager protocols: newswitch/protocols/; states: newswitch/states/; models: newswitch/models/
-- Device configuration: newswitch/config_io/ and backend/configs/README.md
-- Manager implementations: newswitch/drivers/ (uc2/, virtual/) and newswitch/services/
+- The instrument: newswitch/instrument/ and backend/instruments/README.md
+- Manager implementations: newswitch/drivers/ (optics/, uc2/, virtual/) and newswitch/services/
 - Frame generation and helpers: newswitch/drivers/virtual/simulation/
 - Routes: newswitch/routes/ (live view, files, cache) and newswitch/accounts/routes.py (accounts)

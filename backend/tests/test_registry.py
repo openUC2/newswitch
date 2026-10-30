@@ -1,4 +1,4 @@
-"""The app registry holds what the device configuration's microscope has, and nothing else."""
+"""The app registry holds what the instrument has, and nothing else."""
 
 import time
 from pathlib import Path
@@ -7,14 +7,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from newswitch import config_io
 from main_fastapi import create_app
 from newswitch.accounts.auth import AllowAllAuthenticator
+from newswitch.instrument import spec
 from newswitch.settings import Settings
-from tests.conftest import registry_names
+from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from tests.conftest import registry_names, run_settings
 
-CONFIGS = Path(__file__).parent.parent / "configs"
-ASSETS = Path(__file__).parent.parent / "newswitch"
+INSTRUMENTS = Path(__file__).parent.parent / "instruments"
+CAM_TEST = INSTRUMENTS / "cam-test"
 
 DEVICE_STATES = {
     "StageState",
@@ -33,28 +34,22 @@ CORE_STATES = {
 }
 
 
-def app_for(name: str, tmp_path: Path) -> FastAPI:
-    """The virtual app of a shipped configuration, writing back into `tmp_path`."""
+def app_for(instrument: Path, tmp_path: Path) -> FastAPI:
+    """The simulated app of an instrument, writing into `tmp_path`."""
     return create_app(
-        Settings(
-            use_virtual_microscope=True,
-            static_config_path=CONFIGS / name,
-            persistent_config_path=tmp_path / "persistent.yaml",
-            load_from_static_config_path=True,
-            db_path=str(tmp_path / "agent.db"),
-        ),
+        run_settings(tmp_path, instrument=instrument),
         AllowAllAuthenticator(),
     )
 
 
-def registered(name: str | None) -> tuple[set[str], set[str]]:
-    """The state and action names a shipped configuration (None: none) registers."""
-    return registry_names(None if name is None else config_io.load_config(CONFIGS / name).config)
+def registered(instrument: Path | None) -> tuple[set[str], set[str]]:
+    """The state and action names an instrument (None: none) registers."""
+    return registry_names(None if instrument is None else spec.load(instrument))
 
 
 def test_a_complete_microscope_registers_every_part() -> None:
-    """The default configuration has every part: every state and action."""
-    states, actions = registered("newswitch-config.yaml")
+    """The reference microscope has every part: every state and action."""
+    states, actions = registered(REFERENCE_INSTRUMENT)
     assert DEVICE_STATES | CORE_STATES | {"AutofocusState"} <= states
     assert {
         "move_stage",
@@ -66,31 +61,15 @@ def test_a_complete_microscope_registers_every_part() -> None:
 
 def test_a_camera_alone_registers_no_stage() -> None:
     """One camera: its state and actions, the core, nothing of a stage or light source."""
-    states, actions = registered("camTest_config.yaml")
+    states, actions = registered(CAM_TEST)
     assert states == CORE_STATES | {"CameraState"}
     assert {"capture_image", "start_live_view"} <= actions
     assert not {"move_stage", "calibrate_light_path", "scan_region", "switch_objective"} & actions
 
 
-def test_the_fluorescence_microscope_has_no_objective_or_filters() -> None:
-    """The design's microscope: stage, laser, camera and UC2 board, no objective or filters."""
-    if not (ASSETS / "assets" / "design").is_dir():
-        pytest.skip("the design's model is not built here: just build-design")
-    states, actions = registered("newswitch-config.fluorescence.yaml")
-    assert states == CORE_STATES | {
-        "StageState",
-        "IlluminationState",
-        "CameraState",
-        "UC2State",
-        "AutofocusState",
-    }
-    assert not {"switch_objective", "toggle_objective", "switch_filter", "toggle_filter"} & actions
-    assert {"move_stage", "calibrate_light_path", "acquire_multidimensional_acquisition"} <= actions
-
-
 def test_the_parts_it_registers_are_the_parts_it_starts(tmp_path: Path) -> None:
-    """Started, the agent publishes the configured parts' states, and no others."""
-    app = app_for("camTest_config.yaml", tmp_path)
+    """Started, the agent publishes the states of the parts it has, and no others."""
+    app = app_for(CAM_TEST, tmp_path)
     with TestClient(app) as client:
         # The startup hooks run once the agent is up; wait for what they publish.
         published: set[str] = set()
@@ -105,8 +84,8 @@ def test_the_parts_it_registers_are_the_parts_it_starts(tmp_path: Path) -> None:
         assert client.get("/states/StageState").status_code == 404
 
 
-def test_without_a_configuration_only_the_core() -> None:
-    """No device configuration: no devices, so only the core."""
+def test_without_an_instrument_only_the_core() -> None:
+    """No instrument: no devices, so only the core."""
     states, actions = registered(None)
     assert states == CORE_STATES
     assert actions == {"clear_expanse"}
@@ -127,41 +106,28 @@ def test_the_schema_export_refuses_an_incomplete_microscope(tmp_path: Path) -> N
     """A part missing from the export would drop its hooks from the frontend."""
     from newswitch.tools.export_schemas import export
 
-    with pytest.raises(ValueError, match="objective"):
-        export(tmp_path, CONFIGS / "newswitch-config.fluorescence.yaml")
-
-
-def test_hardware_parts_need_a_uc2_board(tmp_path: Path) -> None:
-    """On hardware a stage is driven through a UC2 board: without one, startup refuses."""
-    from newswitch.microscope.parts import build_microscope
-
-    devices = config_io.load_config(CONFIGS / "newswitch-config.fluorescence.yaml").config
-    devices.devices = {
-        key: device for key, device in devices.devices.items() if device.type != "controller"
-    }
-    settings = Settings(use_virtual_microscope=False, config_file=None, camera_debug_window=False)
-    with pytest.raises(config_io.ConfigError, match="stage, illumination need a UC2 board"):
-        build_microscope(settings, devices)
+    with pytest.raises(ValueError, match="ObjectiveState"):
+        export(tmp_path, CAM_TEST)
 
 
 def test_with_a_uc2_board_the_bus_runs() -> None:
     """A UC2 board is provided and its bus pumped: both are registered with it."""
-    states, actions = registered("newswitch-config.yaml")
+    states, actions = registered(REFERENCE_INSTRUMENT)
     assert "UC2State" in states and "home_stage" in actions
 
 
 def test_a_camera_alone_acquires(settings: Settings) -> None:
-    """Without stage, objective or filters (camTest) capture_image takes an uncalibrated image.
+    """Without stage, objective or filters (cam-test) capture_image takes an uncalibrated image.
 
-    Its light path is the detector alone; the frame gets the detector's nominal pixel size.
+    Its light path is the detector alone; the frame gets the size its optics predict: lenses that
+    magnify by one, so the sensor's own.
     (Called directly: the in-process agent test client can stall on this action's result,
     which a real server delivers; see the serving tests for the agent path.)
     """
     from newswitch.actions.detector import capture_image
     from newswitch.microscope.parts import build_microscope
 
-    devices = config_io.load_config(CONFIGS / "camTest_config.yaml").config
-    built = build_microscope(settings, devices)
+    built = build_microscope(settings, spec.load(CAM_TEST))
     assert built.detector is not None and built.acquisition is not None
     assert [[k.kube_id for k in p.kubes] for p in built.light_path.state.light_paths] == [
         ["detector_1"]
@@ -171,4 +137,40 @@ def test_a_camera_alone_acquires(settings: Settings) -> None:
 
     assert len(frames) == 1
     detector = built.camera_state.detectors[0]
-    assert frames[0].metadata.fov_width == pytest.approx(detector.pixel_size_um * detector.width)
+    assert frames[0].metadata.fov_width == pytest.approx(
+        detector.pixel_size_um * detector.width, rel=0.01
+    )
+
+
+def test_a_part_reached_twice_counts_once() -> None:
+    """Focus and acquisition both bring stage and detector: one hook of each, one state."""
+    from main_fastapi import create_fastapi_registry
+
+    registry = create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT)).registry
+    hooks = registry.hooks_registry.startup_hooks
+    assert {"provide_core", "provide_stage", "provide_detector", "provide_focus"} <= set(hooks)
+    assert list(registry.states).count("StageState") == 1
+
+
+def test_two_apps_share_no_microscope(tmp_path: Path) -> None:
+    """Every run holds its own build; the part registries hold none."""
+    from newswitch.microscope.run import Run
+
+    settings = run_settings(tmp_path, instrument=REFERENCE_INSTRUMENT)
+    first, second = Run.of(settings), Run.of(settings)
+    assert first.microscope is first.microscope
+    assert first.microscope is not second.microscope
+    assert first.microscope.stage_state is not second.microscope.stage_state
+
+
+def test_merging_leaves_the_parts_as_they_are() -> None:
+    """Parts live as long as the process, so one instrument must not leak into the next app."""
+    from main_fastapi import create_fastapi_registry
+    from newswitch.microscope.apps import stage
+
+    before = set(stage.app.registry.hooks_registry.startup_hooks)
+    create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT))
+    assert set(stage.app.registry.hooks_registry.startup_hooks) == before
+    assert not {"provide_frame_broadcaster", "provide_focus"} & before
+    states, _ = registered(CAM_TEST)
+    assert "StageState" not in states

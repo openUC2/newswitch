@@ -101,7 +101,6 @@ def impacts(instrument: Instrument, state: Mapping[str, Any]) -> list[dict[str, 
     rows = []
     for name, variable in instrument.variables.items():
         if variable.verb == "swaps":
-            assert variable.slots is not None
             nudges = [slot for slot in variable.slots if slot != state[name]]
         else:
             assert variable.step is not None

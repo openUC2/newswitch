@@ -30,7 +30,8 @@ RUN uv sync --frozen --extra uc2 --extra mikro
 
 # Defaults matching the repo's root .env. compose overrides them per service, and
 # `docker run -e BACKEND_PORT=...` works too - CMD/HEALTHCHECK below both read them.
-ENV BACKEND_HOST=0.0.0.0 \
+ENV NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml \
+    BACKEND_HOST=0.0.0.0 \
     BACKEND_PORT=8099
 
 # Documentation only, and resolved at BUILD time - a runtime -e BACKEND_PORT still works,

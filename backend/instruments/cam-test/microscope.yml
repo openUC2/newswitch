@@ -1,0 +1,113 @@
+# One simulated uc2_cam_py camera and nothing else: no board, no stage, no light of its own to
+# control. Start the backend with
+#   NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml
+# (needs the extra "camera": uv sync --extra camera). Walkthrough: "End-to-end test for camera" in
+# the repository's README.md.
+
+spec: newswitch/instrument/v0
+name: cam-test
+
+sample:
+  fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+  transmit: 0.9
+  reflect: 0.001
+
+cubes:
+  sample:
+    element: {kind: sample}
+
+  # Nothing can be imaged without lenses: two alike, so a pixel on the sample is a pixel on the sensor.
+  lens-a:
+    element: {kind: lens, f: 50 mm, na: 0.1}
+
+  lens-b:
+    element: {kind: lens, f: 50 mm}
+
+  sim-cam:
+    element:
+      kind: sensor
+      axes: {x: {size: 640, pitch: 5.86 um}, y: {size: 480, pitch: 5.86 um}}
+    tunes:
+      exposure: {initial: 10.0, step: 1.0, units: ms}
+      gain: {initial: 0.0, step: 1.0, units: dB}
+      binning: {initial: 1, step: 1}
+
+illumination: []
+
+detection:
+  - {from: sample, to: lens-a, distance: focus}
+  - {from: lens-a, to: lens-b, distance: 100 mm}
+  - {from: lens-b, to: sim-cam, distance: focus}
+
+parts:
+  detectors:
+    1: {cube: sim-cam, frame_rate: 20 Hz}
+
+# A camera only runs on real hardware; set it true to see what the optics render instead.
+settings:
+  use_virtual_microscope: false
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: true
+
+hardware:
+  cameras:
+    sim-cam:
+      protocol: usb3-vision
+      vendor: Simulated   # uc2_cam_py simulates it: a Gaussian spot walking over the sensor
+      buffer_size: 8
+      store_image_data: false  # true records every image to camera_recording_dir
+      vendor_options: {sensor_width: 640, sensor_height: 480, frame_rate: 20.0}
+
+# What the frontend shows: bloks in blok language v2, checked against the catalog the frontend
+# publishes (newswitch/bloks/newswitch-catalog.json). `catalog` names the version they were written
+# against; the blok marked default is shown first. A blok naming an action this microscope does not
+# have is refused at startup.
+ui:
+  catalog: newswitch@2
+  bloks:
+    view-camera:
+      description: 'Camera: the live image of the camera, and acquiring it.'
+      default: true
+      bsx: |
+        <Html>
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex gap-2 past:hidden">
+                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
+                <Button icon="camera" onClick={self.capture_image()}>Acquire</Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
+                <LiveView className="h-full" />
+            </div>
+        </div>
+        </Html>
+
+# What Orkestrator shows in agent mode (just agent): bloks drawn with the spec's catalogs and
+# Orkestrator's module, the cameras as lovekit streams.
+agent_ui:
+  catalog: orkestrator@v4.2.1
+  bloks:
+    view-microscope:
+      description: 'Microscope: the camera streams, live view and acquiring.'
+      default: true
+      bsx: |
+        <Html>
+        <div className="flex flex-col gap-4 p-4">
+            <Card>
+                <CardHeader><CardTitle>Cameras</CardTitle></CardHeader>
+                <CardContent>
+                    <foreach items={self.CameraStreams.streams} let="stream">
+                        <StructureDisplay value={stream} />
+                    </foreach>
+                </CardContent>
+            </Card>
+            <div className="flex gap-2">
+                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                <Button icon="square" onClick={self.stop_live_view()}>Stop</Button>
+                <Button icon="camera" onClick={self.capture_image()}>Acquire</Button>
+            </div>
+        </div>
+        </Html>

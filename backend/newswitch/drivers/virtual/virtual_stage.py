@@ -36,8 +36,8 @@ class StageConfig:
         0.1  # Sleep time to simulate movement delay (seconds)
     )
     speed_um_per_s: float | None = None
-    """The speed of the simulated stage, when the device configuration gives one (an axis'
-    ``vel``): a move then takes as long as it would on the real stage, in at most
+    """The speed of the simulated stage, when the instrument gives one (a move's
+    ``speed``): a move then takes as long as it would on the real stage, in at most
     `MAX_STEPS` steps. None: every step takes `simulated_pos_sleep_per_micrometer`."""
     # PSF computation dimensions (height, width)
     psf_a_dimension: int = 128

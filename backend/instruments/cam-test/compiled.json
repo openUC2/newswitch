@@ -1,0 +1,46 @@
+{
+ "instrument": "cam-test",
+ "digest": "ce573a0214247c6a",
+ "states": {
+  "": {
+   "sim-cam": {
+    "imaging": {
+     "magnification": -1.0,
+     "reflections": 0,
+     "distortion_percent": 0.0,
+     "relative_illumination": 1.0,
+     "spot_center_um": 4.091859184150518e-13,
+     "spot_corner_um": 6.383366062451862e-13,
+     "numerical_aperture": 0.1
+    },
+    "coupling": {},
+    "axial": {}
+   }
+  }
+ },
+ "impacts": [
+  {
+   "variable": "sim-cam.exposure",
+   "verb": "tunes",
+   "nudge": 11.0,
+   "detector": "sim-cam",
+   "changes": {}
+  },
+  {
+   "variable": "sim-cam.gain",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "sim-cam",
+   "changes": {}
+  },
+  {
+   "variable": "sim-cam.binning",
+   "verb": "tunes",
+   "nudge": 2,
+   "detector": "sim-cam",
+   "changes": {
+    "pixels": 320.0
+   }
+  }
+ ]
+}

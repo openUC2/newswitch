@@ -65,18 +65,18 @@ def assemble(
 ) -> Answer:
     """An `Answer` from what the tracer found and the current values."""
     camera = instrument.cubes[detector]
-    axes = camera.element_at(state).properties["axes"]
+    axes = camera.element_at(state).axes
     binning = state[f"{detector}.binning"]
     flip = -1.0 if imaging["reflections"] % 2 else 1.0
     magnification = imaging["magnification"]
-    pixel_x = axes["x"]["pitch"] * binning / (magnification * flip)
-    pixel_y = axes["y"]["pitch"] * binning / magnification
-    width, height = axes["x"]["size"] // binning, axes["y"]["size"] // binning
+    pixel_x = axes["x"].pitch * binning / (magnification * flip)
+    pixel_y = axes["y"].pitch * binning / magnification
+    width, height = axes["x"].size // binning, axes["y"].size // binning
 
     stage = instrument.cubes[instrument.sample_cube()]
     centre = [0.0, 0.0]
     for variable in stage.variables.values():
-        if variable.along in ("x", "y"):
+        if variable.verb == "moves" and variable.along in ("x", "y"):
             centre["xy".index(variable.along)] = float(state[variable.name])
 
     # Binned pixels are averaged, not summed (`VirtualDetectorManager._read_out`): binning does
@@ -103,7 +103,7 @@ def assemble(
         centre=(centre[0], centre[1]),
         size=(width, height),
         field_of_view_um=(abs(pixel_x) * width, abs(pixel_y) * height),
-        spot_px=spot_um / (axes["x"]["pitch"] * binning),
+        spot_px=spot_um / (axes["x"].pitch * binning),
         relative_illumination=imaging["relative_illumination"],
         distortion_percent=imaging["distortion_percent"],
         band_nm=band,

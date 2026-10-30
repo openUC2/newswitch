@@ -55,15 +55,16 @@ def _gaussian(center: float, width: float) -> np.ndarray:
 
 def transmission(element: Element, via: str | None) -> np.ndarray:
     """How much of each wavelength an element lets through, leaving the way `via` says."""
-    properties = element.properties
     if element.kind == "dichroic":
-        passes = 1.0 / (1.0 + np.exp(-(WAVELENGTHS - properties["cut"]) / 2.0))
+        passes = 1.0 / (1.0 + np.exp(-(WAVELENGTHS - element.cut) / 2.0))
         return passes if via == "transmit" else 1.0 - passes
     if element.kind == "splitter":
-        return np.full(WAVELENGTHS.shape, float(properties[via or "transmit"]))
-    if element.kind == "filter" and "center" in properties:
-        half = properties["width"] / 2.0
-        edge = (np.abs(WAVELENGTHS - properties["center"]) - half) / 2.0
+        return np.full(
+            WAVELENGTHS.shape, float(element.reflect if via == "reflect" else element.transmit)
+        )
+    if element.kind == "filter" and element.center is not None:
+        half = element.width / 2.0
+        edge = (np.abs(WAVELENGTHS - element.center) - half) / 2.0
         return 0.95 / (1.0 + np.exp(edge))
     return np.ones(WAVELENGTHS.shape)
 
@@ -88,19 +89,20 @@ def coupling(
     sample = instrument.sample
     stage = instrument.sample_cube()
     detection = instrument.routes(instrument.detection, stage, detector)
-    excitation = _gaussian(sample["excitation"], sample["excitation_width"])
-    emission = _gaussian(sample["emission"], sample["emission_width"])
+    fluorophore = sample.fluorophore
+    excitation = _gaussian(fluorophore.excitation, fluorophore.excitation_width)
+    emission = _gaussian(fluorophore.emission, fluorophore.emission_width)
     emission = emission / emission.sum()
     result: dict[str, dict[str, Any]] = {}
     for source in instrument.sources():
         element = instrument.cubes[source].element_at(state)
-        spectrum = _gaussian(element.properties["wavelength"], element.properties["width"])
+        spectrum = _gaussian(element.wavelength, element.width)
         spectrum = spectrum / spectrum.sum()
         arriving = np.zeros(WAVELENGTHS.shape)
         for edges in instrument.routes(instrument.illumination, source, stage):
             on_sample = spectrum * _route_transmission(instrument, edges, state)
-            direct = sample["reflect"] if edges[-1].side == "epi" else sample["transmit"]
-            emitted = (on_sample * excitation).sum() * sample["quantum_yield"] * emission
+            direct = sample.reflect if edges[-1].side == "epi" else sample.transmit
+            emitted = (on_sample * excitation).sum() * fluorophore.quantum_yield * emission
             arriving = arriving + on_sample * direct + emitted
         through = np.zeros(WAVELENGTHS.shape)
         for edges in detection:
@@ -253,7 +255,7 @@ def imaging(
             lens = (
                 target if target.kind == "lens" else instrument.cubes[edge.source].element_at(state)
             )
-            focal = lens.properties["f"]
+            focal = lens.f
             if not lenses:
                 focal *= errors.objective_focal_factor
             distance = focal
@@ -263,27 +265,27 @@ def imaging(
                 object_distance = distance_since_lens + moved(stage)
             elif pending is not None:
                 lenses.append(_lens(pending, distance_since_lens + moved(edge.target)))
-            if "prescription" in target.properties:
+            if target.prescription is not None:
                 pending = {
                     "kind": "prescription",
-                    "what": str(instrument.folder / target.properties["prescription"]),
-                    "clear_radius": target.properties.get("clear_radius", 11.43),
+                    "what": str(instrument.folder / target.prescription),
+                    "clear_radius": 11.43 if target.clear_radius is None else target.clear_radius,
                 }
             else:
-                focal = target.properties["f"]
+                focal = target.f
                 if objective_f is None:
                     focal *= errors.objective_focal_factor
                     objective_f = focal
-                    na = target.properties["na"]
+                    na = target.na
                 pending = {"kind": "ideal", "what": focal}
             distance_since_lens = -moved(edge.target) if pending["kind"] == "prescription" else 0.0
     assert pending is not None and na is not None
     lenses.append(_lens(pending, distance_since_lens))
 
-    axes = instrument.cubes[detector].element_at(state).properties["axes"]
+    axes = instrument.cubes[detector].element_at(state).axes
     half_diagonal = math.hypot(
-        axes["x"]["size"] * axes["x"]["pitch"] / 2000.0,
-        axes["y"]["size"] * axes["y"]["pitch"] / 2000.0,
+        axes["x"].size * axes["x"].pitch / 2000.0,
+        axes["y"].size * axes["y"].pitch / 2000.0,
     )
     magnification, distortion, relative, spot_center, spot_corner = _trace(
         tuple(lenses), object_distance, na, wavelength_nm / 1000.0, half_diagonal

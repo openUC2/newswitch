@@ -61,8 +61,8 @@ def test_a_sensors_size_lives_on_its_axes_and_nowhere_else(instrument: spec.Inst
     """There is no width or height to disagree with the axes."""
     sensor = instrument.cubes["camera-a"].element
     assert sensor is not None
-    assert sensor.properties["axes"]["x"]["size"] == 512
-    assert not {"width", "height", "sensor_width", "sensor_height"} & set(sensor.properties)
+    assert sensor.axes["x"].size == 512
+    assert not {"width", "height", "sensor_width", "sensor_height"} & set(vars(sensor))
 
 
 # --- the wall between predictions and the truth

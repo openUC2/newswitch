@@ -1,4 +1,4 @@
-"""The server running on an instrument: its description, and no device configuration."""
+"""The server running on an instrument: its description is all it needs."""
 
 import shutil
 import subprocess
@@ -10,15 +10,14 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from main import load_devices
 from main_fastapi import create_fastapi_registry
-from newswitch import config_io
 from newswitch.broadcasters import FrameBroadcaster
-from newswitch.microscope.parts import Microscope, build_microscope, configured_parts
+from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.instrument import spec
 from newswitch.routines.affine_matrix import pixel_shift
 from newswitch.routines.calibration import calibrate_light_path
-from newswitch.settings import Settings, load_settings
+from newswitch.settings import Settings, load_devices, load_settings
+from tests.conftest import registry_names, run_settings
 
 BACKEND = Path(__file__).parent.parent
 INSTRUMENT = BACKEND / "instruments" / "fake-microscope"
@@ -27,15 +26,7 @@ INSTRUMENT = BACKEND / "instruments" / "fake-microscope"
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     """The settings of a server on the instrument, with its files somewhere temporary."""
-    return Settings(
-        instrument=INSTRUMENT,
-        config_file=None,
-        db_path=str(tmp_path / "agent.db"),
-        image_dir=tmp_path / "images",
-        cache_dir=tmp_path / "cache",
-        camera_debug_window=False,
-        use_virtual_microscope=True,
-    )
+    return run_settings(tmp_path, instrument=INSTRUMENT)
 
 
 @pytest.fixture
@@ -65,7 +56,6 @@ def test_naming_a_description_runs_that_instrument() -> None:
     """All it takes is the one environment variable."""
     settings = load_settings(str(INSTRUMENT / "microscope.yml"))
     assert settings.instrument == INSTRUMENT / "microscope.yml"
-    assert settings.config_file is None
 
 
 def test_naming_its_folder_does_too() -> None:
@@ -73,30 +63,23 @@ def test_naming_its_folder_does_too() -> None:
     assert load_settings(str(INSTRUMENT)).instrument == INSTRUMENT
 
 
-def test_a_device_configuration_is_still_one(tmp_path: Path) -> None:
-    """Old configurations keep working: a description is told by what it says it is."""
+def test_any_other_file_is_refused(tmp_path: Path) -> None:
+    """Rather than quietly running something else."""
     path = tmp_path / "newswitch-config.yaml"
     path.write_text("newswitch_version: v1.0.2\ndevices: {}\n")
-    settings = load_settings(str(path))
-    assert settings.instrument is None
-    assert settings.static_config_path == path
+    with pytest.raises(spec.SpecError, match="does not say"):
+        load_settings(str(path))
 
 
 def test_it_loads_as_the_devices_of_a_server(settings: Settings) -> None:
-    """Step 2 of starting up gives the instrument, not a configuration."""
-    assert isinstance(load_devices(settings, "ui"), spec.Instrument)
+    """Step 2 of starting up gives the instrument."""
+    assert isinstance(load_devices(settings), spec.Instrument)
 
 
-def test_agent_mode_is_refused_for_now(settings: Settings) -> None:
-    """It has no agent_ui, and says so rather than failing somewhere later."""
-    with pytest.raises(config_io.ConfigError, match="FastAPI mode only"):
-        load_devices(settings, "agent_ui")
-
-
-def test_real_hardware_is_refused_for_now(settings: Settings) -> None:
-    """The description does not yet say how an actuator reaches hardware."""
+def test_real_hardware_needs_it_wired(settings: Settings) -> None:
+    """The fake microscope does not say how its actuators reach hardware: it says so at startup."""
     real = settings.model_copy(update={"use_virtual_microscope": False})
-    with pytest.raises(config_io.ConfigError, match="only runs simulated"):
+    with pytest.raises(spec.SpecError, match="no wired actuator"):
         build_microscope(real, spec.load(INSTRUMENT))
 
 
@@ -105,9 +88,15 @@ def test_real_hardware_is_refused_for_now(settings: Settings) -> None:
 
 def test_it_has_the_parts_its_elements_say() -> None:
     """Which controls exist follows from the description."""
-    parts = configured_parts(spec.load(INSTRUMENT))
-    assert (parts.stage, parts.illumination, parts.detector) == (True, True, True)
-    assert (parts.objective, parts.filter_bank, parts.uc2) == (True, True, False)
+    states, _ = registry_names(spec.load(INSTRUMENT))
+    assert {
+        "StageState",
+        "IlluminationState",
+        "CameraState",
+        "ObjectiveState",
+        "FilterBankState",
+    } <= states
+    assert "UC2State" not in states
 
 
 def test_the_models_come_from_the_description(microscope: Microscope) -> None:
@@ -168,33 +157,41 @@ def test_rewording_a_comment_does_not_outdate_the_tables(tmp_path: Path) -> None
     assert spec.load(copy).digest == spec.load(INSTRUMENT).digest
 
 
+def test_rewiring_it_does_not_outdate_the_tables(tmp_path: Path) -> None:
+    """The ``hardware`` section is no part of the optics the tables are about."""
+    copy = tmp_path / "instrument"
+    shutil.copytree(INSTRUMENT, copy)
+    description = copy / spec.DESCRIPTION
+    description.write_text(description.read_text() + "\nhardware: {cameras: {}}\n")
+    assert spec.load(copy).digest == spec.load(INSTRUMENT).digest
+
+
+def test_changing_its_ui_does_not_outdate_the_tables(tmp_path: Path) -> None:
+    """The bloks are no part of the optics the tables are about."""
+    copy = tmp_path / "instrument"
+    shutil.copytree(INSTRUMENT, copy)
+    description = copy / spec.DESCRIPTION
+    description.write_text(description.read_text().replace("Minimal: the live", "Small: the live"))
+    assert spec.load(copy).digest == spec.load(INSTRUMENT).digest
+
+
 def test_its_objectives_have_a_control() -> None:
-    """Which needs naming only here: other views stay as they are."""
-    from newswitch.bloks.fluorescence import fluorescence_ui
+    """Which the blok in its description names."""
+    ui = spec.load(INSTRUMENT).ui
+    assert ui is not None
+    assert "self.switch_objective" in ui.bloks["view-fluorescence"].bsx
 
-    assert "self.switch_objective" in fluorescence_ui(True, has_objectives=True)
-    assert "self.switch_objective" not in fluorescence_ui(True)
 
-
-def test_the_ui_is_the_views_it_names() -> None:
+def test_the_ui_is_the_bloks_it_holds() -> None:
     """A registry with the instrument's bloks, the first its default."""
     registry = create_fastapi_registry(spec.load(INSTRUMENT)).registry
     assert {"move_stage", "calibrate_light_path", "switch_objective", "switch_filter"} <= {
         impl.interface or impl.definition.name for impl in registry.snapshot().get_implementations()
     }
     assert len(registry.registered_bloks) == 3
-
-
-def test_a_view_there_is_none_of_is_refused(tmp_path: Path) -> None:
-    """Rather than a server with a missing view."""
-    from newswitch.instrument.parts import ui_config
-
-    copy = spec.load(INSTRUMENT)
-    with pytest.raises(ValueError, match="no view 'nope'"):
-        ui_config(
-            spec.Instrument(**{**copy.__dict__, "views": ("nope",)}),  # type: ignore[arg-type]
-            "newswitch@1",
-        )
+    assert [name for name, blok in registry.get_declared_bloks().items() if blok.default] == [
+        "view-fluorescence"
+    ]
 
 
 def test_the_server_starts_without_the_optics_library() -> None:

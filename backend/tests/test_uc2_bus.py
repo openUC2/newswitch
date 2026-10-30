@@ -1,14 +1,11 @@
 """Tests for the UC2 hardware bus layer (virtual transport + event dispatch)."""
 
 import asyncio
-from pathlib import Path
-from typing import Any
 
 import pytest
 
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.dispatch import apply_uc2_event
-from newswitch.drivers.uc2.rest_bus import UC2RestBusConfig
 from newswitch.drivers.uc2.stage_manager import UC2StageConfig, UC2StageManager
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.models.uc2 import BusError, EStopChanged, MotionDone, NodeSeen, PositionUpdate
@@ -135,41 +132,3 @@ def test_apply_uc2_event_updates_states() -> None:
 
     apply_uc2_event(BusError(message="boom"), stage_state, uc2_state)
     assert uc2_state.last_error == "boom"
-
-
-def test_shipped_config_files_load() -> None:
-    """The example setup JSONs parse into Settings and typed bus configs."""
-    from newswitch.settings import Settings
-
-    configs_dir = Path(__file__).parent.parent / "configs"
-
-    serial_cfg = Settings.model_validate_json((configs_dir / "uc2_serial.json").read_text())
-    assert serial_cfg.use_virtual_microscope is False
-    assert serial_cfg.uc2_transport == "rest"
-    rest_kwargs: dict[str, Any] = {
-        "serialport": serial_cfg.uc2_serial_port,
-        "baudrate": serial_cfg.uc2_baudrate,
-        **serial_cfg.uc2_rest,
-    }
-    rest_bus_cfg = UC2RestBusConfig(**rest_kwargs)
-    assert rest_bus_cfg.serialport == "/dev/cu.SLAB_USBtoUART"
-    assert rest_bus_cfg.baudrate == 921600
-    assert rest_bus_cfg.require_master is True
-    assert rest_bus_cfg.steps_per_um_x == pytest.approx(3.2)
-    assert serial_cfg.uc2_stage["home_axes"] == ["Z", "X", "Y"]
-    assert serial_cfg.uc2_stage["registered_step_sizes"] == [10.0, 100.0, 1000.0, 10000.0]
-    assert len(serial_cfg.uc2_illumination["sources"]) == 3
-
-    can_cfg = Settings.model_validate_json((configs_dir / "uc2_canopen.json").read_text())
-    assert can_cfg.uc2_transport == "canopen"
-    can_kwargs: dict[str, Any] = {
-        "interface": can_cfg.uc2_can_interface,
-        "channel": can_cfg.uc2_can_channel,
-        "port": can_cfg.uc2_can_port,
-        **can_cfg.uc2_can,
-    }
-    can_bus_cfg = UC2CanBusConfig(**can_kwargs)
-    assert can_bus_cfg.interface == "socketcan"
-    assert can_bus_cfg.channel == "can0"
-    assert can_bus_cfg.node_x == 11
-    assert can_bus_cfg.node_galvo == 30

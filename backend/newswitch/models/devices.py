@@ -24,7 +24,7 @@ class Colormap(str, Enum):
     BLUE = "blue"
 
 
-# Built from the device configuration (`config_io.adapters`); the detector manager then
+# Built from the instrument (`instrument.parts`); the detector manager then
 # fills in what the device reports and keeps the current values up to date. Fields a
 # manager cannot know stay None. The docstring stays one line: it goes into the generated
 # frontend code, and Python 3.12 and 3.13 indent multi-line docstrings differently.
@@ -56,7 +56,7 @@ class Detector:
 
     # --- device: from the configuration, replaced by what the device reports once open
     key: Optional[str] = None
-    """Key of the detector in the device configuration."""
+    """Key of the detector in the instrument."""
     manufacturer: Optional[str] = None
     """Vendor as the camera library names it, passed on unchanged."""
     model: Optional[str] = None

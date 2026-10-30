@@ -47,6 +47,10 @@ dev-fake:
 compile-fake:
     cd backend && uv run --with optiland python -m newswitch.tools.compile_instrument instruments/fake-microscope
 
+# Ray trace the reference microscope again, after changing its description
+compile-reference:
+    cd backend && uv run --with optiland python -m newswitch.tools.compile_instrument newswitch/reference/complete-microscope
+
 # The mikro stack in docker: images and their metadata, for FastAPI mode
 mikro:
     docker compose --profile mikro up -d mikro
@@ -67,7 +71,7 @@ wait-backend url=BACKEND_HEALTH:
     echo "backend did not answer within 60s" >&2
     exit 1
 
-# Run backend + frontend together. Any device configuration works: the frontend's hooks
+# Run backend + frontend together. Any instrument works: the frontend's hooks
 # are generated from the committed schema export (just export-schemas), not this backend.
 dev:
     #!/usr/bin/env bash
@@ -79,8 +83,8 @@ dev:
     (cd frontend && exec yarn dev) &
     wait
 
-# newswitch as an arkitekt agent (lovekit streams, the configuration's agent_ui), e.g.
-#   NEWSWITCH_CONFIG=configs/newswitch-config.fluorescence.yaml just agent
+# newswitch as an arkitekt agent (lovekit streams, the agent's view), e.g.
+#   NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent
 # Logs in to the arkitekt server fakts finds (--url / $FAKTS_URL). Needs the extra 'agent'.
 agent *args:
     cd backend && uv run --extra agent python main_arkitekt.py {{args}}
@@ -96,11 +100,6 @@ dev-e2e:
     just wait-backend
     (cd frontend && exec yarn dev --mode test) &
     wait
-
-# Write a device configuration, UI included, from an optikit design; run it with
-# NEWSWITCH_CONFIG=<out> just dev. Needs the extra 'design'.
-build-design dsn out:
-    cd backend && uv run python -m newswitch.tools.build_design {{dsn}} -o {{out}}
 
 # ---------- quality ----------
 
@@ -154,7 +153,7 @@ create-admin username password:
     cd backend && uv run python -m newswitch.tools.accounts create-admin {{username}} {{password}}
 
 
-# Write the schemas of a complete microscope (configs/newswitch-config.yaml) into
+# Write the schemas of a complete microscope (newswitch/reference/complete-microscope) into
 # frontend/schemas/, which the frontend's codegen generates its typed hooks from.
 export-schemas:
     cd backend && uv run python -m newswitch.tools.export_schemas

@@ -75,9 +75,6 @@ ipython_config.py
 # Real login credentials. auth.example.yaml is the committed template.
 backend/auth.yaml
 
-# Local machine override files for hardware-specific config (kept out of git)
-backend/configs/*.local.json
-
 # Backend runtime artifacts (the app writes these into its CWD)
 *.db
 db.sqlite3
@@ -110,14 +107,10 @@ frontend/.auth/
 docs/_build/
 /site
 
-# Backups written by newswitch.config_io when saving the device config
-backend/configs/*.bak
 
-# Local hardware settings and generated browser-test reports
-backend/configs/*.local.json
-backend/configs/*.persistent.yaml
+# Generated browser-test reports
 frontend/playwright-report/
 frontend/test-results/
 
-# Built from the configured optikit design at startup (newswitch.design.model)
+# Models built by the removed optikit design pipeline
 backend/newswitch/assets/design/
