@@ -434,7 +434,7 @@ class TestCameraSettings:
 
 
 class RecordingBroadcaster(FrameBroadcaster):
-    """Frame broadcaster that keeps what it is sent instead of encoding it."""
+    """Frame broadcaster that keeps everything it is sent."""
 
     def __init__(self) -> None:
         """Start with nothing sent."""

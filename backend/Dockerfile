@@ -39,9 +39,11 @@ EXPOSE ${BACKEND_PORT}
 
 # main_fastapi:create is a factory, so --reload builds a fresh app on every edit.
 # The source dir is bind-mounted by compose, so edits on the host reload the container.
+# Per-message deflate off: compressing the live view's whole frames takes a core and most of the
+# frame rate.
 # Via `sh -c` so $BACKEND_PORT is expanded instead of passed literally, and `exec` so
 # uvicorn replaces the shell as PID 1 and still receives SIGTERM from `docker compose down`.
-CMD ["sh", "-c", "exec uvicorn main_fastapi:create --factory --host \"$BACKEND_HOST\" --port \"$BACKEND_PORT\" --reload"]
+CMD ["sh", "-c", "exec uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host \"$BACKEND_HOST\" --port \"$BACKEND_PORT\" --reload"]
 
 # python:slim has no curl, so probe with urllib instead
 HEALTHCHECK --interval=5s --timeout=5s --retries=30 --start-period=30s \

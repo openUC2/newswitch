@@ -1,171 +1,126 @@
-"""
-High-performance frame broadcaster for low-latency video streaming.
+"""The newest frame of every detector slot, for the websocket live view.
 
-Optimized for minimal latency with:
-- Lock-free broadcasting using thread-safe primitives
-- Zero-copy frame references where possible
-- Automatic frame dropping to prevent queue backlog
-- Integrated Zstd and H.264 encoding for WebSocket streaming
-- Shared encoders for clients with matching configurations
+A detector hands its frames over from its own thread, often holding its own lock, so
+`broadcast_sync` only keeps the frame and wakes whoever waits. A subscriber takes the
+newest frame whenever it is ready for one, so a slow viewer skips frames. Every frame stands
+alone, so a viewer can join at any time and leave out any frame.
 """
 
 import asyncio
 import threading
+import time
+from dataclasses import dataclass, field
+from types import TracebackType
 from typing import Optional
 
 import numpy as np
 
-from newswitch.broadcasters.encoders.base import EncoderProtocol, EncoderSubscriptionProtocol
-from newswitch.broadcasters.encoders.config import EncoderConfig
-from newswitch.broadcasters.encoders.h264_encoder import H264Encoder, H264EncoderConfig
-from newswitch.broadcasters.encoders.zstd_encoder import (
-    ZstdEncoder,
-    ZstdEncoderConfig,
-)
+
+@dataclass(eq=False)
+class SlotFrame:
+    """A frame of a detector slot, numbered in the order it came."""
+
+    slot: int
+    sequence: int
+    time_s: float
+    data: np.ndarray
+    #: The frame as sent, by binning factor: viewers of one size share the work.
+    messages: dict[int, bytes] = field(default_factory=dict)
+
+
+class FrameSubscription:
+    """One viewer of a slot: `next_frame` waits for a frame it has not seen yet."""
+
+    def __init__(self, broadcaster: "FrameBroadcaster", slot: int) -> None:
+        """Watch `slot` of `broadcaster`, from the running event loop."""
+        self._broadcaster = broadcaster
+        self._slot = slot
+        self._loop = asyncio.get_running_loop()
+        self._changed = asyncio.Event()
+        self._last_sequence: Optional[int] = None
+
+    def __enter__(self) -> "FrameSubscription":
+        """Start watching."""
+        self._broadcaster._add(self._slot, self)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
+        """Stop watching."""
+        self._broadcaster._remove(self._slot, self)
+
+    def _notify(self) -> None:
+        """A new frame came; called from the detector's thread."""
+        try:
+            self._loop.call_soon_threadsafe(self._changed.set)
+        except RuntimeError:  # the event loop is closed: the server is shutting down
+            pass
+
+    async def next_frame(self) -> SlotFrame:
+        """The newest frame, once there is one this subscription has not returned."""
+        while True:
+            self._changed.clear()
+            frame = self._broadcaster.newest(self._slot)
+            if frame is not None and frame.sequence != self._last_sequence:
+                self._last_sequence = frame.sequence
+                return frame
+            await self._changed.wait()
 
 
 class FrameBroadcaster:
-    """
-    High-performance frame broadcaster with shared Zstd and H.264 encoding.
-
-    Design principles:
-    1. Shared encoders - clients with same config share one encoder
-    2. Lock-free broadcasting - optimized for speed
-    3. Automatic cleanup - encoders stop when last subscriber leaves
-
-    Usage:
-        broadcaster = FrameBroadcaster()
-        broadcaster.start_broadcasting()
-
-        # Producer (sync, from detector thread):
-        broadcaster.broadcast_sync(1, frame)
-
-        # Consumer (async, from WebSocket):
-        config = ZstdEncoderConfig(level=1)
-        subscription = await broadcaster.get_encoder_subscription(1, config)
-        chunk = await subscription.get_encoded_chunk()
-        # When done:
-        await broadcaster.release_subscription(subscription)
-    """
-
-    __slots__ = (
-        "_broadcasting",
-        "_loop",
-        "_latest_frame",
-        "_encoders",
-        "_encoder_lock",
-    )
+    """Keeps the newest frame per detector slot and tells the subscribers of that slot."""
 
     def __init__(self) -> None:
-        """Initialize the FrameBroadcaster."""
-        self._broadcasting: bool = False
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._latest_frame: Optional[np.ndarray] = None
-        # Shared encoders keyed by config
-        self._encoders: dict[tuple[int, EncoderConfig], EncoderProtocol] = {}
-        self._encoder_lock = threading.Lock()
+        """Nothing broadcast, nobody watching."""
+        self._broadcasting = False
+        self._lock = threading.Lock()
+        self._newest: dict[int, SlotFrame] = {}
+        self._subscriptions: dict[int, set[FrameSubscription]] = {}
 
     def start_broadcasting(self) -> None:
-        """Start broadcasting frames to encoders."""
+        """A detector starts streaming: frames follow."""
         self._broadcasting = True
-
-    def stop_broadcasting(self) -> None:
-        """Stop broadcasting frames."""
-        self._broadcasting = False
-        self._latest_frame = None
 
     @property
     def is_broadcasting(self) -> bool:
-        """Check if broadcasting is active."""
+        """Whether a detector has started streaming."""
         return self._broadcasting
 
-    @property
-    def encoder_count(self) -> int:
-        """Number of active shared encoders."""
-        return len(self._encoders)
+    def subscribe(self, slot: int) -> FrameSubscription:
+        """A subscription to `slot`, as a context manager; from the event loop."""
+        return FrameSubscription(self, slot)
 
-    async def get_subscription_(
-        self, detector_slot: int, config: Optional[EncoderConfig] = None
-    ) -> EncoderSubscriptionProtocol:
-        """
-        Get a subscription to a Zstd encoder with the given config.
+    def subscriber_count(self, slot: int) -> int:
+        """How many subscriptions watch `slot`."""
+        with self._lock:
+            return len(self._subscriptions.get(slot, ()))
 
-        Args:
-            config: Zstd encoder configuration. Uses defaults if not provided.
-
-        Returns:
-            EncoderSubscriptionProtocol for receiving encoded chunks.
-        """
-        config = config or ZstdEncoderConfig()
-        key = (detector_slot, config)
-
-        with self._encoder_lock:
-            encoder = self._encoders.get(key)
-            if encoder is None:
-                match config:
-                    case ZstdEncoderConfig():
-                        encoder = ZstdEncoder(config)
-                    case H264EncoderConfig():
-                        encoder = H264Encoder(config)
-
-            self._encoders[key] = encoder
-
-        if not encoder.is_running:
-            await encoder.astart()
-
-        return await encoder.asubscribe(detector_slot)
-
-    async def arelease_subscription(self, subscription: EncoderSubscriptionProtocol) -> None:
-        """Unsubscribe from its shared encoder, stopping the encoder if it was the last one."""
-        key = (subscription.detector_slot, subscription.config)
-
-        with self._encoder_lock:
-            encoder = self._encoders.get(key)
-
-        if encoder is None:
-            return
-
-        await encoder.aunsubscribe(subscription)
-
-        if encoder.subscriber_count == 0:
-            await encoder.astop()
-            with self._encoder_lock:
-                self._encoders.pop(key, None)
-
-    def _schedule_encoder_frames(self, detector_slot: int, frame: np.ndarray) -> None:
-        """Schedule frame encoding for active encoders of one detector slot."""
-
-        for (slot, _), encoder in self._encoders.items():
-            if slot != detector_slot:
-                continue
-            if encoder.is_running:
-                encoder.encode_frame(frame)
+    def newest(self, slot: int) -> Optional[SlotFrame]:
+        """The newest frame of `slot`, or None before the first one."""
+        with self._lock:
+            return self._newest.get(slot)
 
     def broadcast_sync(self, detector_slot: int, frame: np.ndarray) -> None:
+        """Keep `frame` as the newest of `detector_slot`; called from the detector's thread.
+
+        The frame is kept as it is, not copied: a detector must not write to it afterwards.
         """
-        Synchronous broadcast for use from detector/camera thread.
+        with self._lock:
+            previous = self._newest.get(detector_slot)
+            sequence = 0 if previous is None else previous.sequence + 1
+            self._newest[detector_slot] = SlotFrame(detector_slot, sequence, time.time(), frame)
+            subscriptions = list(self._subscriptions.get(detector_slot, ()))
+        for subscription in subscriptions:
+            subscription._notify()
 
-        Sends frames to all active shared encoders.
+    def _add(self, slot: int, subscription: FrameSubscription) -> None:
+        with self._lock:
+            self._subscriptions.setdefault(slot, set()).add(subscription)
 
-        Args:
-            frame: The numpy array frame to broadcast (uint16 typically).
-        """
-
-        self._schedule_encoder_frames(detector_slot, frame)
-
-    def get_latest_frame(self) -> Optional[np.ndarray]:
-        """
-        Get the most recently broadcast frame.
-
-        Returns:
-            The latest frame or None if no frame has been broadcast.
-        """
-        return self._latest_frame
-
-    async def stop_all_encoders(self) -> None:
-        """Stop all active encoders."""
-        with self._encoder_lock:
-            encoders = list(self._encoders.values())
-
-        for encoder in encoders:
-            await encoder.astop()
+    def _remove(self, slot: int, subscription: FrameSubscription) -> None:
+        with self._lock:
+            self._subscriptions.get(slot, set()).discard(subscription)

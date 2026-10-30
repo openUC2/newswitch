@@ -50,7 +50,7 @@ flowchart LR
     end
     TP -- "REST: /assign /cancel /pause" --> API
     TP <-- "WS /ws: task events,<br/>state patches, locks (journal)" --> API
-    TP <-- "WS /stream/zstd|h264" --> ENC[FrameBroadcaster + encoders]
+    TP <-- "WS /stream/frames" --> ENC[FrameBroadcaster]
     subgraph Backend[FastAPI + arkitekt agent]
         API[arkitekt-fastapi routes] --> AG[FastApiAgent]
         AG --> ACT["actors (one per action)"]
@@ -477,11 +477,16 @@ sequenceDiagram
 Bulk pixels never travel through the state system. The detector background
 loop (`run_detector_loop`, `detector.acquire_live(sink)`) pushes frames into the
 **`FrameBroadcaster`** (`backend/newswitch/broadcasters/`; the `FrameSink` `main_fastapi.py` provides),
-which owns shared encoders (zstd, H.264) keyed by `(slot, config)`. Browsers
-open `WS /stream/zstd/{slot}` or `/stream/h264/{slot}`
+which keeps the newest frame per slot. Browsers open `WS /stream/frames/{slot}`
 (`backend/newswitch/routes/liveview.py`, its `router` included by `create_app`;
-the first message is the client's auth frame) and decode with `fzstd`/`jmuxer`
-(`frontend/src/components/liveview/StreamingView.tsx`). Scan/acquisition code
+the first message is the client's auth frame) and get whole frames, one per message: a
+header and the detector's own values (`newswitch/broadcasters/wire.py`), binned to
+`max_size` (default 640; 0 sends full size). The client acknowledges each frame and is sent
+the newest one after that, so a slow viewer skips frames and one can join at any time; without
+this the server would buffer what a client has not taken yet, without limit. uvicorn runs with
+`--ws-per-message-deflate false`: compressing every frame takes a core and most of the
+frame rate. The frontend shares one socket per slot and size per tab
+(`frontend/src/components/liveview/frameStream.ts`). Scan/acquisition code
 can broadcast into additional slots (e.g. stitched-map tiles).
 
 ### 6.1 Two ways to serve
@@ -558,7 +563,7 @@ a fake lovekit client.
 | `newswitch/drivers/virtual/` | Full simulation implementations (stage, LED, detector, objective, filter bank); `simulation/` renders the frames (sample, synthetic PSF, defocus, noise). |
 | `newswitch/drivers/uc2/` | Real hardware: `canopen_bus.py` / `rest_bus.py` / `virtual_bus.py` (transports behind `UC2BusManager`), `event_broker.py` (fan-out), `dispatch.py` (events → states), plus bus-based device managers (`stage_manager.py`, `illumination_manager.py`, `objective_manager.py`, `filter_bank_manager.py`) and `uc2_detector.py` (real cameras through uc2_cam_py). |
 | `newswitch/services/` | The managers every microscope shares: `acquisition.py`, `cache/`, `calibration.py`, `expanse.py`, `io/`, `light_path.py`, `metadata.py`, `hooks/` (`manager.py`: `PythonHookManager`; `software_autofocus.py`). |
-| `newswitch/broadcasters/` | The `FrameSink` protocol (`sink.py`, runtime-checkable; the context the detectors stream to, provided by the entry file), `FrameBroadcaster` + encoders (zstd, H.264) for `main_fastapi.py`; `lovekit.py` for `main_arkitekt.py` (`LovekitSink`, `CameraStream`, `CameraStreams`, `publish_camera_streams`, `MAX_FPS`; not imported by the package). |
+| `newswitch/broadcasters/` | The `FrameSink` protocol (`sink.py`, runtime-checkable; the context the detectors stream to, provided by the entry file), `FrameBroadcaster` (`frame.py`, the newest frame per slot) and the live view's message format (`wire.py`) for `main_fastapi.py`; `lovekit.py` for `main_arkitekt.py` (`LovekitSink`, `CameraStream`, `CameraStreams`, `publish_camera_streams`, `MAX_FPS`; not imported by the package). |
 | `newswitch/accounts/` | Users and auth of the FastAPI server: `auth.py` (login, tokens, middleware), `store.py` (the account database), `routes.py` (account management). (Live view, files and cache are in `newswitch/routes/`.) |
 | `newswitch/reference/complete-microscope.yaml` | The reference microscope: every part, devices only (no `ui`); what the frontend's schemas are exported from. |
 | `configs/` | Device configuration read via `base_config.yaml` (`newswitch-config.yaml`, generated schema in `schemas/`, see `configs/README.md`) and whole-microscope setup files loaded via `NEWSWITCH_CONFIG` (`uc2_serial.json`, `uc2_canopen.json`). |

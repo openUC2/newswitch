@@ -3,14 +3,14 @@ import { useCurrentAffineTransform } from "@/hooks/useCurrentAffineTransform";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { DoubleSide, Matrix4, Mesh } from "three";
-import { useH264LiveTexture } from "../../hooks/useH264LiveTexture";
+import { useLiveFrameTexture } from "../../hooks/useLiveFrameTexture";
 
 export const LivePlane = (props: { detector: Detector }) => {
   const meshRef = useRef<Mesh>(null);
 
-  const { texture: liveTexture } = useH264LiveTexture({
-    detector: props.detector,
-  });
+  const liveTexture = useLiveFrameTexture(props.detector.slot);
+  const imageWidth = liveTexture?.image.width ?? 1;
+  const imageHeight = liveTexture?.image.height ?? 1;
   const affine = useCurrentAffineTransform();
 
   const stageMatrix = useMemo(() => {
@@ -38,24 +38,26 @@ export const LivePlane = (props: { detector: Detector }) => {
       );
     }
 
-    // Apply the 20um scale relative to the affine transform
+    // The longer side is this large relative to the affine transform; the other follows
+    // from the image, so it is not stretched.
     const liveTextureSizeUm = 1024;
+    const longerSide = Math.max(imageWidth, imageHeight);
     const scaleM = new Matrix4().makeScale(
-      liveTextureSizeUm,
-      liveTextureSizeUm,
+      (liveTextureSizeUm * imageWidth) / longerSide,
+      (liveTextureSizeUm * imageHeight) / longerSide,
       1,
     );
     return m.multiply(scaleM);
-  }, [affine]);
+  }, [affine, imageWidth, imageHeight]);
 
-  // NOTE: the per-frame `needsUpdate` flag for the video texture now lives inside
-  // useH264LiveTexture, which owns the texture.
   useFrame(() => {
     if (meshRef.current) {
       meshRef.current.matrix.copy(stageMatrix);
       meshRef.current.matrixWorldNeedsUpdate = true;
     }
   });
+
+  if (!liveTexture) return null;
 
   return (
     <mesh ref={meshRef} matrixAutoUpdate={false}>

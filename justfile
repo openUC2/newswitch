@@ -25,10 +25,12 @@ install:
     npx --yes lefthook install
 
 # ---------- dev ----------
+# --ws-per-message-deflate false: the live view sends whole frames, and compressing every one
+# on the event loop takes a core and most of the frame rate (uvicorn does so by default).
 
 # Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
 dev-backend:
-    cd backend && uv run uvicorn main_fastapi:create --factory --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
+    cd backend && uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
 
 # Frontend only -> http://localhost:$FRONTEND_PORT (codegen reads frontend/schemas/, no backend needed)
 # Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
@@ -53,7 +55,7 @@ dev:
     #!/usr/bin/env bash
     set -uo pipefail
     trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run uvicorn main_fastapi:create --factory --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
+    (cd backend && exec uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
     just wait-backend || echo "!! backend unreachable - the frontend will show it as offline" >&2
     echo "frontend -> http://localhost:{{FRONTEND_PORT}}"
     (cd frontend && exec yarn dev) &
@@ -72,7 +74,7 @@ dev-e2e:
     set -euo pipefail
     trap 'trap - EXIT; kill 0' EXIT INT TERM
     rm -f frontend/test-results/e2e-auth.db
-    (cd backend && NEWSWITCH_AUTH_DB=../frontend/test-results/e2e-auth.db exec uv run uvicorn main_fastapi:create --factory --host {{BACKEND_HOST}} --port {{BACKEND_PORT}}) &
+    (cd backend && NEWSWITCH_AUTH_DB=../frontend/test-results/e2e-auth.db exec uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}}) &
     just wait-backend
     (cd frontend && exec yarn dev --mode test) &
     wait

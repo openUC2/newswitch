@@ -313,7 +313,7 @@ def test_agent_websocket_accepts_an_in_band_token(client: TestClient, token: str
 def test_stream_websocket_rejects_a_missing_token(client: TestClient) -> None:
     """Video sockets carry no frames until the auth frame is accepted."""
     with pytest.raises(WebSocketDisconnect) as excinfo:  # noqa: PT012
-        with client.websocket_connect("/stream/zstd/1") as websocket:
+        with client.websocket_connect("/stream/frames/1") as websocket:
             websocket.send_json({"type": "auth"})
             websocket.receive_bytes()
     assert excinfo.value.code == 1008
@@ -322,7 +322,7 @@ def test_stream_websocket_rejects_a_missing_token(client: TestClient) -> None:
 def test_stream_websocket_rejects_a_wrong_token(client: TestClient) -> None:
     """Video sockets are gated like the agent socket."""
     with pytest.raises(WebSocketDisconnect) as excinfo:  # noqa: PT012
-        with client.websocket_connect("/stream/h264/1") as websocket:
+        with client.websocket_connect("/stream/frames/1") as websocket:
             websocket.send_json({"type": "auth", "token": "nope"})
             websocket.receive_bytes()
     assert excinfo.value.code == 1008

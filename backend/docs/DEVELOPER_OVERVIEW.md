@@ -30,7 +30,7 @@ Files: backend/main_fastapi.py, newswitch/microscope/registry.py, newswitch/micr
 - **Managers** are concrete implementations of the protocol interfaces (`newswitch/protocols/`):
   - drivers (`newswitch/drivers/`): `VirtualStageManager`, `VirtualLEDManager`, `VirtualDetectorManager` (or `UC2DetectorManager` for real cameras, see below), `VirtualObjectiveManager`, `VirtualFilterBankManager`; on UC2 hardware the bus-based managers in `drivers/uc2/`
   - services (`newswitch/services/`): `AcquisitionManager`, `LocalCacheManager`, `CalibrationManager`, `ExpanseManager`, `LocalFileIOManager`, `LightPathManager`, `MetadataManager`, `PythonHookManager`
-- **FrameSink**: the context the detectors stream to, registered by `create_registry` and provided by the entry file's startup hook (`main_fastapi.py`: a `FrameBroadcaster`, which serves the live video encoders and shares video streams; `main_arkitekt.py`: a `LovekitSink`).
+- **FrameSink**: the context the detectors stream to, registered by `create_registry` and provided by the entry file's startup hook (`main_fastapi.py`: a `FrameBroadcaster`, which keeps the newest frame per detector for the websocket live view; `main_arkitekt.py`: a `LovekitSink`).
 - **Startup hooks** (`app.register_startup`, one per configured part): `provide_core`, `provide_stage`, `provide_illumination`, `provide_detector`, `provide_objective`, `provide_filter_bank`, `provide_uc2`, and `provide_focus` for the focus group — closures in `create_registry` with static `Tuple[...]` return annotations, each returning its part's managers and states to the agent. Startup hooks get only the app context injected (no states/contexts exist yet) and none sees another's result, which is why they share one `build_microscope`, made on the first hook; an absent part's manager is never constructed (on hardware nothing talks to the bus for it). The entry files add one module-level startup hook each that provides the `FrameSink` (`provide_frame_broadcaster`, `provide_lovekit_sink`).
 - **Shutdown hooks** (`app.register_shutdown`): `save_device_config` (if the microscope was started) writes runtime values back into the device config,
   `close_detector` closes the detector manager (stops and releases the cameras, which
@@ -196,8 +196,8 @@ File: newswitch/routes/cache.py
 
 File: newswitch/routes/liveview.py
 
-- **WebSocket live view**: `/stream/zstd/{detector_slot}` and `/stream/h264/{detector_slot}` deliver a detector's frames, encoded as the client asks; the client's first message is its auth frame.
-- Clients subscribe to a shared encoder so multiple viewers can share a single encoding pipeline.
+- **WebSocket live view**: `/stream/frames/{detector_slot}?max_size=640&max_fps=30` delivers a detector's frames, one whole frame per message (`newswitch/broadcasters/wire.py`): the detector's own values, binned to `max_size` (0 sends full size); the client's first message is its auth frame, then it answers each frame with a message.
+- A viewer is sent the newest frame once it acknowledged the last (`FrameBroadcaster.subscribe`): a slow one skips frames instead of the server buffering them without limit, and one can join at any time. Run uvicorn with `--ws-per-message-deflate false`, or compressing every frame takes a core and most of the frame rate.
 
 ## Where to look next
 

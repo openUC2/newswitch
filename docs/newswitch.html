@@ -877,11 +877,11 @@ def create_fastapi_registry(devices: NewswitchConfig | None) -&gt; App:
       <div class="h2row"><span class="num">06</span><h2>Video streaming (separate from /ws)</h2></div>
       <p>Bulk pixels never travel through the state system. The detector background loop
         (<code>run_detector_loop</code>, <code>detector.acquire_live(sink)</code>) pushes frames into the
-        <strong>FrameBroadcaster</strong> — the <code>FrameSink</code> <code>main_fastapi.py</code> provides — which owns shared encoders (zstd, H.264) keyed by
-        <code>(slot, config)</code> — ten browsers cost one encode. Browsers open
-        <code>WS /stream/zstd/{slot}</code> or <code>/stream/h264/{slot}</code> — the first message is the
-        client’s auth frame — and decode with
-        <code>fzstd</code> / <code>jmuxer</code>. Scan and acquisition code can broadcast into additional
+        <strong>FrameBroadcaster</strong> — the <code>FrameSink</code> <code>main_fastapi.py</code> provides — which keeps the newest frame per slot. Browsers open
+        <code>WS /stream/frames/{slot}</code> — the first message is the client’s auth frame — and get
+        whole frames, one per message: the detector’s own values, binned to <code>max_size</code>
+        (default 640; 0 sends full size). The client acknowledges each frame and is sent the newest
+        after that, so a slow viewer skips frames. Scan and acquisition code can broadcast into additional
         slots, for example stitched-map tiles.</p>
       <p><code>create_app</code> includes the module-level routers of <code>newswitch/routes/</code> —
         <code>liveview.router</code> at <code>/stream</code>, <code>files.router</code>
@@ -967,7 +967,7 @@ def create_fastapi_registry(devices: NewswitchConfig | None) -&gt; App:
             <tr><td><code>newswitch/drivers/virtual/</code></td><td>Full simulation implementations: stage, LED, detector, objective, filter bank; <code>simulation/</code> renders the frames (sample, synthetic PSF, defocus, noise).</td></tr>
             <tr><td><code>newswitch/drivers/uc2/</code></td><td>Real hardware: <code>canopen_bus.py</code>, <code>rest_bus.py</code>, <code>virtual_bus.py</code> (transports behind <code>UC2BusManager</code>), <code>event_broker.py</code> (fan-out), <code>dispatch.py</code> (events → states), plus bus-based device managers for stage, illumination, objective and filter bank, and <code>uc2_detector.py</code> (real cameras through uc2_cam_py).</td></tr>
             <tr><td><code>newswitch/services/</code></td><td>The managers every microscope shares: <code>acquisition</code>, <code>cache/</code>, <code>calibration</code>, <code>expanse</code>, <code>io/</code>, <code>light_path</code>, <code>metadata</code>, <code>hooks/</code> (<code>manager.py</code>: <code>PythonHookManager</code>; <code>software_autofocus.py</code>).</td></tr>
-            <tr><td><code>newswitch/broadcasters/</code></td><td>The <code>FrameSink</code> protocol (<code>sink.py</code>, runtime-checkable; the context the detectors stream to, provided by the entry file), <code>FrameBroadcaster</code> and encoders (zstd, H.264) for <code>main_fastapi.py</code>; <code>lovekit.py</code> for <code>main_arkitekt.py</code> (<code>LovekitSink</code>, <code>CameraStream</code>, <code>CameraStreams</code>, <code>publish_camera_streams</code>, <code>MAX_FPS</code>; not imported by the package).</td></tr>
+            <tr><td><code>newswitch/broadcasters/</code></td><td>The <code>FrameSink</code> protocol (<code>sink.py</code>, runtime-checkable; the context the detectors stream to, provided by the entry file), <code>FrameBroadcaster</code> and the live view’s message format (<code>wire.py</code>) for <code>main_fastapi.py</code>; <code>lovekit.py</code> for <code>main_arkitekt.py</code> (<code>LovekitSink</code>, <code>CameraStream</code>, <code>CameraStreams</code>, <code>publish_camera_streams</code>, <code>MAX_FPS</code>; not imported by the package).</td></tr>
             <tr><td><code>newswitch/accounts/</code></td><td>Users and auth of the FastAPI server: <code>auth.py</code> (login, tokens, middleware), <code>store.py</code> (the account database), <code>routes.py</code> (account management). Live view, files and cache are in <code>newswitch/routes/</code>.</td></tr>
             <tr><td><code>newswitch/reference/complete-microscope.yaml</code></td><td>The reference microscope: every part, devices only (no <code>ui</code>); what the frontend’s schemas are exported from.</td></tr>
             <tr><td><code>configs/</code></td><td>Device configuration read via <code>base_config.yaml</code> (<code>newswitch-config.yaml</code>, generated schema in <code>schemas/</code>), and whole-microscope setup files loaded via <code>NEWSWITCH_CONFIG</code>: <code>uc2_serial.json</code>, <code>uc2_canopen.json</code>.</td></tr>
