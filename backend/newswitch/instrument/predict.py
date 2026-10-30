@@ -9,15 +9,19 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
-from examples.fake_microscope.spec import Instrument
+from newswitch.instrument.spec import Instrument
 
-COMPILED = Path(__file__).parent / "compiled.json"
+#: What the compiler predicts, in an instrument's folder.
+COMPILED = "compiled.json"
+
+
+class NotCompiled(RuntimeError):
+    """An instrument has no table of what it does, or one of an older description."""
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,7 @@ class Answer:
     distortion_percent: float
     band_nm: float | None  # the mean wavelength arriving, if any arrives
     light: float  # expected counts at the middle of the image
+    light_by_source: Mapping[str, float] = field(default_factory=dict)  # the same, per source
 
     @property
     def black(self) -> bool:
@@ -74,16 +79,19 @@ def assemble(
         if variable.along in ("x", "y"):
             centre["xy".index(variable.along)] = float(state[variable.name])
 
-    light = 0.0
+    # Binned pixels are averaged, not summed (`VirtualDetectorManager._read_out`): binning does
+    # not change the counts.
+    gain = 10.0 ** (float(state.get(f"{detector}.gain", 0.0)) / 20.0)
+    per_mw = state[f"{detector}.exposure"] * COUNTS_PER_LIGHT * gain
+    counts_by_source = {}
     weighted = 0.0
     for source, arriving in coupling.items():
-        power = float(state[f"{source}.power"])
-        amount = power * arriving["light_per_mw"]
-        light += amount
+        amount = float(state[f"{source}.power"]) * arriving["light_per_mw"]
+        counts_by_source[source] = amount * per_mw
         if arriving["band_mean_nm"] is not None:
             weighted += amount * arriving["band_mean_nm"]
-    band = weighted / light if light > 1e-9 else None
-    counts = light * state[f"{detector}.exposure"] * COUNTS_PER_LIGHT * binning**2
+    total = sum(counts_by_source.values())
+    band = weighted * per_mw / total if total > 1e-9 else None
 
     numerical_aperture = imaging["numerical_aperture"]
     airy_um = 0.61 * (band or 550.0) / 1000.0 / numerical_aperture
@@ -99,7 +107,8 @@ def assemble(
         relative_illumination=imaging["relative_illumination"],
         distortion_percent=imaging["distortion_percent"],
         band_nm=band,
-        light=counts,
+        light=total,
+        light_by_source=counts_by_source,
     )
 
 
@@ -112,9 +121,19 @@ class Compiled:
     impacts: list[dict[str, Any]]
 
     @classmethod
-    def load(cls, instrument: Instrument, path: str | Path = COMPILED) -> Compiled:
-        """The compiled microscope at `path`."""
-        data = json.loads(Path(path).read_text())
+    def load(cls, instrument: Instrument, name: str = COMPILED) -> Compiled:
+        """The table called `name` in the instrument's folder.
+
+        Raises:
+            NotCompiled: There is none, or the description changed since: its numbers would be
+                about another microscope. `just compile-fake` makes a new one.
+        """
+        path = instrument.folder / name
+        if not path.is_file():
+            raise NotCompiled(f"{path} does not exist: compile the instrument")
+        data = json.loads(path.read_text())
+        if data.get("digest") != instrument.digest:
+            raise NotCompiled(f"{path} is of another version of the description: compile it again")
         return cls(instrument, data["states"], data["impacts"])
 
     def answer(self, detector: str, state: Mapping[str, Any]) -> Answer:

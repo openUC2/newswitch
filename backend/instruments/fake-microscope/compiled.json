@@ -1,0 +1,505 @@
+{
+ "instrument": "fake-microscope",
+ "digest": "c5c5f1029a9f4850",
+ "states": {
+  "filter-wheel.slot=1,objective.slot=1": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -2.0008691537426415,
+     "reflections": 0,
+     "distortion_percent": -0.3809838483591177,
+     "relative_illumination": 0.47465437788018433,
+     "spot_center_um": 0.8536081112679751,
+     "spot_corner_um": 3.633198785534942,
+     "numerical_aperture": 0.04997828059518496
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.14235185241293735
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -1.0457767278034602e-05,
+      "blur_um_per_um": 0.038406582574594526
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -4.0,
+     "reflections": 1,
+     "distortion_percent": -1.1102230246251565e-14,
+     "relative_illumination": 1.0,
+     "spot_center_um": 1.5025730205206613e-12,
+     "spot_corner_um": 1.7593770803608708e-12,
+     "numerical_aperture": 0.025
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.3008158157515815
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  },
+  "filter-wheel.slot=2,objective.slot=1": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -2.0008716055189955,
+     "reflections": 0,
+     "distortion_percent": -0.3810872720283798,
+     "relative_illumination": 0.47465437788018433,
+     "spot_center_um": 0.8534785059319073,
+     "spot_corner_um": 3.6339121332863513,
+     "numerical_aperture": 0.049978219354090705
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.1423574277431807
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -1.0457763794538443e-05,
+      "blur_um_per_um": 0.03840602815453416
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -4.0,
+     "reflections": 1,
+     "distortion_percent": -1.1102230246251565e-14,
+     "relative_illumination": 1.0,
+     "spot_center_um": 1.5025730205206613e-12,
+     "spot_corner_um": 1.7593770803608708e-12,
+     "numerical_aperture": 0.025
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.3008158157515815
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  },
+  "filter-wheel.slot=1,objective.slot=2": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -4.002231897887929,
+     "reflections": 0,
+     "distortion_percent": -0.4620332979240471,
+     "relative_illumination": 0.3778801843317972,
+     "spot_center_um": 0.8427987716461192,
+     "spot_corner_um": 3.2979629000633777,
+     "numerical_aperture": 0.049972116834495435
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.6029867828149981
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -3.091371902463891e-05,
+      "blur_um_per_um": 0.03897293438700328
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -8.0,
+     "reflections": 1,
+     "distortion_percent": -1.1102230246251565e-14,
+     "relative_illumination": 1.0,
+     "spot_center_um": 2.6724271139647677e-12,
+     "spot_corner_um": 2.741305045161334e-12,
+     "numerical_aperture": 0.025
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 1.2219196199438433
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  },
+  "filter-wheel.slot=2,objective.slot=2": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -4.002237333268571,
+     "reflections": 0,
+     "distortion_percent": -0.4622124053205834,
+     "relative_illumination": 0.3778801843317972,
+     "spot_center_um": 0.8426329657542411,
+     "spot_corner_um": 3.29884317917004,
+     "numerical_aperture": 0.04997204896808626
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.6029920904807275
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -3.091370252670789e-05,
+      "blur_um_per_um": 0.03897229076314689
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -8.0,
+     "reflections": 1,
+     "distortion_percent": -1.1102230246251565e-14,
+     "relative_illumination": 1.0,
+     "spot_center_um": 2.6724271139647677e-12,
+     "spot_corner_um": 2.741305045161334e-12,
+     "numerical_aperture": 0.025
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 1.2219196199438433
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  }
+ },
+ "impacts": [
+  {
+   "variable": "laser-488.power",
+   "verb": "tunes",
+   "nudge": 21.0,
+   "detector": "camera-a",
+   "changes": {
+    "light": 0.05000000000000001
+   }
+  },
+  {
+   "variable": "laser-488.power",
+   "verb": "tunes",
+   "nudge": 21.0,
+   "detector": "camera-b",
+   "changes": {
+    "light": 0.05000000000000001
+   }
+  },
+  {
+   "variable": "led-625.power",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "camera-a",
+   "changes": {
+    "colour": 77.22327496054356,
+    "light": 2.4924626903116263
+   }
+  },
+  {
+   "variable": "led-625.power",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "camera-b",
+   "changes": {
+    "colour": 77.22327496054356,
+    "light": 2.4924626903116263
+   }
+  },
+  {
+   "variable": "stage.x",
+   "verb": "moves",
+   "nudge": 10.0,
+   "detector": "camera-a",
+   "changes": {
+    "position": 2.0008691537426415
+   }
+  },
+  {
+   "variable": "stage.x",
+   "verb": "moves",
+   "nudge": 10.0,
+   "detector": "camera-b",
+   "changes": {
+    "position": 4.0
+   }
+  },
+  {
+   "variable": "stage.y",
+   "verb": "moves",
+   "nudge": 10.0,
+   "detector": "camera-a",
+   "changes": {
+    "position": 2.0008691537426415
+   }
+  },
+  {
+   "variable": "stage.y",
+   "verb": "moves",
+   "nudge": 10.0,
+   "detector": "camera-b",
+   "changes": {
+    "position": 4.0
+   }
+  },
+  {
+   "variable": "stage.z",
+   "verb": "moves",
+   "nudge": 100.0,
+   "detector": "camera-a",
+   "changes": {
+    "blur": 1.214570321647878
+   }
+  },
+  {
+   "variable": "stage.z",
+   "verb": "moves",
+   "nudge": 100.0,
+   "detector": "camera-b",
+   "changes": {
+    "blur": 2.617056186079029
+   }
+  },
+  {
+   "variable": "objective.slot",
+   "verb": "swaps",
+   "nudge": 2,
+   "detector": "camera-a",
+   "changes": {
+    "scale": 128.01578608465243
+   }
+  },
+  {
+   "variable": "objective.slot",
+   "verb": "swaps",
+   "nudge": 2,
+   "detector": "camera-b",
+   "changes": {
+    "scale": 128.0
+   }
+  },
+  {
+   "variable": "filter-wheel.slot",
+   "verb": "swaps",
+   "nudge": 2,
+   "detector": "camera-a",
+   "changes": {
+    "light": 0.08143716296938931
+   }
+  },
+  {
+   "variable": "filter-wheel.slot",
+   "verb": "swaps",
+   "nudge": 2,
+   "detector": "camera-b",
+   "changes": {
+    "light": 0.08143716296938931
+   }
+  },
+  {
+   "variable": "tube-a.dz",
+   "verb": "moves",
+   "nudge": 1000.0,
+   "detector": "camera-a",
+   "changes": {
+    "scale": 1.3310558294612065,
+    "blur": 3.6204949671741318
+   }
+  },
+  {
+   "variable": "tube-a.dz",
+   "verb": "moves",
+   "nudge": 1000.0,
+   "detector": "camera-b",
+   "changes": {}
+  },
+  {
+   "variable": "camera-a.exposure",
+   "verb": "tunes",
+   "nudge": 110.0,
+   "detector": "camera-a",
+   "changes": {
+    "light": 0.10000000000000002
+   }
+  },
+  {
+   "variable": "camera-a.exposure",
+   "verb": "tunes",
+   "nudge": 110.0,
+   "detector": "camera-b",
+   "changes": {}
+  },
+  {
+   "variable": "camera-a.gain",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "camera-a",
+   "changes": {
+    "light": 0.12201845430196338
+   }
+  },
+  {
+   "variable": "camera-a.gain",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "camera-b",
+   "changes": {}
+  },
+  {
+   "variable": "camera-a.binning",
+   "verb": "tunes",
+   "nudge": 2,
+   "detector": "camera-a",
+   "changes": {
+    "pixels": 256.0
+   }
+  },
+  {
+   "variable": "camera-a.binning",
+   "verb": "tunes",
+   "nudge": 2,
+   "detector": "camera-b",
+   "changes": {}
+  },
+  {
+   "variable": "camera-b.exposure",
+   "verb": "tunes",
+   "nudge": 110.0,
+   "detector": "camera-a",
+   "changes": {}
+  },
+  {
+   "variable": "camera-b.exposure",
+   "verb": "tunes",
+   "nudge": 110.0,
+   "detector": "camera-b",
+   "changes": {
+    "light": 0.10000000000000002
+   }
+  },
+  {
+   "variable": "camera-b.gain",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "camera-a",
+   "changes": {}
+  },
+  {
+   "variable": "camera-b.gain",
+   "verb": "tunes",
+   "nudge": 1.0,
+   "detector": "camera-b",
+   "changes": {
+    "light": 0.12201845430196338
+   }
+  },
+  {
+   "variable": "camera-b.binning",
+   "verb": "tunes",
+   "nudge": 2,
+   "detector": "camera-a",
+   "changes": {}
+  },
+  {
+   "variable": "camera-b.binning",
+   "verb": "tunes",
+   "nudge": 2,
+   "detector": "camera-b",
+   "changes": {
+    "pixels": 256.0
+   }
+  }
+ ]
+}

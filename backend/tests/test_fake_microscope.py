@@ -1,6 +1,7 @@
 """The fake microscope: predictions from what it is made of, and catching what is really there."""
 
 import ast
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -8,27 +9,24 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from examples.fake_microscope import spec
-from examples.fake_microscope.predict import Compiled
+from newswitch.instrument import spec
+from newswitch.instrument.predict import Compiled, NotCompiled
 
-HERE = Path(spec.__file__).parent
-PREDICTORS = ("spec.py", "optics.py", "compiler.py", "predict.py")
+BACKEND = Path(__file__).parent.parent
+INSTRUMENT = BACKEND / "instruments" / "fake-microscope"
+PREDICTORS = ("spec.py", "tracing.py", "compiler.py", "predict.py", "parts.py")
 
 
 @pytest.fixture(scope="module")
 def instrument() -> spec.Instrument:
     """The microscope as described."""
-    return spec.load()
+    return spec.load(INSTRUMENT)
 
 
 @pytest.fixture(scope="module")
-def compiled(instrument: spec.Instrument, tmp_path_factory: pytest.TempPathFactory) -> Compiled:
-    """The microscope compiled, into a file of the test's own."""
-    pytest.importorskip("optiland")
-    from examples.fake_microscope.compiler import compile_instrument
-
-    path = tmp_path_factory.mktemp("compiled") / "compiled.json"
-    return Compiled.load(instrument, compile_instrument(instrument, path))
+def compiled(instrument: spec.Instrument) -> Compiled:
+    """What is compiled for the microscope, as a server reads it."""
+    return Compiled.load(instrument)
 
 
 def changes(compiled: Compiled, variable: str, detector: str = "camera-a") -> dict[str, float]:
@@ -52,7 +50,7 @@ def test_routes_are_found_by_walking_the_edges(instrument: spec.Instrument) -> N
 
 def test_an_edge_to_nothing_is_refused(tmp_path: Path) -> None:
     """Everything an edge names has to exist."""
-    text = spec.DESCRIPTION.read_text().replace("to: tube-b", "to: nothing")
+    text = (INSTRUMENT / spec.DESCRIPTION).read_text().replace("to: tube-b", "to: nothing")
     bad = tmp_path / "bad.yml"
     bad.write_text(text)
     with pytest.raises(spec.SpecError, match="no cube 'nothing'"):
@@ -63,7 +61,7 @@ def test_a_sensors_size_lives_on_its_axes_and_nowhere_else(instrument: spec.Inst
     """There is no width or height to disagree with the axes."""
     sensor = instrument.cubes["camera-a"].element
     assert sensor is not None
-    assert sensor.properties["axes"]["x"]["size"] == 256
+    assert sensor.properties["axes"]["x"]["size"] == 512
     assert not {"width", "height", "sensor_width", "sensor_height"} & set(sensor.properties)
 
 
@@ -73,8 +71,9 @@ def test_a_sensors_size_lives_on_its_axes_and_nowhere_else(instrument: spec.Inst
 @pytest.mark.parametrize("module", PREDICTORS)
 def test_nothing_that_predicts_can_see_the_truth(module: str) -> None:
     """Comparing predictions with images only means something if the two are kept apart."""
-    source = (HERE / module).read_text()
+    source = (BACKEND / "newswitch" / "instrument" / module).read_text()
     assert "truth.yml" not in source
+    assert "compiled.truth" not in source
     imported = {
         name
         for node in ast.walk(ast.parse(source))
@@ -85,15 +84,16 @@ def test_nothing_that_predicts_can_see_the_truth(module: str) -> None:
             else [node.module or ""]
         )
     }
-    assert not {name for name in imported if "hardware" in name or "demo" in name}
+    assert not {name for name in imported if "drivers" in name or "check_instrument" in name}
 
 
 def test_the_microscope_side_runs_without_the_optics_library() -> None:
-    """Predicting reads a file: optiland is too heavy for a Pi."""
+    """Predicting and rendering read files: optiland is too heavy for a Pi."""
     code = (
-        "import sys; import examples.fake_microscope.predict; assert 'optiland' not in sys.modules"
+        "import sys, newswitch.instrument.predict, newswitch.drivers.optics.simulator; "
+        "assert 'optiland' not in sys.modules"
     )
-    subprocess.run([sys.executable, "-c", code], check=True, cwd=HERE.parent.parent)
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=BACKEND)
 
 
 # --- the optics
@@ -104,14 +104,14 @@ def test_the_prescription_is_the_lens_it_says_it_is() -> None:
     pytest.importorskip("optiland")
     from optiland.fileio import load_optiland_file
 
-    lens = load_optiland_file(str(HERE / "lenses" / "AC254-100-A.optiland"))
+    lens = load_optiland_file(str(INSTRUMENT / "lenses" / "AC254-100-A.optiland"))
     assert float(lens.paraxial.f2()) == pytest.approx(100.0, abs=0.2)
 
 
 def test_magnification_comes_from_the_pair_of_lenses(instrument: spec.Instrument) -> None:
     """Tube over objective, inverted: and each detector has its own tube lens."""
     pytest.importorskip("optiland")
-    from examples.fake_microscope.optics import imaging
+    from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
     assert imaging(instrument, "camera-a", state, 525.0).magnification == pytest.approx(
@@ -129,7 +129,7 @@ def test_magnification_comes_from_the_pair_of_lenses(instrument: spec.Instrument
 def test_a_reflection_is_counted_along_the_route(instrument: spec.Instrument) -> None:
     """Camera b sits behind the splitter's reflection, camera a behind its transmission."""
     pytest.importorskip("optiland")
-    from examples.fake_microscope.optics import imaging
+    from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
     assert imaging(instrument, "camera-a", state, 525.0).reflections == 0
@@ -139,7 +139,7 @@ def test_a_reflection_is_counted_along_the_route(instrument: spec.Instrument) ->
 def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.Instrument) -> None:
     """A prediction nobody declared: only the camera behind the real lens's aperture is affected."""
     pytest.importorskip("optiland")
-    from examples.fake_microscope.optics import imaging
+    from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
     assert imaging(instrument, "camera-a", state, 525.0).relative_illumination < 0.95
@@ -148,7 +148,7 @@ def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.In
 
 def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrument) -> None:
     """Red light through a green filter: a black image, known before taking it."""
-    from examples.fake_microscope.optics import coupling
+    from newswitch.instrument.tracing import coupling
 
     state = {**instrument.initial_state(), "filter-wheel.slot": 2}
     arriving = coupling(instrument, "camera-a", state)
@@ -158,7 +158,7 @@ def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrum
 
 def test_the_dichroic_keeps_the_laser_from_the_camera(instrument: spec.Instrument) -> None:
     """What arrives from the laser is the sample's emission, not the laser."""
-    from examples.fake_microscope.optics import coupling
+    from newswitch.instrument.tracing import coupling
 
     arriving = coupling(instrument, "camera-a", instrument.initial_state())
     assert arriving["laser-488"]["band_mean_nm"] == pytest.approx(515.0, abs=5.0)
@@ -211,11 +211,38 @@ def test_tuning_one_camera_leaves_the_other_alone(compiled: Compiled) -> None:
 # --- the table
 
 
+def test_the_committed_tables_are_what_compiling_gives_now(tmp_path: Path) -> None:
+    """A server trusts these files: they must come from the description and optics next to them."""
+    pytest.importorskip("optiland")
+    from newswitch.drivers.optics.simulator import TRUTH_TABLE, optical_errors
+    from newswitch.instrument.compiler import compile_instrument
+
+    copy = tmp_path / "instrument"
+    shutil.copytree(INSTRUMENT, copy)
+    again = spec.load(copy)
+    for name, errors in (("compiled.json", None), (TRUTH_TABLE, optical_errors(again))):
+        written = compile_instrument(again, name, errors)
+        assert written.read_text() == (INSTRUMENT / name).read_text(), (
+            f"run: just compile-fake ({name})"
+        )
+
+
+def test_a_table_of_another_description_is_refused(tmp_path: Path) -> None:
+    """Its numbers would be about another microscope."""
+    copy = tmp_path / "instrument"
+    shutil.copytree(INSTRUMENT, copy)
+    description = copy / spec.DESCRIPTION
+    description.write_text(description.read_text().replace("f: 50 mm", "f: 40 mm"))
+    with pytest.raises(NotCompiled, match="compile it again"):
+        Compiled.load(spec.load(copy))
+
+
 def test_the_table_answers_what_a_trace_would(
     instrument: spec.Instrument, compiled: Compiled
 ) -> None:
     """What the microscope reads is what the tracer found."""
-    from examples.fake_microscope.compiler import traced_answer
+    pytest.importorskip("optiland")
+    from newswitch.instrument.compiler import traced_answer
 
     state = {**instrument.initial_state(), "objective.slot": 2, "filter-wheel.slot": 2}
     for detector in instrument.detectors():
@@ -229,7 +256,8 @@ def test_the_table_follows_a_move_along_the_axis(
     instrument: spec.Instrument, compiled: Compiled
 ) -> None:
     """Scale and blur through the sensitivities, close to tracing it."""
-    from examples.fake_microscope.compiler import traced_answer
+    pytest.importorskip("optiland")
+    from newswitch.instrument.compiler import traced_answer
 
     state = {**instrument.initial_state(), "tube-a.dz": 500.0}
     table = compiled.answer("camera-a", state)
@@ -242,12 +270,11 @@ def test_the_table_follows_a_move_along_the_axis(
 
 
 @pytest.fixture(scope="module")
-def microscope(instrument: spec.Instrument):  # noqa: ANN201 - only importable with optiland
+def microscope(instrument: spec.Instrument):  # noqa: ANN201
     """The fake hardware, with its hidden errors."""
-    pytest.importorskip("optiland")
-    from examples.fake_microscope.hardware import FakeMicroscope
+    from newswitch.drivers.optics.simulator import SimulatedMicroscope
 
-    return FakeMicroscope(instrument)
+    return SimulatedMicroscope(instrument)
 
 
 @pytest.mark.parametrize(
@@ -260,7 +287,7 @@ def test_the_images_reveal_what_the_description_does_not_say(
     turn: float,  # noqa: ANN001
 ) -> None:
     """A 2% scale error and a turned camera, found from the images alone."""
-    from examples.fake_microscope.demo import measure
+    from newswitch.tools.check_instrument import measure
 
     microscope.set({"filter-wheel.slot": 1})
     size, measured_turn = measure(microscope, detector)

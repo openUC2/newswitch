@@ -582,6 +582,26 @@ a fake lovekit client.
 | React widget + Redux slice + axios file | one component using **generated** hooks |
 | setup JSON `availableWidgets` | `Settings` / `NEWSWITCH_CONFIG` file + which parts `configured_parts` finds (`build_microscope` builds, `create_registry` registers) |
 
+### Instruments: a microscope described by its optical elements
+
+A second way to say what the microscope is, next to a device configuration, in
+`backend/instruments/<name>/`. It is chosen the same way, `NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml`
+(`just dev-fake`), and `load_settings` tells the two apart by the file's `spec:` line. So far it runs simulated
+and in FastAPI mode only; anything else is refused at startup.
+
+- `microscope.yml` holds cubes around optical elements, what an actuator does to each (moves, swaps, tunes) and
+  how light connects them. A sensor's size is on its axes and nowhere else. Nothing says what impacts what.
+- `newswitch/instrument/compiler.py` works that out: it ray traces every combination of swaps with optiland and
+  nudges every variable. It writes `compiled.json`, which is committed. `just compile-fake` runs it again, needed
+  after a change to what the description says; a server refuses tables of another version of it. Optiland is
+  never installed with the server, and `tracing.py` is the only module importing it.
+- `newswitch/instrument/parts.py` is to an instrument what `config_io/adapters.py` is to a device configuration:
+  it gives the models the managers take, so `build_microscope` and everything after it stay the same.
+- `newswitch/drivers/optics/` is the simulator. Only it may read `truth.yml`, the errors the real thing has and
+  the description does not know of, and `compiled.truth.json`, the same trace with those applied. Calibration has to
+  find them from the images: `python -m newswitch.tools.check_instrument instruments/fake-microscope` compares
+  prediction, measurement and truth.
+
 ---
 
 ## 8. The UC2 hardware layer

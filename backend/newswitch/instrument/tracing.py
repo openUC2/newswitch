@@ -1,7 +1,7 @@
 """What light does on its way: ray tracing for geometry, and transmission curves for colour.
 
 The only module that imports optiland, and only when it traces, because this runs at compile time
-on a real computer: a microscope only ever reads what came out (`predict.py`).
+on a real computer: a microscope only ever reads what came out (`newswitch.instrument.predict`).
 
 Each route is traced on its own, as a straight line with mirrors unfolded: optiland traces one
 sequence of surfaces, and branching is the job of the routes. Filters and dichroics only shape the
@@ -23,9 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from examples.fake_microscope.spec import Edge, Element, Instrument
-
-HERE = Path(__file__).parent
+from newswitch.instrument.spec import Edge, Element, Instrument
 
 #: The spectrum everything is computed on, in nanometres.
 WAVELENGTHS = np.arange(350.0, 801.0, 1.0)
@@ -115,7 +113,7 @@ def coupling(
 
 def _prescription_surfaces(path: str) -> list[dict[str, Any]]:
     """A lens's surfaces as its file states them: never retyped, as one wrong radius is a wrong lens."""
-    data = json.loads((HERE / path).read_text())
+    data = json.loads(Path(path).read_text())
     surfaces = data["surface_group"]["surfaces"][1:-1]  # neither the object nor the image
     found = []
     for surface in surfaces:
@@ -268,7 +266,7 @@ def imaging(
             if "prescription" in target.properties:
                 pending = {
                     "kind": "prescription",
-                    "what": target.properties["prescription"],
+                    "what": str(instrument.folder / target.properties["prescription"]),
                     "clear_radius": target.properties.get("clear_radius", 11.43),
                 }
             else:

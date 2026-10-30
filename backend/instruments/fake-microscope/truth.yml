@@ -1,4 +1,4 @@
-# What the microscope really is: read by hardware.py alone. The compiler and the predictions must
+# What the microscope really is: read by the simulator alone (newswitch/drivers/optics). The compiler and the predictions must
 # never see this, or comparing them with the images would prove nothing. Each error exercises
 # something different.
 

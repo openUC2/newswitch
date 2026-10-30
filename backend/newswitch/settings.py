@@ -27,6 +27,7 @@ from pydantic_settings import (
 )
 
 from newswitch import config_io
+from newswitch.instrument import spec as instrument_spec
 
 #: The base settings file; see the comments in it. Relative folders in it are taken
 #: relative to its own folder, so the working directory does not matter.
@@ -66,6 +67,10 @@ class Settings(BaseSettings):
     """Device configuration read at startup: `static_config_path` or
     `persistent_config_path` (changes always go into the persistent one, see
     `config_io.open_config`). None keeps the built-in virtual devices."""
+
+    instrument: Optional[Path] = None
+    """A microscope described by its optical elements (`newswitch.instrument`), in place of a
+    device configuration."""
 
     camera_recording_dir: Optional[Path] = None
     """Folder the cameras record into (see `drivers.uc2.uc2_detector`). None: the default of
@@ -118,7 +123,9 @@ class Settings(BaseSettings):
             return {key: value for key, value in data.items() if not str(key).startswith("_")}
         return data
 
-    @field_validator("config_dir", "schema_dir", "camera_recording_dir", "image_dir", "cache_dir")
+    @field_validator(
+        "instrument", "config_dir", "schema_dir", "camera_recording_dir", "image_dir", "cache_dir"
+    )
     @classmethod
     def _relative_to_base_config(cls, path: Optional[Path]) -> Optional[Path]:
         if path is None or path.is_absolute():
@@ -166,6 +173,9 @@ def load_settings(named: Optional[str] = None) -> Settings:
     if not path.is_absolute():
         path = BASE_CONFIG_FILE.parent / path
 
+    if instrument_spec.is_description(path):
+        return Settings(instrument=path, config_file=None)
+
     if path.suffix.lower() in (".yaml", ".yml"):
         # A device configuration: read as the static file; changes go beside it.
         return Settings(
@@ -176,9 +186,13 @@ def load_settings(named: Optional[str] = None) -> Settings:
     return Settings(**json.loads(path.read_text()))
 
 
-def load_devices(config: Settings) -> config_io.NewswitchConfig | None:
-    """The device configuration `config` points at (static or persistent file, see
-    base_config.yaml); None when no file is configured."""
+def load_devices(
+    config: Settings,
+) -> config_io.NewswitchConfig | instrument_spec.Instrument | None:
+    """What `config` points at: an instrument, or a device configuration (static or persistent
+    file, see base_config.yaml); None when neither is configured."""
+    if config.instrument is not None:
+        return instrument_spec.load(config.instrument)
     if config.config_file is None:
         return None
     return config_io.open_config(

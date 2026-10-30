@@ -1,17 +1,27 @@
-"""The microscope as the designer describes it: cubes, their elements, and how light connects them."""
+"""The microscope as the designer describes it: cubes, their elements, and how light connects them.
+
+An instrument is a folder: its description (``microscope.yml``), the optics files it names, and
+what the compiler found (`newswitch.instrument.compiler`). A server can run from it directly
+(``NEWSWITCH_CONFIG=instruments/<name>/microscope.yml``).
+"""
 
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import pint
 import yaml
 
-DESCRIPTION = Path(__file__).parent / "microscope.yml"
+#: The description's name in an instrument's folder.
+DESCRIPTION = "microscope.yml"
+#: What a description states it is, followed by its version.
+SPEC = "newswitch/instrument/"
 
 _UNITS = pint.UnitRegistry()
 
@@ -26,6 +36,8 @@ _CANONICAL = {
     "emission": "nm",
     "emission_width": "nm",
     "f": "mm",
+    "working_distance": "mm",
+    "max_power": "mW",
     "clear_radius": "mm",
     "pitch": "um",
     "distance": "mm",
@@ -65,6 +77,9 @@ class Variable:
     along: str | None = None  # moves: x, y, or the optical axis
     actuator: str | None = None
     units: str | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    speed: float | None = None
     slots: Mapping[int, Element] | None = None
 
 
@@ -102,10 +117,15 @@ class Instrument:
     """A whole description."""
 
     name: str
+    folder: Path
     sample: Mapping[str, Any]
     cubes: Mapping[str, Cube]
     illumination: tuple[Edge, ...]
     detection: tuple[Edge, ...]
+    views: tuple[str, ...] = ()
+    digest: str = ""
+    #: What an old configuration ships besides its devices; an instrument has none of its own yet.
+    assets: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def variables(self) -> dict[str, Variable]:
@@ -186,6 +206,9 @@ def _variables(name: str, spec: Mapping[str, Any]) -> dict[str, Variable]:
                 along=declared.get("along"),
                 actuator=declared.get("actuator"),
                 units=declared.get("units"),
+                minimum=declared.get("min"),
+                maximum=declared.get("max"),
+                speed=declared.get("speed"),
             )
     for short, declared in (spec.get("swaps") or {}).items():
         variables[short] = Variable(
@@ -209,14 +232,35 @@ def _edges(declared: list[Mapping[str, Any]]) -> tuple[Edge, ...]:
     return tuple(edges)
 
 
-def load(path: str | Path = DESCRIPTION) -> Instrument:
-    """The instrument the file at `path` describes.
+def _digest(data: Mapping[str, Any]) -> str:
+    """What a description says, so that rewording a comment does not outdate its tables."""
+    encoded = json.dumps(data, sort_keys=True, default=str).encode()
+    return hashlib.blake2b(encoded, digest_size=8).hexdigest()
+
+
+def is_description(path: str | Path) -> bool:
+    """Whether `path` is an instrument: a description, or a folder holding one."""
+    path = Path(path)
+    if path.is_dir():
+        path = path / DESCRIPTION
+    if not path.is_file() or path.suffix.lower() not in (".yml", ".yaml"):
+        return False
+    data = yaml.safe_load(path.read_text())
+    return isinstance(data, dict) and str(data.get("spec", "")).startswith(SPEC)
+
+
+def load(path: str | Path) -> Instrument:
+    """The instrument described at `path`: a description, or a folder holding one.
 
     Raises:
-        SpecError: An edge names a cube that does not exist, or a detector has no route.
+        SpecError: It is not one, an edge names a cube that does not exist, or a detector has
+            no route.
     """
-    data = yaml.safe_load(Path(path).read_text())
-    if not str(data.get("spec", "")).startswith("newswitch/instrument/"):
+    path = Path(path)
+    if path.is_dir():
+        path = path / DESCRIPTION
+    data = yaml.safe_load(path.read_text())
+    if not str(data.get("spec", "")).startswith(SPEC):
         raise SpecError(f"{path} does not say it is an instrument description")
     cubes = {
         name: Cube(
@@ -228,12 +272,15 @@ def load(path: str | Path = DESCRIPTION) -> Instrument:
     }
     instrument = Instrument(
         name=data["name"],
+        folder=path.parent.resolve(),
         sample=_canonical(
             {**data["sample"], **_canonical(data["sample"].get("fluorophore") or {})}
         ),
         cubes=cubes,
         illumination=_edges(data["illumination"]),
         detection=_edges(data["detection"]),
+        views=tuple((data.get("ui") or {}).get("views") or ()),
+        digest=_digest(data),
     )
     problems = [
         f"an edge names no cube {name!r}"

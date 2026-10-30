@@ -36,6 +36,7 @@ from newswitch.microscope import locks
 from newswitch.actions import core, detector, filter_bank, illumination, objective, stage, uc2
 from newswitch.settings import Settings
 from newswitch.config_io import NewswitchConfig
+from newswitch.instrument.spec import Instrument
 from newswitch.microscope.parts import (
     Microscope,
     build_microscope,
@@ -77,7 +78,9 @@ from newswitch.states.stage import StageState
 from newswitch.states.uc2 import UC2State
 
 
-def create_registry(devices: NewswitchConfig | None, services: Sequence[Service[Any]] = ()) -> App:
+def create_registry(
+    devices: NewswitchConfig | Instrument | None, services: Sequence[Service[Any]] = ()
+) -> App:
     """A new app registry with what the microscope of `devices` has.
 
     Args:

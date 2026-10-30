@@ -1,25 +1,23 @@
 """The whole loop: what the design predicts, what the images measure, and what was really there.
 
-    uv run --with optiland python -m examples.fake_microscope.demo
+    uv run python -m newswitch.tools.check_instrument instruments/fake-microscope
 
-Images land in ``examples/fake_microscope/out/``.
+Reads the compiled tables, so it needs no optics library. Images land in the instrument's ``out/``.
 """
 
 from __future__ import annotations
 
+import argparse
 import math
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from examples.fake_microscope.compiler import compile_instrument
-from examples.fake_microscope.hardware import FakeMicroscope
-from examples.fake_microscope.predict import Compiled
-from examples.fake_microscope.spec import load
+from newswitch.drivers.optics.simulator import SimulatedMicroscope
+from newswitch.instrument.predict import Compiled
+from newswitch.instrument.spec import load
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
-
-OUT = Path(__file__).parent / "out"
 
 #: How far apart prediction and measurement may be before it is worth saying so.
 SCALE_TOLERANCE_PERCENT = 0.5
@@ -27,16 +25,16 @@ ROTATION_TOLERANCE_DEG = 0.25
 SHIFT_TOLERANCE_PX = 0.5
 
 
-def save(name: str, frame: np.ndarray) -> None:
+def save(folder: Path, name: str, frame: np.ndarray) -> None:
     """Keep an image to look at, stretched to its own range."""
-    OUT.mkdir(exist_ok=True)
+    folder.mkdir(exist_ok=True)
     low, high = np.percentile(frame, (0.5, 99.9))
     scaled = np.clip((frame.astype(float) - low) / max(high - low, 1.0), 0.0, 1.0)
-    Image.fromarray((scaled * 255).astype(np.uint8)).save(OUT / f"{name}.png")
+    Image.fromarray((scaled * 255).astype(np.uint8)).save(folder / f"{name}.png")
 
 
 def _stage_moves(
-    microscope: FakeMicroscope, detector: str, step: float
+    microscope: SimulatedMicroscope, detector: str, step: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """An image, one after moving the stage in x, and one after moving it in y."""
     x, y = microscope.state["stage.x"], microscope.state["stage.y"]
@@ -57,7 +55,7 @@ def _size_and_rotation(matrix: np.ndarray) -> tuple[float, float]:
     )
 
 
-def measure(microscope: FakeMicroscope, detector: str) -> tuple[float, float]:
+def measure(microscope: SimulatedMicroscope, detector: str) -> tuple[float, float]:
     """newswitch's own calibration arithmetic on the fake images: pixel size, and its turn."""
     step = 100.0
     frames = _stage_moves(microscope, detector, step)
@@ -69,12 +67,14 @@ def flag(mismatch: float, tolerance: float) -> str:
     return "MISMATCH" if abs(mismatch) > tolerance else "ok"
 
 
-def main() -> None:
-    """Run the loop."""
-    instrument = load()
-    print("=== Compile: ray trace every combination of swaps, and nudge every variable")
-    compiled = Compiled.load(instrument, compile_instrument(instrument))
-    print(f"  {len(compiled.states)} combinations, {len(instrument.detectors())} detectors")
+def main(argv: list[str] | None = None) -> None:
+    """Run the loop on the instrument the command line names."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("instrument", type=Path, help="the instrument's folder")
+    instrument = load(parser.parse_args(argv).instrument)
+    compiled = Compiled.load(instrument)
+    out = instrument.folder / "out"
+    print(f"=== {len(compiled.states)} combinations, {len(instrument.detectors())} detectors")
 
     print("\n=== What impacts what: calculated, nothing declared this")
     for row in compiled.impacts:
@@ -109,7 +109,7 @@ def main() -> None:
         }
         print(f"  {key}: {row['camera-a']}")
 
-    microscope = FakeMicroscope(instrument)
+    microscope = SimulatedMicroscope(instrument)
     print("\n=== Measure the fake images with newswitch's own calibration code")
     print(f"  {'':22} {'predicted':>10} {'measured':>10}")
     for detector in instrument.detectors():
@@ -125,7 +125,7 @@ def main() -> None:
             f"  {detector} turn, degrees  {0.0:10.2f} {turn:10.2f}   "
             f"{flag(turn, ROTATION_TOLERANCE_DEG)}"
         )
-        save(f"{detector}-filter1", microscope.image(detector))
+        save(out, f"{detector}-filter1", microscope.image(detector))
 
     print("\n=== Swap the filter: the design says the image cannot move")
     for detector in instrument.detectors():
@@ -133,7 +133,7 @@ def main() -> None:
         before = microscope.image(detector)
         microscope.set({"filter-wheel.slot": 2})
         after = microscope.image(detector)
-        save(f"{detector}-filter2", after)
+        save(out, f"{detector}-filter2", after)
         shift = pixel_shift(before, after)
         print(
             f"  {detector}: predicted 0.00 px, measured ({shift[0]:+.2f}, {shift[1]:+.2f})   "
@@ -150,7 +150,7 @@ def main() -> None:
     )
     microscope.set({"filter-wheel.slot": 1})
     answer = compiled.answer("camera-a", microscope.state)
-    save("camera-a-transmitted", microscope.image("camera-a"))
+    save(out, "camera-a-transmitted", microscope.image("camera-a"))
     print(f"  filter open: predicted {answer.light:.0f} counts, black: {answer.black}")
 
     print("\n=== The truth, now that everyone has answered")

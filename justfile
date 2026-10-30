@@ -39,6 +39,14 @@ dev-backend:
 dev-frontend:
     cd frontend && yarn dev
 
+# Backend + frontend on the fake microscope: a simulated instrument, with hidden errors
+dev-fake:
+    NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev
+
+# Ray trace the fake microscope again, after changing its description (needs nothing installed)
+compile-fake:
+    cd backend && uv run --with optiland python -m newswitch.tools.compile_instrument instruments/fake-microscope
+
 # The mikro stack in docker: images and their metadata, for FastAPI mode
 mikro:
     docker compose --profile mikro up -d mikro

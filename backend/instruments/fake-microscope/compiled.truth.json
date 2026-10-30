@@ -1,0 +1,263 @@
+{
+ "instrument": "fake-microscope",
+ "digest": "c5c5f1029a9f4850",
+ "states": {
+  "filter-wheel.slot=1,objective.slot=1": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -1.9616267467442972,
+     "reflections": 0,
+     "distortion_percent": -0.37788902669334545,
+     "relative_illumination": 0.47465437788018433,
+     "spot_center_um": 0.8395912634884884,
+     "spot_corner_um": 3.6955199113549178,
+     "numerical_aperture": 0.05097809772729167
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.13965720725889003
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -1.0056670188169692e-05,
+      "blur_um_per_um": 0.039136914286079176
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -3.9215686274509793,
+     "reflections": 1,
+     "distortion_percent": 2.220446049250313e-14,
+     "relative_illumination": 1.0,
+     "spot_center_um": 1.109059119410871e-12,
+     "spot_corner_um": 1.3912271065557895e-12,
+     "numerical_aperture": 0.02550000000000001
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.2949174664231129
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  },
+  "filter-wheel.slot=2,objective.slot=1": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -1.9616291400185035,
+     "reflections": 0,
+     "distortion_percent": -0.37798997344147267,
+     "relative_illumination": 0.47465437788018433,
+     "spot_center_um": 0.8394155496582327,
+     "spot_corner_um": 3.6962097777833716,
+     "numerical_aperture": 0.05097803553176047
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.13966401330622033
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -1.0056666959858962e-05,
+      "blur_um_per_um": 0.03913624406593855
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -3.9215686274509793,
+     "reflections": 1,
+     "distortion_percent": 2.220446049250313e-14,
+     "relative_illumination": 1.0,
+     "spot_center_um": 1.109059119410871e-12,
+     "spot_corner_um": 1.3912271065557895e-12,
+     "numerical_aperture": 0.02550000000000001
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.2949174664231129
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  },
+  "filter-wheel.slot=1,objective.slot=2": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -3.9237470849920393,
+     "reflections": 0,
+     "distortion_percent": -0.4603435569965675,
+     "relative_illumination": 0.3778801843317972,
+     "spot_center_um": 0.8280879599695089,
+     "spot_corner_um": 3.3525356293151387,
+     "numerical_aperture": 0.05097168488891169
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.5912614354490562
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -3.011152483066626e-05,
+      "blur_um_per_um": 0.03971304137224537
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -7.8431372549019605,
+     "reflections": 1,
+     "distortion_percent": 0.0,
+     "relative_illumination": 1.0,
+     "spot_center_um": 2.0565273384207473e-12,
+     "spot_corner_um": 2.2869504675000672e-12,
+     "numerical_aperture": 0.025500000000000002
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.009027216370162348,
+      "band_mean_nm": 516.7940045113954
+     },
+     "led-625": {
+      "light_per_mw": 0.45,
+      "band_mean_nm": 624.9999999999999
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 1.1979604117096663
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  },
+  "filter-wheel.slot=2,objective.slot=2": {
+   "camera-a": {
+    "imaging": {
+     "magnification": -3.923752403368841,
+     "reflections": 0,
+     "distortion_percent": -0.4605208732742061,
+     "relative_illumination": 0.3778801843317972,
+     "spot_center_um": 0.8278799371855362,
+     "spot_corner_um": 3.3533958486978013,
+     "numerical_aperture": 0.05097161580029483
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.5912679507491677
+     },
+     "tube-a.dz": {
+      "magnification_per_um": -3.0111508843114532e-05,
+      "blur_um_per_um": 0.039712274919813544
+     }
+    }
+   },
+   "camera-b": {
+    "imaging": {
+     "magnification": -7.8431372549019605,
+     "reflections": 1,
+     "distortion_percent": 0.0,
+     "relative_illumination": 1.0,
+     "spot_center_um": 2.0565273384207473e-12,
+     "spot_corner_um": 2.2869504675000672e-12,
+     "numerical_aperture": 0.025500000000000002
+    },
+    "coupling": {
+     "laser-488": {
+      "light_per_mw": 0.008292065479465498,
+      "band_mean_nm": 517.2681257564836
+     },
+     "led-625": {
+      "light_per_mw": 3.526038656129833e-15,
+      "band_mean_nm": null
+     }
+    },
+    "axial": {
+     "stage.z": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 1.1979604117096663
+     },
+     "tube-a.dz": {
+      "magnification_per_um": 0.0,
+      "blur_um_per_um": 0.0
+     }
+    }
+   }
+  }
+ },
+ "impacts": []
+}

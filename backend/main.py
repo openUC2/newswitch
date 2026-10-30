@@ -27,16 +27,26 @@ schemas, recovering accounts) are in `newswitch.tools`.
 import argparse
 
 from newswitch import config_io, settings
+from newswitch.instrument.spec import Instrument
 
 
-def load_devices(config: settings.Settings, ui_section: str) -> config_io.NewswitchConfig | None:
-    """Step 2: the device configuration of `config`, which must have `ui_section`.
+def load_devices(
+    config: settings.Settings, ui_section: str
+) -> config_io.NewswitchConfig | Instrument | None:
+    """Step 2: the device configuration of `config`, which must have `ui_section`, or its instrument.
 
     Raises:
         config_io.ConfigError: It has no `ui_section` (``ui`` for FastAPI, ``agent_ui``
-            for arkitekt): newswitch shows only the bloks its configuration lists.
+            for arkitekt): newswitch shows only the bloks its configuration lists. An instrument
+            runs in FastAPI mode only: it has no ``agent_ui``.
     """
     devices = settings.load_devices(config)
+    if isinstance(devices, Instrument):
+        if ui_section != "ui":
+            raise config_io.ConfigError(
+                f"{devices.name} is an instrument, which runs in FastAPI mode only so far"
+            )
+        return devices
     if devices is not None and getattr(devices, ui_section) is None:
         raise config_io.ConfigError(
             f"{config.config_file} has no {ui_section} section: newswitch shows only the "

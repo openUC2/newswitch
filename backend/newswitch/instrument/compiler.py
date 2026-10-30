@@ -1,10 +1,8 @@
 """Work out what the microscope does, from what it is made of.
 
-    uv run --with optiland python -m examples.fake_microscope.compiler
-
-Traces every combination of what the swaps can put in place, for each detector, and nudges every
+Run through ``newswitch.tools.compile_instrument``. Traces every combination of what the swaps can put in place, for each detector, and nudges every
 variable to see what changes. So what impacts what is calculated, with a size, and nothing declares
-it. The result is a plain file (`compiled.json`), which is all a microscope needs to read.
+it. The result is a plain file, which is all a microscope needs to read.
 """
 
 from __future__ import annotations
@@ -15,9 +13,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from examples.fake_microscope import optics
-from examples.fake_microscope.predict import COMPILED, Answer, assemble, state_key
-from examples.fake_microscope.spec import Instrument, load
+from newswitch.instrument import tracing
+from newswitch.instrument.predict import COMPILED, Answer, assemble, state_key
+from newswitch.instrument.spec import Instrument
 
 #: How much of a change counts: below these, a nudge did not matter.
 TOLERANCES = {
@@ -36,16 +34,23 @@ def traced_answer(instrument: Instrument, detector: str, state: Mapping[str, Any
 
 
 def _trace(
-    instrument: Instrument, detector: str, state: Mapping[str, Any]
+    instrument: Instrument,
+    detector: str,
+    state: Mapping[str, Any],
+    errors: tracing.Errors = tracing.Errors(),
 ) -> tuple[dict[str, float], dict[str, dict[str, Any]]]:
-    coupling = optics.coupling(instrument, detector, state)
+    coupling = tracing.coupling(instrument, detector, state)
     bands = [a["band_mean_nm"] for a in coupling.values() if a["band_mean_nm"] is not None]
     wavelength = bands[0] if bands else 550.0
-    return asdict(optics.imaging(instrument, detector, state, wavelength)), coupling
+    return asdict(tracing.imaging(instrument, detector, state, wavelength, errors)), coupling
 
 
 def _axial(
-    instrument: Instrument, detector: str, state: Mapping[str, Any], imaging: Mapping[str, float]
+    instrument: Instrument,
+    detector: str,
+    state: Mapping[str, Any],
+    imaging: Mapping[str, float],
+    errors: tracing.Errors,
 ) -> dict[str, dict[str, float]]:
     """How each move along the optical axis changes scale and blur, per micrometre."""
     found = {}
@@ -53,7 +58,9 @@ def _axial(
         if variable.verb != "moves" or variable.along != "axis":
             continue
         assert variable.step is not None
-        moved, _ = _trace(instrument, detector, {**state, name: state[name] + variable.step})
+        moved, _ = _trace(
+            instrument, detector, {**state, name: state[name] + variable.step}, errors
+        )
         blur = max(moved["spot_center_um"] ** 2 - imaging["spot_center_um"] ** 2, 0.0) ** 0.5
         found[name] = {
             "magnification_per_um": (moved["magnification"] - imaging["magnification"])
@@ -117,32 +124,37 @@ def impacts(instrument: Instrument, state: Mapping[str, Any]) -> list[dict[str, 
     return rows
 
 
-def compile_instrument(instrument: Instrument, path: str | Path = COMPILED) -> Path:
-    """Write what `instrument` does to `path`: a table a microscope can read without tracing."""
+def compile_instrument(
+    instrument: Instrument, name: str = COMPILED, errors: tracing.Errors | None = None
+) -> Path:
+    """Write what `instrument` does to the file `name` in its folder.
+
+    With `errors`, what a microscope with those errors really does, so that a simulator can render
+    it without tracing. Those are passed in: the compiler itself knows only the description.
+    """
+    applied = errors or tracing.Errors()
     states: dict[str, dict[str, Any]] = {}
     for state in instrument.swap_states():
         entry = {}
         for detector in instrument.detectors():
-            imaging, coupling = _trace(instrument, detector, state)
+            imaging, coupling = _trace(instrument, detector, state, applied)
             entry[detector] = {
                 "imaging": imaging,
                 "coupling": coupling,
-                "axial": _axial(instrument, detector, state, imaging),
+                "axial": _axial(instrument, detector, state, imaging, applied),
             }
         states[state_key(instrument, state)] = entry
-    path = Path(path)
+    path = instrument.folder / name
     path.write_text(
         json.dumps(
             {
                 "instrument": instrument.name,
+                "digest": instrument.digest,
                 "states": states,
-                "impacts": impacts(instrument, instrument.initial_state()),
+                "impacts": [] if errors else impacts(instrument, instrument.initial_state()),
             },
             indent=1,
         )
+        + "\n"
     )
     return path
-
-
-if __name__ == "__main__":
-    print(f"wrote {compile_instrument(load())}")

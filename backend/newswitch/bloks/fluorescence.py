@@ -140,6 +140,23 @@ EXCITATION = f"""
     </foreach>
 </div>"""
 
+#: The objectives: the one in the light path is lit, a click switches.
+OBJECTIVES = f"""
+<div className="{TILE} flex flex-col gap-2 past:pointer-events-none">
+    <span className="{EYEBROW}">Objective</span>
+    <foreach items={{self.ObjectiveState.mounted_lenses}} let="lens" key={{lens.slot}}>
+        <if when={{lens.slot == self.ObjectiveState.slot}}>
+            <div className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-3 py-2">
+                <span className="size-2 rounded-full bg-success shadow-[0_0_10px_2px] shadow-success/60" />
+                <span className="text-sm font-medium">{{lens.name}}</span>
+            </div>
+        <else>
+            <Button variant="ghost" fullWidth={{true}} className="justify-start rounded-xl" onClick={{self.switch_objective(slot: lens.slot)}}>{{lens.name}}</Button>
+        </else>
+        </if>
+    </foreach>
+</div>"""
+
 #: The emission filters: the one in the light path is lit, a click switches.
 EMISSION = f"""
 <div className="{TILE} flex flex-col gap-2 past:pointer-events-none">
@@ -287,13 +304,13 @@ LIVE_BUTTONS = """
 </div>"""
 
 
-def fluorescence_ui(has_filters: bool) -> str:
+def fluorescence_ui(has_filters: bool, has_objectives: bool = False) -> str:
     """The fluorescence view: the image large, the light path's controls beside it."""
     return f"""
 <Html>
 <div className="flex h-full w-full gap-4 overflow-hidden bg-gradient-to-br from-info/5 to-transparent p-4">
     <ScrollArea className="h-full w-[380px] shrink-0">
-        <div className="flex flex-col gap-3 pb-4 pr-3">{READINESS}{EXCITATION}{EMISSION if has_filters else ""}{DETECTION}
+        <div className="flex flex-col gap-3 pb-4 pr-3">{READINESS}{EXCITATION}{OBJECTIVES if has_objectives else ""}{EMISSION if has_filters else ""}{DETECTION}
         </div>
     </ScrollArea>
     <div className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
@@ -309,9 +326,9 @@ def fluorescence_ui(has_filters: bool) -> str:
 </Html>"""
 
 
-def blok(has_filters: bool) -> BlokEntry:
+def blok(has_filters: bool, has_objectives: bool = False) -> BlokEntry:
     """The fluorescence view."""
     return BlokEntry(
-        bsx=fluorescence_ui(has_filters),
+        bsx=fluorescence_ui(has_filters, has_objectives),
         description="Fluorescence: excitation, emission and detection, built from blok primitives.",
     )

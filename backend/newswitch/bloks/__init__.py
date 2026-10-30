@@ -32,6 +32,8 @@ from newswitch.bloks.catalog import (
     load_catalog,
 )
 from newswitch.config_io import NewswitchConfig, UiConfig
+from newswitch.instrument.parts import ui_config
+from newswitch.instrument.spec import Instrument
 
 __all__ = [
     "CATALOG_FILE",
@@ -73,7 +75,7 @@ def check_catalog(ui: UiConfig, published: PublishedCatalog) -> None:
         )
 
 
-def _register_assets(app: App, devices: NewswitchConfig) -> None:
+def _register_assets(app: App, devices: NewswitchConfig | Instrument) -> None:
     for name, path in devices.assets.items():
         if not (ASSET_ROOT / path).is_file():
             raise FileNotFoundError(
@@ -84,7 +86,9 @@ def _register_assets(app: App, devices: NewswitchConfig) -> None:
 
 
 def declare_ui(
-    app: App, devices: NewswitchConfig | None, published: PublishedCatalog | None = None
+    app: App,
+    devices: NewswitchConfig | Instrument | None,
+    published: PublishedCatalog | None = None,
 ) -> None:
     """Declare the newswitch frontend's catalog and the ``ui`` bloks of `devices` (FastAPI mode).
 
@@ -94,11 +98,15 @@ def declare_ui(
     """
     published = published or load_catalog()
     declare_catalog(app, published)
-    if devices is None or devices.ui is None:
+    if isinstance(devices, Instrument):
+        ui = ui_config(devices, published.id)
+    elif devices is None or devices.ui is None:
         return
-    check_catalog(devices.ui, published)
+    else:
+        ui = devices.ui
+    check_catalog(ui, published)
     _register_assets(app, devices)
-    for name, entry in devices.ui.bloks.items():
+    for name, entry in ui.bloks.items():
         declare_blok(app, name, entry)
 
 

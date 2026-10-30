@@ -15,6 +15,9 @@ from newswitch.states.stage import StageState
 
 #: The most steps (state updates) a move at a configured speed takes.
 MAX_STEPS = 100
+#: How often such a move updates the state: each update has to reach every client, so faster
+#: leaves them behind the stage for seconds.
+STEPS_PER_SECOND = 20.0
 
 
 @dataclass
@@ -107,10 +110,11 @@ class VirtualStageManager:
         num_steps = max(1, int(total_distance / step_size))
         sleep_per_step = self.config.simulated_pos_sleep_per_micrometer
         if self.config.speed_um_per_s:
-            # At a real stage's speed: few steps (state updates), so a long move does not
-            # flood the clients, each taking its share of the travel time.
-            num_steps = min(num_steps, MAX_STEPS)
-            sleep_per_step = total_distance / num_steps / self.config.speed_um_per_s
+            # At a real stage's speed: few steps (state updates), so a long or quick move does
+            # not flood the clients, each taking its share of the travel time.
+            travel_s = total_distance / self.config.speed_um_per_s
+            num_steps = max(1, min(num_steps, MAX_STEPS, int(travel_s * STEPS_PER_SECOND)))
+            sleep_per_step = travel_s / num_steps
 
         # Calculate step increments
         step_x = dx / num_steps

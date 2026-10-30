@@ -61,7 +61,10 @@ from newswitch.drivers.virtual import (
     VirtualObjectiveManager,
     VirtualStageManager,
 )
+from newswitch.drivers.optics.detector import OpticsDetectorManager
 from newswitch.drivers.virtual import StageConfig as VirtualStageConfig
+from newswitch.instrument import parts as instrument_parts
+from newswitch.instrument.spec import Instrument
 from newswitch.models.devices import Filter as OpticalFilter
 from newswitch.models.devices import Illumination, ObjectiveLens
 from newswitch.protocols import (
@@ -98,9 +101,18 @@ logger = logging.getLogger(__name__)
 UC2_PROTOCOLS = ("uc2-rest", "canopen")
 
 
+#: What a microscope can be built from: a device configuration, or an instrument.
+Devices = config_io.NewswitchConfig | Instrument
+
+
+def _adapters(devices: Devices) -> Any:  # noqa: ANN401 - two modules with the same functions
+    """What turns `devices` into the models the managers take."""
+    return instrument_parts if isinstance(devices, Instrument) else adapters
+
+
 def build_detector_manager(
     config: Settings,
-    devices: Optional[config_io.NewswitchConfig],
+    devices: Optional[Devices],
     camera_state: CameraState,
     stage_state: StageState,
     objective_state: ObjectiveState,
@@ -114,7 +126,19 @@ def build_detector_manager(
     `adapters.cameras`). Without the extra "camera" (uc2_cam_py not importable) the
     virtual detector stands in, with a warning. A camera that cannot be opened is an
     error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
+
+    An instrument renders from its optics instead.
     """
+    if isinstance(devices, Instrument):
+        return OpticsDetectorManager(
+            instrument=devices,
+            camera_state=camera_state,
+            stage_state=stage_state,
+            objective_state=objective_state,
+            illumination_state=illumination_state,
+            filter_bank_state=filter_bank_state,
+            detectors=instrument_parts.detectors(devices) or [],
+        )
     found = None
     if not config.use_virtual_microscope and devices is not None:
         found = adapters.cameras(devices)
@@ -180,10 +204,19 @@ class Parts:
         ]
 
 
-def configured_parts(devices: Optional[config_io.NewswitchConfig]) -> Parts:
+def configured_parts(devices: Optional[Devices]) -> Parts:
     """The parts `devices` has; None (no configuration): none, the core only."""
     if devices is None:
         return Parts(False, False, False, False, False, False)
+    if isinstance(devices, Instrument):
+        return Parts(
+            stage=instrument_parts.has_stage(devices),
+            illumination=bool(devices.sources()),
+            detector=bool(devices.detectors()),
+            objective=instrument_parts.has_objective(devices),
+            filter_bank=instrument_parts.has_filters(devices),
+            uc2=False,
+        )
     return Parts(
         stage=adapters.motion_stage(devices) is not None,
         illumination=adapters.illuminations(devices) is not None,
@@ -229,9 +262,7 @@ class Microscope:
     filter_bank: Optional[FilterBankManager]
 
 
-def build_microscope(
-    settings: Settings, devices: Optional[config_io.NewswitchConfig]
-) -> Microscope:
+def build_microscope(settings: Settings, devices: Optional[Devices]) -> Microscope:
     """Build the managers and states of every part `devices` has (see the module).
 
     Args:
@@ -239,10 +270,16 @@ def build_microscope(
         devices: The device configuration; None: no devices, the core only.
 
     Raises:
-        config_io.ConfigError: On hardware, a part that needs a UC2 board has none.
+        config_io.ConfigError: On hardware, a part that needs a UC2 board has none, or the
+            microscope is an instrument, which does not yet say how to reach any hardware.
     """
     parts = configured_parts(devices)
     hardware = not settings.use_virtual_microscope
+    if hardware and isinstance(devices, Instrument):
+        raise config_io.ConfigError(
+            f"{devices.name} is an instrument, which only runs simulated so far: "
+            "set use_virtual_microscope: true"
+        )
     logger.info(
         "Initializing %s microscope: %s",
         "real hardware" if hardware else "virtual",
@@ -350,6 +387,16 @@ def build_microscope(
         illumination_state=illumination_state,
         camera_state=camera_state,
         calibration_state=calibration_state,
+        nominal_scale=instrument_parts.nominal_pixel_scale(
+            devices,
+            camera_state,
+            stage_state,
+            objective_state,
+            illumination_state,
+            filter_bank_state,
+        )
+        if isinstance(devices, Instrument)
+        else None,
     )
     # The light paths this microscope's parts allow
     light_path.calculate_possible_light_paths()
@@ -433,12 +480,12 @@ def build_uc2_bus(
 
 def build_stage(
     settings: Settings,
-    devices: config_io.NewswitchConfig,
+    devices: Devices,
     stage_state: StageState,
     bus: Optional[UC2BusManager],
 ) -> StageManager:
     """The motion stage: its limits from the configuration; UC2 on hardware, else simulated."""
-    adapters.apply_stage_limits(devices, stage_state)
+    _adapters(devices).apply_stage_limits(devices, stage_state)
     if "design" in devices.assets:
         # A design's stage (its configuration carries the design's model) travels
         # millimetres: steps that show on its model.
@@ -461,13 +508,13 @@ def build_stage(
         max_a=stage_state.max_a,
     )
     # The simulated stage travels at the slowest configured axis speed.
-    config.speed_um_per_s = adapters.stage_speed(devices)
+    config.speed_um_per_s = _adapters(devices).stage_speed(devices)
     return VirtualStageManager(stage=stage_state, config=config)
 
 
 def build_illumination(
     settings: Settings,
-    devices: config_io.NewswitchConfig,
+    devices: Devices,
     illumination_state: IlluminationState,
     bus: Optional[UC2BusManager],
 ) -> IlluminationManager:
@@ -482,7 +529,7 @@ def build_illumination(
             bus=bus,
             config=UC2IlluminationConfig(**kwargs) if kwargs else None,
         )
-    sources = adapters.illuminations(devices)
+    sources = _adapters(devices).illuminations(devices)
     return VirtualLEDManager(
         illumination_state=illumination_state,
         config=LEDConfig(sources=sources) if sources is not None else None,
@@ -491,7 +538,7 @@ def build_illumination(
 
 def build_objective(
     settings: Settings,
-    devices: config_io.NewswitchConfig,
+    devices: Devices,
     objective_state: ObjectiveState,
     bus: Optional[UC2BusManager],
 ) -> ObjectiveManager:
@@ -506,7 +553,7 @@ def build_objective(
             bus=bus,
             config=UC2ObjectiveConfig(**kwargs) if kwargs else None,
         )
-    lenses = adapters.objective_lenses(devices)
+    lenses = _adapters(devices).objective_lenses(devices)
     assert lenses is not None
     return VirtualObjectiveManager(
         objective_state=objective_state,
@@ -516,7 +563,7 @@ def build_objective(
 
 def build_filter_bank(
     settings: Settings,
-    devices: config_io.NewswitchConfig,
+    devices: Devices,
     filter_bank_state: FilterBankState,
     bus: Optional[UC2BusManager],
 ) -> FilterBankManager:
@@ -531,7 +578,7 @@ def build_filter_bank(
             bus=bus,
             config=UC2FilterBankConfig(**kwargs) if kwargs else None,
         )
-    filters = adapters.filters(devices)
+    filters = _adapters(devices).filters(devices)
     assert filters is not None
     return VirtualFilterBankManager(
         filter_bank_state=filter_bank_state,

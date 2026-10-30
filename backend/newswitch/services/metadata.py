@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Dict, Protocol
 
@@ -88,8 +89,14 @@ class MetadataManager:
         stage_state: StageState,
         camera_state: CameraState,
         calibration_state: CalibrationState,
+        nominal_scale: Callable[[int], tuple[float, float, float, float]] | None = None,
     ) -> None:
-        """Initialize the MetadataManager with all the necessary states (to retrieve the state from and the) and light paths."""
+        """Initialize the MetadataManager with all the necessary states (to retrieve the state from and the) and light paths.
+
+        `nominal_scale` is what a detector's pixels are expected to be, where that is known better
+        than from its pixel size and the objective: see `instrument.parts.nominal_pixel_scale`.
+        """
+        self._nominal_scale = nominal_scale
         self._objective_state = objective_state
         self._filter_bank_state = filter_bank_state
         self._illumination_state = illumination_state
@@ -252,6 +259,19 @@ class MetadataManager:
         self, light_path: LightPath, light_path_state: LightPathSnapshot
     ) -> CalibratedLightPath:
         """The nominal scale of a light path no calibration covers."""
+        if self._nominal_scale is not None:
+            pixel_x, pixel_y, fov_width, fov_height = self._nominal_scale(light_path.detector)
+            return CalibratedLightPath(
+                light_path_state_hash=light_path_state.transformation_hash,
+                affine_matrix=[
+                    [pixel_x, 0.0, 0.0, 0.0],
+                    [0.0, pixel_y, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ],
+                fov_width=fov_width,
+                fov_height=fov_height,
+            )
         detector = self._camera_state.get_detector_for_slot(light_path.detector)
         magnification = 1.0
         if self._objective_state.mounted_lenses:

@@ -33,6 +33,7 @@ from newswitch.accounts.routes import router as users_router
 from newswitch.bloks import declare_ui
 from newswitch.broadcasters import FrameBroadcaster, FrameSink
 from newswitch.config_io import NewswitchConfig
+from newswitch.instrument.spec import Instrument
 from newswitch.microscope.registry import create_registry
 from newswitch.routes.cache import router as cache_router
 from newswitch.routes.files import router as files_router
@@ -49,7 +50,7 @@ async def provide_frame_broadcaster(app_context: Settings) -> Tuple[FrameSink]:
 
 
 def create_fastapi_registry(
-    devices: NewswitchConfig | None, mikro: MikroConnection | None = None
+    devices: NewswitchConfig | Instrument | None, mikro: MikroConnection | None = None
 ) -> App:
     """Step 3: the registry of `devices` for the newswitch frontend.
 
