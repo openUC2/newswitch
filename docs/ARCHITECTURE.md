@@ -481,11 +481,12 @@ which keeps the newest frame per slot. Browsers open `WS /stream/frames/{slot}`
 (`backend/newswitch/routes/liveview.py`, its `router` included by `create_app`;
 the first message is the client's auth frame) and get whole frames, one per message: a
 header and the detector's own values (`newswitch/broadcasters/wire.py`), binned to
-`max_size` (default 640; 0 sends full size). The client acknowledges each frame and is sent
+`max_size` (default 640; 0 sends full size), byte-shuffled and zstd-compressed, which is
+lossless. The client acknowledges each frame and is sent
 the newest one after that, so a slow viewer skips frames and one can join at any time; without
 this the server would buffer what a client has not taken yet, without limit. uvicorn runs with
-`--ws-per-message-deflate false`: compressing every frame takes a core and most of the
-frame rate. The frontend shares one socket per slot and size per tab
+`--ws-per-message-deflate false`: its own compression of every frame takes a core and most
+of the frame rate. The frontend shares one socket per slot and size per tab
 (`frontend/src/components/liveview/frameStream.ts`). Scan/acquisition code
 can broadcast into additional slots (e.g. stitched-map tiles).
 

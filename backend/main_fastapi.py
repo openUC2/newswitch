@@ -139,8 +139,8 @@ def main() -> None:
         create(),
         host=os.environ.get("BACKEND_HOST", "0.0.0.0"),
         port=int(os.environ.get("BACKEND_PORT", "8099")),
-        # The live view sends whole frames: compressing every one on the event loop takes a
-        # core and most of the frame rate.
+        # The live view compresses its frames itself: deflating every one again on the event
+        # loop takes a core and most of the frame rate.
         ws_per_message_deflate=False,
     )
 

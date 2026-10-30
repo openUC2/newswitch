@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 AUTH_FRAME_TIMEOUT = 10.0
 
 #: What a viewer is sent unless it asks otherwise: the longer side of the image (reached by
-#: binning) and the frames per second. 640x480 of uint16 at 30 fps is about 150 Mbit/s; a
-#: slower link gets fewer frames: a viewer only gets the next once it took the last.
+#: binning) and the frames per second. 640x480 of uint16 at 30 fps is about 150 Mbit/s before
+#: compression; a slower link gets fewer frames: a viewer only gets the next once it took the last.
 DEFAULT_MAX_SIZE = 640
 DEFAULT_MAX_FPS = 30.0
 

@@ -17,12 +17,18 @@ pixels after it are aligned for a typed array):
     16     u16   contrast low: the 1st percentile of the image
     18     u16   contrast high: its 99.9th percentile
     20     f64   when the detector handed the frame over, in seconds since the epoch
-    28           4 bytes of padding
+    28     u8    compression: 0 (none) or 1 (byte-shuffled, then zstd)
+    29           3 bytes of padding
     ====== ===== =========================================================
 
 The pixels are the detector's own values, unscaled: row after row, little-endian. Binning
 takes block means, so a binned frame is still in the detector's units. The contrast is only
 a suggestion for how to show them; frontend/src/components/liveview/frames.ts reads this.
+
+Compression is lossless. Byte-shuffling puts all low bytes before all high bytes: the high
+bytes of a camera's frame hardly change, which is most of what makes it compress. It gets
+1.7x to 4x at a few milliseconds per full-size frame, where the websocket's own per-message
+deflate takes about 190. A frame that does not get smaller is sent as it is.
 """
 
 import math
@@ -30,11 +36,17 @@ import struct
 from typing import Optional
 
 import numpy as np
+import zstandard
 
 from newswitch.broadcasters.frame import SlotFrame
 
-HEADER = struct.Struct("<4sBBHIHHHHd4x")
+HEADER = struct.Struct("<4sBBHIHHHHdB3x")
 MAGIC = b"NSF1"
+COMPRESSION_NONE = 0
+COMPRESSION_SHUFFLED_ZSTD = 1
+
+#: Fast enough to run for every frame; higher levels gain little on a camera's noise.
+ZSTD_LEVEL = 1
 
 #: About how many pixels the contrast is computed from, however large the image.
 CONTRAST_SAMPLES = 65536
@@ -70,6 +82,12 @@ def _contrast(image: np.ndarray) -> tuple[int, int]:
     return int(low), int(high)
 
 
+def _compressed(pixels: bytes, bytes_per_sample: int) -> bytes:
+    """`pixels` byte-shuffled, then zstd; a compressor is not shared, viewers run in threads."""
+    shuffled = pixels if bytes_per_sample == 1 else pixels[0::2] + pixels[1::2]
+    return zstandard.ZstdCompressor(level=ZSTD_LEVEL).compress(shuffled)
+
+
 def pack_frame(frame: SlotFrame, max_size: int) -> Optional[bytes]:
     """`frame` as one message, its longer side at most `max_size` (<= 0: full size).
 
@@ -90,6 +108,9 @@ def pack_frame(frame: SlotFrame, max_size: int) -> Optional[bytes]:
 
     binned = _binned(image, factor)
     low, high = _contrast(binned)
+    pixels = binned.astype(binned.dtype.newbyteorder("<"), copy=False).tobytes()
+    compressed = _compressed(pixels, binned.dtype.itemsize)
+    smaller = len(compressed) < len(pixels)
     header = HEADER.pack(
         MAGIC,
         binned.dtype.itemsize,
@@ -101,7 +122,8 @@ def pack_frame(frame: SlotFrame, max_size: int) -> Optional[bytes]:
         low,
         high,
         frame.time_s,
+        COMPRESSION_SHUFFLED_ZSTD if smaller else COMPRESSION_NONE,
     )
-    message = header + binned.astype(binned.dtype.newbyteorder("<"), copy=False).tobytes()
+    message = header + (compressed if smaller else pixels)
     frame.messages[factor] = message
     return message

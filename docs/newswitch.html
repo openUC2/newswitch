@@ -880,7 +880,7 @@ def create_fastapi_registry(devices: NewswitchConfig | None) -&gt; App:
         <strong>FrameBroadcaster</strong> — the <code>FrameSink</code> <code>main_fastapi.py</code> provides — which keeps the newest frame per slot. Browsers open
         <code>WS /stream/frames/{slot}</code> — the first message is the client’s auth frame — and get
         whole frames, one per message: the detector’s own values, binned to <code>max_size</code>
-        (default 640; 0 sends full size). The client acknowledges each frame and is sent the newest
+        (default 640; 0 sends full size), compressed losslessly. The client acknowledges each frame and is sent the newest
         after that, so a slow viewer skips frames. Scan and acquisition code can broadcast into additional
         slots, for example stitched-map tiles.</p>
       <p><code>create_app</code> includes the module-level routers of <code>newswitch/routes/</code> —

@@ -39,7 +39,7 @@ EXPOSE ${BACKEND_PORT}
 
 # main_fastapi:create is a factory, so --reload builds a fresh app on every edit.
 # The source dir is bind-mounted by compose, so edits on the host reload the container.
-# Per-message deflate off: compressing the live view's whole frames takes a core and most of the
+# Per-message deflate off: the live view compresses its frames itself, and deflating them too takes a core and most of the
 # frame rate.
 # Via `sh -c` so $BACKEND_PORT is expanded instead of passed literally, and `exec` so
 # uvicorn replaces the shell as PID 1 and still receives SIGTERM from `docker compose down`.

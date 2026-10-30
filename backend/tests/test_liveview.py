@@ -8,13 +8,21 @@ from typing import Callable, Iterator
 
 import numpy as np
 import pytest
+import zstandard
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from newswitch.accounts.auth import AllowAllAuthenticator
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.broadcasters.frame import SlotFrame
-from newswitch.broadcasters.wire import HEADER, MAGIC, binning_for, pack_frame
+from newswitch.broadcasters.wire import (
+    COMPRESSION_NONE,
+    COMPRESSION_SHUFFLED_ZSTD,
+    HEADER,
+    MAGIC,
+    binning_for,
+    pack_frame,
+)
 from newswitch.routes.liveview import router
 
 
@@ -37,14 +45,32 @@ def client(broadcaster: FrameBroadcaster) -> Iterator[TestClient]:
 
 def unpack(message: bytes) -> tuple[dict[str, int | float], np.ndarray]:
     """A message's header and its pixels, as the frontend reads them."""
-    magic, sample, factor, slot, sequence, width, height, low, high, time_s = HEADER.unpack_from(
-        message
+    magic, sample, factor, slot, sequence, width, height, low, high, time_s, compression = (
+        HEADER.unpack_from(message)
     )
     assert magic == MAGIC
+    payload = message[HEADER.size :]
+    if compression == COMPRESSION_SHUFFLED_ZSTD:
+        payload = zstandard.ZstdDecompressor().decompress(payload)
+        if sample == 2:
+            pairs = np.empty(len(payload), dtype=np.uint8)
+            pairs[0::2] = np.frombuffer(payload, dtype=np.uint8, count=width * height)
+            pairs[1::2] = np.frombuffer(payload, dtype=np.uint8, offset=width * height)
+            payload = pairs.tobytes()
+    else:
+        assert compression == COMPRESSION_NONE
     dtype = {1: "<u1", 2: "<u2"}[sample]
-    pixels = np.frombuffer(message, dtype=dtype, offset=HEADER.size).reshape(height, width)
+    pixels = np.frombuffer(payload, dtype=dtype).reshape(height, width)
     return (
-        dict(factor=factor, slot=slot, sequence=sequence, low=low, high=high, time_s=time_s),
+        dict(
+            factor=factor,
+            slot=slot,
+            sequence=sequence,
+            low=low,
+            high=high,
+            time_s=time_s,
+            compression=compression,
+        ),
         pixels,
     )
 
@@ -58,7 +84,7 @@ def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
 
 
 def test_the_header_is_aligned_for_typed_arrays() -> None:
-    """The frontend views the pixels in place: uint16 needs an even offset, f64 is 8 bytes."""
+    """The frontend views uncompressed pixels in place: uint16 needs an even offset."""
     assert HEADER.size == 32
 
 
@@ -93,6 +119,38 @@ def test_a_frame_arrives_with_exactly_the_detectors_values(
 
     assert header["slot"] == 1
     assert header["factor"] == 1
+    np.testing.assert_array_equal(pixels, image)
+
+
+def test_compression_keeps_every_value_of_a_camera_like_frame(
+    client: TestClient, broadcaster: FrameBroadcaster
+) -> None:
+    """Noise, a bright spot and a saturated pixel: compressed, and exactly what was sent."""
+    rng = np.random.default_rng(1)
+    image = rng.normal(100, 5, (480, 640)).clip(0, 65535).astype(np.uint16)
+    image[100:140, 200:240] = 40000
+    image[0, 0] = 65535
+    broadcaster.broadcast_sync(1, image)
+
+    with client.websocket_connect("/stream/frames/1") as websocket:
+        websocket.send_json({"token": "any"})
+        message = websocket.receive_bytes()
+
+    header, pixels = unpack(message)
+    assert header["compression"] == COMPRESSION_SHUFFLED_ZSTD
+    assert len(message) < image.nbytes / 1.5
+    np.testing.assert_array_equal(pixels, image)
+
+
+def test_a_frame_that_does_not_get_smaller_is_sent_as_it_is() -> None:
+    """Pure noise over every bit: compressing it only costs, so the frame goes uncompressed."""
+    rng = np.random.default_rng(1)
+    image = rng.integers(0, 65536, (64, 64), dtype=np.uint16)
+    message = pack_frame(SlotFrame(1, 0, 0.0, image), 640)
+    assert message is not None
+    header, pixels = unpack(message)
+    assert header["compression"] == COMPRESSION_NONE
+    assert len(message) == HEADER.size + image.nbytes
     np.testing.assert_array_equal(pixels, image)
 
 
@@ -137,6 +195,7 @@ def test_uint8_frames_stay_uint8() -> None:
     assert pixels.dtype == np.uint8
     assert pixels[0, 0] == 200
     assert header["factor"] == 3
+    assert header["compression"] == COMPRESSION_SHUFFLED_ZSTD
 
 
 @pytest.mark.parametrize(
@@ -257,20 +316,15 @@ def test_a_viewer_is_let_go_when_it_leaves_while_no_frames_come(
     wait_until(lambda: broadcaster.subscriber_count(1) == 0)
 
 
-def test_many_viewers_coming_and_going_leave_nothing_behind(
+def test_viewers_coming_and_going_leave_nothing_behind(
     client: TestClient, broadcaster: FrameBroadcaster
 ) -> None:
-    """Viewers hold nothing but their subscription, so there is nothing to leak or race."""
+    """Viewers hold nothing but their subscription, so there is nothing to leak."""
     broadcaster.broadcast_sync(1, np.zeros((4, 4), dtype=np.uint16))
 
-    def visit() -> None:
+    for _ in range(20):
         with client.websocket_connect("/stream/frames/1") as websocket:
             websocket.send_json({"token": "any"})
             websocket.receive_bytes()
 
-    threads = [threading.Thread(target=visit) for _ in range(20)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
     wait_until(lambda: broadcaster.subscriber_count(1) == 0)

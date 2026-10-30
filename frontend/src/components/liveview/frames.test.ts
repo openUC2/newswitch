@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { frameToRgba, parseFrame } from "./frames";
+import { framePixels, frameToRgba, parseFrame } from "./frames";
+
+const COMPRESSED_BY_THE_BACKEND = "KLUv/SAghQAAQGSgyCwAAAABAgCAI3OOCA==";
 
 function message({
   sample = 2,
@@ -40,16 +42,47 @@ describe("parseFrame", () => {
       high: 200,
       timeS: 1.5,
     });
-    expect(Array.from(frame.pixels)).toEqual([100, 150, 200, 300]);
-    expect(frame.pixels).toBeInstanceOf(Uint16Array);
+    const pixels = framePixels(frame);
+    expect(Array.from(pixels)).toEqual([100, 150, 200, 300]);
+    expect(pixels).toBeInstanceOf(Uint16Array);
   });
 
   it("reads uint8 frames as uint8", () => {
     const frame = parseFrame(
       message({ sample: 1, low: 0, high: 255, values: [1, 2, 3, 4] }),
     );
-    expect(frame.pixels).toBeInstanceOf(Uint8Array);
-    expect(Array.from(frame.pixels)).toEqual([1, 2, 3, 4]);
+    const pixels = framePixels(frame);
+    expect(pixels).toBeInstanceOf(Uint8Array);
+    expect(Array.from(pixels)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("decompresses what the backend compressed, value for value", () => {
+    // wire.py's output for a 4x4 uint16 frame of 100, 160, 200, 300 repeated: byte-shuffled, zstd.
+    const compressed = Uint8Array.from(atob(COMPRESSED_BY_THE_BACKEND), (c) =>
+      c.charCodeAt(0),
+    );
+    const buffer = message({ width: 0, height: 0, values: [] });
+    const whole = new Uint8Array(32 + compressed.length);
+    whole.set(new Uint8Array(buffer));
+    whole.set(compressed, 32);
+    const view = new DataView(whole.buffer);
+    view.setUint16(12, 4, true);
+    view.setUint16(14, 4, true);
+    view.setUint8(28, 1);
+
+    const frame = parseFrame(whole.buffer);
+    expect(Array.from(framePixels(frame))).toEqual(
+      Array.from({ length: 16 }, (_, i) => [100, 160, 200, 300][i % 4]),
+    );
+    expect(Array.from(frameToRgba(frame).slice(4, 8))).toEqual([
+      153, 153, 153, 255,
+    ]);
+  });
+
+  it("refuses a compression it does not know", () => {
+    const buffer = message({});
+    new DataView(buffer).setUint8(28, 9);
+    expect(() => parseFrame(buffer)).toThrow();
   });
 
   it("refuses what is not a frame", () => {

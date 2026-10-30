@@ -25,8 +25,8 @@ install:
     npx --yes lefthook install
 
 # ---------- dev ----------
-# --ws-per-message-deflate false: the live view sends whole frames, and compressing every one
-# on the event loop takes a core and most of the frame rate (uvicorn does so by default).
+# --ws-per-message-deflate false: the live view compresses its frames itself; this compressing
+# every one again on the event loop takes a core and most of the frame rate (uvicorn does so by default).
 
 # Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
 dev-backend:

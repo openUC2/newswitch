@@ -196,8 +196,8 @@ File: newswitch/routes/cache.py
 
 File: newswitch/routes/liveview.py
 
-- **WebSocket live view**: `/stream/frames/{detector_slot}?max_size=640&max_fps=30` delivers a detector's frames, one whole frame per message (`newswitch/broadcasters/wire.py`): the detector's own values, binned to `max_size` (0 sends full size); the client's first message is its auth frame, then it answers each frame with a message.
-- A viewer is sent the newest frame once it acknowledged the last (`FrameBroadcaster.subscribe`): a slow one skips frames instead of the server buffering them without limit, and one can join at any time. Run uvicorn with `--ws-per-message-deflate false`, or compressing every frame takes a core and most of the frame rate.
+- **WebSocket live view**: `/stream/frames/{detector_slot}?max_size=640&max_fps=30` delivers a detector's frames, one whole frame per message (`newswitch/broadcasters/wire.py`): the detector's own values, binned to `max_size` (0 sends full size), compressed losslessly; the client's first message is its auth frame, then it answers each frame with a message.
+- A viewer is sent the newest frame once it acknowledged the last (`FrameBroadcaster.subscribe`): a slow one skips frames instead of the server buffering them without limit, and one can join at any time. Run uvicorn with `--ws-per-message-deflate false`, or the websocket's own compression of every frame takes a core and most of the frame rate.
 
 ## Where to look next
 
