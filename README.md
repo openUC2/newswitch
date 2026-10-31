@@ -12,7 +12,7 @@ You need Python 3.11+ with uv and Node 20+. The repo uses [just](https://just.sy
 
 ```bash
 just install     # uv sync + yarn install
-just dev         # backend , then frontend (will autocodegen)-> http://localhost:5173
+just dev         # backend , then frontend (will autocodegen)-> http://localhost:5473
 ```
 
 Run `just` on its own to see every recipe. Both ports come from the committed root `.env` — see
@@ -30,8 +30,8 @@ just export-schemas   # = cd backend && uv run python -m newswitch.tools.export_
 ```
 
 builds the app registry in-process on the reference microscope
-`backend/newswitch/reference/complete-microscope/` (every part, no bloks; it refuses an
-instrument missing any part), takes a snapshot of it — nothing is started — and writes exactly what a
+`backend/newswitch/reference/complete-microscope/` (everything a microscope can have, no bloks; it
+refuses an instrument lacking any of it), takes a snapshot of it — nothing is started — and writes exactly what a
 FastAPI backend on it serves at `/schemas/implementations`, `/schemas/states` and `/schemas/locks` into
 `frontend/schemas/{implementations,states,locks}.json`. It is the mirror of the blok catalog, which the
 frontend exports for the backend.
@@ -80,18 +80,18 @@ just agent                    # serve as an arkitekt agent instead (see below)
 
 newswitch can be served two ways, each its own entry file. Both read the same settings and
 instrument (`load_devices` in `backend/newswitch/settings.py`) and call
-`create_registry(instrument, services=())`, which registers the context `FrameSink` the detectors
-send their frames to; each entry file then registers on the returned app a startup hook that
-provides that sink, how the frames are watched and the UI.
+`create_registry` (`backend/newswitch/microscope/registry.py`), which registers the contexts
+`FrameSink`, the detectors send their frames to, and `DatasetStore`, an acquisition stores its datasets
+in; each entry file passes in the arkitekt services it needs, then registers on the returned app the
+startup hooks that provide those two, how the frames are watched and the UI.
 
 | Entry file | Run | Registry | Frames | UI | HTTP routes |
 | --- | --- | --- | --- | --- | --- |
 | `backend/main_fastapi.py` | `uvicorn main_fastapi:create --factory`, `just dev` | `create_fastapi_registry` | `FrameBroadcaster` → websocket live view `/stream/...` | the description's `ui`, in the newswitch frontend's catalog | auth, accounts, live view, files, cache |
 | `backend/main_arkitekt.py` | `python main_arkitekt.py`, `just agent` | `create_arkitekt_registry` | `LovekitSink` → one lovekit `VideoStream` per detector | the description's `agent_ui`, in Orkestrator's standard catalog | none |
 
-Serving as an agent is new: newswitch runs as an arkitekt agent (`arkitekt.run`), logs in to the arkitekt
-server fakts finds (`--url` or `$FAKTS_URL`) and is shown in Orkestrator. It needs the extra `agent`
-(`arkitekt[rekuest,lovekit]`):
+As an agent, newswitch runs through `arkitekt.run`, logs in to the arkitekt
+server fakts finds (`--url` or `$FAKTS_URL`) and is shown in Orkestrator. It needs the extra `agent`:
 
 ```bash
 cd backend && uv sync --extra agent
@@ -152,10 +152,10 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 1. `NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml` names the instrument, and `spec.load`
    reads it. Everything below comes from that one file.
-2. Its `settings` section has `use_virtual_microscope: false` (cameras are only used on real
-   hardware), `camera_debug_window: true` (a window per camera) and `camera_recording_dir` (where
+2. Its `settings` section has `simulate: unwired` (a camera is only opened when it is not
+   simulated, and without the extra `camera` the optics stand in, with a warning), `camera_debug_window: true` (a window per camera) and `camera_recording_dir` (where
    recordings go).
-3. `parts.cameras()` finds the camera: the entry of
+3. `cameras()` in `newswitch/instrument/parts.py` finds the camera: the entry of
    its sensor in `hardware.cameras` (`protocol: usb3-vision`, `vendor: Simulated`).
 4. `build_detector_manager()` creates the `UC2DetectorManager`, which calls
    `uc2_cam_py.create_camera(..., debug_window=True)`.
@@ -199,11 +199,11 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 4. A window **"uc2_cam_py debug - Simulated UC2-SIM SN SIM-0001"** opens. It shows a bright
    Gaussian spot that walks row by row over a 5 × 4 grid of the 640 × 480 sensor, 20 images per
-   second. The instrument has only the camera, so only the detector is built: no stage,
-   illumination or UC2 bus is started for it.
+   second. Nothing on this instrument moves and it has no board, so only its detector and its
+   tunes are built: no focus routine and no UC2 bus is started for it.
 5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
-   browser, next to the debug window. Capturing works too: the light path holds only the parts
-   the microscope has (here just the detector).
+   browser, next to the debug window. Capturing works too: the light path is what the description's
+   edges say (here `sample`, `lens_a`, `lens_b` and `sim_cam`).
 6. Optional: record to disk. Set `store_image_data: true` for `sim_cam` in
    `instruments/cam-test/microscope.yml` and restart. Each acquisition session is written as a `.uc2rb`
    file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
@@ -224,7 +224,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 3. Remove the `vendor_options`; they are options of the simulated camera only.
 
-Keys and options are described in `backend/instruments/README.md`.
+Keys and options are described in [`backend/instruments/README.md`](backend/instruments/README.md).
 
 **Troubleshooting:**
 
@@ -233,7 +233,7 @@ Keys and options are described in `backend/instruments/README.md`.
 | No window, and an error `debug_window=True: no X11 display available` | No display (headless session, or `DISPLAY` not set). The camera works anyway. |
 | No window, and an error `this build has no X11 support` | uc2_cam_py was built without the X11 headers. Install `libX11-devel` (Fedora) or `libx11-dev` (Debian/Ubuntu), then `uv sync --extra camera --reinstall-package uc2-cam-py`. |
 | Warning `uc2_cam_py cannot be imported`, rendered from the optics | The extra is not installed, or the MVS runtime libraries are missing. |
-| No window and no warning | `use_virtual_microscope` is still `true`; check that `NEWSWITCH_CONFIG` reached the backend. |
+| No window and no warning | `settings.simulate` is `everything`, which opens no camera; check that `NEWSWITCH_CONFIG` reached the backend. |
 | `camera_debug_window` should stay off | Set it to `false` in the `settings` section of the instrument's `microscope.yml`, e.g. on headless machines. |
 
 ### Commits
@@ -265,7 +265,7 @@ one role (`admin`/`operator`/`viewer`/`analyst`). Accounts and sessions live in 
 sessions, audit trail).
 
 On a completely fresh clone, with no accounts yet, the backend seeds one `admin` account from the
-legacy single-account file if present:
+single-account file `auth.yaml` if present:
 
 ```bash
 cp backend/auth.example.yaml backend/auth.yaml   # optional, then edit the password
@@ -288,8 +288,8 @@ just create-admin rescue rescue-pass  # every admin locked out: create a fresh o
 ### How it works
 
 `POST /auth/login` takes HTTP Basic, checks the password (argon2) against `backend/auth.db`, and returns
-a random, revocable session token — unlike the legacy single-account token, a restart does *not* log
-everyone out, but `POST /auth/logout` (or a password change) revokes just that one session. The
+a random, revocable session token: a restart does *not* log
+anyone out, but `POST /auth/logout` (or a password change) revokes just that one session. The
 frontend keeps the token in `localStorage` until logout.
 
 The token then has to reach the backend over transports that carry credentials differently, because a
@@ -314,12 +314,16 @@ dropped connection it should retry.
 
 ### Ports live in the root `.env`
 
-Every port is defined **once**, in the committed root `.env` (defaults, not secrets):
+Every port is defined **once**, in the committed root `.env` (defaults, not secrets), beside the
+microscope to run:
 
 ```dotenv
 BACKEND_HOST=0.0.0.0
-BACKEND_PORT=8099
-FRONTEND_PORT=5173
+BACKEND_PORT=8069
+NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml
+FRONTEND_PORT=5473
+MIKRO_PORT=6580
+RUSTFS_PORT=6890
 ```
 
 It propagates everywhere from there:
@@ -328,10 +332,10 @@ It propagates everywhere from there:
 | --- | --- |
 | `just` | `set dotenv-load` — exported into every recipe, and used for `wait-backend`'s health URL |
 | `docker compose` | interpolation for the published ports, plus an `environment:` block so the value also reaches inside each container |
-| `frontend/.env`, `.env.docker` | `${BACKEND_PORT:-8099}` in the URLs; an exported value wins, the fallback keeps a bare `yarn dev` working |
+| `frontend/.env`, `.env.docker` | `${BACKEND_PORT:-8099}` in the URLs; an exported value wins, the fallback (not the root `.env`'s value) keeps a bare `yarn dev` working |
 | `vite.config.ts` | `server.port` / `preview.port` from `FRONTEND_PORT` |
-| backend | `os.environ` in `main_fastapi:main` and `backend/test.py`; the Dockerfile sets matching `ENV` defaults |
-| CI | a "Load the ports from .env" step exports them into `$GITHUB_ENV` |
+| backend | `os.environ` in `main_fastapi:main`, `--port` from `just`; the Dockerfile has `ENV` defaults of its own, which compose overrides |
+| Playwright | `frontend/playwright.config.ts` reads `FRONTEND_PORT` from the file, and starts `just dev-e2e` |
 
 To change a port for one run, export it — a shell variable beats the file in all of the above:
 
@@ -342,7 +346,6 @@ BACKEND_PORT=9000 just up       # same for compose (published port + container p
 
 To change it for good, edit the root `.env`. Codegen reads the committed export, not a backend URL, so a
 port change does not touch the generated files.
-CI is unaffected: it reads the same `.env`.
 
 ### Frontend URLs
 
@@ -355,9 +358,10 @@ VITE_BACKEND_URL=http://my-lab-box:${BACKEND_PORT:-8099}
 VITE_WEBSOCKET_URL=ws://my-lab-box:${BACKEND_PORT:-8099}/ws
 ```
 
-Apart from `BACKEND_HOST`, `BACKEND_PORT` and `NEWSWITCH_CONFIG` (which microscope to run, by default the
-fake one), the backend reads no `.env`: everything about a microscope, how it runs included, is in its
-`microscope.yml` (`backend/instruments/README.md`).
+Apart from `BACKEND_HOST`, `BACKEND_PORT`, `NEWSWITCH_CONFIG` (which microscope to run, by default the
+fake one) and, in FastAPI mode, `MIKRO_URL`, `MIKRO_DATALAYER_URL` and `MIKRO_TOKEN` (where a mikro is;
+`just dev-mikro` sets them), the backend reads no `.env`: everything about a microscope, how it runs
+included, is in its `microscope.yml` ([`backend/instruments/README.md`](backend/instruments/README.md)).
 
 ## Releases
 
@@ -366,6 +370,8 @@ One version for the whole repo, one tag (`vX.Y.Z`), **GitHub Releases only**.
 Pushing [conventional commits](https://www.conventionalcommits.org/) to `main` triggers
 `.github/workflows/release.yml`, which runs semantic-release from the root `release.config.cjs`. It bumps
 `backend/pyproject.toml` **and** `frontend/package.json` to the same version, rebuilds the frontend *after*
+that bump, builds the backend wheel and sdist, commits the bump and `CHANGELOG.md`, and attaches
+`blok.zip`, the wheel and the sdist to the GitHub Release.
 
 Preview what a release would do, without tagging or pushing:
 
@@ -375,5 +381,5 @@ just release-dry
 
 
 A full local dry run also needs a `GITHUB_TOKEN` in the environment (the GitHub plugin verifies auth even
-in `--dry-run`). In CI, both the URL and the token come from the Actions checkout automatically.
+in `--dry-run`). In CI, the workflow passes in its own `secrets.GITHUB_TOKEN`.
 
