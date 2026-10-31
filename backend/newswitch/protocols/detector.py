@@ -18,7 +18,7 @@ import numpy as np
 
 from newswitch.models.devices import Detector, Roi
 from newswitch.protocols.base import Manager
-from newswitch.states.detector import CameraState
+from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
     from newswitch.broadcasters import FrameSink
@@ -33,8 +33,8 @@ def is_full_sensor(roi: Roi) -> bool:
 class DetectorFrame:
     """One image of a detector with its timing."""
 
-    slot: int
-    """Detector slot the image belongs to."""
+    detector: str
+    """The detector the image belongs to."""
     data: np.ndarray
     """Pixel data, an own copy: ``(H, W)`` mono or raw Bayer, ``(H, W, 3)`` color."""
     sequence: int
@@ -86,24 +86,24 @@ class DetectorSessionInfo:
 class DetectorManager(Manager, Protocol):
     """Protocol defining the interface for detector/camera managers."""
 
-    state: CameraState
+    state: DetectorState
 
-    def capture_channels(self, slot: int) -> np.ndarray:
+    def capture_channels(self, name: str) -> np.ndarray:
         """Capture one exposure as ``(c, H, W)``: one image per color, one for a mono camera.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Returns:
             The images, in the order of the detector's `colors`.
         """
         ...
 
-    def capture_stack(self, slot: int, planes: int) -> Iterator[np.ndarray]:
+    def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """Capture a stack whose z the detector delivers: each event of it steps the stage.
 
         Args:
-            slot: Detector slot number; its `axes` have a ``z``.
+            name: The detector; its `axes` have a ``z``.
             planes: How many planes, starting from where the stage is.
 
         Yields:
@@ -111,42 +111,42 @@ class DetectorManager(Manager, Protocol):
         """
         ...
 
-    def capture_image(self, slot: int) -> DetectorFrame:
+    def capture_image(self, name: str) -> DetectorFrame:
         """Capture a single image from a specific detector.
 
         A snapshot: the image is exposed after the call.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Returns:
             The image with its timing.
         """
         ...
 
-    def activate_detector(self, slot: int) -> Detector:
+    def activate_detector(self, name: str) -> Detector:
         """Activate a detector by its slot number.
 
         Args:
-            slot: Detector slot number from available_detectors.
+            name: The detector from available_detectors.
 
         Returns:
             The activated detector's state.
         """
         ...
 
-    def deactivate_detector(self, slot: int) -> None:
+    def deactivate_detector(self, name: str) -> None:
         """Deactivate a detector by its slot number.
 
         Args:
-            slot: Detector slot number to deactivate.
+            name: The detector to deactivate.
         """
         ...
 
     def update_detector(
         self,
-        slot: int,
-        exposure_time: Optional[float] = None,
+        name: str,
+        exposure_ms: Optional[float] = None,
         gain: Optional[float] = None,
         frame_rate: Optional[float] = None,
         binning: Optional[int] = None,
@@ -158,8 +158,8 @@ class DetectorManager(Manager, Protocol):
         region starts a new acquisition session.
 
         Args:
-            slot: Detector slot number.
-            exposure_time: New exposure time in seconds (if provided).
+            name: The detector.
+            exposure_ms: New exposure time in ms (if provided).
             gain: New gain value (if provided).
             frame_rate: New frame rate in frames per second (if provided); 0 removes the
                 limit.
@@ -173,22 +173,22 @@ class DetectorManager(Manager, Protocol):
         """
         ...
 
-    def get_detector_state(self, slot: int) -> Optional[Detector]:
+    def get_detector_state(self, name: str) -> Optional[Detector]:
         """Get the state of a detector: what it is and can do, with its current settings.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Returns:
             The detector if found, None otherwise.
         """
         ...
 
-    def get_image_info(self, slot: int) -> Optional[DetectorSessionInfo]:
+    def get_image_info(self, name: str) -> Optional[DetectorSessionInfo]:
         """Return the metadata of the current or last acquisition session.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Returns:
             The session metadata, or None before the first acquisition.
@@ -214,13 +214,13 @@ class DetectorManager(Manager, Protocol):
     def acquire_live(self, sink: "FrameSink") -> None:
         """Run the live loop until `close`.
 
-        Streams the active detectors to `sink` while `CameraState.is_acquiring` is set;
+        Streams the active detectors to `sink` while `DetectorState.is_acquiring` is set;
         setting it starts the live stream.
         """
         ...
 
     def stop_acquire_live(self) -> None:
-        """Stop the live stream now: clear `CameraState.is_acquiring`, end its acquisition.
+        """Stop the live stream now: clear `DetectorState.is_acquiring`, end its acquisition.
 
         `acquire_live` keeps running and streams again once `is_acquiring` is set.
         """

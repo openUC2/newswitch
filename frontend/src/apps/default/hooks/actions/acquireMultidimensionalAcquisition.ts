@@ -441,12 +441,7 @@ export const AcquireMultidimensionalAcquisitionDefinition: ActionDefinition<
     'Acquire timepoints x positions x z planes x channels, into one dataset per position.\n\nPer timepoint the stage visits each position, then each plane of its stack, and every stream\nlights the sample for its detectors; hooks (`m_hooks`, `t_hooks`, `p_hooks`, `z_hooks`) run at\nthe start, per timepoint, per position and per plane.',
   argsSchema: AcquireMultidimensionalAcquisitionArgsSchema,
   returnSchema: AcquireMultidimensionalAcquisitionReturnSchema,
-  lockKeys: [
-    'camera_parameters',
-    'hook_registry',
-    'illumination',
-    'stage_position',
-  ],
+  lockKeys: ['motion', 'swap', 'tune'],
 };
 
 /**

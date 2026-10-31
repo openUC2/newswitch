@@ -91,9 +91,7 @@ def acquire(
         store,
         m.optics,
         m.detector,
-        m.stage,
-        m.illumination,
-        m.illumination_state,
+        m.values,
         m.calibration_state,
         m.metadata,
         m.hooks,
@@ -148,7 +146,16 @@ def test_two_detectors_of_a_stream_become_two_channels(tmp_path: Path) -> None:
 def test_each_filter_sees_its_own_light(tmp_path: Path) -> None:
     """Laser excites the beads: green passes; red through its filter sees nearly nothing."""
     m = built(tmp_path, "dual-camera")
-    store = acquire(m, plan([Streams(detectors=["1", "2"], mapping="gfp", illuminations=[LASER])]))
+    store = acquire(
+        m,
+        plan(
+            [
+                Streams(
+                    detectors=["camera_green", "camera_red"], mapping="gfp", illuminations=[LASER]
+                )
+            ]
+        ),
+    )
     green, red = store.published[0].data[0, :, 0]
     assert np.percentile(green, 99.9) > 5 * np.percentile(red, 99.9)
 
@@ -206,7 +213,7 @@ def test_placement_has_the_pixel_size_and_the_middle_at_the_stage(tmp_path: Path
     store = acquire(
         m,
         plan(
-            [Streams(detectors=["1"], mapping="gfp", illuminations=[LASER])],
+            [Streams(detectors=["camera_green"], mapping="gfp", illuminations=[LASER])],
             planes=[-2.0, 0.0, 2.0],
             places=((100.0, 50.0),),
         ),
@@ -263,13 +270,13 @@ def test_its_colors_see_what_their_bands_let_through(tmp_path: Path) -> None:
 def test_alone_it_still_gives_one_image(tmp_path: Path) -> None:
     """The live view, an autofocus and a capture take one image, as of any camera."""
     m = built(tmp_path, "rgb-camera")
-    assert m.detector is not None
-    m.detector.activate_detector(1)
-    assert m.detector.capture_image(1).data.shape == (512, 512)
-    assert m.detector.capture_channels(1).shape == (3, 512, 512)
-    m.detector.update_detector(1, binning=2)
-    assert m.detector.capture_image(1).data.shape == (256, 256)
-    assert m.detector.capture_channels(1).shape == (3, 256, 256)
+    assert m.detector is not None and m.values is not None
+    m.detector.activate_detector("camera")
+    assert m.detector.capture_image("camera").data.shape == (512, 512)
+    assert m.detector.capture_channels("camera").shape == (3, 512, 512)
+    m.values.set({"camera.binning": 2})
+    assert m.detector.capture_image("camera").data.shape == (256, 256)
+    assert m.detector.capture_channels("camera").shape == (3, 256, 256)
 
 
 # --- what is refused, before anything moves
@@ -284,7 +291,7 @@ def test_alone_it_still_gives_one_image(tmp_path: Path) -> None:
             plan(
                 [
                     Streams(
-                        detectors=["1"],
+                        detectors=["camera_green"],
                         mapping="x",
                         illuminations=[StreamIllumination("LED1", 488.0, 0.5)],
                     )
@@ -294,7 +301,7 @@ def test_alone_it_still_gives_one_image(tmp_path: Path) -> None:
         ),
         (
             plan(
-                [Streams(detectors=["1"], mapping="x", illuminations=[LASER])],
+                [Streams(detectors=["camera_green"], mapping="x", illuminations=[LASER])],
                 planes=[0.0, 1.0, 3.0],
             ),
             "evenly spaced",
@@ -306,18 +313,18 @@ def test_what_is_no_array_is_refused_before_anything_moves(
 ) -> None:
     """With the stage where it was and no dataset written."""
     m = built(tmp_path, "dual-camera")
-    m.stage.move(x=7.0, is_absolute=True)  # type: ignore[union-attr]
+    m.values.set({"stage.x": 7.0})  # type: ignore[union-attr]
     store = RecordingStore()
     with pytest.raises(ValueError, match=finding):
         acquire(m, config, store)
-    assert m.stage_state.x == pytest.approx(7.0)
+    assert m.values["stage.x"] == pytest.approx(7.0)
     assert store.published == []
 
 
 def test_a_position_that_wanders_is_refused(tmp_path: Path) -> None:
     """One dataset is one place."""
     m = built(tmp_path, "dual-camera")
-    stream = Streams(detectors=["1"], mapping="x", illuminations=[LASER])
+    stream = Streams(detectors=["camera_green"], mapping="x", illuminations=[LASER])
     stack = Stack(z_offset=0.0, z_slices=[], z_step=1.0, channels=[stream])
     config = MultidimensionalAcquisition(
         timepoints=[
@@ -332,16 +339,25 @@ def test_a_position_that_wanders_is_refused(tmp_path: Path) -> None:
 def test_detectors_of_different_pixel_size_are_refused(tmp_path: Path) -> None:
     """One registration maps a dataset: binning one camera would make it wrong."""
     m = built(tmp_path, "dual-camera")
-    assert m.detector is not None
-    m.detector.update_detector(2, binning=2)
+    assert m.values is not None
+    m.values.set({"camera_red.binning": 2})
     with pytest.raises(ValueError, match="cannot share an array|one pixel size"):
-        acquire(m, plan([Streams(detectors=["1", "2"], mapping="x", illuminations=[LASER])]))
+        acquire(
+            m,
+            plan(
+                [
+                    Streams(
+                        detectors=["camera_green", "camera_red"], mapping="x", illuminations=[LASER]
+                    )
+                ]
+            ),
+        )
 
 
 def test_without_a_store_it_says_so(tmp_path: Path) -> None:
     """Before anything moves, and with what to do about it."""
     m = built(tmp_path, "dual-camera")
-    config = plan([Streams(detectors=["1"], mapping="x", illuminations=[LASER])])
+    config = plan([Streams(detectors=["camera_green"], mapping="x", illuminations=[LASER])])
     with pytest.raises(RuntimeError, match="MIKRO_URL"):
         acquire(m, config, NoDatasetStore())
 
@@ -349,7 +365,7 @@ def test_without_a_store_it_says_so(tmp_path: Path) -> None:
 def test_nothing_reaches_the_local_cache(tmp_path: Path) -> None:
     """An acquisition goes to its store, and not to the frames of the expanse."""
     m = built(tmp_path, "dual-camera")
-    acquire(m, plan([Streams(detectors=["1"], mapping="x", illuminations=[LASER])]))
+    acquire(m, plan([Streams(detectors=["camera_green"], mapping="x", illuminations=[LASER])]))
     assert m.expanse_state.current_frames == []
     cache = tmp_path / "cache"
     assert not cache.exists() or not list(cache.iterdir())
@@ -358,5 +374,5 @@ def test_nothing_reaches_the_local_cache(tmp_path: Path) -> None:
 def test_it_leaves_the_lights_off(tmp_path: Path) -> None:
     """Whatever it turned on, and only its stream's sources were on for each image."""
     m = built(tmp_path, "dual-camera")
-    acquire(m, plan([Streams(detectors=["1"], mapping="x", illuminations=[LASER])]))
-    assert not any(source.is_active for source in m.illumination_state.illuminations)
+    acquire(m, plan([Streams(detectors=["camera_green"], mapping="x", illuminations=[LASER])]))
+    assert not any(source.on for source in m.source_state.sources.values())

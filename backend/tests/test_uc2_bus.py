@@ -4,14 +4,17 @@ import asyncio
 
 import pytest
 
+from newswitch.drivers.uc2.actuators import Stepper, StepperConfig
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.dispatch import apply_uc2_event
-from newswitch.drivers.uc2.stage_manager import UC2StageConfig, UC2StageManager
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
+from newswitch.instrument import spec
 from newswitch.models.uc2 import BusError, EStopChanged, MotionDone, NodeSeen, PositionUpdate
 from newswitch.protocols.uc2 import UC2BusManager
-from newswitch.states.stage import StageState
+from newswitch.services.values import Values
 from newswitch.states.uc2 import UC2State
+from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
+from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
 
 
 def make_virtual_bus() -> VirtualUC2Bus:
@@ -88,47 +91,35 @@ def test_canopen_unit_conversion_roundtrip() -> None:
     assert bus.axis_for_node(99) is None
 
 
-def test_uc2_stage_exposes_configured_jog_distances() -> None:
-    """Hardware setups publish practical XY jog distances to the frontend."""
-    stage_state = StageState()
-
-    UC2StageManager(
-        stage_state=stage_state,
-        bus=make_virtual_bus(),
-        config=UC2StageConfig(registered_step_sizes=[10.0, 100.0, 1000.0, 10000.0]),
-    )
-
-    assert stage_state.registered_step_sizes == [10.0, 100.0, 1000.0, 10000.0]
-
-
-def test_uc2_stage_rejects_invalid_jog_distances() -> None:
-    """Zero or negative jog distances cannot be exposed to the controls."""
-    with pytest.raises(ValueError, match="positive values"):
-        UC2StageManager(
-            stage_state=StageState(),
-            bus=make_virtual_bus(),
-            config=UC2StageConfig(registered_step_sizes=[100.0, 0.0]),
-        )
-
-
 def test_apply_uc2_event_updates_states() -> None:
-    """Dispatch mirrors hardware events into stage and bus states."""
-    stage_state = StageState()
+    """Dispatch mirrors hardware events into what moved and the bus state, by the axis of each."""
+    bus = make_virtual_bus()
+    values = Values(
+        spec.load(REFERENCE_INSTRUMENT),
+        MoveState(),
+        SwapState(),
+        TuneState(),
+        SourceState(),
+        {
+            "stage.x": Stepper(bus, StepperConfig(axis="X", steps_per_um=3.2), None),
+            "stage.z": Stepper(bus, StepperConfig(axis="Z", steps_per_um=3.2), None),
+        },
+    )
     uc2_state = UC2State()
 
-    # StageState requires the stage_position lock for writes (as in dispatch).
-    apply_uc2_event(PositionUpdate(axis="X", position=42.0), stage_state, uc2_state)
-    assert stage_state.x == pytest.approx(42.0)
+    apply_uc2_event(PositionUpdate(axis="X", position=42.0), values, uc2_state)
+    assert values["stage.x"] == pytest.approx(42.0)
+    assert values.move_state.moves["stage"]["x"].value == pytest.approx(42.0)
 
-    apply_uc2_event(MotionDone(axis="Z", position=-7.5), stage_state, uc2_state)
-    assert stage_state.z == pytest.approx(-7.5)
+    apply_uc2_event(MotionDone(axis="Z", position=-7.5), values, uc2_state)
+    assert values["stage.z"] == pytest.approx(-7.5)
 
-    apply_uc2_event(EStopChanged(active=True), stage_state, uc2_state)
+    apply_uc2_event(EStopChanged(active=True), values, uc2_state)
     assert uc2_state.estop_active is True
 
-    apply_uc2_event(NodeSeen(node_id=11, nmt_state=5), stage_state, uc2_state)
-    apply_uc2_event(NodeSeen(node_id=11, nmt_state=5), stage_state, uc2_state)
+    apply_uc2_event(NodeSeen(node_id=11, nmt_state=5), values, uc2_state)
+    apply_uc2_event(NodeSeen(node_id=11, nmt_state=5), values, uc2_state)
     assert uc2_state.nodes_online == [11]
 
-    apply_uc2_event(BusError(message="boom"), stage_state, uc2_state)
+    apply_uc2_event(BusError(message="boom"), values, uc2_state)
     assert uc2_state.last_error == "boom"

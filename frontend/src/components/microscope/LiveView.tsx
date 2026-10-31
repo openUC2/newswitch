@@ -1,26 +1,26 @@
 import { Badge } from "@/components/ui/badge";
-import { useCameraState, useStageState } from "@/apps/default/hooks/states";
+import { useDetectorState } from "@/apps/default/hooks/states";
+import { useStagePosition } from "@/lib/microscope/values";
 import { Camera } from "lucide-react";
 import { StreamingView } from "../liveview/StreamingView";
 
 export function LiveView() {
-  const { data: cameraState } = useCameraState({ subscribe: true });
-  const { data: stageState } = useStageState({ subscribe: true });
+  const { data: detectorState } = useDetectorState({ subscribe: true });
+  const stageState = useStagePosition();
 
   // Use camera state to determine if live view is active
-  const isLive = cameraState?.is_acquiring ?? false;
+  const isLive = detectorState?.is_acquiring ?? false;
   // The stream of the first active detector.
-  const slot =
-    cameraState?.detectors.find((detector) => detector.is_active)?.slot ?? 1;
+  const detector = detectorState?.detectors.find((d) => d.is_active)?.name;
 
   return (
     <div className="flex flex-col h-full bg-black rounded-lg overflow-hidden">
       {/* Image viewport */}
       <div className="relative flex-1 overflow-hidden">
         {/* StreamingView or placeholder */}
-        {isLive ? (
+        {isLive && detector ? (
           <div className="absolute inset-0">
-            <StreamingView slot={slot} />
+            <StreamingView detector={detector} />
           </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -39,7 +39,7 @@ export function LiveView() {
               LIVE
             </Badge>
           )}
-          {cameraState && (
+          {detectorState && (
             <Badge variant="secondary" className="text-xs"></Badge>
           )}
         </div>

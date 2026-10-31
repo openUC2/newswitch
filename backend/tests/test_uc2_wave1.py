@@ -4,14 +4,16 @@ import asyncio
 
 import pytest
 
+from newswitch.drivers.base import Driver
+from newswitch.drivers.uc2.actuators import Turret, Wheel, WheelConfig
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
-from newswitch.drivers.uc2.filter_bank_manager import UC2FilterBankManager
-from newswitch.drivers.uc2.objective_manager import UC2ObjectiveManager
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
+from newswitch.instrument import spec
 from newswitch.models.uc2 import BusError
-from newswitch.states.filter_bank import FilterBankState
-from newswitch.states.objective import ObjectiveState
+from newswitch.services.values import Values
 from newswitch.states.uc2 import UC2State
+from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
+from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
 
 
 def make_virtual_bus() -> VirtualUC2Bus:
@@ -19,6 +21,18 @@ def make_virtual_bus() -> VirtualUC2Bus:
     return VirtualUC2Bus(
         state=UC2State(),
         config=VirtualUC2BusConfig(default_speed=1_000_000.0, update_interval_s=0.001),
+    )
+
+
+def reference_with(**drivers: Driver) -> Values:
+    """The values of the reference microscope, these variables (`__` for `.`) through `drivers`."""
+    return Values(
+        spec.load(REFERENCE_INSTRUMENT),
+        MoveState(),
+        SwapState(),
+        TuneState(),
+        SourceState(),
+        {name.replace("__", "."): driver for name, driver in drivers.items()},
     )
 
 
@@ -101,49 +115,45 @@ def test_can_shared_node_sub_axis_mapping() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_objective_manager_switches_and_toggles() -> None:
-    """UC2ObjectiveManager drives the bus and mirrors slot metadata into state."""
+def test_a_turret_drives_the_bus_and_says_what_is_in_place() -> None:
+    """A swap goes to the board's objective changer, and what it put in place is published."""
     import koil
     from koil import unkoil
 
     with koil.Koil():
         bus = make_virtual_bus()
-        state = ObjectiveState()
-        manager = UC2ObjectiveManager(objective_state=state, bus=bus)
+        values = reference_with(objective__slot=Turret(bus))
+        swap = values.swap_state.swaps["objective"]
 
-        manager.switch_objective(2)
-        assert state.slot == 2
-        assert state.magnification == pytest.approx(20.0)
+        values.set({"objective.slot": 2})
+        assert values.swap_state.swaps["objective"]["slot"].value == 2
+        assert values.swap_state.swaps["objective"]["slot"].label == "f10 NA 0.4"
+        assert swap["slot"].options[1].facts["magnification"] == "20x"
         assert unkoil(bus.aobjective_status)["slot"] == 2
 
-        manager.toggle_objective()
-        assert state.slot == 1
+        values.set({"objective.slot": 1})
+        assert values["objective.slot"] == 1
 
         with pytest.raises(ValueError):
-            manager.switch_objective(99)
+            values.set({"objective.slot": 99})
 
 
-def test_filter_bank_manager_moves_wheel_axis() -> None:
-    """UC2FilterBankManager positions the wheel axis and tracks the active filter."""
+def test_a_wheel_moves_its_axis() -> None:
+    """A swap positions the wheel's axis, and tracks the filter in place."""
     import koil
     from koil import unkoil
 
     with koil.Koil():
         bus = make_virtual_bus()
-        state = FilterBankState()
-        manager = UC2FilterBankManager(filter_bank_state=state, bus=bus)
+        wheel = Wheel(bus, WheelConfig(axis="A", positions={1: 0.0, 2: 120.0}))
+        values = reference_with(filter_wheel__slot=wheel)
 
-        active = manager.switch_filter(2)
-        assert active.slot == 2
-        assert state.current_slot == 2
+        values.set({"filter_wheel.slot": 2})
+        assert values.swap_state.swaps["filter_wheel"]["slot"].value == 2
         assert unkoil(bus.aget_position, "A") == pytest.approx(120.0)
 
-        active = manager.toggle_filter()
-        assert active.slot == 3
-        assert unkoil(bus.aget_position, "A") == pytest.approx(240.0)
-
-        assert manager.get_transmission_at_wavelength(605.0) == pytest.approx(1.0)
-        assert manager.get_transmission_at_wavelength(450.0) == pytest.approx(0.0)
+        values.set({"filter_wheel.slot": 1})
+        assert unkoil(bus.aget_position, "A") == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio

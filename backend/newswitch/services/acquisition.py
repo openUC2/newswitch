@@ -33,22 +33,20 @@ class AcquisitionManager:
         self.optics_manager = optics_manager
         self.cache_manager = cache_manager
 
-    def acquire(self, slots: Optional[list[int]] = None) -> list[Frame]:
-        """A frame from each active detector (only those in `slots`, when given).
+    def acquire(self, names: Optional[list[str]] = None) -> list[Frame]:
+        """A frame from each active detector (only those in `names`, when given).
 
         Each frame is cached, gets the metadata of its light path, and is added to the expanse.
         """
         frames: list[Frame] = []
 
         for detector in self.detector_manager.state.detectors:
-            if slots is not None and detector.slot not in slots:
+            if names is not None and detector.name not in names:
                 continue
             if detector.is_active:
-                image_data = self.detector_manager.capture_image(slot=detector.slot).data
+                image_data = self.detector_manager.capture_image(detector.name).data
 
-                light_path = self.optics_manager.get_light_path_for_detector(
-                    detector_slot=detector.slot
-                )
+                light_path = self.optics_manager.get_light_path_for_detector(detector.name)
 
                 metadata = self.metadata_manager.get_metadata_for_light_path(light_path=light_path)
 
@@ -72,7 +70,7 @@ class AcquisitionManager:
                     ),
                 )
 
-                logger.debug("Acquired frame %s from detector %d", frame.id, detector.slot)
+                logger.debug("Acquired frame %s from detector %s", frame.id, detector.name)
                 self.expanse_manager.add_frame(frame)
                 frames.append(frame)
 

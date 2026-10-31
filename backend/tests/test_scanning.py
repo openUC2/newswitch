@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import yaml
 
-from newswitch.drivers.optics.simulator import SimulatedMicroscope
+from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import parts, spec
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.tracing import scan_um_per_degree
@@ -111,11 +111,13 @@ def test_defocus_blurs_a_scan(instrument: spec.Instrument) -> None:
 def test_the_server_takes_images_of_the_scans_size(tmp_path: Path, instrument) -> None:  # noqa: ANN001
     """Through the same detector manager as a camera."""
     m = build_microscope(run_settings(tmp_path), instrument)
-    detector = m.camera_state.detectors[0]
+    detector = m.detector_state.detectors[0]
     assert (detector.width, detector.height, detector.colors) == (512, 512, [])
-    assert detector.pixel_size_um == pytest.approx(0.02 * 5_000.0 * math.pi / 180.0)
-    m.detector.activate_detector(1)
-    image = m.detector.capture_channels(1)
+    assert m.optics_state.detectors["pmt"].pixel_um == pytest.approx(
+        0.02 * 5_000.0 * math.pi / 180.0
+    )
+    m.detector.activate_detector("pmt")
+    image = m.detector.capture_channels("pmt")
     assert image.shape == (1, 512, 512) and np.issubdtype(image.dtype, np.integer)
 
 
@@ -159,8 +161,8 @@ def test_a_scan_that_cannot_work_is_refused_when_parsed(
 
 def test_a_point_detector_is_refused_on_real_hardware(instrument: spec.Instrument) -> None:
     """Nothing can read one yet."""
-    with pytest.raises(spec.SpecError, match="the sensor pmt has no camera"):
-        parts.check_wired(instrument)
+    with pytest.raises(spec.SpecError, match="the detector pmt has no camera"):
+        parts.check_wired(instrument, "nothing")
 
 
 def test_a_point_detector_is_no_camera(tmp_path: Path) -> None:

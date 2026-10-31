@@ -9,12 +9,12 @@ cubes:
   laser_488:
     element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
-      power: {actuator: laser-dac, initial: 20 mW, step: 1 mW}
+      power: {actuator: laser-dac, initial: 20 mW, step: 1 mW, max: 50 mW}
 
   led_625:
     element: {kind: source, emits: led, spectrum: {center: 625 nm, width: 15 nm}, max_power: 50 nW}
     tunes:
-      power: {actuator: led-dac, initial: 0 mW, step: 5 nW}
+      power: {actuator: led-dac, initial: 0 mW, step: 5 nW, max: 50 nW}
 
   stage:
     element:
@@ -61,9 +61,10 @@ cubes:
       axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
       readout: scmos
     tunes:
+      frame_rate: {initial: 30 Hz, min: 1 Hz, max: 100 Hz, step: 1 Hz}
       exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
       gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
-      binning: {initial: 1, step: 1}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
 
 illumination:
   - {from: laser_488, to: dichroic}
@@ -78,18 +79,8 @@ detection:
   - {from: filter_wheel, to: tube, distance: 30 mm}
   - {from: tube, to: camera, distance: focus}
 
-parts:
-  stage: stage
-  objective: {swap: objective.slot}
-  filters: {swap: filter_wheel.slot}
-  sources:
-    1: {cube: laser_488, full_intensity: 100.0}
-    2: {cube: led_625, full_intensity: 100.0}
-  detectors:
-    1: {cube: camera, frame_rate: 30 Hz}
-
 settings:
-  use_virtual_microscope: true
+  simulate: everything
   simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
@@ -104,17 +95,13 @@ hardware:
       transport: canopen
       interface: socketcan
       channel: can0
-      steps_per_um_x: 3.2
-      steps_per_um_y: 3.2
-      steps_per_um_z: 3.2
-      stage: {home_axes: [Z, X, Y]}
   actuators:
-    stg-x: {board: uc2, axis: X}
-    stg-y: {board: uc2, axis: Y}
-    stg-z: {board: uc2, axis: Z}
-    turret: {board: uc2, positions: {1: 0, 2: 20000}}
-    wheel: {board: uc2, axis: A, positions: {1: 0.0, 2: 120.0}}
-    laser-dac: {board: uc2, channel: 1, pwm_max: 1023}
-    led-dac: {board: uc2, channel: 2, pwm_max: 1023}
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    turret: {driver: uc2.turret, board: uc2, positions: {1: 0, 2: 20000}}
+    wheel: {driver: uc2.wheel, board: uc2, axis: A, positions: {1: 0.0, 2: 120.0}}
+    laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+    led-dac: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
   cameras:
     camera: {protocol: usb3-vision, vendor: Simulated, buffer_size: 8}

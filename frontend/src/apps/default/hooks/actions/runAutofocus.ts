@@ -20,10 +20,18 @@ how deep the detector's objective sees sharply. */
     .describe('Number of Z planes to score (>= 3).')
     .nullable()
     .optional(),
-  /** Detector to read frames from. */
-  detector_slot: z
-    .number()
-    .describe('Detector to read frames from.')
+  /** The detector to read frames from; by default, the first that is on. */
+  detector_name: z
+    .string()
+    .describe(
+      'The detector to read frames from; by default, the first that is on.',
+    )
+    .nullable()
+    .optional(),
+  /** What to focus with, if several things do. */
+  focus: z
+    .string()
+    .describe('What to focus with, if several things do.')
     .nullable()
     .optional(),
   /** "laplacian_variance" (default) or "intensity_variance". */
@@ -59,7 +67,7 @@ export const RunAutofocusDefinition: ActionDefinition<
     'Autofocus: sweep Z around the current position and move to the sharpest plane.',
   argsSchema: RunAutofocusArgsSchema,
   returnSchema: RunAutofocusReturnSchema,
-  lockKeys: ['stage_position'],
+  lockKeys: ['motion'],
 };
 
 /**

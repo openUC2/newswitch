@@ -1,22 +1,17 @@
-import { useStageState } from "@/apps/default/hooks/states/StageState";
+import { useStage } from "@/lib/microscope/values";
 import { useModeStore } from "@/store/modeStore";
 import { Line } from "@react-three/drei";
 
 export const StageAxis = () => {
-  const { data: stageState } = useStageState({ subscribe: true });
+  const stage = useStage();
   const interactionMode = useModeStore((s) => s.interactionMode);
 
-  if (!stageState) return null;
   if (interactionMode === "META") return null;
 
-  const stageRangeX = Math.max(
-    200,
-    (stageState?.max_x ?? 100) - (stageState?.min_x ?? -100),
-  );
-  const stageRangeY = Math.max(
-    200,
-    (stageState?.max_y ?? 100) - (stageState?.min_y ?? -100),
-  );
+  const range = (moves: typeof stage.x) =>
+    Math.max(200, (moves[0]?.maximum ?? 100) - (moves[0]?.minimum ?? -100));
+  const stageRangeX = range(stage.x);
+  const stageRangeY = range(stage.y);
 
   return (
     <group>

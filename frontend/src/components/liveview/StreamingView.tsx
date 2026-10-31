@@ -4,7 +4,7 @@ import { DEFAULT_MAX_SIZE, FULL_SIZE, useFrameStream } from "./frameStream";
 
 interface StreamingViewProps {
   /** The detector to show */
-  slot: number;
+  detector: string;
   /** Custom class name for container */
   className?: string;
 }
@@ -16,7 +16,7 @@ const STATE_COLORS = {
 };
 
 export const StreamingView: React.FC<StreamingViewProps> = ({
-  slot,
+  detector,
   className,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -25,7 +25,7 @@ export const StreamingView: React.FC<StreamingViewProps> = ({
   const [size, setSize] = useState<[number, number] | null>(null);
 
   const state = useFrameStream(
-    slot,
+    detector,
     fullSize ? FULL_SIZE : DEFAULT_MAX_SIZE,
     (frame) => {
       latestRef.current = frame;

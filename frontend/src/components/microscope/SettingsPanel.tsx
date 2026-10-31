@@ -11,7 +11,7 @@ import {
   useStartLiveView,
   useStopLiveView,
 } from "@/apps/default/hooks/actions";
-import { useCameraState, useObjectiveState } from "@/apps/default/hooks/states";
+import { useDetectorState } from "@/apps/default/hooks/states";
 import { useCaptureAndDownload } from "@/hooks/useCaptureAndDownload";
 import { cn } from "@/lib/utils";
 import {
@@ -24,14 +24,12 @@ import {
   Settings2,
   Square,
   Sun,
-  Target,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CameraControl } from "./CameraControl";
-import { FilterBankControl } from "./FilterBankControl";
-import { IlluminationControl } from "./IlluminationControl";
-import { ObjectiveControl } from "./ObjectiveControl";
+import { DetectorControl } from "./DetectorControl";
+import { SourceControl } from "./SourceControl";
+import { SwapsControl } from "./SwapsControl";
 
 interface SettingsSectionProps {
   title: string;
@@ -75,8 +73,7 @@ function SettingsSection({
 
 export function SettingsPanel() {
   const { t } = useTranslation();
-  const { data: cameraState } = useCameraState({ subscribe: true });
-  const { data: objectiveState } = useObjectiveState({ subscribe: true });
+  const { data: detectorState } = useDetectorState({ subscribe: true });
   // Live view and capture controls
   const {
     assign: startLiveView,
@@ -97,7 +94,7 @@ export function SettingsPanel() {
 
   const { call: reset } = useClearExpanse();
 
-  const isLive = cameraState?.is_acquiring ?? false;
+  const isLive = detectorState?.is_acquiring ?? false;
 
   return (
     <div className="h-full flex flex-col">
@@ -165,7 +162,7 @@ export function SettingsPanel() {
           title={t("microscope.camera")}
           icon={<Camera className="h-4 w-4" />}
         >
-          <CameraControl />
+          <DetectorControl />
         </SettingsSection>
 
         <Separator />
@@ -175,29 +172,14 @@ export function SettingsPanel() {
           title={t("microscope.illumination")}
           icon={<Sun className="h-4 w-4" />}
         >
-          <IlluminationControl />
+          <SourceControl />
         </SettingsSection>
-        {/* Illumination Settings */}
+        {/* What is swapped */}
         <SettingsSection
           title={t("microscope.filters")}
           icon={<Filter className="h-4 w-4" />}
         >
-          <FilterBankControl />
-        </SettingsSection>
-
-        <Separator />
-
-        {/* Objective Settings */}
-        <SettingsSection
-          title={t("microscope.objective")}
-          icon={<Target className="h-4 w-4" />}
-          badge={
-            objectiveState?.slot
-              ? t("common.slot", { slot: objectiveState.slot })
-              : undefined
-          }
-        >
-          <ObjectiveControl />
+          <SwapsControl />
         </SettingsSection>
 
         <Separator />

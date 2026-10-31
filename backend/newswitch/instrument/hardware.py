@@ -1,22 +1,20 @@
 """How an instrument's optics reach real hardware: the ``hardware`` section of its description.
 
-The cubes say what the microscope is and name their actuators; this section says what those names
-are wired to. It is read only with ``use_virtual_microscope: false``, and is no part of what the
-compiler looks at::
+The cubes say what the microscope is and name their actuators; this section says which driver reaches
+each, and with what. An actuator's other keys are its driver's to check. It is no part of what the
+compiler looks at, and what it does not wire is simulated or refused, as ``settings.simulate`` says::
 
     hardware:
       boards:
         uc2:
           transport: rest        # rest | canopen
           port: /dev/ttyUSB0     # or port_pattern; neither: autodetect
-          baudrate: 921600
-          steps_per_um_x: 3.2    # any other option of UC2RestBusConfig / UC2CanBusConfig
-          stage: {home_axes: [Z, X, Y]}  # any option of UC2StageConfig but its axes
+          baudrate: 921600       # any other option of UC2RestBusConfig / UC2CanBusConfig
       actuators:
-        stg-x: {board: uc2, axis: X}
-        wheel: {board: uc2, axis: A, positions: {1: 0.0, 2: 120.0}}
-        turret: {board: uc2, positions: {1: 0, 2: 20000}}
-        laser-dac: {board: uc2, channel: 1, pwm_max: 1023}
+        stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+        wheel: {driver: uc2.wheel, board: uc2, axis: A, positions: {1: 0.0, 2: 120.0}}
+        turret: {driver: uc2.turret, board: uc2}
+        laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
       cameras:                   # by the cube of the sensor
         camera_a: {protocol: usb3-vision, vendor: HikRobot, serial_number: "00F1"}
 """
@@ -32,7 +30,6 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
-    StrictFloat,
     StrictInt,
     TypeAdapter,
     ValidationError,
@@ -49,7 +46,8 @@ STRICT = ConfigDict(extra="forbid")
 #: How a camera is reached, and what uc2_cam_py calls that.
 CAMERA_PROTOCOLS = {"usb3-vision": "USB3", "gige-vision": "GigE"}
 
-_BOARD_FIELDS = {"name", "transport", "port", "port_pattern", "options", "stage"}
+_BOARD_FIELDS = {"name", "transport", "port", "port_pattern", "options"}
+_ACTUATOR_FIELDS = {"name", "driver", "board", "options"}
 
 
 def _named(entries: Any) -> Any:  # noqa: ANN401 - raw input of any shape
@@ -71,7 +69,6 @@ class Board:
     port: str | None = None
     port_pattern: str | None = None
     options: dict[str, Any] = field(default_factory=dict)
-    stage: dict[str, Any] = field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -86,8 +83,6 @@ class Board:
     def _check(self) -> Self:
         if self.port is not None and self.port_pattern is not None:
             raise ValueError("port and port_pattern both name the port, give only one")
-        if "axes" in self.stage:
-            raise ValueError("stage.axes: the stage's axes come from its actuators")
         return self
 
     def resolved_port(self) -> str | None:
@@ -100,14 +95,21 @@ class Board:
 
 @dataclass(frozen=True, config=STRICT)
 class Actuator:
-    """What an actuator's name is wired to."""
+    """Which driver an actuator's name means, and what it needs."""
 
     name: str
-    board: str
-    axis: str | None = None
-    channel: StrictInt | None = None
-    pwm_max: StrictInt | None = None
-    positions: dict[StrictInt, StrictFloat] | None = None  # by slot
+    driver: str
+    board: str | None = None
+    options: dict[str, Any] = field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _rest_are_driver_options(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        # The driver's config checks them when the driver is built.
+        if not isinstance(data, Mapping):
+            return data
+        known = {key: value for key, value in data.items() if key in _ACTUATOR_FIELDS}
+        return {**known, "options": {k: v for k, v in data.items() if k not in _ACTUATOR_FIELDS}}
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -150,7 +152,7 @@ class Hardware:
         if len(self.boards) > 1:
             raise ValueError(f"boards: newswitch drives one board, not {sorted(self.boards)}")
         for actuator in self.actuators.values():
-            if actuator.board not in self.boards:
+            if actuator.board is not None and actuator.board not in self.boards:
                 raise ValueError(f"actuators.{actuator.name}: names no board {actuator.board!r}")
         return self
 

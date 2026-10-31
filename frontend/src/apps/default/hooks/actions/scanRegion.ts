@@ -163,8 +163,8 @@ export const ScanRegionArgsSchema = z.object({
   end_y: z.number(),
   overlap: z.number().nullable().optional(),
   /** The detector to calculate the FOV for (all other detectors will follow). If None, use the first active detector. */
-  detector_slot: z
-    .number()
+  detector_name: z
+    .string()
     .describe(
       'The detector to calculate the FOV for (all other detectors will follow). If None, use the first active detector.',
     )
@@ -194,17 +194,17 @@ export const ScanRegionDefinition: ActionDefinition<
   name: 'scan_region',
   appKey: 'default',
   description:
-    'Scan a rectangular region of the stage tile by tile.\n\nThe region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered\nwith fields of view of the detector (`detector_slot`, else the first active one),\noverlapping by `overlap`, visited in `scan_order`; every active detector acquires a\nframe at each tile.',
+    'Scan a rectangular region of the stage tile by tile.\n\nThe region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered\nwith fields of view of the detector (`detector_name`, else the first active one),\noverlapping by `overlap`, visited in `scan_order`; every active detector acquires a\nframe at each tile.',
   argsSchema: ScanRegionArgsSchema,
   returnSchema: ScanRegionReturnSchema,
-  lockKeys: ['camera_parameters', 'expanse_state', 'io', 'stage_position'],
+  lockKeys: ['motion'],
 };
 
 /**
  * Scan a rectangular region of the stage tile by tile.
 
 The region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered
-with fields of view of the detector (`detector_slot`, else the first active one),
+with fields of view of the detector (`detector_name`, else the first active one),
 overlapping by `overlap`, visited in `scan_order`; every active detector acquires a
 frame at each tile.
  */

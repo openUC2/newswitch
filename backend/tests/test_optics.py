@@ -13,6 +13,7 @@ from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.optics import DetectorOptics
 from newswitch.routines.autofocus import autofocus_sweep
 from newswitch.routines.common import focus_range, z_sweep
+from newswitch.services.stage import stage_of
 from newswitch.settings import Settings
 from tests.conftest import run_settings
 
@@ -69,36 +70,36 @@ def test_a_scanned_source_is_a_spot(tmp_path: Path) -> None:
 
 def test_what_changes_is_published_at_once(microscope: Microscope) -> None:
     """Another objective is another pixel; no one has to ask."""
-    assert microscope.objective is not None
+    assert microscope.values is not None
     before = first_detector(microscope).pixel_um
-    microscope.objective.switch_objective(2)
+    microscope.values.set({"objective.slot": 2})
     assert first_detector(microscope).pixel_um != pytest.approx(before, rel=0.1)
 
 
 def test_more_power_is_published_as_more_counts(microscope: Microscope) -> None:
     """Expected counts follow the sources."""
-    assert microscope.illumination is not None
-    microscope.illumination.set_intensity(10.0, channel=1)
+    assert microscope.values is not None
+    microscope.values.set({"laser_488.power": 5.0})
     dim = first_detector(microscope).expected_counts
-    microscope.illumination.set_intensity(80.0, channel=1)
+    microscope.values.set({"laser_488.power": 40.0})
     assert first_detector(microscope).expected_counts > dim
 
 
 def test_what_did_not_change_is_not_published_again(microscope: Microscope) -> None:
     """Exposure changes the counts, and leaves the sources and their channels' shape alone."""
-    assert microscope.detector is not None
+    assert microscope.values is not None
     sources = microscope.optics_state.sources
     detectors = microscope.optics_state.detectors
     microscope.optics.refresh()
     assert microscope.optics_state.detectors is detectors
-    microscope.detector.update_detector(1, exposure_time=0.05)
+    microscope.values.set({"camera.exposure": 50.0})
     assert microscope.optics_state.detectors is not detectors
     assert microscope.optics_state.sources is sources
 
 
 def test_a_calibration_is_published_over_the_prediction(microscope: Microscope) -> None:
     """Measured beats predicted, for as long as what it depends on holds."""
-    path = microscope.optics.get_light_path_for_detector(1)
+    path = microscope.optics.get_light_path_for_detector("camera")
     microscope.calibration.set_calibrated_state(
         CalibratedLightPath(
             key=microscope.optics.snapshot(path).key,
@@ -112,6 +113,28 @@ def test_a_calibration_is_published_over_the_prediction(microscope: Microscope) 
     )
     found = first_detector(microscope)
     assert (found.calibrated, found.pixel_um) == (True, 0.5)
+
+
+def test_a_region_is_what_a_calibration_depends_on_and_is_published_at_once(
+    microscope: Microscope,
+) -> None:
+    """Reading out another part of the sensor leaves the prediction, not the measurement."""
+    assert microscope.detector is not None
+    path = microscope.optics.get_light_path_for_detector("camera")
+    microscope.calibration.set_calibrated_state(
+        CalibratedLightPath(
+            key=microscope.optics.snapshot(path).key,
+            affine_matrix=[
+                [0.5, 0.0, 0.0, 0.0],
+                [0.0, 0.5, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        )
+    )
+    assert first_detector(microscope).calibrated
+    microscope.detector.update_detector("camera", roi=(0, 0, 100, 100))
+    assert not first_detector(microscope).calibrated
 
 
 def test_what_a_calibration_depends_on_is_measured() -> None:
@@ -163,20 +186,20 @@ def test_a_low_na_sweep_reaches_focus_from_where_a_fixed_one_could_not(
     microscope: Microscope,
 ) -> None:
     """Two depths of field off: what the NA asks for finds it, and 20 um would only walk towards it."""
-    assert microscope.stage is not None and microscope.detector is not None
-    assert microscope.illumination is not None and microscope.objective is not None
-    sources = microscope.illumination_state.illuminations
-    for source in sources:
-        microscope.illumination.turn_off_channel(source.slot)
-    microscope.illumination.turn_on(sources[0].slot, sources[0].max_intensity * 0.5)
-    microscope.objective.switch_objective(microscope.objective_state.mounted_lenses[0].slot)
-    depth = microscope.optics.depth_of_field_um(1)
+    assert microscope.values is not None and microscope.detector is not None
+    values = microscope.values
+    sources = list(microscope.source_state.sources.values())
+    values.set({source.power_variable: 0.0 for source in sources})
+    values.set({sources[0].power_variable: sources[0].max_power * 0.5})
+    values.set({"objective.slot": microscope.swap_state.swaps["objective"]["slot"].options[0].slot})
+    depth = microscope.optics.depth_of_field_um("camera")
+    stage = stage_of(values, "camera")
 
-    microscope.stage.move(z=2.0 * depth, is_absolute=True)
-    sweep = z_sweep(microscope.stage.state.z, focus_range(depth, 11), 11)
-    best, _ = autofocus_sweep(microscope.stage, microscope.detector, sweep)
+    stage.move(z=2.0 * depth, is_absolute=True)
+    sweep = z_sweep(stage.state.z, focus_range(depth, 11), 11)
+    best, _ = autofocus_sweep(stage, microscope.detector, sweep)
     assert abs(best) <= depth / 2.0
 
-    microscope.stage.move(z=2.0 * depth, is_absolute=True)
-    best, _ = autofocus_sweep(microscope.stage, microscope.detector, z_sweep(2.0 * depth, 20.0, 11))
+    stage.move(z=2.0 * depth, is_absolute=True)
+    best, _ = autofocus_sweep(stage, microscope.detector, z_sweep(2.0 * depth, 20.0, 11))
     assert abs(best) > depth / 2.0

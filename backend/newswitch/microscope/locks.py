@@ -1,15 +1,14 @@
-"""The locks of a microscope: one per part (and per shared service), held by the actions using it.
+"""The locks of a microscope: one per way of changing it (and per shared service), held by an action.
 
-A state's ``required_locks`` and a context's ``locks`` name these; an action taking that state
-or context holds them while it runs (arkitekt infers them), so two actions using the same
-part never run at once. Keep the strings stable: clients know the locks by name.
+A state's ``required_locks`` and a context's ``locks`` name these; an action taking such a state or
+context holds them while it runs (arkitekt infers them), so two actions on one never run at once. A
+move does not block changing a laser. Keep the strings stable: clients know the locks by them.
 """
 
-STAGE = "stage_position"
-ILLUMINATION = "illumination"
-DETECTOR = "camera_parameters"
-OBJECTIVE = "objective"
-FILTER_BANK = "filter_bank"
+MOTION = "motion"
+SWAP = "swap"
+TUNE = "tune"
+DETECTOR = "detector"
 GALVO = "galvo"
 IO = "io"
 HOOKS = "hook_registry"

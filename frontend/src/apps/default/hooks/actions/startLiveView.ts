@@ -6,7 +6,8 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 // --- Schemas ---
 export const StartLiveViewArgsSchema = z.object({});
 export const StartLiveViewReturnSchema = z.object({
-  return0: z.string(),
+  /** Status message. */
+  return0: z.string().describe('Status message.'),
 });
 
 // --- Types ---
@@ -22,18 +23,14 @@ export const StartLiveViewDefinition: ActionDefinition<
 > = {
   name: 'start_live_view',
   appKey: 'default',
-  description:
-    'Start broadcasting frames to the video WebSocket endpoint.\n\nCall this to begin streaming frames captured by the detector\nto connected video clients.',
+  description: 'Start streaming every active detector.',
   argsSchema: StartLiveViewArgsSchema,
   returnSchema: StartLiveViewReturnSchema,
-  lockKeys: ['camera_parameters'],
+  lockKeys: ['detector'],
 };
 
 /**
- * Start broadcasting frames to the video WebSocket endpoint.
-
-Call this to begin streaming frames captured by the detector
-to connected video clients.
+ * Start streaming every active detector.
  */
 export const useStartLiveView = () => {
   return useAction(StartLiveViewDefinition);

@@ -11,7 +11,7 @@ import yaml
 from mikro import dataset_arrays
 from mikro.api import schema
 
-from newswitch.drivers.optics.simulator import SimulatedMicroscope
+from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import StreamIllumination, Streams
@@ -112,9 +112,9 @@ def test_flim_that_cannot_work_is_refused_when_parsed(
 def test_what_expects_one_image_gets_one(microscope: Microscope) -> None:
     """The live view and an autofocus see the photons per pixel."""
     assert microscope.detector is not None
-    microscope.detector.activate_detector(1)
-    assert microscope.detector.capture_image(1).data.shape == (512, 512)
-    assert microscope.detector.capture_channels(1).shape == (1, 64, 512, 512)
+    microscope.detector.activate_detector("spad")
+    assert microscope.detector.capture_image("spad").data.shape == (512, 512)
+    assert microscope.detector.capture_channels("spad").shape == (1, 64, 512, 512)
 
 
 def test_an_acquisition_has_the_arrival_time_axis(microscope: Microscope) -> None:
@@ -174,15 +174,14 @@ def test_detectors_with_and_without_arrival_times_cannot_share_a_dataset(tmp_pat
         }
         data["detection"].append({"from": "pinhole", "to": "pmt"})
         data["drives"].append({"from": "galvo.pixel", "to": "pmt.sample"})
-        data["parts"]["detectors"][2] = {"cube": "pmt", "frame_rate": "1 Hz"}
 
     m = build_microscope(run_settings(tmp_path), spec.load(edited(tmp_path, change)))
-    assert m.stage is not None
-    moved_from = (m.stage_state.x, m.stage_state.y, m.stage_state.z)
+    assert m.values is not None
+    moved_from = m.values.snapshot()
     both = Streams(
         detectors=["spad", "pmt"],
         illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
     )
     with pytest.raises(ValueError, match="arrival-time bins"):
         acquire(m, plan([both]))
-    assert (m.stage_state.x, m.stage_state.y, m.stage_state.z) == moved_from
+    assert m.values.snapshot() == moved_from

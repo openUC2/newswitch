@@ -6,7 +6,8 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 // --- Schemas ---
 export const StopLiveViewArgsSchema = z.object({});
 export const StopLiveViewReturnSchema = z.object({
-  return0: z.string(),
+  /** Status message. */
+  return0: z.string().describe('Status message.'),
 });
 
 // --- Types ---
@@ -22,18 +23,14 @@ export const StopLiveViewDefinition: ActionDefinition<
 > = {
   name: 'stop_live_view',
   appKey: 'default',
-  description:
-    'Stop broadcasting frames to the video WebSocket endpoint.\n\nCall this to stop streaming frames captured by the detector\nto connected video clients.',
+  description: 'Stop streaming.',
   argsSchema: StopLiveViewArgsSchema,
   returnSchema: StopLiveViewReturnSchema,
-  lockKeys: ['camera_parameters'],
+  lockKeys: ['detector'],
 };
 
 /**
- * Stop broadcasting frames to the video WebSocket endpoint.
-
-Call this to stop streaming frames captured by the detector
-to connected video clients.
+ * Stop streaming.
  */
 export const useStopLiveView = () => {
   return useAction(StopLiveViewDefinition);

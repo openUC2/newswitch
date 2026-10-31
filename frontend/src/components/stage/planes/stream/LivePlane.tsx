@@ -1,4 +1,4 @@
-import type { Detector } from "@/apps/default/hooks/actions";
+import type { Detector } from "@/apps/default/hooks/states/DetectorState";
 import { useCurrentAffineTransform } from "@/hooks/useCurrentAffineTransform";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
@@ -8,7 +8,7 @@ import { useLiveFrameTexture } from "../../hooks/useLiveFrameTexture";
 export const LivePlane = (props: { detector: Detector }) => {
   const meshRef = useRef<Mesh>(null);
 
-  const liveTexture = useLiveFrameTexture(props.detector.slot);
+  const liveTexture = useLiveFrameTexture(props.detector.name);
   const imageWidth = liveTexture?.image.width ?? 1;
   const imageHeight = liveTexture?.image.height ?? 1;
   const affine = useCurrentAffineTransform();

@@ -55,17 +55,17 @@ describe("subscribeFrames", () => {
   });
 
   it("authenticates in the first message, not in the URL", () => {
-    const stop = subscribeFrames(1, 640, listener());
+    const stop = subscribeFrames("d1", 640, listener());
     const socket = FakeSocket.instances[0];
     socket.onopen?.();
-    expect(socket.url).toContain("/stream/frames/1?max_size=640");
+    expect(socket.url).toContain("/stream/frames/d1?max_size=640");
     expect(socket.url).not.toContain("token");
     expect(socket.sent).toHaveLength(1);
     stop();
   });
 
   it("acknowledges every frame, or the backend sends no next one", () => {
-    const stop = subscribeFrames(7, 640, listener());
+    const stop = subscribeFrames("d7", 640, listener());
     const socket = FakeSocket.instances[0];
     socket.onmessage?.(frame(1));
     socket.onmessage?.(frame(2));
@@ -73,34 +73,34 @@ describe("subscribeFrames", () => {
     stop();
   });
 
-  it("shares one socket between the views of a slot and size", () => {
+  it("shares one socket between the views of a detector and size", () => {
     const stops = [
-      subscribeFrames(2, 640, listener()),
-      subscribeFrames(2, 640, listener()),
+      subscribeFrames("d2", 640, listener()),
+      subscribeFrames("d2", 640, listener()),
     ];
     expect(FakeSocket.instances).toHaveLength(1);
-    const other = subscribeFrames(2, 0, listener());
+    const other = subscribeFrames("d2", 0, listener());
     expect(FakeSocket.instances).toHaveLength(2);
     [...stops, other].forEach((stop) => stop());
   });
 
   it("hands a new view the newest frame straight away", () => {
     const first = listener();
-    const stop = subscribeFrames(3, 640, first);
+    const stop = subscribeFrames("d3", 640, first);
     FakeSocket.instances[0].onmessage?.(frame(5));
     expect(first.onFrame).toHaveBeenCalledOnce();
     expect(first.onState).toHaveBeenLastCalledWith("live");
 
     const late = listener();
-    const stopLate = subscribeFrames(3, 640, late);
+    const stopLate = subscribeFrames("d3", 640, late);
     expect(late.onFrame.mock.calls[0][0].sequence).toBe(5);
     stop();
     stopLate();
   });
 
   it("survives a remount, and closes once nobody came back", () => {
-    subscribeFrames(4, 640, listener())();
-    const stop = subscribeFrames(4, 640, listener());
+    subscribeFrames("d4", 640, listener())();
+    const stop = subscribeFrames("d4", 640, listener());
     vi.advanceTimersByTime(5000);
     expect(FakeSocket.instances).toHaveLength(1);
     expect(FakeSocket.instances[0].closed).toBe(false);
@@ -113,7 +113,7 @@ describe("subscribeFrames", () => {
 
   it("reconnects when the socket is lost, also before the microscope started", () => {
     const view = listener();
-    const stop = subscribeFrames(5, 640, view);
+    const stop = subscribeFrames("d5", 640, view);
     FakeSocket.instances[0].onclose?.({ code: 1013 });
     expect(view.onState).toHaveBeenLastCalledWith("disconnected");
     vi.advanceTimersByTime(1000);
@@ -123,7 +123,7 @@ describe("subscribeFrames", () => {
   });
 
   it("gives up on a rejected token instead of looping", () => {
-    const stop = subscribeFrames(6, 640, listener());
+    const stop = subscribeFrames("d6", 640, listener());
     FakeSocket.instances[0].onclose?.({ code: 1008 });
     vi.advanceTimersByTime(5000);
     expect(FakeSocket.instances).toHaveLength(1);

@@ -8,7 +8,7 @@
 import type * as React from "react";
 import { useEffect } from "react";
 import * as z from "zod";
-import { useCameraState } from "@/apps/default/hooks/states";
+import { useDetectorState } from "@/apps/default/hooks/states";
 import { CameraMatrixSync } from "@/components/stage/CameraMatrixSync";
 import { CameraController } from "@/components/stage/cameras/CameraController";
 import { KeyboardModeController } from "@/components/stage/controllers/KeyboardModeController";
@@ -52,7 +52,7 @@ export const StageView = createBlokComponent(
     const children = useValue(blok.children);
     const className = useValue(blok.className);
     // Keep the camera state live while the view is shown, as Expanse does.
-    useCameraState({ subscribe: true });
+    useDetectorState({ subscribe: true });
 
     return (
       <div

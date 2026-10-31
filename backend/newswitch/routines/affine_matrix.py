@@ -1,14 +1,11 @@
 """Estimation and validation of the 3D affine matrix mapping pixel to stage coordinates."""
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, List
 
 import numpy as np
 from pystackreg import StackReg
 from scipy import ndimage
-
-from newswitch.models.devices import Detector, ObjectiveLens
-from newswitch.states.stage import StageState
 
 
 @dataclass
@@ -21,9 +18,7 @@ class AffineMatrix:
     singular_values: np.ndarray
 
 
-def calculate_3d_affine(
-    images: List[np.ndarray], stage_positions: List[StageState]
-) -> AffineMatrix:
+def calculate_3d_affine(images: List[np.ndarray], stage_positions: List[Any]) -> AffineMatrix:
     """
     Calculates the 4x4 3D affine matrix mapping [x, y, z, 1] pixel coordinates
     to [X, Y, Z, 1] stage microns.
@@ -248,8 +243,7 @@ class ValidationResult:
 
 def check_calibration(
     affine_matrix: AffineMatrix,
-    objective: ObjectiveLens,
-    detector: Detector,
+    predicted_um_per_px: float,
     tolerance_pct: float = 15.0,
 ) -> ValidationResult:
     """
@@ -265,7 +259,7 @@ def check_calibration(
     # 2. Magnification Check
     # Area scaling in XY
     measured_px_size = np.sqrt(np.abs(np.linalg.det(affine_matrix.matrix[:2, :2])))
-    theoretical_px_size = detector.pixel_size_um / objective.magnification
+    theoretical_px_size = predicted_um_per_px
     mag_error = abs(measured_px_size - theoretical_px_size) / theoretical_px_size * 100
 
     # 3. Aspect Ratio (X scale vs Y scale)

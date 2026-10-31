@@ -34,11 +34,11 @@ REFERENCE_INSTRUMENT = Path(__file__).parents[1] / "reference" / "complete-micro
 SCHEMA_DIR = Path(__file__).parents[3] / "frontend" / "schemas"
 #: The states of every part: a microscope without one has no hooks for it.
 EVERY_PART = {
-    "StageState",
-    "IlluminationState",
-    "CameraState",
-    "ObjectiveState",
-    "FilterBankState",
+    "MoveState",
+    "SwapState",
+    "TuneState",
+    "SourceState",
+    "DetectorState",
     "UC2State",
 }
 

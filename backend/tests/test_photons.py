@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import yaml
 
-from newswitch.drivers.optics.simulator import SimulatedMicroscope
+from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument
 

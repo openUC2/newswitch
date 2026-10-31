@@ -29,7 +29,7 @@ export const NEWSWITCH_CATALOG_NAME = "newswitch";
  * changes (a component or prop added, removed or changed);
  * `yarn catalog:export` refuses a changed module under the same version.
  */
-export const NEWSWITCH_CATALOG_VERSION = 3;
+export const NEWSWITCH_CATALOG_VERSION = 4;
 
 /** The components newswitch adds to the standard catalog. */
 export const newswitchBlokComponents: BlokComponentDefinition[] = [

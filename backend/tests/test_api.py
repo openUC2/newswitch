@@ -31,13 +31,13 @@ async def test_assign_and_get_result(virtual_microscope_app: FastAPI) -> None:
     """
     async with AsyncAgentTestClient(virtual_microscope_app) as client:
         # First activate a detector
-        activate_result = await client.assign("activate_detector", {"slot": 1})
+        activate_result = await client.assign("activate_detector", {"name": "camera"})
         events = await collect_until_completed(client, activate_result.task_id)
         assert len(events) >= 1
         assert events[-1].event_type == "COMPLETED"
 
         # Now update the detector exposure
-        assign_result = await client.assign("update_detector", {"slot": 1, "exposure_time": 0.5})
+        assign_result = await client.assign("tune", {"name": "camera.exposure", "to": 500.0})
         assert assign_result.status == "submitted"
 
         # Collect events until done

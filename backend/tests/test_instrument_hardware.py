@@ -13,15 +13,14 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from newswitch.drivers.base import SimulatedMove
+from newswitch.drivers.simulated_detector import SimulatedDetectorManager
+from newswitch.drivers.uc2.actuators import Laser, Stepper, Turret, Wheel
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
-from newswitch.drivers.uc2.filter_bank_manager import UC2FilterBankManager
-from newswitch.drivers.uc2.illumination_manager import UC2IlluminationManager
-from newswitch.drivers.uc2.objective_manager import UC2ObjectiveManager
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
-from newswitch.drivers.uc2.stage_manager import UC2StageManager
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument import hardware, parts, spec
-from newswitch.microscope.parts import build_microscope, build_uc2_bus
+from newswitch.microscope.parts import build_microscope, build_uc2_bus, bus_options
 from newswitch.settings import Settings
 from newswitch.states.uc2 import UC2State
 from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
@@ -33,7 +32,7 @@ README = Path(__file__).parent.parent / "instruments" / "README.md"
 @pytest.fixture
 def real(tmp_path: Path) -> Settings:
     """Real hardware, with every folder under `tmp_path` and no debug window."""
-    return run_settings(tmp_path, use_virtual_microscope=False)
+    return run_settings(tmp_path, simulate="nothing")
 
 
 def rewired(tmp_path: Path, **changes: Any) -> spec.Instrument:  # noqa: ANN401
@@ -67,8 +66,8 @@ def actuators(**changes: Any) -> dict[str, Any]:  # noqa: ANN401
         ({"boards": {"uc2": {"transport": "bluetooth"}}}, "bluetooth"),
         ({"boards": {"a": {"transport": "rest"}, "b": {"transport": "rest"}}}, "one board"),
         ({"boards": {"uc2": {"transport": "rest", "port": "a", "port_pattern": "b"}}}, "only one"),
-        ({"boards": {"uc2": {"transport": "rest", "stage": {"axes": ["X"]}}}}, "its actuators"),
-        ({"actuators": {"stg-x": {"board": "nope", "axis": "X"}}}, "no board 'nope'"),
+        ({"actuators": {"stg-x": {"driver": "uc2.stepper", "board": "nope"}}}, "no board 'nope'"),
+        ({"actuators": {"stg-x": {"board": "uc2", "axis": "X"}}}, "driver"),
         ({"cameras": {"cam": {"protocol": "firewire"}}}, "firewire"),
         ({"cameras": {"cam": {"protocol": "usb3-vision", "serial_number": 12}}}, "serial_number"),
         ({"cameras": {"cam": {"protocol": "usb3-vision", "index": -1}}}, "index"),
@@ -97,8 +96,10 @@ def test_no_section_is_nothing_wired() -> None:
 @pytest.mark.parametrize(
     "changes, finding",
     [
-        ({"actuators": actuators(ghost={"board": "uc2", "axis": "X"})}, "no variable has"),
-        ({"actuators": actuators(**{"stg-x": {"board": "uc2", "axis": "Y"}})}, "on axis X"),
+        (
+            {"actuators": actuators(ghost={"driver": "uc2.stepper", "board": "uc2", "axis": "X"})},
+            "no variable has",
+        ),
         ({"cameras": {"nope": {"protocol": "usb3-vision"}}}, "no sensor 'nope'"),
     ],
 )
@@ -133,10 +134,9 @@ def test_the_documented_setups_are_what_the_drivers_take(block: str) -> None:
     board = parsed.board
     assert board is not None
     config = UC2RestBusConfig if board.transport == "rest" else UC2CanBusConfig
-    built = config(**board.options)
+    built = config(**bus_options(parsed))
     assert built.steps_per_um_x == pytest.approx(3.2)
-    assert board.stage["home_axes"] == ["Z", "X", "Y"]
-    assert [a.channel for a in parsed.actuators.values() if a.channel is not None]
+    assert [a.options["channel"] for a in parsed.actuators.values() if "channel" in a.options]
 
 
 # --- simulated
@@ -161,26 +161,43 @@ def test_every_control_must_be_wired(tmp_path: Path, real: Settings) -> None:
     )
     with pytest.raises(spec.SpecError) as info:
         build_microscope(real, instrument)
-    for finding in ("stage.x", "laser_488.power", "the sensor camera"):
+    for finding in ("stage.x", "laser_488.power", "the detector camera"):
         assert finding in str(info.value)
 
 
 def test_a_wheel_needs_its_positions(tmp_path: Path, real: Settings) -> None:
     """One position per slot, or some slot would drive the wheel nowhere."""
     instrument = rewired(
-        tmp_path, actuators=actuators(wheel={"board": "uc2", "axis": "A", "positions": {1: 0.0}})
+        tmp_path,
+        actuators=actuators(
+            wheel={"driver": "uc2.wheel", "board": "uc2", "axis": "A", "positions": {1: 0.0}}
+        ),
     )
     with pytest.raises(spec.SpecError, match="a position for each of the slots"):
         build_microscope(real, instrument)
 
 
-def test_sources_share_one_pwm_scale(tmp_path: Path, real: Settings) -> None:
-    """The driver has one, so differing ones would drive a source at the wrong power."""
+def test_each_source_has_its_own_pwm_scale(tmp_path: Path, real: Settings) -> None:
+    """Each has a driver of its own, so differing ones drive each source at its own power."""
     instrument = rewired(
-        tmp_path, actuators=actuators(**{"led-dac": {"board": "uc2", "channel": 2, "pwm_max": 255}})
+        tmp_path,
+        actuators=actuators(
+            **{"led-dac": {"driver": "uc2.laser", "board": "uc2", "channel": 2, "pwm_max": 255}}
+        ),
     )
-    with pytest.raises(spec.SpecError, match="one pwm_max"):
-        build_microscope(real, instrument)
+    built = build_microscope(real, instrument)
+    assert built.values.drivers["laser_488.power"].config.pwm_max == 1023
+    assert built.values.drivers["led_625.power"].config.pwm_max == 255
+
+
+def test_a_power_with_no_max_has_no_full_scale(tmp_path: Path, real: Settings) -> None:
+    """A board's counts are a share of something: the description has to say of what."""
+
+    def change(data: dict[str, Any]) -> None:
+        data["cubes"]["laser_488"]["tunes"]["power"].pop("max")
+
+    with pytest.raises(spec.SpecError, match="a laser's power needs a max"):
+        build_microscope(real, spec.load(edited(tmp_path, change)))
 
 
 def test_a_rest_board_keeps_its_own_objective_positions(tmp_path: Path, real: Settings) -> None:
@@ -197,8 +214,34 @@ def test_an_option_the_driver_does_not_have_is_refused(tmp_path: Path, real: Set
         build_microscope(real, instrument)
 
 
+def test_a_board_has_no_stage_of_its_own(tmp_path: Path, real: Settings) -> None:
+    """What moves is what its actuators say: a ``stage`` is an option no bus has."""
+    instrument = rewired(
+        tmp_path,
+        boards={"uc2": {"transport": "canopen", "stage": {"home_axes": ["Z", "X", "Y"]}}},
+    )
+    with pytest.raises(spec.SpecError, match="stage"):
+        build_microscope(real, instrument)
+
+
+def test_what_is_not_wired_can_be_simulated_beside_what_is(tmp_path: Path) -> None:
+    """``simulate: unwired`` takes a real stepper beside a simulated stage axis."""
+    instrument = rewired(
+        tmp_path,
+        actuators={
+            "stg-x": {"driver": "uc2.stepper", "board": "uc2", "axis": "X", "steps_per_um": 3.2}
+        },
+        cameras=None,
+    )
+    built = build_microscope(run_settings(tmp_path, simulate="unwired"), instrument)
+    assert isinstance(built.uc2_bus, UC2CanBus)
+    assert isinstance(built.values.drivers["stage.x"], Stepper)
+    assert isinstance(built.values.drivers["stage.y"], SimulatedMove)
+    assert isinstance(built.detector, SimulatedDetectorManager)
+
+
 def test_it_runs_on_what_the_description_wires(real: Settings) -> None:
-    """Every part gets its UC2 manager, configured from the section and the optics."""
+    """Every variable gets its UC2 driver, configured from the section and the optics."""
     built = build_microscope(real, spec.load(REFERENCE_INSTRUMENT))
 
     assert isinstance(built.uc2_bus, UC2CanBus)
@@ -206,27 +249,34 @@ def test_it_runs_on_what_the_description_wires(real: Settings) -> None:
     assert built.uc2_bus.config.steps_per_um_x == pytest.approx(3.2)
     assert built.uc2_bus.config.objective_slot_positions_steps == [0, 20000]
 
-    assert isinstance(built.stage, UC2StageManager)
-    assert built.stage.config.axes == ["X", "Y", "Z"]
-    assert built.stage.config.home_axes == ["Z", "X", "Y"]
-    assert built.stage_state.max_x == 50000.0
+    drivers = built.values.drivers
+    for name, axis in (("stage.x", "X"), ("stage.y", "Y"), ("stage.z", "Z")):
+        assert isinstance(drivers[name], Stepper)
+        assert drivers[name].config.axis == axis
+        assert drivers[name].config.steps_per_um == pytest.approx(3.2)
+    assert built.move_state.moves["stage"]["x"].maximum == 50000.0
 
-    assert isinstance(built.illumination, UC2IlluminationManager)
-    assert built.illumination.config.pwm_max == 1023
-    sources = built.illumination_state.illuminations
-    assert [(s.channel, s.wavelength) for s in sources] == [(1, 488.0), (2, 625.0)]
-    assert not any(s.is_active for s in sources)  # nothing turned them on yet
+    lasers = drivers["laser_488.power"], drivers["led_625.power"]
+    assert all(isinstance(laser, Laser) for laser in lasers)
+    assert [(laser.config.channel, laser.config.pwm_max) for laser in lasers] == [
+        (1, 1023),
+        (2, 1023),
+    ]
+    sources = built.source_state.sources.values()
+    assert [s.wavelength for s in sources] == [488.0, 625.0]
+    assert not any(s.on for s in sources)  # nothing turned them on yet
 
-    assert isinstance(built.objective, UC2ObjectiveManager)
-    assert [lens.name for lens in built.objective_state.mounted_lenses] == [
+    assert isinstance(drivers["objective.slot"], Turret)
+    swaps = built.swap_state.swaps
+    assert [lens.label for lens in swaps["objective"]["slot"].options] == [
         "f20 NA 0.25",
         "f10 NA 0.4",
     ]
 
-    assert isinstance(built.filter_bank, UC2FilterBankManager)
-    assert built.filter_bank.config.axis == "A"
-    assert built.filter_bank.config.slot_positions == [0.0, 120.0]
-    assert [f.name for f in built.filter_bank_state.filters] == ["Open", "BP 525/50"]
+    assert isinstance(drivers["filter_wheel.slot"], Wheel)
+    assert drivers["filter_wheel.slot"].config.axis == "A"
+    assert drivers["filter_wheel.slot"].config.positions == {1: 0.0, 2: 120.0}
+    assert [f.label for f in swaps["filter_wheel"]["slot"].options] == ["Open", "BP 525/50"]
 
 
 def test_a_rest_board_opens_its_port(tmp_path: Path, real: Settings) -> None:
@@ -249,7 +299,7 @@ def test_a_rest_board_opens_its_port(tmp_path: Path, real: Settings) -> None:
 
 
 def test_cameras_are_what_it_wires(tmp_path: Path) -> None:
-    """How to open each, and its options apart, by slot; none wired is none."""
+    """How to open each, and its options apart, by name; none wired is none."""
     camera = {
         "protocol": "gige-vision",
         "vendor": "HikRobot",
@@ -261,10 +311,10 @@ def test_cameras_are_what_it_wires(tmp_path: Path) -> None:
     found = parts.cameras(rewired(tmp_path, cameras={"camera": camera}))
     assert found is not None
     (detector,), options = found
-    assert (detector.slot, detector.name, detector.manufacturer) == (1, "camera", "HikRobot")
+    assert (detector.name, detector.manufacturer) == ("camera", "HikRobot")
     assert (detector.connection_type, detector.serial_number) == ("GigE", "00F1")
     assert (detector.buffer_size, detector.store_image_data) == (8, True)
-    assert options == {1: {"frame_rate": 20.0}}
+    assert options == {"camera": {"frame_rate": 20.0}}
 
 
 # --- the description as a whole
@@ -303,8 +353,14 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["cubes"]["laser_488"]["element"].update(wavelength="488 mW"), "wavelength"),
         (lambda d: d["cubes"]["laser_488"]["element"].update(kind="plasma"), "plasma"),
         (lambda d: d["cubes"]["laser_488"]["element"].update(wavelenght="488 nm"), "wavelenght"),
-        (lambda d: d["cubes"]["laser_488"].pop("tunes"), "must tune"),
         (lambda d: d["cubes"]["camera"].pop("tunes"), "must tune"),
+        (lambda d: d["cubes"]["camera"]["tunes"].pop("exposure"), "must tune"),
+        (
+            lambda d: d["cubes"]["laser_488"]["tunes"].update(
+                power={"initial": "5 ms", "step": "1 ms"}
+            ),
+            "power is in mW",
+        ),
         (lambda d: d["cubes"]["dichroic"].pop("element"), "exactly one"),
         (lambda d: d["cubes"]["tube"]["element"].pop("f"), "focal length"),
         (lambda d: d["cubes"]["camera"]["element"]["axes"].pop("y"), "axes x and y"),
@@ -312,10 +368,6 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["cubes"]["stage"]["moves"]["x"].update(initial="99999 um"), "above max"),
         (lambda d: d["cubes"]["stage"]["moves"]["x"].update(along="sideways"), "sideways"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"].update(initial=7), "none of the slots"),
-        (
-            lambda d: d["cubes"]["objective"]["swaps"]["slot"]["slots"][1].pop("na"),
-            "its f, na and magnification",
-        ),
         (
             lambda d: d["cubes"]["filter_wheel"]["swaps"]["slot"]["slots"][2].update(
                 curve={"type": "bandpass", "center": "525 nm", "peak": 0.95, "edge": "2 nm"}
@@ -335,26 +387,12 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: _simulation(d)["pattern"].update(beads=-1), "beads"),
         (lambda d: d["detection"][0].update(via="absorb"), "absorb"),
         (lambda d: d["detection"][1].update(distance="far"), "distance"),
-        (lambda d: d.pop("parts"), "parts"),
+        (lambda d: d.update(parts={}), "parts"),
         (lambda d: d.pop("settings"), "settings"),
-        (lambda d: d["parts"].update(stage="dichroic"), "holds no sample"),
-        (lambda d: d["parts"].update(stage="nothing"), "holds no sample"),
-        (lambda d: d["parts"].update(colour="red"), "colour"),
-        (lambda d: d["parts"]["objective"].update(swap="nothing.slot"), "no swap"),
-        (lambda d: d["parts"]["objective"].update(swap="filter_wheel.slot"), "is no lens"),
-        (lambda d: d["parts"]["filters"].update(swap="objective.slot"), "is no filter"),
-        (lambda d: d["parts"]["objective"].update(swap="stage.x"), "no swap"),
-        (lambda d: d["parts"]["sources"].pop(2), "'led_625' has no slot"),
-        (lambda d: d["parts"]["sources"][2].update(cube="dichroic"), "holds no source"),
-        (lambda d: d["parts"]["sources"][2].update(cube="laser_488"), "two slots"),
-        (lambda d: d["parts"]["sources"][1].pop("full_intensity"), "full_intensity"),
-        (lambda d: d["parts"]["sources"].update({5: d["parts"]["sources"].pop(2)}), "count from 1"),
-        (lambda d: d["parts"]["detectors"].pop(1), "'camera' has no slot"),
-        (lambda d: d["parts"]["detectors"][1].pop("frame_rate"), "frame_rate"),
-        (lambda d: d["parts"]["detectors"][1].update(frame_rate="30 mm"), "frame_rate"),
+        (lambda d: d["cubes"]["camera"]["tunes"]["frame_rate"].pop("initial"), "frame_rate"),
         (
-            lambda d: d["cubes"]["stage"]["moves"].update(w=d["cubes"]["stage"]["moves"].pop("x")),
-            "not 'w'",
+            lambda d: d["cubes"]["camera"]["tunes"]["frame_rate"].update(initial="30 mm"),
+            "frame_rate",
         ),
         (lambda d: d.update(ui={"views": ["fluorescence"]}), "views"),
         (lambda d: d.update(ui={"catalog": "newswitch", "bloks": {}}), "catalog"),
@@ -368,6 +406,33 @@ def test_a_description_that_does_not_validate_is_refused(
     """When it is loaded, naming the place in the file."""
     with pytest.raises(spec.SpecError, match=finding):
         spec.load(edited(tmp_path, change))
+
+
+def test_an_objective_needs_its_na(tmp_path: Path) -> None:
+    """Refused when the description is loaded, naming where in it."""
+
+    def change(data: dict[str, Any]) -> None:
+        del data["cubes"]["objective"]["swaps"]["slot"]["slots"][1]["na"]
+
+    with pytest.raises(
+        spec.SpecError, match=r"objective\.slot: slot 1: the lens nearest .* its na"
+    ):
+        spec.load(edited(tmp_path, change))
+
+
+def test_a_detector_only_has_to_tune_its_exposure(tmp_path: Path) -> None:
+    """What it does not tune is fixed: no frame rate, no gain, no binning, and it takes images."""
+
+    def change(data: dict[str, Any]) -> None:
+        tunes = data["cubes"]["camera"]["tunes"]
+        data["cubes"]["camera"]["tunes"] = {"exposure": tunes["exposure"]}
+
+    built = build_microscope(run_settings(tmp_path), spec.load(edited(tmp_path, change)))
+    assert built.detector is not None
+    (detector,) = built.detector_state.detectors
+    assert (detector.current_frame_rate, detector.current_gain) == (None, None)
+    assert detector.current_binning == 1
+    assert built.detector.capture_image("camera").data.shape == (512, 512)
 
 
 def test_every_problem_is_listed_at_once(tmp_path: Path) -> None:
@@ -396,7 +461,7 @@ def test_the_loaded_values_are_typed_and_in_their_units() -> None:
     assert instrument.detection[1].distance == 100.0
     fluorophore = instrument.sample_holder().simulations["gfp-beads"].fluorophore
     assert fluorophore is not None and fluorophore.excitation == 488.0
-    assert instrument.parts.detectors[1].frame_rate == 30.0
+    assert instrument.cubes["camera"].tunes["frame_rate"].initial == 30.0
     binning = instrument.cubes["camera"].variables["binning"].initial
     assert binning == 1 and isinstance(binning, int)
 
@@ -414,47 +479,28 @@ def test_the_instrument_is_itself_validated() -> None:
 
 
 def test_the_constants_are_the_files(tmp_path: Path) -> None:
-    """Intensity range, frame rate and magnification reach the models as stated."""
+    """Power range, frame rate and magnification reach the models as stated."""
 
     def change(data: dict[str, Any]) -> None:
         data["cubes"]["objective"]["swaps"]["slot"]["slots"][1]["magnification"] = 9.0
-        data["parts"]["sources"][1]["full_intensity"] = 255.0
-        data["parts"]["detectors"][1]["frame_rate"] = "12.5 Hz"
+        data["cubes"]["laser_488"]["element"]["max_power"] = "255 mW"
+        data["cubes"]["camera"]["tunes"]["frame_rate"]["initial"] = "12.5 Hz"
 
     instrument = spec.load(edited(tmp_path, change))
-    lenses = parts.objective_lenses(instrument)
-    assert lenses is not None and lenses[0][0].magnification == pytest.approx(9.0)
-    sources = parts.illuminations(instrument)
-    assert sources is not None
-    assert sources[0].max_intensity == 255.0
-    assert sources[0].intensity == pytest.approx(255.0 * 20.0 / 50.0)
-    detectors = parts.detectors(instrument)
-    assert detectors is not None and detectors[0].current_frame_rate == 12.5
+    built = build_microscope(run_settings(tmp_path), instrument)
+    lens = built.swap_state.swaps["objective"]["slot"].options[0]
+    assert lens.facts["magnification"] == "9x"
+    laser = built.source_state.sources["laser_488"]
+    assert (laser.max_power, laser.power) == (255.0, 20.0)
+    assert parts.detectors(instrument)[0].current_frame_rate == 12.5
 
 
-def test_slots_are_the_files_not_the_order_of_its_cubes(tmp_path: Path) -> None:
-    """Swapping two slots swaps them, wherever the cubes stand in the file."""
-
-    def change(data: dict[str, Any]) -> None:
-        sources = data["parts"]["sources"]
-        sources[1], sources[2] = sources[2], sources[1]
-
-    instrument = spec.load(edited(tmp_path, change))
-    assert instrument.sources() == ["led_625", "laser_488"]
-    found = parts.illuminations(instrument)
-    assert found is not None
-    assert [(s.slot, s.wavelength) for s in found] == [(1, 625.0), (2, 488.0)]
-
-
-def test_a_swap_with_no_role_has_no_control(tmp_path: Path) -> None:
-    """A wheel of lenses is no objective changer until the file says so."""
-    instrument = spec.load(edited(tmp_path, lambda d: d["parts"].pop("objective")))
-    assert "switch_objective" not in registry_names(instrument)[1]
-    assert parts.objective_lenses(instrument) is None
-
-
-def test_a_cube_with_moves_is_no_stage_until_the_file_says_so(tmp_path: Path) -> None:
-    """No stage part, whatever moves on the sample's cube."""
-    instrument = spec.load(edited(tmp_path, lambda d: d["parts"].pop("stage")))
-    assert "move_stage" not in registry_names(instrument)[1]
-    assert parts.stage_moves(instrument) == {}
+def test_sources_are_in_the_order_of_the_file(tmp_path: Path) -> None:
+    """Swapping two cubes swaps them: nothing else says which comes first."""
+    copy = edited(tmp_path, lambda _: None)
+    path = copy / spec.DESCRIPTION
+    data = yaml.safe_load(path.read_text())
+    cubes = data["cubes"]
+    data["cubes"] = {"led_625": cubes.pop("led_625"), "laser_488": cubes.pop("laser_488"), **cubes}
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    assert spec.load(copy).sources() == ["led_625", "laser_488"]

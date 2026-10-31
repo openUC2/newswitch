@@ -11,6 +11,7 @@ import logging
 import sys
 import threading
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -18,15 +19,11 @@ from newswitch.microscope import parts as microscope
 from newswitch.actions.detector import close_detector
 from newswitch.broadcasters import FrameBroadcaster
 from newswitch.settings import Settings
-from newswitch.drivers.optics.detector import OpticsDetectorManager
+from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import spec
 from newswitch.microscope.parts import build_detector_manager
 from newswitch.protocols import DetectorManager
-from newswitch.states.detector import CameraState
-from newswitch.states.filter_bank import FilterBankState
-from newswitch.states.illumination import IlluminationState
-from newswitch.states.objective import ObjectiveState
-from newswitch.states.stage import StageState
+from newswitch.states.detector import DetectorState
 from tests.conftest import run_settings
 
 #: One simulated uc2_cam_py camera and nothing else.
@@ -46,19 +43,22 @@ def camera_instrument() -> spec.Instrument:
 
 
 def _build(config: Settings, instrument: spec.Instrument) -> DetectorManager:
-    """Call `build_detector_manager` with fresh states, holding the camera lock."""
+    """Call `build_detector_manager` with a fresh state, at the instrument's initial values."""
     return build_detector_manager(
         config,
         instrument,
-        camera_state=CameraState(),
-        stage_state=StageState(),
-        objective_state=ObjectiveState(),
-        illumination_state=IlluminationState(),
-        filter_bank_state=FilterBankState(),
+        DetectorState(),
+        instrument.initial_state,
+        lambda name, value: None,
     )
 
 
-def _settings(tmp_path: Path, *, virtual: bool, debug_window: bool = False) -> Settings:
+def _settings(
+    tmp_path: Path,
+    *,
+    simulate: Literal["everything", "unwired", "nothing"],
+    debug_window: bool = False,
+) -> Settings:
     """Settings of `CAM_TEST`, recording into `tmp_path`.
 
     The debug window is off unless asked for: the description switches it on, and no window may
@@ -66,7 +66,7 @@ def _settings(tmp_path: Path, *, virtual: bool, debug_window: bool = False) -> S
     """
     return run_settings(
         tmp_path,
-        use_virtual_microscope=virtual,
+        simulate=simulate,
         instrument=CAM_TEST,
         camera_debug_window=debug_window,
     )
@@ -76,8 +76,8 @@ def test_simulated_it_renders_from_the_optics(
     tmp_path: Path, camera_instrument: spec.Instrument
 ) -> None:
     """Simulated, a wired camera is not opened: newswitch renders what it would see."""
-    manager = _build(_settings(tmp_path, virtual=True), camera_instrument)
-    assert isinstance(manager, OpticsDetectorManager)
+    manager = _build(_settings(tmp_path, simulate="everything"), camera_instrument)
+    assert isinstance(manager, SimulatedDetectorManager)
     assert [detector.name for detector in manager.state.detectors] == ["sim_cam"]
 
 
@@ -92,8 +92,8 @@ def test_missing_camera_library_falls_back(
         monkeypatch.delitem(sys.modules, name, raising=False)
     monkeypatch.setitem(sys.modules, "uc2_cam_py", None)  # makes the import fail
     with caplog.at_level(logging.WARNING, logger=microscope.logger.name):
-        manager = _build(_settings(tmp_path, virtual=False), camera_instrument)
-    assert isinstance(manager, OpticsDetectorManager)
+        manager = _build(_settings(tmp_path, simulate="nothing"), camera_instrument)
+    assert isinstance(manager, SimulatedDetectorManager)
     assert "uv sync --extra camera" in caplog.text
 
 
@@ -104,23 +104,18 @@ def test_real_hardware_opens_the_cameras(
     pytest.importorskip("uc2_cam_py")
     from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager
 
-    manager = _build(_settings(tmp_path, virtual=False), camera_instrument)
+    manager = _build(_settings(tmp_path, simulate="nothing"), camera_instrument)
     try:
         assert isinstance(manager, UC2DetectorManager)
         assert isinstance(manager, DetectorManager)
         (detector,) = manager.state.detectors
-        assert (detector.slot, detector.name, detector.width, detector.height) == (
-            1,
-            "sim_cam",
-            640,
-            480,
-        )
+        assert (detector.name, detector.width, detector.height) == ("sim_cam", 640, 480)
         assert (detector.serial_number, detector.connection_type) == ("SIM-0001", "USB3")
         assert not detector.is_recording  # no debug window: nobody holds it
     finally:
         close_detector(manager)
     with pytest.raises(RuntimeError, match="closed"):
-        manager.capture_image(1)
+        manager.capture_image("sim_cam")
 
 
 def test_camera_debug_window_is_passed_on(
@@ -135,11 +130,11 @@ def test_camera_debug_window_is_passed_on(
 
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    manager = _build(_settings(tmp_path, virtual=False, debug_window=True), camera_instrument)
+    manager = _build(_settings(tmp_path, simulate="nothing", debug_window=True), camera_instrument)
     try:
         assert isinstance(manager, UC2DetectorManager)
-        assert manager._cameras[1].camera._debug_window is not None
-        assert manager.state.get_detector_for_slot(1).is_recording
+        assert manager._cameras["sim_cam"].camera._debug_window is not None
+        assert manager.state.get("sim_cam").is_recording
     finally:
         close_detector(manager)
 
@@ -148,7 +143,7 @@ def test_close_detector_ends_the_simulated_live_loop(
     tmp_path: Path, camera_instrument: spec.Instrument
 ) -> None:
     """The shutdown hook closes any detector manager; a simulated one ends its live loop."""
-    manager = _build(_settings(tmp_path, virtual=True), camera_instrument)
+    manager = _build(_settings(tmp_path, simulate="everything"), camera_instrument)
     live = threading.Thread(target=manager.acquire_live, args=(FrameBroadcaster(),), daemon=True)
     live.start()
     close_detector(manager)

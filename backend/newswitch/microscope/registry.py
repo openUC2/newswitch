@@ -23,18 +23,7 @@ from typing import Any, Sequence
 from arkitekt import App, Service
 
 from newswitch.instrument.spec import Instrument
-from newswitch.microscope.apps import (
-    acquisition,
-    core,
-    detector,
-    filter_bank,
-    focus,
-    illumination,
-    objective,
-    stage,
-    uc2,
-    uc2_stage,
-)
+from newswitch.microscope.apps import acquisition, core, detector, focus, uc2, values
 from newswitch.microscope.run import Run
 
 
@@ -50,23 +39,15 @@ def create_registry(instrument: Instrument | None, services: Sequence[Service[An
     if instrument is None:
         return app
 
-    parts, boards = instrument.parts, instrument.hardware.boards
-    if parts.stage:
-        app.registry.merge(stage.app.registry)
-    if parts.sources:
-        app.registry.merge(illumination.app.registry)
-    if parts.detectors:
+    moves = any(variable.verb == "moves" for variable in instrument.variables.values())
+    detectors, sources = instrument.detectors(), instrument.sources()
+    app.registry.merge(values.app.registry)
+    if detectors:
         app.registry.merge(detector.app.registry)
-    if parts.objective:
-        app.registry.merge(objective.app.registry)
-    if parts.filters:
-        app.registry.merge(filter_bank.app.registry)
-    if boards:
-        app.registry.merge(uc2.app.registry)
-    if parts.stage and parts.detectors:
+    if moves and detectors:
         app.registry.merge(focus.app.registry)
-    if parts.stage and boards:
-        app.registry.merge(uc2_stage.app.registry)
-    if parts.stage and parts.detectors and parts.sources:
+    if moves and detectors and sources:
         app.registry.merge(acquisition.app.registry)
+    if instrument.hardware.boards:
+        app.registry.merge(uc2.app.registry)
     return app

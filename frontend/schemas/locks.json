@@ -1,5 +1,5 @@
 {
-  "count": 9,
+  "count": 7,
   "locks": {
     "expanse_state": {
       "key": "expanse_state",
@@ -8,25 +8,32 @@
         "description": "Lock definition for expanse_state"
       }
     },
-    "stage_position": {
-      "key": "stage_position",
+    "motion": {
+      "key": "motion",
       "definition": {
-        "key": "stage_position",
-        "description": "Lock definition for stage_position"
+        "key": "motion",
+        "description": "Lock definition for motion"
       }
     },
-    "illumination": {
-      "key": "illumination",
+    "swap": {
+      "key": "swap",
       "definition": {
-        "key": "illumination",
-        "description": "Lock definition for illumination"
+        "key": "swap",
+        "description": "Lock definition for swap"
       }
     },
-    "camera_parameters": {
-      "key": "camera_parameters",
+    "tune": {
+      "key": "tune",
       "definition": {
-        "key": "camera_parameters",
-        "description": "Lock definition for camera_parameters"
+        "key": "tune",
+        "description": "Lock definition for tune"
+      }
+    },
+    "detector": {
+      "key": "detector",
+      "definition": {
+        "key": "detector",
+        "description": "Lock definition for detector"
       }
     },
     "io": {
@@ -36,32 +43,11 @@
         "description": "Lock definition for io"
       }
     },
-    "objective": {
-      "key": "objective",
-      "definition": {
-        "key": "objective",
-        "description": "Lock definition for objective"
-      }
-    },
-    "filter_bank": {
-      "key": "filter_bank",
-      "definition": {
-        "key": "filter_bank",
-        "description": "Lock definition for filter_bank"
-      }
-    },
     "galvo": {
       "key": "galvo",
       "definition": {
         "key": "galvo",
         "description": "Lock definition for galvo"
-      }
-    },
-    "hook_registry": {
-      "key": "hook_registry",
-      "definition": {
-        "key": "hook_registry",
-        "description": "Lock definition for hook_registry"
       }
     }
   }

@@ -1,0 +1,241 @@
+"""What every variable of a microscope is now, and the one way of changing it.
+
+Everything goes through `Values.set`: it takes a variable to its value through its driver, publishes
+what that became, and has the optics find out what it means. That is why there is one place to look,
+and why nothing can change a value and leave what is published behind.
+
+A published entry is replaced along with its whole field rather than changed where it is: arkitekt
+cannot describe a change inside a ``dict[str, model]`` as a patch.
+"""
+
+from __future__ import annotations
+
+import threading
+from collections import defaultdict
+from collections.abc import Callable, Mapping
+from dataclasses import replace
+from typing import Any
+
+from arkitekt import Task
+
+from newswitch.drivers.base import Driver, Report, Simulated, SimulatedMove
+from newswitch.instrument import spec
+from newswitch.instrument.roles import Roles
+from newswitch.instrument.spec import Instrument, Variable
+from newswitch.models.values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
+from newswitch.services.element_facts import facts_of
+from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
+
+
+def _in_range(variable: Variable, value: float) -> float:
+    """`value`, as far as the range `variable` states allows it."""
+    low = -float("inf") if variable.min is None else variable.min
+    high = float("inf") if variable.max is None else variable.max
+    return max(low, min(high, value))
+
+
+def _copied(entries: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Copies of what is kept here: publishing turns an entry into another class, for good."""
+    return {cube: {short: replace(e) for short, e in by.items()} for cube, by in entries.items()}
+
+
+def _label(element: spec.Element, slot: int) -> str:
+    return getattr(element, "name", None) or f"Slot {slot}"
+
+
+class Values:
+    """Holds what every variable is, and publishes it, by what the variable does."""
+
+    def __init__(
+        self,
+        instrument: Instrument,
+        move_state: MoveState,
+        swap_state: SwapState,
+        tune_state: TuneState,
+        source_state: SourceState,
+        drivers: Mapping[str, Driver] | None = None,
+    ) -> None:
+        """The values of `instrument`, at what its `drivers` say they start at.
+
+        A variable with no driver here is simulated.
+        """
+        self.instrument = instrument
+        self.roles = Roles(instrument)
+        self.move_state = move_state
+        self.swap_state = swap_state
+        self.tune_state = tune_state
+        self.source_state = source_state
+        self.on_change: Callable[[], None] = lambda: None
+        self._lock = threading.RLock()
+        self.drivers: dict[str, Driver] = {
+            name: (drivers or {}).get(name) or self._simulated(variable)
+            for name, variable in instrument.variables.items()
+        }
+        self._values: dict[str, Any] = instrument.initial_state()
+        for name, driver in self.drivers.items():
+            self._values[name] = driver.start(self._values[name])
+        self._lit = {
+            source: self._values.get(f"{source}.power", 0.0)
+            or instrument.cubes[source].element_at(self._values).max_power
+            for source in instrument.sources()
+        }
+        self._publish_all()
+
+    def _simulated(self, variable: Variable) -> Driver:
+        if variable.verb == "moves":
+            return SimulatedMove(variable.speed, lambda: self._values[variable.name])
+        return Simulated()
+
+    def __getitem__(self, name: str) -> Any:  # noqa: ANN401 - whatever the variable holds
+        """What the variable `name` is now."""
+        return self._values[name]
+
+    def snapshot(self) -> dict[str, Any]:
+        """Every value now, and the simulation: what the optics take."""
+        return dict(self._values)
+
+    def set(
+        self,
+        targets: Mapping[str, Any],
+        relative: bool = False,
+        task: Task | None = None,
+    ) -> None:
+        """Take variables to values, or by them, and return once they are there.
+
+        Raises:
+            ValueError: One of them is not a variable, or a swap to a slot it does not have. Then
+                nothing has moved.
+        """
+        wanted = {name: self._target(name, value, relative) for name, value in targets.items()}
+        groups: dict[type, list[tuple[Driver, Any, Report]]] = defaultdict(list)
+        for name, value in wanted.items():
+            driver = self.drivers[name]
+            groups[type(driver)].append((driver, value, self.reporter(name)))
+        for driver_type, group in groups.items():
+            driver_type.set_together(group, task)
+        self.on_change()
+
+    def _target(self, name: str, value: Any, relative: bool) -> Any:  # noqa: ANN401
+        variable = self.instrument.variables.get(name)
+        if variable is None:
+            raise ValueError(f"{name} is no variable: {sorted(self.instrument.variables)}")
+        if variable.verb == "swaps":
+            if value not in variable.slots:
+                raise ValueError(f"{name} has no slot {value}: {sorted(variable.slots)}")
+            return value
+        wanted = _in_range(variable, value + (self._values[name] if relative else 0.0))
+        if variable.verb == "tunes" and name == f"{variable.cube}.power":
+            element = self.instrument.cubes[variable.cube].element_at(self._values)
+            if isinstance(element, spec.Source):
+                return min(wanted, element.max_power)
+        return wanted
+
+    def reporter(self, name: str) -> Report:
+        """What publishes where a variable got to, on its way."""
+
+        def report(value: Any) -> None:  # noqa: ANN401 - whatever the variable holds
+            with self._lock:
+                self._values[name] = value
+                self._publish(name)
+
+        return report
+
+    def _publish(self, name: str) -> None:
+        """Publish the entry of one variable, in a new copy of its field."""
+        variable = self.instrument.variables[name]
+        cube, short = variable.cube, name.split(".", 1)[1]
+        if variable.verb == "moves":
+            self._moves[cube][short] = replace(self._moves[cube][short], value=self._values[name])
+            self.move_state.moves = _copied(self._moves)
+        elif variable.verb == "swaps":
+            self._swaps[cube][short] = replace(
+                self._swaps[cube][short],
+                value=self._values[name],
+                label=_label(variable.slots[self._values[name]], self._values[name]),
+            )
+            self.swap_state.swaps = _copied(self._swaps)
+        else:
+            self._tunes[cube][short] = replace(self._tunes[cube][short], value=self._values[name])
+            self.tune_state.tunes = _copied(self._tunes)
+            if cube in self._sources and short == "power":
+                self._publish_source(cube)
+
+    def _publish_source(self, source: str) -> None:
+        power = self._values[f"{source}.power"]
+        if power > 0.0:
+            self._lit[source] = power
+        self._sources[source] = replace(
+            self._sources[source],
+            power=power,
+            lit_power=self._lit[source],
+            on=power > 0.0,
+        )
+        self.source_state.sources = {name: replace(s) for name, s in self._sources.items()}
+
+    def _publish_all(self) -> None:
+        moves: dict[str, dict[str, MoveValue]] = defaultdict(dict)
+        swaps: dict[str, dict[str, SwapValue]] = defaultdict(dict)
+        tunes: dict[str, dict[str, TuneValue]] = defaultdict(dict)
+        for name, variable in self.instrument.variables.items():
+            short = name.split(".", 1)[1]
+            value = self._values[name]
+            does = self.roles.does(name)
+            if variable.verb == "moves":
+                moves[variable.cube][short] = MoveValue(
+                    name=name,
+                    value=value,
+                    unit=variable.unit,
+                    along=variable.along,
+                    minimum=variable.min,
+                    maximum=variable.max,
+                    step=variable.step,
+                    does=does,
+                )
+            elif variable.verb == "swaps":
+                swaps[variable.cube][short] = SwapValue(
+                    name=name,
+                    value=value,
+                    label=_label(variable.slots[value], value),
+                    options=[
+                        SwapOption(
+                            slot=slot,
+                            label=_label(element, slot),
+                            kind=element.kind,
+                            facts=facts_of(element),
+                        )
+                        for slot, element in variable.slots.items()
+                    ],
+                    does=does,
+                )
+            else:
+                tunes[variable.cube][short] = TuneValue(
+                    name=name,
+                    value=value,
+                    unit=variable.unit,
+                    minimum=variable.min,
+                    maximum=variable.max,
+                    step=variable.step,
+                    does=does,
+                )
+        self._moves, self._swaps, self._tunes = dict(moves), dict(swaps), dict(tunes)
+        self.move_state.moves = _copied(self._moves)
+        self.swap_state.swaps = _copied(self._swaps)
+        self.tune_state.tunes = _copied(self._tunes)
+        sources = {}
+        for source in self.instrument.sources():
+            element = self.instrument.cubes[source].element_at(self._values)
+            variable = f"{source}.power"
+            power = self._values.get(variable, element.max_power)
+            sources[source] = LightSource(
+                name=source,
+                emits=element.emits,
+                wavelength=element.wavelength,
+                lines=[line.center for line in element.spectrum],
+                max_power=element.max_power,
+                power=power,
+                lit_power=self._lit[source],
+                on=power > 0.0,
+                power_variable=variable if variable in self.instrument.variables else None,
+            )
+        self._sources = sources
+        self.source_state.sources = {name: replace(s) for name, s in sources.items()}

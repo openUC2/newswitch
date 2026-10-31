@@ -1,4 +1,4 @@
-"""The newest frame of every detector slot, for the websocket live view.
+"""The newest frame of every detector, for the websocket live view.
 
 A detector hands its frames over from its own thread, often holding its own lock, so
 `broadcast_sync` only keeps the frame and wakes whoever waits. A subscriber takes the
@@ -17,31 +17,31 @@ import numpy as np
 
 
 @dataclass(eq=False)
-class SlotFrame:
-    """A frame of a detector slot, numbered in the order it came."""
+class DetectorFrameMessage:
+    """A frame of a detector, numbered in the order it came."""
 
-    slot: int
+    detector: str
     sequence: int
     time_s: float
     data: np.ndarray
     #: The frame as sent, by binning factor: viewers of one size share the work.
-    messages: dict[int, bytes] = field(default_factory=dict)
+    messages: dict[str, bytes] = field(default_factory=dict)
 
 
 class FrameSubscription:
-    """One viewer of a slot: `next_frame` waits for a frame it has not seen yet."""
+    """One viewer of a detector: `next_frame` waits for a frame it has not seen yet."""
 
-    def __init__(self, broadcaster: "FrameBroadcaster", slot: int) -> None:
-        """Watch `slot` of `broadcaster`, from the running event loop."""
+    def __init__(self, broadcaster: "FrameBroadcaster", detector: str) -> None:
+        """Watch `detector` of `broadcaster`, from the running event loop."""
         self._broadcaster = broadcaster
-        self._slot = slot
+        self._detector = detector
         self._loop = asyncio.get_running_loop()
         self._changed = asyncio.Event()
         self._last_sequence: Optional[int] = None
 
     def __enter__(self) -> "FrameSubscription":
         """Start watching."""
-        self._broadcaster._add(self._slot, self)
+        self._broadcaster._add(self._detector, self)
         return self
 
     def __exit__(
@@ -51,7 +51,7 @@ class FrameSubscription:
         traceback: Optional[TracebackType],
     ) -> None:
         """Stop watching."""
-        self._broadcaster._remove(self._slot, self)
+        self._broadcaster._remove(self._detector, self)
 
     def _notify(self) -> None:
         """A new frame came; called from the detector's thread."""
@@ -60,11 +60,11 @@ class FrameSubscription:
         except RuntimeError:  # the event loop is closed: the server is shutting down
             pass
 
-    async def next_frame(self) -> SlotFrame:
+    async def next_frame(self) -> DetectorFrameMessage:
         """The newest frame, once there is one this subscription has not returned."""
         while True:
             self._changed.clear()
-            frame = self._broadcaster.newest(self._slot)
+            frame = self._broadcaster.newest(self._detector)
             if frame is not None and frame.sequence != self._last_sequence:
                 self._last_sequence = frame.sequence
                 return frame
@@ -72,14 +72,14 @@ class FrameSubscription:
 
 
 class FrameBroadcaster:
-    """Keeps the newest frame per detector slot and tells the subscribers of that slot."""
+    """Keeps the newest frame per detector and tells the subscribers of that detector."""
 
     def __init__(self) -> None:
         """Nothing broadcast, nobody watching."""
         self._broadcasting = False
         self._lock = threading.Lock()
-        self._newest: dict[int, SlotFrame] = {}
-        self._subscriptions: dict[int, set[FrameSubscription]] = {}
+        self._newest: dict[str, DetectorFrameMessage] = {}
+        self._subscriptions: dict[str, set[FrameSubscription]] = {}
 
     def start_broadcasting(self) -> None:
         """A detector starts streaming: frames follow."""
@@ -90,37 +90,37 @@ class FrameBroadcaster:
         """Whether a detector has started streaming."""
         return self._broadcasting
 
-    def subscribe(self, slot: int) -> FrameSubscription:
-        """A subscription to `slot`, as a context manager; from the event loop."""
-        return FrameSubscription(self, slot)
+    def subscribe(self, detector: str) -> FrameSubscription:
+        """A subscription to `detector`, as a context manager; from the event loop."""
+        return FrameSubscription(self, detector)
 
-    def subscriber_count(self, slot: int) -> int:
-        """How many subscriptions watch `slot`."""
+    def subscriber_count(self, detector: str) -> int:
+        """How many subscriptions watch `detector`."""
         with self._lock:
-            return len(self._subscriptions.get(slot, ()))
+            return len(self._subscriptions.get(detector, ()))
 
-    def newest(self, slot: int) -> Optional[SlotFrame]:
-        """The newest frame of `slot`, or None before the first one."""
+    def newest(self, detector: str) -> Optional[DetectorFrameMessage]:
+        """The newest frame of `detector`, or None before the first one."""
         with self._lock:
-            return self._newest.get(slot)
+            return self._newest.get(detector)
 
-    def broadcast_sync(self, detector_slot: int, frame: np.ndarray) -> None:
-        """Keep `frame` as the newest of `detector_slot`; called from the detector's thread.
+    def broadcast_sync(self, detector: str, frame: np.ndarray) -> None:
+        """Keep `frame` as the newest of `detector`; called from the detector's thread.
 
         The frame is kept as it is, not copied: a detector must not write to it afterwards.
         """
         with self._lock:
-            previous = self._newest.get(detector_slot)
+            previous = self._newest.get(detector)
             sequence = 0 if previous is None else previous.sequence + 1
-            self._newest[detector_slot] = SlotFrame(detector_slot, sequence, time.time(), frame)
-            subscriptions = list(self._subscriptions.get(detector_slot, ()))
+            self._newest[detector] = DetectorFrameMessage(detector, sequence, time.time(), frame)
+            subscriptions = list(self._subscriptions.get(detector, ()))
         for subscription in subscriptions:
             subscription._notify()
 
-    def _add(self, slot: int, subscription: FrameSubscription) -> None:
+    def _add(self, detector: str, subscription: FrameSubscription) -> None:
         with self._lock:
-            self._subscriptions.setdefault(slot, set()).add(subscription)
+            self._subscriptions.setdefault(detector, set()).add(subscription)
 
-    def _remove(self, slot: int, subscription: FrameSubscription) -> None:
+    def _remove(self, detector: str, subscription: FrameSubscription) -> None:
         with self._lock:
-            self._subscriptions.get(slot, set()).discard(subscription)
+            self._subscriptions.get(detector, set()).discard(subscription)

@@ -1,9 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import {
-  useCameraState,
-  useIlluminationState,
-  useObjectiveState,
-  useStageState,
+  useDetectorState,
+  useMoveState,
+  useSourceState,
+  useSwapState,
 } from "@/apps/default/hooks/states";
 import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -36,15 +36,16 @@ function StatusBadge({
 
 export function StatusPanel() {
   const { t } = useTranslation();
-  const { data: camera, loading: cameraLoading } = useCameraState({
+  const { data: detectors, loading: detectorsLoading } = useDetectorState({
     subscribe: true,
   });
-  const { data: stage, loading: stageLoading } = useStageState({
+  const { data: moves, loading: movesLoading } = useMoveState({
     subscribe: true,
   });
-  const { data: illumination, loading: illuminationLoading } =
-    useIlluminationState({ subscribe: true });
-  const { data: objective, loading: objectiveLoading } = useObjectiveState({
+  const { data: sources, loading: sourcesLoading } = useSourceState({
+    subscribe: true,
+  });
+  const { data: swaps, loading: swapsLoading } = useSwapState({
     subscribe: true,
   });
 
@@ -52,23 +53,23 @@ export function StatusPanel() {
     <div className="flex items-center gap-1.5">
       <StatusBadge
         label={t("microscope.cameraShort")}
-        isLoading={cameraLoading}
-        isConnected={!!camera}
+        isLoading={detectorsLoading}
+        isConnected={!!detectors}
       />
       <StatusBadge
         label={t("microscope.stageShort")}
-        isLoading={stageLoading}
-        isConnected={!!stage}
+        isLoading={movesLoading}
+        isConnected={!!moves}
       />
       <StatusBadge
         label={t("microscope.lightShort")}
-        isLoading={illuminationLoading}
-        isConnected={!!illumination}
+        isLoading={sourcesLoading}
+        isConnected={!!sources}
       />
       <StatusBadge
         label={t("microscope.objectiveShort")}
-        isLoading={objectiveLoading}
-        isConnected={!!objective}
+        isLoading={swapsLoading}
+        isConnected={!!swaps}
       />
     </div>
   );

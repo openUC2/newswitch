@@ -12,6 +12,8 @@ from newswitch.models.acquisition import (
 )
 from newswitch.models.frames import Frame
 from newswitch.routines.common import acquire_step
+from newswitch.services.stage import stage_of
+from newswitch.services.values import Values
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ def scan_region(
     acquisition_manager: protocols.AcquisitionManager,
     metadata_manager: protocols.MetadataManager,
     detector_manager: protocols.DetectorManager,
-    stage_manager: protocols.StageManager,
+    values: Values,
     task: Task,
     scan_order: ScanOrder,
     start_x: float,
@@ -29,8 +31,8 @@ def scan_region(
     end_x: float,
     end_y: float,
     overlap: float = 0.1,
-    detector_slot: Annotated[
-        int,
+    detector_name: Annotated[
+        str,
         Description(
             "The detector to calculate the FOV for (all other detectors will follow). If None, use the first active detector."
         ),
@@ -40,7 +42,7 @@ def scan_region(
     """Scan a rectangular region of the stage tile by tile.
 
     The region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered
-    with fields of view of the detector (`detector_slot`, else the first active one),
+    with fields of view of the detector (`detector_name`, else the first active one),
     overlapping by `overlap`, visited in `scan_order`; every active detector acquires a
     frame at each tile.
 
@@ -53,17 +55,15 @@ def scan_region(
     )
 
     # 1. Calculate FOV for the current objective and detector configuration
-    if detector_slot is not None:
-        current_detector = detector_manager.state.get_detector_for_slot(detector_slot)
+    if detector_name is not None:
+        current_detector = detector_manager.state.get(detector_name)
     else:
         active_detectors = detector_manager.state.get_active_detectors()
         if not active_detectors:
             raise ValueError("No active detectors found.")
         current_detector = active_detectors[0]
 
-    current_light_path = optics_manager.get_light_path_for_detector(
-        detector_slot=current_detector.slot
-    )
+    current_light_path = optics_manager.get_light_path_for_detector(current_detector.name)
     metadata = metadata_manager.get_metadata_for_light_path(current_light_path)
 
     # The field of view of its light path (calibrated, else nominal): positive whatever the
@@ -120,10 +120,11 @@ def scan_region(
 
     logger.info("%d cols x %d rows: %d tiles", cols, rows, len(path_points))
 
+    stage = stage_of(values, current_detector.name)
     acquired_images: list[Frame] = []
     total = len(path_points)
     for i, (tgt_x, tgt_y) in enumerate(path_points):
-        stage_manager.move(x=tgt_x, y=tgt_y, is_absolute=True)
+        stage.move(x=tgt_x, y=tgt_y, is_absolute=True)
         acquired_images.extend(
             acquire_step(acquisition_manager, task, i + 1, total, f"Acquired tile {i + 1}/{total}")
         )

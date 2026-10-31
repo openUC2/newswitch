@@ -12,6 +12,7 @@ import yaml
 from newswitch.instrument import parts, spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import StreamIllumination, Streams
+from newswitch.services.stage import Stage
 from tests.conftest import run_settings
 from tests.test_multidimensional_acquisition import RecordingStore, acquire, plan
 
@@ -72,6 +73,7 @@ BASE = {
         "camera": {
             "component": "generic-camera-512",
             "tunes": {
+                "frame_rate": {"initial": "30 Hz", "step": "1 Hz"},
                 "exposure": {"initial": "100 ms", "step": "10 ms"},
                 "gain": {"initial": "0 dB", "step": "1 dB"},
                 "binning": {"initial": 1, "step": 1},
@@ -84,14 +86,9 @@ BASE = {
         {"from": "objective", "to": "tube", "distance": "100 mm"},
         {"from": "tube", "to": "camera", "distance": "focus"},
     ],
-    "parts": {
-        "stage": "stage",
-        "sources": {1: {"cube": "laser", "full_intensity": 100.0}},
-        "detectors": {1: {"cube": "camera", "frame_rate": "30 Hz"}},
-    },
     "drives": [{"from": "camera.frame", "to": "stage.z", "by": "2 um"}],
     "settings": {
-        "use_virtual_microscope": True,
+        "simulate": "everything",
         "simulation": "beads",
         "db_path": "agent.db",
         "image_dir": "/tmp/newswitch/images",
@@ -170,7 +167,7 @@ def test_a_component_makes_up_a_cube(tmp_path: Path) -> None:
                 d["cubes"]["stage"]["signals"]["in"].append("x"),
                 d["drives"].append({"from": "camera.frame", "to": "stage.x", "by": "1 um"}),
             ),
-            "only the stage's z",
+            "only a move along the axis",
         ),
         (
             lambda d: (
@@ -204,7 +201,24 @@ def test_every_component_problem_is_listed_at_once(tmp_path: Path) -> None:
 def test_a_wire_is_refused_on_real_hardware(tmp_path: Path) -> None:
     """A rig really wired so, with the software stepping too, would move twice per plane."""
     with pytest.raises(spec.SpecError, match="no driver can arm this wire"):
-        parts.check_wired(spec.load(described(tmp_path)))
+        parts.check_wired(spec.load(described(tmp_path)), "nothing")
+
+
+def test_a_wire_from_a_real_camera_is_refused_with_the_rest_simulated(tmp_path: Path) -> None:
+    """The stage may be simulated, and the camera would still be triggered by nothing."""
+
+    def change(data: dict[str, Any]) -> None:
+        data["hardware"] = {"cameras": {"camera": {"protocol": "usb3-vision"}}}
+
+    instrument = spec.load(described(tmp_path, change))
+    with pytest.raises(spec.SpecError, match="no driver can arm this wire"):
+        parts.check_wired(instrument, "unwired")
+    parts.check_wired(instrument, "everything")
+
+
+def test_a_wire_between_what_is_simulated_is_simulated(tmp_path: Path) -> None:
+    """Nothing real on either end: there is nothing to arm."""
+    parts.check_wired(spec.load(described(tmp_path)), "unwired")
 
 
 # --- the logical detectors
@@ -234,19 +248,18 @@ def test_a_color_camera_delivers_its_colors() -> None:
 # --- a stack the detector sweeps
 
 
-class CountingMoves:
-    """Counts what the routine asks of a stage."""
+@pytest.fixture
+def software_moves(monkeypatch: pytest.MonkeyPatch) -> list[float | None]:
+    """The z of every move the routine asks of a stage; what a wire steps goes past it."""
+    moves: list[float | None] = []
+    original = Stage.move
 
-    def __init__(self, m: Microscope) -> None:
-        """Between the routine and the stage of `m`."""
-        self.moves: list[float | None] = []
-        self.original = m.stage.move
+    def move(self: Stage, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        moves.append(kwargs.get("z"))
+        return original(self, *args, **kwargs)
 
-        def move(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-            self.moves.append(kwargs.get("z"))
-            return self.original(*args, **kwargs)
-
-        m.stage.move = move  # type: ignore[method-assign]
+    monkeypatch.setattr(Stage, "move", move)
+    return moves
 
 
 class RecordingZ(RecordingStore):
@@ -259,15 +272,16 @@ class RecordingZ(RecordingStore):
 
     def state(self) -> dict[str, float]:
         """Where the stage is now."""
-        return {"stage.z": self.m.stage_state.z}
+        return {"stage.z": self.m.values["stage.z"]}
 
 
-def test_a_swept_stack_takes_no_software_steps(tmp_path: Path) -> None:
+def test_a_swept_stack_takes_no_software_steps(
+    tmp_path: Path, software_moves: list[float | None]
+) -> None:
     """The stage goes to the first plane and the wire does the rest, on the planes asked for."""
     m = compiled(tmp_path)
-    counting = CountingMoves(m)
     store = acquire(m, plan([stream()], planes=[0.0, 2.0, 4.0]), RecordingZ(m))
-    assert counting.moves == [0.0, 0.0]  # the position, and the first plane
+    assert software_moves == [0.0, 0.0]  # the position, and the first plane
     acquired = store.published[0]
     assert acquired.data.shape == (1, 1, 3, 512, 512)
     assert [plane.state["stage.z"] for plane in acquired.planes] == [0.0, 2.0, 4.0]
@@ -280,7 +294,7 @@ def test_a_swept_stack_is_the_stack_software_would_take(tmp_path: Path) -> None:
     wired = acquire(swept, plan([stream()], planes=planes)).published[0].data
 
     plain = compiled(tmp_path / "plain")
-    for axis in plain.camera_state.detectors:
+    for axis in plain.detector_state.detectors:
         axis.axes = [item for item in axis.axes if item.name != "z"]
     stepped = acquire(plain, plan([stream()], planes=planes)).published[0].data
     assert np.array_equal(wired, stepped)
@@ -294,31 +308,31 @@ def test_a_swept_stack_is_the_stack_software_would_take(tmp_path: Path) -> None:
     ],
 )
 def test_a_stack_the_wire_cannot_do_is_refused_before_anything_moves(
-    tmp_path: Path, planes: list[float], finding: str
+    tmp_path: Path, planes: list[float], finding: str, software_moves: list[float | None]
 ) -> None:
     """The spacing is the wire's, and a sweep has no move that would check the travel."""
     m = compiled(tmp_path)
-    counting = CountingMoves(m)
     with pytest.raises(ValueError, match=finding):
         acquire(m, plan([stream()], planes=planes))
-    assert counting.moves == []
+    assert software_moves == []
 
 
-def test_hooks_between_swept_planes_are_refused(tmp_path: Path) -> None:
+def test_hooks_between_swept_planes_are_refused(
+    tmp_path: Path, software_moves: list[float | None]
+) -> None:
     """Nothing can run between the planes of a sweep."""
     m = compiled(tmp_path)
     config = plan([stream()], planes=[0.0, 2.0])
     config.timepoints[0].positions[0].stacks[0].z_hooks = ["anything"]  # type: ignore[list-item]
-    counting = CountingMoves(m)
     with pytest.raises(ValueError, match="between the planes"):
         acquire(m, config)
-    assert counting.moves == []
+    assert software_moves == []
 
 
 def test_capturing_on_its_own_does_not_step_the_stage(tmp_path: Path) -> None:
     """A driven axis only runs through a stack, or a live view would walk off."""
     m = compiled(tmp_path)
-    m.detector.activate_detector(1)
-    m.detector.capture_image(1)
-    m.detector.capture_channels(1)
-    assert m.stage_state.z == 0.0
+    m.detector.activate_detector("camera")
+    m.detector.capture_image("camera")
+    m.detector.capture_channels("camera")
+    assert m.values["stage.z"] == 0.0

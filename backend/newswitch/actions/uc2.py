@@ -9,7 +9,7 @@ from koil import unkoil
 from newswitch.drivers.uc2.dispatch import dispatch_uc2_events
 from newswitch.models.uc2 import STAGE_AXES
 from newswitch.protocols.uc2 import UC2BusManager
-from newswitch.states.stage import StageState
+from newswitch.services.values import Values
 from newswitch.states.uc2 import UC2State
 
 
@@ -20,11 +20,11 @@ async def run_uc2_bus(uc2_bus: UC2BusManager) -> None:
 
 async def run_uc2_event_dispatch(
     uc2_bus: UC2BusManager,
-    stage_state: StageState,
+    values: Values,
     uc2_state: UC2State,
 ) -> None:
     """Mirror spontaneous UC2 hardware events into the shared reactive states."""
-    await dispatch_uc2_events(uc2_bus, stage_state, uc2_state)
+    await dispatch_uc2_events(uc2_bus, values, uc2_state)
 
 
 @dataclass

@@ -23,7 +23,7 @@ export const LedMatrixOffDefinition: ActionDefinition<
   description: 'Turn the LED matrix off.',
   argsSchema: LedMatrixOffArgsSchema,
   returnSchema: LedMatrixOffReturnSchema,
-  lockKeys: ['illumination'],
+  lockKeys: ['tune'],
 };
 
 /**

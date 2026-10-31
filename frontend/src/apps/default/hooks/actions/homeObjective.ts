@@ -23,7 +23,7 @@ export const HomeObjectiveDefinition: ActionDefinition<
   description: 'Home the objective changer.',
   argsSchema: HomeObjectiveArgsSchema,
   returnSchema: HomeObjectiveReturnSchema,
-  lockKeys: ['objective'],
+  lockKeys: ['swap'],
 };
 
 /**

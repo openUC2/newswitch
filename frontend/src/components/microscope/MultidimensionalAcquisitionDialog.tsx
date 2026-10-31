@@ -31,12 +31,8 @@ import {
   type Streams,
   type Timepoint,
 } from "@/apps/default/hooks/actions";
-import {
-  useCameraState,
-  useIlluminationState,
-  useStageState,
-  type StageState,
-} from "@/apps/default/hooks/states";
+import { useDetectorState, useSourceState } from "@/apps/default/hooks/states";
+import { useStagePosition } from "@/lib/microscope/values";
 import { cn } from "@/lib/utils";
 import { DetectorPicker } from "./DetectorPicker";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -147,9 +143,9 @@ export function MultidimensionalAcquisitionDialog() {
   const [selectedPosition, setSelectedPosition] = useState(0);
 
   // Live microscope state for "init from state"
-  const { data: cameraState } = useCameraState({ subscribe: true });
-  const { data: illuminationState } = useIlluminationState({ subscribe: true });
-  const { data: stageState } = useStageState({ subscribe: true });
+  const { data: detectorState } = useDetectorState({ subscribe: true });
+  const { data: sourceState } = useSourceState({ subscribe: true });
+  const stageState = useStagePosition();
 
   // Acquisition action
   const {
@@ -162,10 +158,10 @@ export function MultidimensionalAcquisitionDialog() {
 
   // Build defaults from current microscope state
   const buildDefaultsFromState = useCallback((): FormValues => {
-    const detectors = cameraState?.detectors ?? [];
+    const detectors = detectorState?.detectors ?? [];
     const activeDetectors = detectors.filter((d) => d.is_active);
-    const illuminations = illuminationState?.illuminations ?? [];
-    const activeIlluminations = illuminations.filter((i) => i.is_active);
+    const illuminations = Object.values(sourceState?.sources ?? {});
+    const activeIlluminations = illuminations.filter((i) => i.on);
 
     // One stream: what is lit now, seen by every active detector
     const channels: Streams[] = [
@@ -175,9 +171,9 @@ export function MultidimensionalAcquisitionDialog() {
         illuminations:
           activeIlluminations.length > 0
             ? activeIlluminations.map((ill) => ({
-                source: ill.key ?? String(ill.slot),
-                wavelength: ill.wavelength ?? 488,
-                intensity: ill.intensity / (ill.max_intensity || 100),
+                source: ill.name,
+                wavelength: ill.wavelength,
+                intensity: ill.power / ill.max_power,
               }))
             : [makeDefaultIllumination()],
       },
@@ -191,7 +187,7 @@ export function MultidimensionalAcquisitionDialog() {
     );
 
     return makeDefaultConfig([pos]);
-  }, [cameraState, illuminationState, stageState]);
+  }, [detectorState, sourceState, stageState]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(AcquireMultidimensionalAcquisitionArgsSchema),
@@ -528,7 +524,7 @@ function PositionAddButton({
   timepointIndex: number;
   // The generated state type, not ReturnType<typeof useStageState>["data"] - the hook is
   // generic, so that indirection collapsed to {} and x/y/z were unreachable.
-  stageState: StageState | null | undefined;
+  stageState: { x: number; y: number; z: number };
   defaultChannels: Streams[];
   onAdded: (index: number) => void;
 }) {

@@ -16,26 +16,26 @@ default it to the fake one). There is no other file: everything about it is in i
 The description is validated when it is loaded (`Instrument` in `newswitch/instrument/spec.py`,
 pydantic dataclasses all the way down): an unknown key, a value of the wrong type or unit, or a missing one stops
 the start, and every problem is listed with its path in the file. A quantity is a string with its
-unit (`488 nm`, `50 mW`) or a bare number in the unit newswitch keeps it in (nm, mm, um, mW).
+unit (`488 nm`, `50 mW`): a bare number is refused where a quantity is meant.
 
 ## What the server controls
 
-`parts` says what has a control, in which role, and by which slot. Nothing is inferred from the
-optics: a sensor or source without a slot is an error, and a swap or a move with no role has no
-control and stays at its `initial`.
+Everything that can change, and nothing has to be told what it is for. Every variable has a control;
+sources and detectors are found from what the cubes hold; and what a variable does is measured by
+nudging it (`newswitch/instrument/roles.py`):
 
-```yaml
-parts:
-  stage: stage                       # the cube holding the sample; left out: nothing moves it
-  objective: {swap: objective.slot, reference_tube: 200 mm}  # what magnification is stated against
-  filters: {swap: filter_wheel.slot}
-  sources:                           # by slot, counting from 1
-    1: {cube: laser_488, full_intensity: 100.0}  # its intensity runs from 0 to this
-  detectors:
-    1: {cube: camera_a, frame_rate: 30 Hz}       # how often it streams
-```
+| Question | Found from |
+| --- | --- |
+| What moves the view sideways? | Moves that change where a detector looks, each along its `along` |
+| What focuses? | Moves that change how sharp the image is, and not how large |
+| What changes the pixel size? | What changes the image's scale |
 
-A source's `power` and a sensor's `exposure`, `gain` and `binning` are tunes every such cube must have.
+A routine that needs one of these and finds none or several refuses and lists them, so a second focus
+motor stops an autofocus rather than changing which motor it drives. The call can name the one it means.
+
+A detector must tune its `exposure`. Anything else it does not tune is fixed: a PMT has no `binning`.
+A tune called `power`, `exposure`, `gain`, `binning` or `frame_rate` is in mW, ms, dB, no unit or Hz.
+A source's power goes up to its `max_power`, whatever else its tune states.
 
 ## What is on the stage
 
@@ -148,7 +148,7 @@ at the working directory.
 
 ```yaml
 settings:
-  use_virtual_microscope: true       # false: the real hardware of the `hardware` section
+  simulate: everything               # everything | unwired | nothing, see "How it reaches hardware"
   simulation: gfp-beads              # which of the holder's `simulations` is on it
   db_path: arkitekt_agent.db         # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images   # where the file IO writes
@@ -166,7 +166,7 @@ nothing. Each states the `catalog` it is written against and its `bloks` by name
 
 ```yaml
 ui:
-  catalog: newswitch@3
+  catalog: newswitch@4
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'
@@ -186,7 +186,7 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `fake-microscope` | Two cameras behind a splitter, objectives and a filter wheel, with hidden errors to calibrate away. |
 | `dual-camera` | Two cameras, each behind a filter of its own (BP 525/50, BP 625/50), seeing the sample at once. |
 | `rgb-camera` | One color camera: every exposure gives an image per color. |
-| `cam-test` | One simulated uc2_cam_py camera and nothing else, in real-hardware mode. |
+| `cam-test` | One simulated uc2_cam_py camera and nothing else, with nothing simulated. |
 | `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image. |
 | `light-sheet` | A sheet from the side and a camera above, whose frames step the stage. |
 | `flim` | The point scanner, timing each photon against a pulsed laser. |
@@ -224,19 +224,31 @@ acquisition larger than the free memory is refused too, and stopping one part wa
 
 ## How it reaches hardware
 
-`settings.use_virtual_microscope` says whether a run is simulated. A simulated
-run ignores the `hardware` section apart from a board giving it the UC2 actions, on a virtual bus;
-a real one refuses to start until everything with a control is wired.
+`settings.simulate` says what has no hardware:
 
-The cubes name their actuators; `hardware` says what those names are wired to.
+| Value | Means |
+| --- | --- |
+| `everything` | Run a description dry: its `hardware` section opens nothing, apart from a board giving it the UC2 actions on a virtual bus. |
+| `unwired` | What the section wires is real, the rest simulated: a real camera beside a simulated stage. |
+| `nothing` | What the section does not wire stops the start, and every such thing is listed. |
+
+The cubes name their actuators; `hardware` says which driver reaches each, and with what.
 
 | Key | Means |
 | --- | --- |
-| `boards.<name>` | The one UC2 board: `transport` (`rest`, `canopen`), `port` or `port_pattern` (neither: autodetect), `stage` (options of `UC2StageConfig` but its axes), and any other option of `UC2RestBusConfig` or `UC2CanBusConfig`. |
-| `actuators.<name>` | What a variable's `actuator` is: `board`, and `axis` (a stage move, on the axis of its name; a filter wheel), `channel` and `pwm_max` (a source's power), `positions` per slot (a filter wheel, on its axis; an objective changer on a `canopen` board, in steps; a `rest` board's firmware keeps its own). |
+| `boards.<name>` | The one UC2 board: `transport` (`rest`, `canopen`), `port` or `port_pattern` (neither: autodetect), and any other option of `UC2RestBusConfig` or `UC2CanBusConfig`. |
+| `actuators.<name>` | What a variable's `actuator` is: its `driver`, and what that driver takes. |
 | `cameras.<cube>` | The camera behind a sensor: `protocol` (`usb3-vision`, `gige-vision`), `vendor` as uc2_cam_py names it, `serial_number` or `index` (neither: the first), `buffer_size`, `store_image_data`, `vendor_options` (passed on unchanged). |
 
-A tube lens's focus and the like have no control in the server, and need no wire.
+| Driver | Moves | Takes |
+| --- | --- | --- |
+| `uc2.stepper` | A move, on one axis of the board | `board`, `axis`, `steps_per_um` (required: a wrong guess moves the sample somewhere else) |
+| `uc2.laser` | A source's power; its tune must state a `max`, the board's full scale | `board`, `channel`, `pwm_max` |
+| `uc2.wheel` | A swap, by moving an axis | `board`, `axis`, `positions` per slot |
+| `uc2.turret` | A swap, by the objective changer | `board`, `positions` per slot in steps on a `canopen` board; a `rest` board's firmware keeps its own |
+
+Others can be added: `register_driver` in `newswitch/drivers/base.py`. A wire in `drives` has no driver
+that can arm it yet, so one whose ends are real is refused.
 
 ### UC2 master over USB serial
 
@@ -254,24 +266,17 @@ hardware:
       baudrate: 921600
       identity: UC2_Feather
       require_master: true
-      steps_per_um_x: 3.2
-      steps_per_um_y: 3.2
-      steps_per_um_z: 3.2
       steps_per_deg_a: 1.0
       default_speed: 5000.0
       move_timeout_s: 120.0
       home_timeout_s: 30.0
-      stage:
-        home_axes: [Z, X, Y]
-        registered_step_sizes: [10.0, 100.0, 1000.0, 10000.0]
-        default_speed: 5000.0
   actuators:
-    stg-x: {board: uc2, axis: X}
-    stg-y: {board: uc2, axis: Y}
-    stg-z: {board: uc2, axis: Z}
-    laser_488: {board: uc2, channel: 1, pwm_max: 1023}
-    laser-635: {board: uc2, channel: 2, pwm_max: 1023}
-    led: {board: uc2, channel: 3, pwm_max: 1023}
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    laser_488: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+    laser-635: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
+    led: {driver: uc2.laser, board: uc2, channel: 3, pwm_max: 1023}
 ```
 
 ### CANopen directly
@@ -295,24 +300,17 @@ hardware:
       node_led: 20
       node_laser: 21
       node_galvo: 30
-      steps_per_um_x: 3.2
-      steps_per_um_y: 3.2
-      steps_per_um_z: 3.2
       steps_per_deg_a: 1.0
       default_speed: 5000.0
       home_speed_steps: 15000
       home_direction: -1
       home_timeout_ms: 20000
       move_timeout_s: 120.0
-      stage:
-        home_axes: [Z, X, Y]
-        registered_step_sizes: [10.0, 100.0, 1000.0, 10000.0]
-        default_speed: 5000.0
   actuators:
-    stg-x: {board: uc2, axis: X}
-    stg-y: {board: uc2, axis: Y}
-    stg-z: {board: uc2, axis: Z}
-    laser_488: {board: uc2, channel: 0, pwm_max: 1023}
-    laser-635: {board: uc2, channel: 1, pwm_max: 1023}
-    led: {board: uc2, channel: 2, pwm_max: 1023}
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    laser_488: {driver: uc2.laser, board: uc2, channel: 0, pwm_max: 1023}
+    laser-635: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+    led: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
 ```

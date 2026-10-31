@@ -19,7 +19,7 @@ class FrameSink(Protocol):
         """A detector starts streaming: frames follow."""
         ...
 
-    def broadcast_sync(self, slot: int, frame: np.ndarray) -> None:
-        """A new frame of the detector in `slot`, which the sink keeps as it is: the detector
+    def broadcast_sync(self, detector: str, frame: np.ndarray) -> None:
+        """A new frame of `detector`, which the sink keeps as it is: the detector
         does not write to it afterwards. Called from the detector's thread."""
         ...

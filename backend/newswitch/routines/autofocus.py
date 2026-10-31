@@ -16,8 +16,9 @@ from scipy import ndimage
 
 from newswitch.protocols.detector import DetectorManager
 from newswitch.protocols.optics import OpticsManager
-from newswitch.protocols.stage import StageManager
 from newswitch.routines.common import focus_range, z_sweep
+from newswitch.services.stage import Stage, stage_of
+from newswitch.services.values import Values
 from newswitch.states.autofocus import AutofocusState
 
 #: The Gaussian (px) the Laplacian focus metric is taken over, against pixel noise.
@@ -42,10 +43,10 @@ def compute_focus_metric(image: np.ndarray, metric: str = "laplacian_variance") 
 
 
 def autofocus_sweep(
-    stage: StageManager,
+    stage: Stage,
     detector: DetectorManager,
     z_positions: list[float],
-    detector_slot: int = 1,
+    detector_name: str | None = None,
     metric: str = "laplacian_variance",
     on_step: Optional[Callable[[int, float, float], None]] = None,
 ) -> tuple[float, list[float]]:
@@ -59,7 +60,7 @@ def autofocus_sweep(
     best_value = -np.inf
     for index, z_position in enumerate(z_positions):
         stage.move(z=z_position, is_absolute=True)
-        image = detector.capture_image(slot=detector_slot).data
+        image = detector.capture_image(detector_name).data
         value = compute_focus_metric(image, metric)
         metrics.append(value)
         if value > best_value:
@@ -71,14 +72,15 @@ def autofocus_sweep(
 
 
 def run_autofocus(
-    stage: StageManager,
+    values: Values,
     detector: DetectorManager,
     autofocus_state: AutofocusState,
     optics: OpticsManager,
     task: Task,
     z_range: Optional[float] = None,
     steps: int = 11,
-    detector_slot: int = 1,
+    detector_name: Optional[str] = None,
+    focus: Optional[str] = None,
     metric: str = "laplacian_variance",
 ) -> float:
     """Autofocus: sweep Z around the current position and move to the sharpest plane.
@@ -87,14 +89,19 @@ def run_autofocus(
         z_range: Total sweep range in micrometers, centered on the current Z. By default, from
             how deep the detector's objective sees sharply.
         steps: Number of Z planes to score (>= 3).
-        detector_slot: Detector to read frames from.
+        detector_name: The detector to read frames from; by default, the first that is on.
+        focus: What to focus with, if several things do.
         metric: "laplacian_variance" (default) or "intensity_variance".
 
     Returns:
         The Z position (micrometers) of best focus; the stage is left there.
     """
+    name = detector_name or detector.list_active_detectors()[0].name
+    stage = stage_of(values, name, focus)
+    if stage.z_move is None:
+        raise ValueError(f"Nothing here focuses {name}")
     if z_range is None:
-        z_range = focus_range(optics.depth_of_field_um(detector_slot), steps)
+        z_range = focus_range(optics.depth_of_field_um(name), steps)
     z_positions = z_sweep(stage.state.z, z_range, steps)
 
     autofocus_state.running = True
@@ -113,7 +120,7 @@ def run_autofocus(
             stage,
             detector,
             z_positions,
-            detector_slot=detector_slot,
+            detector_name=name,
             metric=metric,
             on_step=on_step,
         )

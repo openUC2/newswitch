@@ -1,37 +1,28 @@
 import type { LockDefinition } from '@/lib/arkitekt/locks';
-import { CameraParametersDefinition } from './CameraParameters';
+import { DetectorDefinition } from './Detector';
 import { ExpanseStateDefinition } from './ExpanseState';
-import { FilterBankDefinition } from './FilterBank';
 import { GalvoDefinition } from './Galvo';
-import { HookRegistryDefinition } from './HookRegistry';
-import { IlluminationDefinition } from './Illumination';
 import { IoDefinition } from './Io';
-import { ObjectiveDefinition } from './Objective';
-import { StagePositionDefinition } from './StagePosition';
+import { MotionDefinition } from './Motion';
+import { SwapDefinition } from './Swap';
+import { TuneDefinition } from './Tune';
 
-export {
-  CameraParametersDefinition,
-  useCameraParametersLock,
-} from './CameraParameters';
+export { DetectorDefinition, useDetectorLock } from './Detector';
 export { ExpanseStateDefinition, useExpanseStateLock } from './ExpanseState';
-export { FilterBankDefinition, useFilterBankLock } from './FilterBank';
 export { GalvoDefinition, useGalvoLock } from './Galvo';
-export { HookRegistryDefinition, useHookRegistryLock } from './HookRegistry';
-export { IlluminationDefinition, useIlluminationLock } from './Illumination';
 export { IoDefinition, useIoLock } from './Io';
-export { ObjectiveDefinition, useObjectiveLock } from './Objective';
-export { StagePositionDefinition, useStagePositionLock } from './StagePosition';
+export { MotionDefinition, useMotionLock } from './Motion';
+export { SwapDefinition, useSwapLock } from './Swap';
+export { TuneDefinition, useTuneLock } from './Tune';
 
 export const globalLockDefinition = {
-  CameraParameters: CameraParametersDefinition,
+  Detector: DetectorDefinition,
   ExpanseState: ExpanseStateDefinition,
-  FilterBank: FilterBankDefinition,
   Galvo: GalvoDefinition,
-  HookRegistry: HookRegistryDefinition,
-  Illumination: IlluminationDefinition,
   Io: IoDefinition,
-  Objective: ObjectiveDefinition,
-  StagePosition: StagePositionDefinition,
+  Motion: MotionDefinition,
+  Swap: SwapDefinition,
+  Tune: TuneDefinition,
 } satisfies Record<string, LockDefinition<string>>;
 
 export type GlobalLockDefinition = typeof globalLockDefinition;

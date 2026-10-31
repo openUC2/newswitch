@@ -32,7 +32,6 @@ from mikro.api.schema import (
 )
 from mikro.inputs.lightpath import in_out
 
-from newswitch.instrument import parts as instrument_parts
 from newswitch.instrument import spec
 from newswitch.instrument.spec import Instrument
 from newswitch.microscope.parts import Microscope
@@ -129,7 +128,8 @@ def _setting(name: str, value: Any) -> SettingInput:  # noqa: ANN401 - a variabl
 
 def microscope_state(instrument: Instrument, state: Mapping[str, Any]) -> OptikitStateInput:
     """What every device was set to; the stage as lengths, the rest as settings."""
-    moves = instrument_parts.stage_moves(instrument)
+    holder = instrument.sample_cube()
+    moves = instrument.cubes[holder].moves
     stage = {short: f"{state[move.name]} um" for short, move in moves.items() if short in "xyz"}
     devices = [
         DeviceStateInput(
@@ -139,7 +139,7 @@ def microscope_state(instrument: Instrument, state: Mapping[str, Any]) -> Optiki
             ],
         )
         for cube in instrument.cubes.values()
-        if cube.variables and cube.name != instrument.parts.stage
+        if cube.variables and cube.name != holder
     ]
     return OptikitStateInput(stage=StageStateInput(**stage), devices=devices)
 
@@ -185,15 +185,7 @@ class MikroDatasetStore:
 
     def state(self) -> Mapping[str, Any]:
         """What the running microscope is set to now."""
-        m = self.microscope
-        return instrument_parts.runtime_state(
-            self.instrument,
-            m.camera_state,
-            m.stage_state,
-            m.objective_state,
-            m.illumination_state,
-            m.filter_bank_state,
-        )
+        return self.microscope.values.snapshot()
 
     def publish(self, acquired: AcquiredPosition) -> AcquiredDataset:
         """Write `acquired`: the images, their anchors, and their place in the stage's space.

@@ -32,9 +32,10 @@ cubes:
       axes: {x: {size: 640, pitch: 5.86 um}, y: {size: 480, pitch: 5.86 um}}
       readout: scmos
     tunes:
+      frame_rate: {initial: 20 Hz, min: 1 Hz, max: 100 Hz, step: 1 Hz}
       exposure: {initial: 10 ms, step: 1 ms, min: 1 ms, max: 10 s}
       gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
-      binning: {initial: 1, step: 1}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
 
 illumination: []
 
@@ -43,13 +44,8 @@ detection:
   - {from: lens_a, to: lens_b, distance: 100 mm}
   - {from: lens_b, to: sim_cam, distance: focus}
 
-parts:
-  detectors:
-    1: {cube: sim_cam, frame_rate: 20 Hz}
-
-# A camera only runs on real hardware; set it true to see what the optics render instead.
 settings:
-  use_virtual_microscope: false
+  simulate: nothing
   simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
@@ -71,7 +67,7 @@ hardware:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@3
+  catalog: newswitch@4
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'

@@ -20,21 +20,19 @@ from newswitch.models.uc2 import (
     UC2Event,
 )
 from newswitch.protocols.uc2 import UC2BusManager
-from newswitch.states.stage import StageState
+from newswitch.drivers.uc2.actuators import Stepper
+from newswitch.services.values import Values
 from newswitch.states.uc2 import UC2State
 
 logger = logging.getLogger(__name__)
 
-_AXIS_TO_STATE_FIELD = {"X": "x", "Y": "y", "Z": "z", "A": "a"}
 
-
-# TODO: @Johannes this needs critical review
-def apply_uc2_event(event: UC2Event, stage_state: StageState, uc2_state: UC2State) -> None:
+def apply_uc2_event(event: UC2Event, values: Values, uc2_state: UC2State) -> None:
     """Apply one hardware event to the shared states."""
     if isinstance(event, (PositionUpdate, MotionDone)):
-        field = _AXIS_TO_STATE_FIELD.get(event.axis.upper())
-        if field is not None:
-            setattr(stage_state, field, event.position)
+        for name, driver in values.drivers.items():
+            if isinstance(driver, Stepper) and driver.config.axis == event.axis.upper():
+                values.reporter(name)(event.position)
     elif isinstance(event, EStopChanged):
         uc2_state.estop_active = event.active
     elif isinstance(event, NodeSeen):
@@ -47,17 +45,15 @@ def apply_uc2_event(event: UC2Event, stage_state: StageState, uc2_state: UC2Stat
         logger.info("UC2 button event: key=%s data=%s", event.key, event.data)
 
 
-async def dispatch_uc2_events(
-    bus: UC2BusManager, stage_state: StageState, uc2_state: UC2State
-) -> None:
+async def dispatch_uc2_events(bus: UC2BusManager, values: Values, uc2_state: UC2State) -> None:
     """Consume the bus event stream forever, mirroring it into states.
 
-    It writes ``StageState`` while a move may hold ``stage_position``: a lock keeps
+    It writes what moved while a move may hold ``motion``: a lock keeps
     two actions from commanding the stage at once, it does not guard the state,
     so the reported position streams in alongside a running move.
     """
     async for event in bus.subscribe():
         try:
-            apply_uc2_event(event, stage_state, uc2_state)
+            apply_uc2_event(event, values, uc2_state)
         except Exception:
             logger.exception("Failed to apply UC2 event %r", event)

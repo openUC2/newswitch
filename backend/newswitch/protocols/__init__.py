@@ -11,14 +11,10 @@ from .cache import CacheManager
 from .calibration import CalibrationManager
 from .detector import DetectorFrame, DetectorManager, DetectorSessionInfo
 from .expanse import ExpanseManager
-from .filter_bank import FilterBankManager
 from .hook_manager import HookContext, HookHandler, HookManager, UnsupportedHook
-from .illumination import IlluminationManager
 from .io import IOManager
 from .optics import OpticsManager
 from .metadata import MetadataManager
-from .objective import ObjectiveManager
-from .stage import StageManager
 from .uc2 import UC2BusManager
 
 __all__ = [
@@ -30,17 +26,13 @@ __all__ = [
     "DetectorManager",
     "DetectorSessionInfo",
     "ExpanseManager",
-    "FilterBankManager",
     "HookContext",
     "HookHandler",
     "HookManager",
-    "IlluminationManager",
     "IOManager",
     "OpticsManager",
     "Manager",
     "MetadataManager",
-    "ObjectiveManager",
-    "StageManager",
     "UC2BusManager",
     "UnsupportedHook",
 ]

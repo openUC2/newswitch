@@ -22,7 +22,7 @@ interface Listener {
 }
 
 /**
- * One socket per slot and size, however many views show it: a frame is sent, and turned
+ * One socket per detector and size, however many views show it: a frame is sent, and turned
  * into pixels, once per tab.
  */
 class FrameConnection {
@@ -112,11 +112,11 @@ const connections = new Map<string, FrameConnection>();
 
 /** Listen to a detector's frames; a new listener gets the newest frame straight away. */
 export function subscribeFrames(
-  slot: number,
+  detector: string,
   maxSize: number,
   listener: Listener,
 ): () => void {
-  const url = `${FRAME_STREAM_PATH}/${slot}?max_size=${maxSize}`;
+  const url = `${FRAME_STREAM_PATH}/${encodeURIComponent(detector)}?max_size=${maxSize}`;
   let connection = connections.get(url);
   if (!connection) {
     connection = new FrameConnection(url, () => connections.delete(url));
@@ -132,7 +132,7 @@ export function subscribeFrames(
  * Draw from the newest one when the screen is ready, so frames in between cost nothing.
  */
 export function useFrameStream(
-  slot: number,
+  detector: string,
   maxSize: number,
   onFrame: (frame: LiveFrame) => void,
 ): FrameStreamState {
@@ -146,11 +146,11 @@ export function useFrameStream(
 
   useEffect(
     () =>
-      subscribeFrames(slot, maxSize, {
+      subscribeFrames(detector, maxSize, {
         onFrame: (frame) => onFrameRef.current(frame),
         onState: setState,
       }),
-    [slot, maxSize],
+    [detector, maxSize],
   );
 
   return state;

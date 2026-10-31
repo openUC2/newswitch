@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCameraState } from "@/apps/default/hooks/states";
+import { useDetectorState } from "@/apps/default/hooks/states";
 import { Canvas } from "@react-three/fiber";
 import { CameraMatrixSync } from "./CameraMatrixSync";
 import { CameraController } from "./cameras/CameraController";
@@ -28,7 +28,7 @@ export const SceneWrapper = ({ children }: { children: ReactNode }) => {
 };
 
 export const Expanse = () => {
-  useCameraState({ subscribe: true });
+  useDetectorState({ subscribe: true });
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-black">

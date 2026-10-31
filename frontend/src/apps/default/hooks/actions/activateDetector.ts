@@ -5,8 +5,8 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const ActivateDetectorArgsSchema = z.object({
-  /** Detector slot number to activate */
-  slot: z.number().describe('Detector slot number to activate'),
+  /** The detector. */
+  name: z.string().describe('The detector.'),
 });
 export const ActivateDetectorReturnSchema = z.object({});
 
@@ -25,14 +25,14 @@ export const ActivateDetectorDefinition: ActionDefinition<
 > = {
   name: 'activate_detector',
   appKey: 'default',
-  description: 'Activate a detector by its slot number.',
+  description: 'Turn a detector on.',
   argsSchema: ActivateDetectorArgsSchema,
   returnSchema: ActivateDetectorReturnSchema,
-  lockKeys: ['camera_parameters'],
+  lockKeys: ['detector'],
 };
 
 /**
- * Activate a detector by its slot number.
+ * Turn a detector on.
  */
 export const useActivateDetector = () => {
   return useAction(ActivateDetectorDefinition);

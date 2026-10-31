@@ -10,6 +10,6 @@ from newswitch.protocols.base import Manager
 class AcquisitionManager(Manager, Protocol):
     """Takes frames with the active detectors, caches them and adds them to the expanse."""
 
-    def acquire(self, slots: Optional[list[int]] = None) -> list[Frame]:
-        """A frame from each active detector (only those in `slots`, when given)."""
+    def acquire(self, names: Optional[list[str]] = None) -> list[Frame]:
+        """A frame from each active detector (only those in `names`, when given)."""
         ...

@@ -34,7 +34,7 @@ def test_they_come_from_the_description() -> None:
     """Everything, with relative folders below backend/ and the description remembered."""
     settings = load_settings(str(FAKE))
     assert settings.instrument == FAKE
-    assert settings.use_virtual_microscope is True
+    assert settings.simulate == "everything"
     assert settings.db_path == "arkitekt_agent.db"
     assert settings.image_dir == Path("/tmp/newswitch/images")
     assert settings.camera_recording_dir == BACKEND_DIR / "data" / "recordings"
@@ -47,7 +47,7 @@ def test_the_environment_names_the_instrument(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.chdir("/")
     settings = load_settings()
     assert settings.instrument == BACKEND_DIR / "instruments" / "cam-test" / "microscope.yml"
-    assert settings.use_virtual_microscope is False
+    assert settings.simulate == "nothing"
     instrument = load_devices(settings)
     assert instrument is not None and instrument.name == "cam-test"
 
@@ -83,14 +83,14 @@ def test_no_recording_folder_can_be_stated(tmp_path: Path) -> None:
 
 def test_unknown_key_is_an_error(tmp_path: Path) -> None:
     """A misspelled key is reported instead of silently ignored."""
-    with pytest.raises(spec.SpecError, match="use_virutal_microscope"):
-        load_settings(str(edited(tmp_path, use_virutal_microscope=True)))
+    with pytest.raises(spec.SpecError, match="simulatee"):
+        load_settings(str(edited(tmp_path, simulatee="everything")))
 
 
 @pytest.mark.parametrize(
     "key",
     [
-        "use_virtual_microscope",
+        "simulate",
         "db_path",
         "image_dir",
         "cache_dir",
@@ -106,8 +106,14 @@ def test_missing_key_is_an_error(tmp_path: Path, key: str) -> None:
 
 def test_a_flag_is_a_flag(tmp_path: Path) -> None:
     """``"yes"`` is no way to say true."""
-    with pytest.raises(spec.SpecError, match="use_virtual_microscope"):
-        load_settings(str(edited(tmp_path, use_virtual_microscope="yes")))
+    with pytest.raises(spec.SpecError, match="camera_debug_window"):
+        load_settings(str(edited(tmp_path, camera_debug_window="yes")))
+
+
+def test_what_to_simulate_is_one_of_three(tmp_path: Path) -> None:
+    """``true`` is no way to say what has no hardware."""
+    with pytest.raises(spec.SpecError, match="simulate"):
+        load_settings(str(edited(tmp_path, simulate=True)))
 
 
 def test_the_old_settings_are_refused(tmp_path: Path) -> None:

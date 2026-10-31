@@ -1,7 +1,7 @@
 """The detectors' frames as lovekit streams (arkitekt agent, ``main_arkitekt.py``).
 
 Every detector is a lovekit `VideoStream`, keyed by its cube in the instrument
-(lovekit keeps a stream's id by its key over restarts; slots change with
+(lovekit keeps a stream's id by its key over restarts; detectors change with
 the description's order), titled by its name. The detectors hand their frames to a `LovekitSink`
 from their own threads; it keeps the newest one per detector, and the background hook
 `publish_camera_streams` sends what is new, at most `MAX_FPS` per stream, from the event
@@ -30,9 +30,9 @@ MAX_FPS = 15.0
 
 @dataclass(frozen=True)
 class CameraStream:
-    """A detector as a stream: its slot, and the key and title of its stream."""
+    """A detector as a stream: its detector, and the key and title of its stream."""
 
-    slot: int
+    detector: str
     key: str
     title: str
 
@@ -43,21 +43,21 @@ class LovekitSink:
     def __init__(self, cameras: Sequence[CameraStream] = ()) -> None:
         """A sink for `cameras`, the detectors it publishes."""
         self.cameras = list(cameras)
-        self._newest: dict[int, np.ndarray] = {}
+        self._newest: dict[str, np.ndarray] = {}
         self._lock = threading.Lock()
 
     def start_broadcasting(self) -> None:
         """A detector streams: nothing to start, frames are taken as they come."""
 
-    def broadcast_sync(self, slot: int, frame: np.ndarray) -> None:
-        """Keep `frame` as the newest of `slot` (called from the detector's thread)."""
+    def broadcast_sync(self, detector: str, frame: np.ndarray) -> None:
+        """Keep `frame` as the newest of `detector` (called from the detector's thread)."""
         with self._lock:
-            self._newest[slot] = frame
+            self._newest[detector] = frame
 
-    def take(self, slot: int) -> Optional[np.ndarray]:
-        """The newest frame of `slot` since the last take, or None."""
+    def take(self, detector: str) -> Optional[np.ndarray]:
+        """The newest frame of `detector` since the last take, or None."""
         with self._lock:
-            return self._newest.pop(slot, None)
+            return self._newest.pop(detector, None)
 
 
 @dataclass
@@ -80,7 +80,7 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
         live.streams = list(published.streams)
         while not published.stopped.is_set():
             for camera in sink.cameras:
-                frame = sink.take(camera.slot)
+                frame = sink.take(camera.detector)
                 if frame is not None:
                     # ~37 ms for a 1920x1200 frame: converted off the event loop, which
                     # also runs the agent's actions and state updates.

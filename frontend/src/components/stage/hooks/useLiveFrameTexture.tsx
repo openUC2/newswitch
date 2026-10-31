@@ -14,14 +14,14 @@ import {
 } from "three";
 
 /** A texture of a detector's newest frame, null until the first one came. */
-export const useLiveFrameTexture = (slot: number) => {
+export const useLiveFrameTexture = (detector: string) => {
   const latestRef = useRef<LiveFrame | null>(null);
   const shownRef = useRef<LiveFrame | null>(null);
   // Written from useFrame: held in a ref, the state only tells React it was replaced.
   const textureRef = useRef<DataTexture | null>(null);
   const [texture, setTexture] = useState<DataTexture | null>(null);
 
-  useFrameStream(slot, DEFAULT_MAX_SIZE, (frame) => {
+  useFrameStream(detector, DEFAULT_MAX_SIZE, (frame) => {
     latestRef.current = frame;
   });
 

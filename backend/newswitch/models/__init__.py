@@ -12,22 +12,13 @@ from .acquisition import (
     Timepoint,
 )
 from .calibration import CalibratedLightPath
-from .devices import (
-    FULL_SENSOR,
-    Colormap,
-    Detector,
-    DetectorAxis,
-    Filter,
-    Illumination,
-    IlluminationKind,
-    ObjectiveLens,
-    Roi,
-)
+from .devices import FULL_SENSOR, Detector, DetectorAxis, Roi
 from .frames import ArrayMetadata, Frame, Image, Metadata, Scale
 from .hooks import Hook, RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 from .io import FileFormat, FileHandle
 from .light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
 from .optics import DetectorOptics, OpticalChannel, SourceOptics
+from .values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
 from .uc2 import (
     STAGE_AXES,
     BusError,
@@ -54,31 +45,31 @@ __all__ = [
     "BusError",
     "ButtonPressed",
     "CalibratedLightPath",
-    "Colormap",
     "Detector",
     "DetectorAxis",
     "EStopChanged",
     "FULL_SENSOR",
     "FileFormat",
     "FileHandle",
-    "Filter",
     "Frame",
     "HomingChanged",
     "Hook",
-    "Illumination",
-    "IlluminationKind",
     "Image",
     "LightPathSnapshot",
     "DetectorOptics",
     "LightEdge",
     "LightElement",
     "LightPath",
+    "LightSource",
+    "MoveValue",
     "OpticalChannel",
+    "SwapOption",
+    "SwapValue",
+    "TuneValue",
     "SourceOptics",
     "Metadata",
     "MotionDone",
     "NodeSeen",
-    "ObjectiveLens",
     "PositionUpdate",
     "RegisteredHook",
     "Roi",

@@ -1,10 +1,25 @@
-import { useMoveStage } from "@/apps/default/hooks/actions";
-import { useStageState } from "@/apps/default/hooks/states/StageState";
+import { useMove } from "@/apps/default/hooks/actions";
+import { useStage } from "@/lib/microscope/values";
 import { Html, Line } from "@react-three/drei";
 import { useState } from "react";
 import type { Vector3 } from "three";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+
+/** Moves what moves the view, in x and y only: a click on the scene says nothing about focus. */
+const useMoveViewTo = () => {
+  const stage = useStage();
+  const { assign } = useMove();
+  return (x: number, y: number) => {
+    if (stage.x.length !== 1 || stage.y.length !== 1) return;
+    const [moveX] = stage.x;
+    const [moveY] = stage.y;
+    assign({
+      targets: { [moveX.name]: moveX.value - x, [moveY.name]: moveY.value - y },
+      relative: false,
+    });
+  };
+};
 import { useModeStore } from "@/store/modeStore";
 
 /**
@@ -57,8 +72,7 @@ export const ClickWidget = ({
   position: Vector3;
   onClose: () => void;
 }) => {
-  const { data: stageState } = useStageState({ subscribe: true });
-  const { assign: moveToPosition } = useMoveStage();
+  const moveTo = useMoveViewTo();
 
   return (
     <Html position={position} center distanceFactor={1}>
@@ -85,13 +99,7 @@ export const ClickWidget = ({
         )}
         <Button
           onClick={() => {
-            moveToPosition({
-              x: (stageState?.x || 0) - position.x,
-              y: (stageState?.y || 0) - position.y,
-              z: 0,
-              is_absolute: true,
-              step_size: 10,
-            });
+            moveTo(position.x, position.y);
             onClose();
           }}
           className="w-full mt-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white py-1 px-2 rounded"
@@ -111,8 +119,7 @@ export const ClickWidget = ({
 export const StagePositioner = () => {
   const interactionMode = useModeStore((s) => s.interactionMode);
   const [clickPoint, setClickPoint] = useState<Vector3 | null>(null);
-  const { data: stageState } = useStageState({ subscribe: true });
-  const { call: moveToPosition } = useMoveStage();
+  const moveTo = useMoveViewTo();
 
   if (interactionMode !== "MOVE") return null;
 
@@ -124,13 +131,7 @@ export const StagePositioner = () => {
         onClick={async (e) => {
           e.stopPropagation();
           setClickPoint(e.point);
-          moveToPosition({
-            x: (stageState?.x || 0) - e.point.x,
-            y: (stageState?.y || 0) - e.point.y,
-            z: 0,
-            is_absolute: true,
-            step_size: 10,
-          });
+          moveTo(e.point.x, e.point.y);
         }}
       >
         {/* A massive plane to ensure you can click anywhere in the expanse */}

@@ -44,7 +44,7 @@ def cameras_of(instrument: Instrument | None) -> list[CameraStream]:
     if instrument is None:
         return []
     return [
-        CameraStream(slot=index + 1, key=name, title=name)
+        CameraStream(detector=name, key=name, title=name)
         for index, name in enumerate(instrument.detectors())
     ]
 

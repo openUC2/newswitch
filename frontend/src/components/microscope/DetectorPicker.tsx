@@ -1,4 +1,4 @@
-import { useCameraState } from "@/apps/default/hooks/states";
+import { useDetectorState } from "@/apps/default/hooks/states";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -14,8 +14,8 @@ export function DetectorPicker({
   onChange: (detectors: string[]) => void;
   size?: "sm" | "xs";
 }) {
-  const { data: cameraState } = useCameraState({ subscribe: true });
-  const detectors = cameraState?.detectors ?? [];
+  const { data: detectorState } = useDetectorState({ subscribe: true });
+  const detectors = detectorState?.detectors ?? [];
   const toggle = (name: string) =>
     onChange(
       value.includes(name)
@@ -27,7 +27,7 @@ export function DetectorPicker({
     <div className="flex flex-wrap gap-1">
       {detectors.map((detector) => (
         <Button
-          key={detector.slot}
+          key={detector.name}
           type="button"
           variant={value.includes(detector.name) ? "default" : "outline"}
           aria-pressed={value.includes(detector.name)}

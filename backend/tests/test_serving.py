@@ -88,15 +88,15 @@ def test_both_sinks_take_frames() -> None:
 def test_the_newest_frame_is_sent_per_stream_key() -> None:
     """Frames come in on a detector thread and go out on their detector's stream, as RGBA."""
     sink = LovekitSink(
-        [CameraStream(1, "bigcamera42", "Main"), CameraStream(2, "side-cam", "Side")]
+        [CameraStream("main", "bigcamera42", "Main"), CameraStream("side", "side-cam", "Side")]
     )
     live = CameraStreams()
     lovekit = FakeLovekit()
 
     def detector() -> None:
         for value in range(1, 6):  # only the newest is kept between sends
-            sink.broadcast_sync(1, np.full((4, 6), value, dtype=np.uint16))
-        sink.broadcast_sync(2, np.zeros((3, 3), dtype=np.uint8))
+            sink.broadcast_sync("main", np.full((4, 6), value, dtype=np.uint16))
+        sink.broadcast_sync("side", np.zeros((3, 3), dtype=np.uint8))
 
     async def run() -> None:
         task = asyncio.create_task(publish_camera_streams(lovekit, sink, live))  # type: ignore[arg-type]
@@ -123,7 +123,7 @@ def test_the_agent_publishes_the_detectors(tmp_path: Path) -> None:
     current = Run.of(run_settings(tmp_path, instrument=CAM_TEST))
     sink, streams = asyncio.run(provide_lovekit_sink(current))
     assert isinstance(sink, LovekitSink) and isinstance(streams, CameraStreams)
-    assert [(c.slot, c.key) for c in sink.cameras] == [(1, "sim_cam")]
+    assert [(c.detector, c.key) for c in sink.cameras] == [("sim_cam", "sim_cam")]
     app = create_arkitekt_registry(spec.load(CAM_TEST))
     assert "CameraStreams" in app.registry.snapshot().states
 

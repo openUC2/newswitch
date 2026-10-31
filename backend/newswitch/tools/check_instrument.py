@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from newswitch.drivers.optics.simulator import SimulatedMicroscope
+from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.spec import load
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift

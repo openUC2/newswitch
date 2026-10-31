@@ -61,16 +61,15 @@ async def test_galvo_actions(virtual_microscope_app: FastAPI) -> None:
 async def test_run_autofocus_action(virtual_microscope_app: FastAPI) -> None:
     """run_autofocus finds the focal plane and leaves the stage there.
 
-    The virtual detector's focal plane is z = 0 (the bottom of the stage's travel); from
-    z = 6 a sweep over 0..12 finds it.
+    The reference microscope's focal plane is z = 0; from z = 6 a sweep over 0..12 finds it.
     """
     async with AsyncAgentTestClient(virtual_microscope_app) as client:
         # A detector must be active for capture_image to produce frames.
-        result = await client.assign("activate_detector", {"slot": 1})
+        result = await client.assign("activate_detector", {"name": "camera"})
         events = await collect_until_completed(client, result.task_id)
         assert events[-1].event_type == "COMPLETED"
 
-        result = await client.assign("move_stage", {"z": 6.0, "is_absolute": True})
+        result = await client.assign("move_one", {"name": "stage.z", "to": 6.0})
         events = await collect_until_completed(client, result.task_id, timeout=30.0)
         assert events[-1].event_type == "COMPLETED"
 
@@ -82,5 +81,5 @@ async def test_run_autofocus_action(virtual_microscope_app: FastAPI) -> None:
         best_z = next(iter(returned[-1].values()))
         assert abs(best_z) <= 1.0
 
-        stage = (await client.get("/states/StageState")).json()["state"]
-        assert stage["z"] == pytest.approx(best_z)
+        moves = (await client.get("/states/MoveState")).json()["state"]["moves"]
+        assert moves["stage"]["z"]["value"] == pytest.approx(best_z)

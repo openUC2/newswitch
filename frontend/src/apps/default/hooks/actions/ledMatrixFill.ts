@@ -27,7 +27,7 @@ export const LedMatrixFillDefinition: ActionDefinition<
   description: 'Fill the LED matrix with a uniform colour (0-255 per channel).',
   argsSchema: LedMatrixFillArgsSchema,
   returnSchema: LedMatrixFillReturnSchema,
-  lockKeys: ['illumination'],
+  lockKeys: ['tune'],
 };
 
 /**

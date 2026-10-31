@@ -38,10 +38,10 @@ def acquire_step(
     done: int,
     total: int,
     message: str,
-    slots: Optional[list[int]] = None,
+    names: Optional[list[str]] = None,
 ) -> list[Frame]:
     """One step of a routine: a pause point, the frames, the progress (`done` of `total`)."""
     task.pausepoint()
-    frames = acquisition_manager.acquire(slots)
+    frames = acquisition_manager.acquire(names)
     task.progress(int(done / total * 100) if total else 100, message)
     return frames

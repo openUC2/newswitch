@@ -2,7 +2,7 @@
 UC2 Detector Manager
 
 Detector manager for cameras driven through uc2_cam_py (extra "camera"), one camera per
-detector slot. It implements `DetectorManager`, used by the actions, the routines and the
+detector. It implements `DetectorManager`, used by the actions, the routines and the
 live stream. Importing this module imports uc2_cam_py, so the app imports it only when
 cameras are configured (the package `drivers.uc2` does not import it).
 
@@ -21,7 +21,7 @@ fills in what the camera reports and keeps the current values (including whether
 records) up to date. Those updates take the lock ``camera_parameters`` themselves, as they
 also come from the live loop.
 
-Units: the `Detector` state keeps exposure times in seconds, uc2_cam_py in milliseconds.
+Units: exposure times are in milliseconds, as in uc2_cam_py.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ import uc2_cam_py
 
 from newswitch.models.devices import Detector, Roi
 from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo, is_full_sensor
-from newswitch.states.detector import CameraState
+from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
     from newswitch.broadcasters import FrameSink
@@ -100,7 +100,7 @@ def _mirror(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     roi = camera.roi
     detector.width, detector.height = width, height
     if exposure is not None:
-        detector.current_exposure_time = exposure / 1000.0
+        detector.current_exposure_ms = exposure
     if gain is not None:
         detector.current_gain = gain
     detector.current_frame_rate = camera.frame_rate_per_sec
@@ -116,12 +116,7 @@ def _mirror_recording(detector: Detector, camera: uc2_cam_py.Camera) -> None:
 
 
 def _describe(detector: Detector, camera: uc2_cam_py.Camera) -> None:
-    """Take over what the camera reports: identity, sensor, ranges, current values."""
-    exposure_range = camera.range_exposure_time_ms
-    gain_range = camera.range_gain_db
-    frame_rate_range = camera.range_frame_rate_per_sec
-    pitch = camera.pixel_pitch_um
-    size = camera.pixel_size_um
+    """Take over what the camera reports: identity, sensor, current values."""
     detector.manufacturer = camera.vendor
     detector.model = camera.model
     detector.serial_number = camera.serial
@@ -131,21 +126,6 @@ def _describe(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     detector.pixel_format = camera.pixel_format
     detector.data_type = _sample_type(camera.pixel_format)
     detector.sensor_width, detector.sensor_height = camera.pixel_count
-    detector.pixel_pitch_um = None if pitch is None else pitch[0]
-    if size is not None:
-        detector.pixel_size_um = size[0]
-    if exposure_range is not None:
-        detector.min_exposure_time = exposure_range[0] / 1000.0
-        detector.max_exposure_time = exposure_range[1] / 1000.0
-    if gain_range is not None:
-        detector.min_gain, detector.max_gain = gain_range
-    detector.min_frame_rate, detector.max_frame_rate = frame_rate_range or (None, None)
-    detector.available_binnings = list(camera.range_binning)
-    detector.can_set_exposure = camera.can_set_exposure
-    detector.can_set_gain = camera.can_set_gain
-    detector.can_set_frame_rate = camera.can_set_frame_rate
-    detector.can_set_binning = camera.can_set_binning
-    detector.can_set_roi = camera.can_set_roi
     _mirror(detector, camera)
 
 
@@ -177,25 +157,25 @@ class UC2DetectorManager:
     #: Called once a value of this part has changed.
     on_change: Callable[[], None] = staticmethod(lambda: None)
 
-    state: CameraState
+    state: DetectorState
 
     def __init__(
         self,
-        camera_state: CameraState,
+        detector_state: DetectorState,
         cameras: list[Detector],
-        vendor_options: dict[int, dict[str, Any]] | None = None,
+        vendor_options: dict[str, dict[str, Any]] | None = None,
         recording_dir: Path | None = None,
         debug_window: bool = False,
     ) -> None:
         """Open the cameras, apply their configured settings and publish their detectors.
 
         Args:
-            camera_state: Shared camera state; its detectors are replaced.
+            detector_state: Shared camera state; its detectors are replaced.
             cameras: One detector per camera (from `instrument.parts.cameras`): how to
                 open it, the values to set and the name, colormap and exposure presets.
                 What the camera reports then replaces its values (identity, sensor, image
                 size, current settings, ranges); the detectors become the state.
-            vendor_options: Vendor-specific options per slot, passed to uc2_cam_py unchanged.
+            vendor_options: Vendor-specific options per detector, passed to uc2_cam_py unchanged.
             recording_dir: Folder for the recordings; None = uc2_cam_py's default.
             debug_window: Show every camera's newest image in a uc2_cam_py window and keep
                 the cameras acquiring until `close`. Without an X11 display uc2_cam_py
@@ -206,18 +186,18 @@ class UC2DetectorManager:
             IndexError, RuntimeError: A camera cannot be found or opened. Cameras opened
                 before are closed again.
         """
-        self.state = camera_state
+        self.state = detector_state
         self._closed = False
-        self._cameras: dict[int, _OpenCamera] = {}
+        self._cameras: dict[str, _OpenCamera] = {}
         # held for a round of the live loop, so stopping cannot interleave with it
         self._live_lock = threading.Lock()
         options = vendor_options or {}
         try:
             for detector in cameras:
                 camera = self._open(
-                    detector, options.get(detector.slot, {}), recording_dir, debug_window
+                    detector, options.get(detector.name, {}), recording_dir, debug_window
                 )
-                self._cameras[detector.slot] = _OpenCamera(detector=detector, camera=camera)
+                self._cameras[detector.name] = _OpenCamera(detector=detector, camera=camera)
                 self._apply(detector, camera)
                 _describe(detector, camera)
             if debug_window:  # the window shows the newest image: keep images coming
@@ -249,7 +229,7 @@ class UC2DetectorManager:
             buffer_size=detector.buffer_size,
             start_on_init=False,
             image_file_path=recording_dir,
-            logger=logging.getLogger(f"newswitch.camera.{detector.key}"),
+            logger=logging.getLogger(f"newswitch.camera.{detector.name}"),
             debug_window=debug_window,
             **options,
         )
@@ -264,46 +244,46 @@ class UC2DetectorManager:
         camera.binning = detector.current_binning
         if detector.current_roi is not None:
             camera.roi = _camera_roi(detector.current_roi)
-        camera.exposure_time_ms = detector.current_exposure_time * 1000.0
+        camera.exposure_time_ms = detector.current_exposure_ms
         camera.gain_db = detector.current_gain
         if detector.current_frame_rate is not None:
             camera.frame_rate_per_sec = detector.current_frame_rate
 
     # ----------------------------------------------------------------- lookup
 
-    def _open_camera(self, slot: int) -> _OpenCamera:
-        """The camera of a slot.
+    def _open_camera(self, name: str) -> _OpenCamera:
+        """The camera of a detector.
 
         Raises:
-            ValueError: No camera in this slot.
+            ValueError: No such camera.
         """
-        cam = self._cameras.get(slot)
+        cam = self._cameras.get(name)
         if cam is None:
-            raise ValueError(f"No camera found with slot {slot}")
+            raise ValueError(f"No camera {name}")
         return cam
 
-    def _get_detector(self, slot: int) -> Detector | None:
-        """Get a detector by its slot number."""
+    def _get_detector(self, name: str) -> Detector | None:
+        """The detector called `name`."""
         for detector in self.state.detectors:
-            if detector.slot == slot:
+            if detector.name == name:
                 return detector
         return None
 
-    def _require_detector(self, slot: int) -> Detector:
-        """Get a detector by its slot number.
+    def _require_detector(self, name: str) -> Detector:
+        """The detector called `name`.
 
         Raises:
-            ValueError: No detector in this slot.
+            ValueError: No such detector.
         """
-        detector = self._get_detector(slot)
+        detector = self._get_detector(name)
         if detector is None:
-            raise ValueError(f"No detector found with slot {slot}")
+            raise ValueError(f"No detector {name}")
         return detector
 
-    def _get_active_detector(self, slot: int | None = None) -> Detector | None:
-        """Get an active detector by slot or take the first active detector."""
+    def _get_active_detector(self, name: str | None = None) -> Detector | None:
+        """The active detector called `name`, or the first that is on."""
         for detector in self.state.detectors:
-            if detector.is_active and (slot is None or detector.slot == slot):
+            if detector.is_active and (name is None or detector.name == name):
                 return detector
         return None
 
@@ -335,19 +315,19 @@ class UC2DetectorManager:
 
     # ------------------------------------------------------ DetectorManager
 
-    def capture_channels(self, slot: int) -> np.ndarray:
+    def capture_channels(self, name: str) -> np.ndarray:
         """One exposure as ``(c, H, W)``: a color camera's ``(H, W, 3)`` moved, a mono one's kept.
 
         A raw Bayer format comes back as one mono image: nothing here demosaics it.
         """
-        data = self.capture_image(slot).data
+        data = self.capture_image(name).data
         return np.moveaxis(data, -1, 0) if data.ndim == 3 else data[np.newaxis]
 
-    def capture_stack(self, slot: int, planes: int) -> Iterator[np.ndarray]:
+    def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """The cameras run free, so nothing here can step a stage (`parts.check_wired`)."""
-        raise ValueError(f"Detector {slot} delivers no z: no camera is triggered")
+        raise ValueError(f"Detector {name} delivers no z: no camera is triggered")
 
-    def capture_image(self, slot: int | None = None) -> DetectorFrame:
+    def capture_image(self, name: str | None = None) -> DetectorFrame:
         """Capture one image exposed after this call.
 
         The camera runs free (no trigger), so this waits for the first image that reached
@@ -355,30 +335,30 @@ class UC2DetectorManager:
         acquiring is started for it and stopped again.
 
         Args:
-            slot: Detector slot number; None = the first active detector.
+            name: The detector; None = the first active one.
 
         Returns:
             The image (an own copy) with its timing.
 
         Raises:
-            ValueError: No active detector with this slot.
+            ValueError: It is not on.
             RuntimeError: The manager is closed.
             TimeoutError: No image arrived in time.
         """
-        detector = self._get_active_detector(slot)
+        detector = self._get_active_detector(name)
         if detector is None:
-            raise ValueError(f"No active detector found with slot {slot}")
-        cam = self._open_camera(detector.slot)
+            raise ValueError(f"No active detector {name}")
+        cam = self._open_camera(detector.name)
         requested_ns = time.monotonic_ns()
         token = object()
         self._hold(cam, token)
         try:
-            return self._wait_for_image(detector.slot, cam.camera, requested_ns)
+            return self._wait_for_image(detector.name, cam.camera, requested_ns)
         finally:
             self._release(cam, token)
 
     @staticmethod
-    def _wait_for_image(slot: int, camera: uc2_cam_py.Camera, requested_ns: int) -> DetectorFrame:
+    def _wait_for_image(name: str, camera: uc2_cam_py.Camera, requested_ns: int) -> DetectorFrame:
         """Copy the first consistent image that arrived one exposure after `requested_ns`."""
         earliest_ns = requested_ns + int((camera.exposure_time_ms or 0.0) * 1e6)
         timeout_s = _capture_timeout(camera)
@@ -390,7 +370,7 @@ class UC2DetectorManager:
                 if image.is_valid():
                     session = camera.get_image_info()
                     return DetectorFrame(
-                        slot=slot,
+                        detector=name,
                         data=data,
                         sequence=image.sequence,
                         time_ns=image.time_ns,
@@ -401,45 +381,45 @@ class UC2DetectorManager:
             time.sleep(POLL_INTERVAL_S)
         raise TimeoutError(f"no image from camera {camera.serial} within {timeout_s:.1f} s")
 
-    def activate_detector(self, slot: int, raise_on_active: bool = False) -> Detector:
-        """Activate a detector by its slot number.
+    def activate_detector(self, name: str, raise_on_active: bool = False) -> Detector:
+        """Turn a detector on.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
             raise_on_active: Raise if the detector is active already.
 
         Returns:
             The activated detector.
 
         Raises:
-            ValueError: No detector in this slot, or it is active and `raise_on_active`.
+            ValueError: No such detector, or it is active and `raise_on_active`.
         """
-        detector = self._require_detector(slot)
+        detector = self._require_detector(name)
         if detector.is_active and raise_on_active:
-            raise ValueError(f"Detector with slot {slot} is already active")
+            raise ValueError(f"Detector {name} is already active")
         detector.is_active = True
         return detector
 
-    def deactivate_detector(self, slot: int) -> None:
+    def deactivate_detector(self, name: str) -> None:
         """Deactivate a detector; its camera leaves the live stream at once.
 
         A camera held for its debug window keeps acquiring.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Raises:
-            ValueError: No detector in this slot.
+            ValueError: No such detector.
         """
-        detector = self._require_detector(slot)
+        detector = self._require_detector(name)
         with self._live_lock:
             detector.is_active = False
-            self._release(self._open_camera(slot), LIVE)
+            self._release(self._open_camera(name), LIVE)
 
     def update_detector(
         self,
-        slot: int,
-        exposure_time: float | None = None,
+        name: str,
+        exposure_ms: float | None = None,
         gain: float | None = None,
         frame_rate: float | None = None,
         binning: int | None = None,
@@ -452,8 +432,8 @@ class UC2DetectorManager:
         restarts the camera with a new session (a new file when storing).
 
         Args:
-            slot: Detector slot number.
-            exposure_time: New exposure time in seconds (if provided).
+            name: The detector.
+            exposure_ms: New exposure time in ms (if provided).
             gain: New gain in dB (if provided).
             frame_rate: New frame rate in frames per second (if provided); 0 removes the
                 limit.
@@ -467,11 +447,11 @@ class UC2DetectorManager:
             The detector with every value the camera applied.
 
         Raises:
-            ValueError: No detector in this slot, exposure <= 0, gain < 0, frame rate < 0,
+            ValueError: No such detector, exposure <= 0, gain < 0, frame rate < 0,
                 binning < 1 or an invalid region.
         """
-        detector = self._require_detector(slot)
-        cam = self._open_camera(slot)
+        detector = self._require_detector(name)
+        cam = self._open_camera(name)
         camera = cam.camera
         if frame_rate is not None and frame_rate < 0:
             raise ValueError(f"frame rate must be >= 0, got {frame_rate}")
@@ -481,8 +461,8 @@ class UC2DetectorManager:
                     camera.binning = binning
                 if roi is not None:
                     camera.roi = _camera_roi(roi)
-        if exposure_time is not None:
-            camera.exposure_time_ms = exposure_time * 1000.0
+        if exposure_ms is not None:
+            camera.exposure_time_ms = exposure_ms
         if gain is not None:
             camera.gain_db = gain
         if frame_rate is not None:
@@ -491,30 +471,30 @@ class UC2DetectorManager:
         self.on_change()
         return detector
 
-    def get_detector_state(self, slot: int) -> Detector | None:
+    def get_detector_state(self, name: str) -> Detector | None:
         """Get the state of a detector: what the camera is and can do, its current settings.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Returns:
             The detector if found, None otherwise.
         """
-        return self._get_detector(slot)
+        return self._get_detector(name)
 
-    def get_image_info(self, slot: int) -> DetectorSessionInfo | None:
+    def get_image_info(self, name: str) -> DetectorSessionInfo | None:
         """Return the metadata of the current or last acquisition session.
 
         Args:
-            slot: Detector slot number.
+            name: The detector.
 
         Returns:
             The session metadata, or None before the first acquisition.
 
         Raises:
-            ValueError: No camera in this slot.
+            ValueError: No such camera.
         """
-        camera = self._open_camera(slot).camera
+        camera = self._open_camera(name).camera
         meta = camera.get_image_info()
         if meta is None:
             return None
@@ -541,26 +521,26 @@ class UC2DetectorManager:
         return [detector for detector in self.state.detectors if detector.is_active]
 
     def acquire_live(self, sink: "FrameSink") -> None:
-        """Stream the active cameras to `sink` while `CameraState.is_acquiring` is set.
+        """Stream the active cameras to `sink` while `DetectorState.is_acquiring` is set.
 
         Runs in the detector background thread until `close`. Holds every active camera
         while streaming and sends each new image (an own copy) to `sink`.
         """
         sink.start_broadcasting()
-        last_sent: dict[int, int] = {}
+        last_sent: dict[str, int] = {}
         while not self._closed:
             streaming = False
             try:
                 with self._live_lock:
                     for detector in self.state.detectors:
-                        cam = self._cameras.get(detector.slot)
+                        cam = self._cameras.get(detector.name)
                         if cam is None:
                             continue
                         if self.state.is_acquiring and detector.is_active:
                             if LIVE not in cam.holders:
                                 self._hold(cam, LIVE)
                             streaming = True
-                            self._send_new_image(sink, detector.slot, cam.camera, last_sent)
+                            self._send_new_image(sink, detector.name, cam.camera, last_sent)
                         else:
                             self._release(cam, LIVE)
             except Exception:
@@ -572,19 +552,19 @@ class UC2DetectorManager:
             koil.sleep(LIVE_INTERVAL_S if streaming else IDLE_INTERVAL_S)
 
     def _send_new_image(
-        self, sink: "FrameSink", slot: int, camera: uc2_cam_py.Camera, last_sent: dict[int, int]
+        self, sink: "FrameSink", name: str, camera: uc2_cam_py.Camera, last_sent: dict[str, int]
     ) -> None:
         """Send the camera's latest image to `sink` unless it was sent already."""
         image = camera.get_last_image()
-        if image is None or last_sent.get(slot) == image.time_ns:
+        if image is None or last_sent.get(name) == image.time_ns:
             return
         data = image.data.copy()
         if image.is_valid():
-            last_sent[slot] = image.time_ns
-            sink.broadcast_sync(slot, data)
+            last_sent[name] = image.time_ns
+            sink.broadcast_sync(name, data)
 
     def stop_acquire_live(self) -> None:
-        """Stop the live stream: clear `CameraState.is_acquiring` and release the cameras.
+        """Stop the live stream: clear `DetectorState.is_acquiring` and release the cameras.
 
         A camera nobody else holds stops before this returns, so its recording is complete
         on disk; one held for its debug window keeps acquiring. `acquire_live` keeps

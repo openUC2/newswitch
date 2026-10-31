@@ -13,7 +13,7 @@ from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightPathSnapshot
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
-from newswitch.routines.calibration import calibrate_light_path
+from newswitch.routines.calibration import _measure, calibrate_light_path
 from tests.conftest import run_settings
 
 
@@ -25,16 +25,16 @@ def test_calibration_measures_the_pixel_scale(microscope: Microscope) -> None:
 
     The calibration stores what it measures, and the stage ends where it started.
     """
-    assert microscope.stage is not None and microscope.detector is not None
-    start = (microscope.stage_state.x, microscope.stage_state.y)
+    assert microscope.values is not None and microscope.detector is not None
+    start = (microscope.values["stage.x"], microscope.values["stage.y"])
 
     (path,) = calibrate_light_path(
         microscope.optics,
         microscope.metadata,
         microscope.calibration,
-        microscope.stage,
+        microscope.values,
         microscope.detector,
-        microscope.camera_state,
+        microscope.detector_state,
     )
 
     (sx, cxy, _, _), (cyx, sy, _, _) = path.affine_matrix[0], path.affine_matrix[1]
@@ -42,20 +42,22 @@ def test_calibration_measures_the_pixel_scale(microscope: Microscope) -> None:
     assert abs(sy) == pytest.approx(0.65, rel=0.02)
     assert abs(cxy) < 0.25 * abs(sx) and abs(cyx) < 0.5 * abs(sy)
     assert microscope.calibration_state.calibrated_light_paths == [path]
-    assert (microscope.stage_state.x, microscope.stage_state.y) == start
+    assert (microscope.values["stage.x"], microscope.values["stage.y"]) == start
 
 
-def snapshot(microscope: Microscope, slot: int = 1) -> LightPathSnapshot:
-    """The current state of the light path to the detector in `slot`."""
+def snapshot(microscope: Microscope, detector: str = "camera") -> LightPathSnapshot:
+    """The current state of the light path to `detector`."""
     return microscope.metadata.get_current_state_for_light_path(
-        microscope.optics.get_light_path_for_detector(slot)
+        microscope.optics.get_light_path_for_detector(detector)
     )
 
 
-def calibrate(microscope: Microscope, scale: float, slot: int = 1) -> CalibratedLightPath:
-    """Store a calibration of the scale `scale` for the light path to the detector in `slot`."""
+def calibrate(
+    microscope: Microscope, scale: float, detector: str = "camera"
+) -> CalibratedLightPath:
+    """Store a calibration of the scale `scale` for the light path to `detector`."""
     path = CalibratedLightPath(
-        key=snapshot(microscope, slot).key,
+        key=snapshot(microscope, detector).key,
         affine_matrix=[
             [scale, 0.0, 0.0, 0.0],
             [0.0, scale, 0.0, 0.0],
@@ -77,27 +79,27 @@ def test_a_light_path_has_a_stable_identity(microscope: Microscope) -> None:
 def test_another_detector_does_not_get_this_detectors_calibration(tmp_path: Path) -> None:
     """A calibration holds for the detector it was measured with."""
     two = build_microscope(run_settings(tmp_path), spec.load(TWO_CAMERAS))
-    calibrate(two, 0.5, slot=1)
+    calibrate(two, 0.5, detector="camera_green")
     with pytest.raises(ValueError, match="No calibrated light path"):
-        two.calibration_state.get_calibrated_path(snapshot(two, 2))
+        two.calibration_state.get_calibrated_path(snapshot(two, "camera_red"))
 
 
 def test_another_objective_does_not_get_this_objectives_calibration(
     microscope: Microscope,
 ) -> None:
     """Switching the objective changes the scale, so it needs a calibration of its own."""
-    assert microscope.objective is not None
+    assert microscope.values is not None
     calibrate(microscope, 0.5)
-    lenses = microscope.objective_state.mounted_lenses
+    lenses = microscope.swap_state.swaps["objective"]["slot"].options
     assert len(lenses) > 1
-    other = next(lens.slot for lens in lenses if lens.slot != microscope.objective_state.slot)
-    back = microscope.objective_state.slot
+    back = microscope.values["objective.slot"]
+    other = next(lens.slot for lens in lenses if lens.slot != back)
 
-    microscope.objective.switch_objective(other)
+    microscope.values.set({"objective.slot": other})
     with pytest.raises(ValueError, match="No calibrated light path"):
         microscope.calibration_state.get_calibrated_path(snapshot(microscope))
 
-    microscope.objective.switch_objective(back)
+    microscope.values.set({"objective.slot": back})
     assert microscope.calibration_state.get_calibrated_path(snapshot(microscope))
 
 
@@ -113,10 +115,10 @@ def test_where_the_sample_is_and_how_it_is_exposed_do_not_change_the_identity(
     microscope: Microscope,
 ) -> None:
     """A calibration is found again after moving, refocusing or changing the exposure."""
-    assert microscope.stage is not None and microscope.detector is not None
+    assert microscope.values is not None
     before = snapshot(microscope)
-    microscope.stage.move(x=100.0, y=-50.0, z=20.0)
-    microscope.detector.update_detector(1, 0.123, 2.0)
+    microscope.values.set({"stage.x": 100.0, "stage.y": -50.0, "stage.z": 20.0}, relative=True)
+    microscope.values.set({"camera.exposure": 123.0, "camera.gain": 2.0})
     after = snapshot(microscope)
     assert after.hash == before.hash
     assert after.key == before.key
@@ -126,12 +128,12 @@ def test_a_filter_changes_the_setup_but_not_what_the_optics_do_to_a_pixel(
     microscope: Microscope,
 ) -> None:
     """The emission filter tells images apart; the calibration of the path still holds."""
-    assert microscope.filter_bank is not None
-    filters = microscope.filter_bank_state.filters
+    assert microscope.values is not None
+    filters = microscope.swap_state.swaps["filter_wheel"]["slot"].options
     assert len(filters) > 1
     before = snapshot(microscope)
-    other = next(f.slot for f in filters if f.slot != microscope.filter_bank_state.current_slot)
-    microscope.filter_bank.switch_filter(other)
+    other = next(f.slot for f in filters if f.slot != microscope.values["filter_wheel.slot"])
+    microscope.values.set({"filter_wheel.slot": other})
     after = snapshot(microscope)
     assert after.hash != before.hash
     assert after.key == before.key
@@ -179,7 +181,7 @@ class Bench:
         self.state.y += y
         self.moves.append((x, y))
 
-    def capture_image(self, slot: int = 1) -> SimpleNamespace:
+    def capture_image(self, name: str = "bench") -> SimpleNamespace:
         """An image: the sample at the stage position, through the pixel scale."""
         columns, rows = np.meshgrid(np.arange(256.0) - 127.5, np.arange(256.0) - 127.5)
         cos, sin = math.cos(self.turn), math.sin(self.turn)
@@ -193,25 +195,9 @@ class Bench:
 
 
 def calibrated_on(bench: Bench, bench_prediction: float = 1.0) -> list[list[float]]:
-    """Run the real routine on `bench`."""
-    detector = SimpleNamespace(slot=1, name="bench", is_active=True, width=256, height=256)
-    light_path = SimpleNamespace(get_light_path_for_detector=lambda detector_slot: "path")
-    metadata = SimpleNamespace(
-        get_current_state_for_light_path=lambda path: SimpleNamespace(key="h"),
-        get_metadata_for_light_path=lambda path: SimpleNamespace(
-            affine_matrix=[[bench_prediction, 0.0], [0.0, bench_prediction]]
-        ),
-    )
-    calibration = SimpleNamespace(set_calibrated_state=lambda path: None)
-    (path,) = calibrate_light_path(
-        light_path,  # type: ignore[arg-type]
-        metadata,  # type: ignore[arg-type]
-        calibration,  # type: ignore[arg-type]
-        bench,  # type: ignore[arg-type]
-        bench,  # type: ignore[arg-type]
-        SimpleNamespace(detectors=[detector]),  # type: ignore[arg-type]
-    )
-    return path.affine_matrix
+    """Measure on `bench` as the real routine does: it is both the stage and the camera."""
+    detector = SimpleNamespace(name="bench", width=256, height=256)
+    return _measure(bench, bench, detector, bench_prediction)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("shift", [(0.4, -0.3), (3.5, 2.25), (-17.75, 9.5)])

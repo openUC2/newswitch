@@ -13,7 +13,7 @@ from newswitch.instrument.predict import Compiled
 
 BACKEND = Path(__file__).parent.parent
 INSTRUMENT = BACKEND / "instruments" / "fake-microscope"
-PREDICTORS = ("spec.py", "tracing.py", "compiler.py", "predict.py", "parts.py")
+PREDICTORS = ("spec.py", "tracing.py", "compiler.py", "predict.py", "parts.py", "roles.py")
 
 
 @pytest.fixture(scope="module")
@@ -230,7 +230,7 @@ def test_the_table_follows_a_move_along_the_axis(
 @pytest.fixture(scope="module")
 def microscope(instrument: spec.Instrument):  # noqa: ANN201
     """The fake hardware, with its hidden errors."""
-    from newswitch.drivers.optics.simulator import SimulatedMicroscope
+    from newswitch.drivers.simulator import SimulatedMicroscope
 
     return SimulatedMicroscope(instrument)
 

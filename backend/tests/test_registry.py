@@ -17,14 +17,8 @@ from tests.conftest import registry_names, run_settings
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 CAM_TEST = INSTRUMENTS / "cam-test"
 
-DEVICE_STATES = {
-    "StageState",
-    "IlluminationState",
-    "CameraState",
-    "ObjectiveState",
-    "FilterBankState",
-    "UC2State",
-}
+VALUE_STATES = {"MoveState", "SwapState", "TuneState", "SourceState"}
+DEVICE_STATES = VALUE_STATES | {"DetectorState", "UC2State"}
 CORE_STATES = {
     "IOState",
     "HookState",
@@ -51,20 +45,15 @@ def test_a_complete_microscope_registers_every_part() -> None:
     """The reference microscope has every part: every state and action."""
     states, actions = registered(REFERENCE_INSTRUMENT)
     assert DEVICE_STATES | CORE_STATES | {"AutofocusState"} <= states
-    assert {
-        "move_stage",
-        "switch_objective",
-        "switch_filter",
-        "home_stage",
-    } <= actions
+    assert {"move", "move_one", "move_home", "swap", "tune", "home_stage"} <= actions
 
 
 def test_a_camera_alone_registers_no_stage() -> None:
-    """One camera: its state and actions, the core, nothing of a stage or light source."""
+    """One camera: its state and actions, the core, its variables, nothing that needs a stage."""
     states, actions = registered(CAM_TEST)
-    assert states == CORE_STATES | {"CameraState"}
-    assert {"capture_image", "start_live_view"} <= actions
-    assert not {"move_stage", "calibrate_light_path", "scan_region", "switch_objective"} & actions
+    assert states == CORE_STATES | VALUE_STATES | {"DetectorState"}
+    assert {"capture_image", "start_live_view", "tune"} <= actions
+    assert not {"calibrate_light_path", "scan_region", "run_autofocus"} & actions
 
 
 def test_the_parts_it_registers_are_the_parts_it_starts(tmp_path: Path) -> None:
@@ -76,12 +65,12 @@ def test_the_parts_it_registers_are_the_parts_it_starts(tmp_path: Path) -> None:
         for _ in range(250):
             states = client.get("/states").json()["states"]
             published = {name for name, state in states.items() if state["initialized"]}
-            if "CameraState" in published:  # the detector's hook runs after the core's
+            if "DetectorState" in published:  # the detector's hook runs after the core's
                 break
             time.sleep(0.02)
-        assert published == CORE_STATES | {"CameraState"}
-        assert client.get("/states/CameraState").status_code == 200
-        assert client.get("/states/StageState").status_code == 404
+        assert published == CORE_STATES | VALUE_STATES | {"DetectorState"}
+        assert client.get("/states/DetectorState").status_code == 200
+        assert client.get("/states/AutofocusState").status_code == 404
 
 
 def test_without_an_instrument_only_the_core() -> None:
@@ -106,7 +95,7 @@ def test_the_schema_export_refuses_an_incomplete_microscope(tmp_path: Path) -> N
     """A part missing from the export would drop its hooks from the frontend."""
     from newswitch.tools.export_schemas import export
 
-    with pytest.raises(ValueError, match="ObjectiveState"):
+    with pytest.raises(ValueError, match="UC2State"):
         export(tmp_path, CAM_TEST)
 
 
@@ -136,9 +125,9 @@ def test_a_camera_alone_acquires(settings: Settings) -> None:
     frames = capture_image(built.detector, built.acquisition)
 
     assert len(frames) == 1
-    detector = built.camera_state.detectors[0]
+    detector = built.detector_state.detectors[0]
     assert frames[0].metadata.fov_width == pytest.approx(
-        detector.pixel_size_um * detector.width, rel=0.01
+        built.optics_state.detectors["sim_cam"].pixel_um * detector.width, rel=0.01
     )
 
 
@@ -148,8 +137,8 @@ def test_a_part_reached_twice_counts_once() -> None:
 
     registry = create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT)).registry
     hooks = registry.hooks_registry.startup_hooks
-    assert {"provide_core", "provide_stage", "provide_detector", "provide_focus"} <= set(hooks)
-    assert list(registry.states).count("StageState") == 1
+    assert {"provide_core", "provide_values", "provide_detector", "provide_focus"} <= set(hooks)
+    assert list(registry.states).count("MoveState") == 1
 
 
 def test_two_apps_share_no_microscope(tmp_path: Path) -> None:
@@ -160,17 +149,17 @@ def test_two_apps_share_no_microscope(tmp_path: Path) -> None:
     first, second = Run.of(settings), Run.of(settings)
     assert first.microscope is first.microscope
     assert first.microscope is not second.microscope
-    assert first.microscope.stage_state is not second.microscope.stage_state
+    assert first.microscope.move_state is not second.microscope.move_state
 
 
 def test_merging_leaves_the_parts_as_they_are() -> None:
     """Parts live as long as the process, so one instrument must not leak into the next app."""
     from main_fastapi import create_fastapi_registry
-    from newswitch.microscope.apps import stage
+    from newswitch.microscope.apps import values
 
-    before = set(stage.app.registry.hooks_registry.startup_hooks)
+    before = set(values.app.registry.hooks_registry.startup_hooks)
     create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT))
-    assert set(stage.app.registry.hooks_registry.startup_hooks) == before
+    assert set(values.app.registry.hooks_registry.startup_hooks) == before
     assert not {"provide_frame_broadcaster", "provide_focus"} & before
     states, _ = registered(CAM_TEST)
-    assert "StageState" not in states
+    assert not {"AutofocusState", "UC2State"} & states

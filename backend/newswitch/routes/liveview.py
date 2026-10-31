@@ -108,7 +108,7 @@ async def _send_frames(
             if not told_unshowable:
                 logger.warning(
                     "Slot %s sends frames the live view cannot show: shape %s, dtype %s",
-                    frame.slot,
+                    frame.detector,
                     frame.data.shape,
                     frame.data.dtype,
                 )
@@ -129,10 +129,10 @@ async def _receive_until_closed(websocket: WebSocket, acknowledged: asyncio.Even
         acknowledged.set()
 
 
-@router.websocket("/frames/{detector_slot}")
+@router.websocket("/frames/{detector}")
 async def stream_frames(
     websocket: WebSocket,
-    detector_slot: int,
+    detector: str,
     max_size: int = DEFAULT_MAX_SIZE,
     max_fps: float = DEFAULT_MAX_FPS,
 ) -> None:
@@ -142,7 +142,7 @@ async def stream_frames(
     next frame comes after that, and it is the newest. A slower client gets fewer frames.
 
     Args:
-        detector_slot: The detector to show.
+        detector: The detector to show.
         max_size: The longer side of the image, reached by binning; 0 sends full size.
         max_fps: The most frames per second this viewer is sent; 0 sends them all.
     """
@@ -155,7 +155,7 @@ async def stream_frames(
     if broadcaster is None:
         return
 
-    with broadcaster.subscribe(detector_slot) as subscription:
+    with broadcaster.subscribe(detector) as subscription:
         acknowledged = asyncio.Event()
         tasks = {
             asyncio.create_task(

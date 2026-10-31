@@ -5,6 +5,7 @@ import pytest
 
 from newswitch.microscope.parts import Microscope
 from newswitch.routines.autofocus import autofocus_sweep, compute_focus_metric
+from newswitch.services.stage import stage_of
 
 
 def test_compute_focus_metric_prefers_sharp_images() -> None:
@@ -30,13 +31,12 @@ def test_autofocus_sweep_finds_focus_on_simulated_microscope(microscope: Microsc
     the sharpest plane of a sweep around it is that plane. Its first light source is on, so the
     frames carry signal.
     """
-    assert microscope.stage is not None and microscope.detector is not None
-    microscope.stage.move(z=30.0, is_absolute=True)
+    assert microscope.values is not None and microscope.detector is not None
+    stage = stage_of(microscope.values, "camera")
+    stage.move(z=30.0, is_absolute=True)
 
     z_positions = [-30.0 + index * 5.0 for index in range(13)]
-    best_z, metrics = autofocus_sweep(
-        microscope.stage, microscope.detector, z_positions, detector_slot=1
-    )
+    best_z, metrics = autofocus_sweep(stage, microscope.detector, z_positions, "camera")
 
     assert len(metrics) == len(z_positions)
     assert abs(best_z) <= 5.0

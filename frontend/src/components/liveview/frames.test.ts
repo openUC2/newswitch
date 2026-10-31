@@ -33,7 +33,6 @@ describe("parseFrame", () => {
   it("reads the header the backend writes, and the values untouched", () => {
     const frame = parseFrame(message({}));
     expect(frame).toMatchObject({
-      slot: 7,
       binning: 3,
       sequence: 42,
       width: 2,

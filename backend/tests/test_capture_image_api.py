@@ -26,7 +26,7 @@ async def test_assign_and_get_result(virtual_microscope_app: FastAPI) -> None:
     """
     async with AsyncAgentTestClient(virtual_microscope_app) as client:
         # First activate a detector
-        activate_result = await client.assign("activate_detector", {"slot": 1})
+        activate_result = await client.assign("activate_detector", {"name": "camera"})
         events = await collect_until_completed(client, activate_result.task_id)
         assert len(events) >= 1
         assert events[-1].event_type == "COMPLETED"
@@ -36,8 +36,8 @@ async def test_assign_and_get_result(virtual_microscope_app: FastAPI) -> None:
         assert len(calibration_events) >= 1
         assert calibration_events[-1].event_type == "COMPLETED"
 
-        # Assign work - capture_image with slot
-        assign_result = await client.assign("capture_image", {"slot": 1})
+        # Assign work - capture_image with its name
+        assign_result = await client.assign("capture_image", {"name": "camera"})
 
         # Collect events until done
         events = await collect_until_completed(client, assign_result.task_id)

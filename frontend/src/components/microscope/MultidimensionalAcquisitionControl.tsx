@@ -33,11 +33,8 @@ import {
   type Streams,
   type Timepoint,
 } from "@/apps/default/hooks/actions";
-import {
-  useCameraState,
-  useIlluminationState,
-  useStageState,
-} from "@/apps/default/hooks/states";
+import { useDetectorState, useSourceState } from "@/apps/default/hooks/states";
+import { useStagePosition } from "@/lib/microscope/values";
 import { cn } from "@/lib/utils";
 import { DetectorPicker } from "./DetectorPicker";
 import { usePauseTask } from "@/apps/default/hooks/usePauseTask";
@@ -194,9 +191,9 @@ export function MultidimensionalAcquisitionControl() {
   );
 
   // Live microscope state
-  const { data: cameraState } = useCameraState({ subscribe: true });
-  const { data: illuminationState } = useIlluminationState({ subscribe: true });
-  const { data: stageState } = useStageState({ subscribe: true });
+  const { data: detectorState } = useDetectorState({ subscribe: true });
+  const { data: sourceState } = useSourceState({ subscribe: true });
+  const stageState = useStagePosition();
 
   // Acquisition action
   const {
@@ -213,10 +210,10 @@ export function MultidimensionalAcquisitionControl() {
 
   // Build channels from current microscope state
   const buildChannelsFromState = useCallback((): Streams[] => {
-    const detectors = cameraState?.detectors ?? [];
+    const detectors = detectorState?.detectors ?? [];
     const activeDetectors = detectors.filter((d) => d.is_active);
-    const illuminations = illuminationState?.illuminations ?? [];
-    const activeIlluminations = illuminations.filter((i) => i.is_active);
+    const illuminations = Object.values(sourceState?.sources ?? {});
+    const activeIlluminations = illuminations.filter((i) => i.on);
 
     // One stream: what is lit now, seen by every active detector
     return [
@@ -226,17 +223,17 @@ export function MultidimensionalAcquisitionControl() {
         illuminations:
           activeIlluminations.length > 0
             ? activeIlluminations.map((ill) => ({
-                source: ill.key ?? String(ill.slot),
-                wavelength: ill.wavelength ?? 488,
-                intensity: ill.intensity / (ill.max_intensity || 100),
+                source: ill.name,
+                wavelength: ill.wavelength,
+                intensity: ill.power / ill.max_power,
               }))
             : [makeDefaultIllumination()],
       },
     ];
-  }, [cameraState, illuminationState]);
+  }, [detectorState, sourceState]);
 
   // A detector that steps the stage itself says how far apart the planes are.
-  const drivenStep = drivenZStep(cameraState?.detectors);
+  const drivenStep = drivenZStep(detectorState?.detectors);
 
   // Build position from current state
   const buildPositionFromState = useCallback((): Position => {
@@ -872,8 +869,8 @@ function StackEditor({
     `config.timepoints.${timepointIndex}.positions.${positionIndex}.stacks.${stackIndex}` as const;
 
   const { getValues, setValue } = useFormContext<FormValues>();
-  const { data: cameraState } = useCameraState({ subscribe: true });
-  const drivenStep = drivenZStep(cameraState?.detectors);
+  const { data: detectorState } = useDetectorState({ subscribe: true });
+  const drivenStep = drivenZStep(detectorState?.detectors);
 
   const spacePlanes = useCallback(
     (step: number) => {

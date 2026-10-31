@@ -10,15 +10,12 @@ from typing import TYPE_CHECKING, Optional, Protocol, Type, runtime_checkable
 from newswitch.models.hooks import Hook
 from newswitch.protocols.optics import OpticsManager
 from newswitch.protocols.base import Manager
-from newswitch.protocols.stage import StageManager
 
 from .detector import DetectorManager
-from .illumination import IlluminationManager
 from .io import IOManager
-from .objective import ObjectiveManager
 
 if TYPE_CHECKING:
-    pass
+    from newswitch.services.values import Values
 
 
 @dataclass
@@ -28,10 +25,8 @@ class HookContext:
     A manager is None when the microscope lacks that device (see `newswitch.microscope.parts`).
     """
 
-    stage_manager: Optional[StageManager]
+    values: Optional["Values"]
     detector_manager: Optional[DetectorManager]
-    illumination_manager: Optional[IlluminationManager]
-    objective_manager: Optional[ObjectiveManager]
     io_manager: IOManager
     optics_manager: OpticsManager
 

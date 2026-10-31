@@ -26,7 +26,8 @@ from newswitch.models.acquisition import (
     Stack,
     Streams,
 )
-from newswitch.models.devices import Detector, Illumination
+from newswitch.models.devices import Detector
+from newswitch.models.values import LightSource
 from newswitch.protocols.dataset_store import (
     AcquiredChannel,
     AcquiredPlane,
@@ -34,7 +35,8 @@ from newswitch.protocols.dataset_store import (
     DatasetStore,
 )
 from newswitch.states.calibration import CalibrationState
-from newswitch.states.illumination import IlluminationState
+from newswitch.services.stage import Stage, stage_of
+from newswitch.services.values import Values
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ class _Lighting:
     """One stream: which sources it turns on at which intensity, and what it exposes."""
 
     stream: Streams
-    sources: tuple[tuple[Illumination, float], ...]
+    sources: tuple[tuple[LightSource, float], ...]
     exposures: tuple[_Exposure, ...]
 
 
@@ -88,7 +90,7 @@ def _check_sweep(
     position: Position,
     offsets: list[float],
     lightings: list[_Lighting],
-    stage_manager: protocols.StageManager,
+    stage_manager: Stage,
 ) -> bool:
     """Whether a position's stack is swept, by detectors whose wires step the stage.
 
@@ -123,21 +125,20 @@ def _check_sweep(
 
 
 def _find_detector(name: str, detector_manager: protocols.DetectorManager) -> Detector:
-    """The detector called `name`, or in slot `name`."""
+    """The detector called `name`."""
     available = detector_manager.list_available_detectors()
     for detector in available:
-        if name in (detector.name, detector.key, str(detector.slot)):
+        if name == detector.name:
             return detector
     raise ValueError(f"No detector {name!r}: there are {[d.name for d in available]}")
 
 
-def _find_source(name: str, illumination_state: IlluminationState) -> Illumination:
-    """The light source called `name`, or in slot `name`."""
-    for source in illumination_state.illuminations:
-        if name in (source.key, str(source.slot)):
-            return source
-    known = [source.key or source.slot for source in illumination_state.illuminations]
-    raise ValueError(f"No light source {name!r}: there are {known}")
+def _find_source(name: str, values: Values) -> LightSource:
+    """The light source called `name`."""
+    sources = values.source_state.sources
+    if name not in sources:
+        raise ValueError(f"No light source {name!r}: there are {sorted(sources)}")
+    return sources[name]
 
 
 def _z_offsets(stack: Stack) -> list[float]:
@@ -192,7 +193,7 @@ def _pixel_to_world(
     A calibration says how far the stage moves to shift the image by a pixel, the opposite of which
     point of the sample that pixel sees.
     """
-    path = optics_manager.get_light_path_for_detector(detector.slot)
+    path = optics_manager.get_light_path_for_detector(detector.name)
     matrix = metadata_manager.get_metadata_for_light_path(path).affine_matrix
     return -np.array([[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]], dtype=float)
 
@@ -203,7 +204,7 @@ def _is_calibrated(
     metadata_manager: protocols.MetadataManager,
     calibration_state: CalibrationState,
 ) -> bool:
-    path = optics_manager.get_light_path_for_detector(detector.slot)
+    path = optics_manager.get_light_path_for_detector(detector.name)
     snapshot = metadata_manager.get_metadata_for_light_path(path).light_state
     try:
         calibration_state.get_calibrated_path(light_path_state=snapshot)
@@ -221,11 +222,11 @@ def _plan_position(
     index: int,
     times: int,
     detector_manager: protocols.DetectorManager,
-    illumination_state: IlluminationState,
     optics_manager: protocols.OpticsManager,
     metadata_manager: protocols.MetadataManager,
     calibration_state: CalibrationState,
-    stage_manager: protocols.StageManager,
+    stage_manager: Stage,
+    values: Values,
 ) -> _Merge:
     """Everything that can be refused about one position, and the array it will fill."""
     stack = position.stacks[0]
@@ -243,10 +244,10 @@ def _plan_position(
         if not stream.detectors:
             raise ValueError(f"The stream {stream.mapping!r} names no detector")
         sources = tuple(
-            (_find_source(light.source, illumination_state), light.intensity)
+            (_find_source(light.source, values), light.intensity)
             for light in stream.illuminations or []
         )
-        names = tuple(source.key or str(source.slot) for source, _ in sources)
+        names = tuple(source.name for source, _ in sources)
         exposures: list[_Exposure] = []
         for name in stream.detectors:
             detector = _find_detector(name, detector_manager)
@@ -282,7 +283,7 @@ def _plan_position(
             channels.extend(
                 AcquiredChannel(
                     label=_channel_label(stream, detector, color),
-                    detector=detector.key or detector.name,
+                    detector=detector.name,
                     sources=names,
                     color=color,
                 )
@@ -334,18 +335,18 @@ def _to_stage(merge: _Merge) -> tuple[tuple[float, float, float, float], ...]:
     )
 
 
-def _only_these_on(
-    lighting: _Lighting,
-    illumination_manager: protocols.IlluminationManager,
-    illumination_state: IlluminationState,
-) -> None:
+def _only_these_on(lighting: _Lighting, values: Values) -> None:
     """Light the stream with its own sources, and nothing else."""
-    wanted = {source.channel: source.max_intensity * share for source, share in lighting.sources}
-    for source in illumination_state.illuminations:
-        if source.is_active and source.channel not in wanted:
-            illumination_manager.turn_off_channel(source.channel)
-    for channel, intensity in wanted.items():
-        illumination_manager.turn_on(channel=channel, intensity=intensity)
+    wanted = {source.name: source.max_power * share for source, share in lighting.sources}
+    targets = {}
+    for source in values.source_state.sources.values():
+        if source.power_variable is None:
+            continue
+        if source.name in wanted:
+            targets[source.power_variable] = wanted[source.name]
+        elif source.on:
+            targets[source.power_variable] = 0.0
+    values.set(targets)
 
 
 def _expose(
@@ -360,16 +361,16 @@ def _expose(
     for exposure in lighting.exposures:
         _activate(exposure, detector_manager)
         started = datetime.now(timezone.utc)
-        images = detector_manager.capture_channels(exposure.detector.slot)
+        images = detector_manager.capture_channels(exposure.detector.name)
         _keep(merge, exposure, images, time_index, z_index, started, store)
 
 
 def _activate(exposure: _Exposure, detector_manager: protocols.DetectorManager) -> None:
     """Make sure the detector of `exposure` is on."""
-    slot = exposure.detector.slot
-    state = detector_manager.get_detector_state(slot)
+    name = exposure.detector.name
+    state = detector_manager.get_detector_state(name)
     if state is None or not state.is_active:
-        detector_manager.activate_detector(slot)
+        detector_manager.activate_detector(name)
 
 
 def _keep(
@@ -398,14 +399,24 @@ def _keep(
         merge.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))
 
 
+def _first_detector(positions: list[Position], detector_manager: protocols.DetectorManager) -> str:
+    """Whose view an acquisition moves: the one its first stream names, or else the first that is on."""
+    for position in positions:
+        for stream in position.stacks[0].channels:
+            if stream.detectors:
+                return _find_detector(stream.detectors[0], detector_manager).name
+    available = detector_manager.list_available_detectors()
+    if not available:
+        raise ValueError("There is no detector")
+    return available[0].name
+
+
 def acquire_multidimensional_acquisition(
     config: MultidimensionalAcquisition,
     store: DatasetStore,
     optics_manager: protocols.OpticsManager,
     detector_manager: protocols.DetectorManager,
-    stage_manager: protocols.StageManager,
-    illumination_manager: protocols.IlluminationManager,
-    illumination_state: IlluminationState,
+    values: Values,
     calibration_state: CalibrationState,
     metadata_manager: protocols.MetadataManager,
     hook_manager: protocols.HookManager,
@@ -426,17 +437,18 @@ def acquire_multidimensional_acquisition(
     """
     store.check()
     positions = _check_regular(config)
+    stage_manager = stage_of(values, _first_detector(positions, detector_manager))
     merges = [
         _plan_position(
             position,
             index,
             len(config.timepoints),
             detector_manager,
-            illumination_state,
             optics_manager,
             metadata_manager,
             calibration_state,
             stage_manager,
+            values,
         )
         for index, position in enumerate(positions)
     ]
@@ -489,12 +501,12 @@ def acquire_multidimensional_acquisition(
                         is_absolute=True,
                         task=task,
                     )
-                    _only_these_on(lighting, illumination_manager, illumination_state)
+                    _only_these_on(lighting, values)
                     exposure = lighting.exposures[0]
                     _activate(exposure, detector_manager)
                     started = datetime.now(timezone.utc)
                     for z_index, images in enumerate(
-                        detector_manager.capture_stack(exposure.detector.slot, len(merge.offsets))
+                        detector_manager.capture_stack(exposure.detector.name, len(merge.offsets))
                     ):
                         _keep(merge, exposure, images, time_index, z_index, started, store)
                         started = datetime.now(timezone.utc)
@@ -514,7 +526,7 @@ def acquire_multidimensional_acquisition(
 
                 for lighting in merge.lightings:
                     task.pausepoint()
-                    _only_these_on(lighting, illumination_manager, illumination_state)
+                    _only_these_on(lighting, values)
                     _expose(merge, lighting, time_index, z_index, store, detector_manager)
                     done += 1
                     task.progress(
@@ -523,9 +535,13 @@ def acquire_multidimensional_acquisition(
                         f"{lighting.stream.mapping or 'stream'} ({done}/{total})",
                     )
 
-    for source in illumination_state.illuminations:
-        if source.is_active:
-            illumination_manager.turn_off_channel(source.channel)
+    values.set(
+        {
+            source.power_variable: 0.0
+            for source in values.source_state.sources.values()
+            if source.on and source.power_variable is not None
+        }
+    )
 
     datasets = []
     for merge in merges:

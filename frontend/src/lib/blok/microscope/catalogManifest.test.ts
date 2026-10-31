@@ -77,7 +77,7 @@ describe("newswitch catalog manifest", () => {
   it("is the module: only what the spec's catalogs do not hold", () => {
     const { components, operations } = manifest();
     const names = new Set(components.map((component) => component.name));
-    expect(names).toContain("StageControl");
+    expect(names).toContain("MoveControl");
     expect(names).toContain("LiveView");
     for (const name of ["div", "if", "foreach", "Button", "Model"]) {
       expect(names).not.toContain(name);

@@ -10,7 +10,7 @@ pixels after it are aligned for a typed array):
     0      4s    magic, ``NSF1``
     4      u8    bytes per sample: 1 (uint8) or 2 (uint16)
     5      u8    binning factor the sent image was reduced by
-    6      u16   detector slot
+    6      u16   reserved: a socket carries one detector, which its address names
     8      u32   sequence number of the frame (the viewer may have skipped some)
     12     u16   width of the sent image
     14     u16   height of the sent image
@@ -38,7 +38,7 @@ from typing import Optional
 import numpy as np
 import zstandard
 
-from newswitch.broadcasters.frame import SlotFrame
+from newswitch.broadcasters.frame import DetectorFrameMessage
 
 HEADER = struct.Struct("<4sBBHIHHHHdB3x")
 MAGIC = b"NSF1"
@@ -88,7 +88,7 @@ def _compressed(pixels: bytes, bytes_per_sample: int) -> bytes:
     return zstandard.ZstdCompressor(level=ZSTD_LEVEL).compress(shuffled)
 
 
-def pack_frame(frame: SlotFrame, max_size: int) -> Optional[bytes]:
+def pack_frame(frame: DetectorFrameMessage, max_size: int) -> Optional[bytes]:
     """`frame` as one message, its longer side at most `max_size` (<= 0: full size).
 
     Returns:
@@ -115,7 +115,7 @@ def pack_frame(frame: SlotFrame, max_size: int) -> Optional[bytes]:
         MAGIC,
         binned.dtype.itemsize,
         factor,
-        frame.slot,
+        0,
         frame.sequence & 0xFFFFFFFF,
         binned.shape[1],
         binned.shape[0],

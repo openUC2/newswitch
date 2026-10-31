@@ -1,4 +1,4 @@
-"""The camera state: the detectors and whether they acquire."""
+"""The detector state: what the microscope has that delivers images."""
 
 from dataclasses import dataclass, field
 
@@ -6,28 +6,24 @@ from newswitch.models.devices import Detector
 
 
 @dataclass
-class CameraState:
-    """Shared state for camera parameters.
-
-    Default values are set to produce visible images with default illumination.
-    Higher exposure and gain ensure the captured images have sufficient
-    brightness after uint16→uint8 conversion for PNG output.
-    """
+class DetectorState:
+    """The detectors, and whether they stream."""
 
     is_acquiring: bool = False
     detectors: list[Detector] = field(default_factory=lambda: [])
 
     def get_active_detectors(self) -> list[Detector]:
-        """Get the currently active detectors."""
-        active_detectors: list[Detector] = []
-        for detector in self.detectors:
-            if detector.is_active:
-                active_detectors.append(detector)
-        return active_detectors
+        """The detectors that are on."""
+        return [detector for detector in self.detectors if detector.is_active]
 
-    def get_detector_for_slot(self, slot: int) -> Detector:
-        """Get the detector for a specific slot, if it exists."""
+    def get(self, name: str) -> Detector:
+        """The detector called `name`.
+
+        Raises:
+            ValueError: There is none.
+        """
         for detector in self.detectors:
-            if detector.slot == slot:
+            if detector.name == name:
                 return detector
-        raise ValueError(f"No detector found for slot {slot}")
+        known = [detector.name for detector in self.detectors]
+        raise ValueError(f"No detector {name!r}: there are {known}")

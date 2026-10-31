@@ -9,8 +9,9 @@ import numpy as np
 from newswitch.models.frames import Metadata
 from newswitch.models.light_path import LightPath, LightPathSnapshot
 from newswitch.services.optics import OpticsManager
+from newswitch.services.stage import where
+from newswitch.services.values import Values
 from newswitch.states.calibration import CalibrationState
-from newswitch.states.stage import StageState
 
 
 class MetadataManager:
@@ -18,12 +19,12 @@ class MetadataManager:
 
     def __init__(
         self,
-        stage_state: StageState,
+        values: Values,
         calibration_state: CalibrationState,
         optics: OpticsManager,
     ) -> None:
         """A manager reading those states, with `optics` for what no calibration covers."""
-        self._stage_state = stage_state
+        self._values = values
         self._calibration_state = calibration_state
         self._optics = optics
 
@@ -33,11 +34,15 @@ class MetadataManager:
         try:
             calibration = self._calibration_state.get_calibrated_path(light_path_state=snapshot)
         except ValueError:
-            slot = self._optics.instrument.detectors().index(light_path.detector) + 1
-            calibration = self._optics.predicted(slot)
-        combined = np.dot(
-            np.array(calibration.affine_matrix), np.array(self._stage_state.as_affine_matrix())
-        )
+            calibration = self._optics.predicted(light_path.detector)
+        x, y, z = where(self._values, light_path.detector)
+        at = [
+            [1.0, 0.0, 0.0, x],
+            [0.0, 1.0, 0.0, y],
+            [0.0, 0.0, 1.0, z],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        combined = np.dot(np.array(calibration.affine_matrix), np.array(at))
         return Metadata(
             affine_matrix=combined.tolist(),
             fov_height=calibration.fov_height,

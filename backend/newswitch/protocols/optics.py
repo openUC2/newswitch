@@ -18,14 +18,14 @@ class OpticsManager(Manager, Protocol):
         """Publish what the optics find under the current values."""
         ...
 
-    def get_light_path_for_detector(self, detector_slot: int) -> LightPath:
-        """The light path of the detector in a slot, as things are now."""
+    def get_light_path_for_detector(self, detector: str) -> LightPath:
+        """The light path of `detector`, as things are now."""
         ...
 
     def snapshot(self, path: LightPath) -> LightPathSnapshot:
         """`path` as things are now, keyed by what a calibration of it depends on."""
         ...
 
-    def depth_of_field_um(self, detector_slot: int) -> float:
-        """How deep what the detector in a slot sees sharply is, from its objective's NA."""
+    def depth_of_field_um(self, detector: str) -> float:
+        """How deep what `detector` sees sharply is, from its objective's NA."""
         ...

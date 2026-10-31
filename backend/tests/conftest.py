@@ -31,7 +31,7 @@ def run_settings(tmp_path: Path, **changes: Any) -> Settings:  # noqa: ANN401
     """Simulated settings without an instrument, everything written under `tmp_path`."""
     return Settings(
         **{
-            "use_virtual_microscope": True,
+            "simulate": "everything",
             "simulation": "gfp-beads",
             "db_path": str(tmp_path / "agent.db"),
             "image_dir": tmp_path / "images",

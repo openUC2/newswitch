@@ -13,22 +13,18 @@ import { HomeObjectiveDefinition } from './homeObjective';
 import { HomeStageDefinition } from './homeStage';
 import { LedMatrixFillDefinition } from './ledMatrixFill';
 import { LedMatrixOffDefinition } from './ledMatrixOff';
+import { MoveDefinition } from './move';
 import { MoveHomeDefinition } from './moveHome';
-import { MoveStageDefinition } from './moveStage';
+import { MoveOneDefinition } from './moveOne';
 import { RunAutofocusDefinition } from './runAutofocus';
 import { ScanRegionDefinition } from './scanRegion';
-import { SetIlluminationIntensityDefinition } from './setIlluminationIntensity';
+import { SetRegionDefinition } from './setRegion';
 import { StartLiveViewDefinition } from './startLiveView';
 import { StopLiveViewDefinition } from './stopLiveView';
 import { StopStageDefinition } from './stopStage';
-import { SwitchFilterDefinition } from './switchFilter';
-import { SwitchObjectiveDefinition } from './switchObjective';
-import { ToggleFilterDefinition } from './toggleFilter';
-import { ToggleObjectiveDefinition } from './toggleObjective';
-import { TurnOffIlluminationChannelDefinition } from './turnOffIlluminationChannel';
-import { TurnOnIlluminationDefinition } from './turnOnIllumination';
+import { SwapDefinition } from './swap';
+import { TuneDefinition } from './tune';
 import { Uc2ScanNodesDefinition } from './uc2ScanNodes';
-import { UpdateDetectorDefinition } from './updateDetector';
 
 export { createIndexedUnion } from './utils';
 export {
@@ -188,6 +184,13 @@ export {
 } from './ledMatrixOff';
 export type { LedMatrixOffArgs, LedMatrixOffReturn } from './ledMatrixOff';
 export {
+  MoveArgsSchema,
+  MoveReturnSchema,
+  MoveDefinition,
+  useMove,
+} from './move';
+export type { MoveArgs, MoveReturn } from './move';
+export {
   MoveHomeArgsSchema,
   MoveHomeReturnSchema,
   MoveHomeDefinition,
@@ -195,13 +198,12 @@ export {
 } from './moveHome';
 export type { MoveHomeArgs, MoveHomeReturn } from './moveHome';
 export {
-  MoveStageArgsSchema,
-  MoveStageReturnSchema,
-  MoveStageDefinition,
-  useMoveStage,
-  OptimisticStageState,
-} from './moveStage';
-export type { MoveStageArgs, MoveStageReturn } from './moveStage';
+  MoveOneArgsSchema,
+  MoveOneReturnSchema,
+  MoveOneDefinition,
+  useMoveOne,
+} from './moveOne';
+export type { MoveOneArgs, MoveOneReturn } from './moveOne';
 export {
   RunAutofocusArgsSchema,
   RunAutofocusReturnSchema,
@@ -217,15 +219,12 @@ export {
 } from './scanRegion';
 export type { ScanRegionArgs, ScanRegionReturn } from './scanRegion';
 export {
-  SetIlluminationIntensityArgsSchema,
-  SetIlluminationIntensityReturnSchema,
-  SetIlluminationIntensityDefinition,
-  useSetIlluminationIntensity,
-} from './setIlluminationIntensity';
-export type {
-  SetIlluminationIntensityArgs,
-  SetIlluminationIntensityReturn,
-} from './setIlluminationIntensity';
+  SetRegionArgsSchema,
+  SetRegionReturnSchema,
+  SetRegionDefinition,
+  useSetRegion,
+} from './setRegion';
+export type { SetRegionArgs, SetRegionReturn } from './setRegion';
 export {
   StartLiveViewArgsSchema,
   StartLiveViewReturnSchema,
@@ -248,59 +247,19 @@ export {
 } from './stopStage';
 export type { StopStageArgs, StopStageReturn } from './stopStage';
 export {
-  SwitchFilterArgsSchema,
-  SwitchFilterReturnSchema,
-  SwitchFilterDefinition,
-  useSwitchFilter,
-} from './switchFilter';
-export type { SwitchFilterArgs, SwitchFilterReturn } from './switchFilter';
+  SwapArgsSchema,
+  SwapReturnSchema,
+  SwapDefinition,
+  useSwap,
+} from './swap';
+export type { SwapArgs, SwapReturn } from './swap';
 export {
-  SwitchObjectiveArgsSchema,
-  SwitchObjectiveReturnSchema,
-  SwitchObjectiveDefinition,
-  useSwitchObjective,
-} from './switchObjective';
-export type {
-  SwitchObjectiveArgs,
-  SwitchObjectiveReturn,
-} from './switchObjective';
-export {
-  ToggleFilterArgsSchema,
-  ToggleFilterReturnSchema,
-  ToggleFilterDefinition,
-  useToggleFilter,
-} from './toggleFilter';
-export type { ToggleFilterArgs, ToggleFilterReturn } from './toggleFilter';
-export {
-  ToggleObjectiveArgsSchema,
-  ToggleObjectiveReturnSchema,
-  ToggleObjectiveDefinition,
-  useToggleObjective,
-} from './toggleObjective';
-export type {
-  ToggleObjectiveArgs,
-  ToggleObjectiveReturn,
-} from './toggleObjective';
-export {
-  TurnOffIlluminationChannelArgsSchema,
-  TurnOffIlluminationChannelReturnSchema,
-  TurnOffIlluminationChannelDefinition,
-  useTurnOffIlluminationChannel,
-} from './turnOffIlluminationChannel';
-export type {
-  TurnOffIlluminationChannelArgs,
-  TurnOffIlluminationChannelReturn,
-} from './turnOffIlluminationChannel';
-export {
-  TurnOnIlluminationArgsSchema,
-  TurnOnIlluminationReturnSchema,
-  TurnOnIlluminationDefinition,
-  useTurnOnIllumination,
-} from './turnOnIllumination';
-export type {
-  TurnOnIlluminationArgs,
-  TurnOnIlluminationReturn,
-} from './turnOnIllumination';
+  TuneArgsSchema,
+  TuneReturnSchema,
+  TuneDefinition,
+  useTune,
+} from './tune';
+export type { TuneArgs, TuneReturn } from './tune';
 export {
   Uc2ScanNodesArgsSchema,
   Uc2ScanNodesReturnSchema,
@@ -308,22 +267,6 @@ export {
   useUc2ScanNodes,
 } from './uc2ScanNodes';
 export type { Uc2ScanNodesArgs, Uc2ScanNodesReturn } from './uc2ScanNodes';
-export {
-  DetectorAxisSchema,
-  DetectorSchema,
-  UpdateDetectorArgsSchema,
-  UpdateDetectorReturnSchema,
-  UpdateDetectorDefinition,
-  useUpdateDetector,
-} from './updateDetector';
-export type {
-  DetectorAxis,
-  DetectorAxisOutput,
-  Detector,
-  DetectorOutput,
-  UpdateDetectorArgs,
-  UpdateDetectorReturn,
-} from './updateDetector';
 
 export const globalActionDefinition = {
   AcquireMultidimensionalAcquisition:
@@ -341,22 +284,18 @@ export const globalActionDefinition = {
   HomeStage: HomeStageDefinition,
   LedMatrixFill: LedMatrixFillDefinition,
   LedMatrixOff: LedMatrixOffDefinition,
+  Move: MoveDefinition,
   MoveHome: MoveHomeDefinition,
-  MoveStage: MoveStageDefinition,
+  MoveOne: MoveOneDefinition,
   RunAutofocus: RunAutofocusDefinition,
   ScanRegion: ScanRegionDefinition,
-  SetIlluminationIntensity: SetIlluminationIntensityDefinition,
+  SetRegion: SetRegionDefinition,
   StartLiveView: StartLiveViewDefinition,
   StopLiveView: StopLiveViewDefinition,
   StopStage: StopStageDefinition,
-  SwitchFilter: SwitchFilterDefinition,
-  SwitchObjective: SwitchObjectiveDefinition,
-  ToggleFilter: ToggleFilterDefinition,
-  ToggleObjective: ToggleObjectiveDefinition,
-  TurnOffIlluminationChannel: TurnOffIlluminationChannelDefinition,
-  TurnOnIllumination: TurnOnIlluminationDefinition,
+  Swap: SwapDefinition,
+  Tune: TuneDefinition,
   Uc2ScanNodes: Uc2ScanNodesDefinition,
-  UpdateDetector: UpdateDetectorDefinition,
 } satisfies Record<string, ActionDefinition<unknown, unknown>>;
 
 export type GlobalActionDefinition = typeof globalActionDefinition;

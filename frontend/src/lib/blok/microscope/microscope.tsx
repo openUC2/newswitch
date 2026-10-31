@@ -7,19 +7,19 @@
 import type * as React from "react";
 import * as z from "zod";
 import {
-  CameraControl,
-  FilterBankControl,
-  IlluminationControl,
   LatestImage,
   LiveView,
   MultidimensionalAcquisitionControl,
-  ObjectiveControl,
   SettingsPanel,
-  StageControl,
   StatusPanel,
 } from "@/components/microscope";
 import { BloksPanel } from "@/components/bloks/BloksPanel";
 import { CalibrateLightPath } from "@/components/microscope/CalibrateLightPath";
+import { DetectorControl } from "@/components/microscope/DetectorControl";
+import { MoveControl } from "@/components/microscope/MoveControl";
+import { SourceControl } from "@/components/microscope/SourceControl";
+import { SwapsControl } from "@/components/microscope/SwapsControl";
+import { VariableControl } from "@/components/microscope/VariableControl";
 import {
   createBlokComponent,
   useBlok,
@@ -65,7 +65,39 @@ const panelBlok = (
     },
   );
 
+const VariableBlok = createBlokComponent(
+  {
+    name: "VariableControl",
+    schema: z
+      .object({
+        name: z
+          .string()
+          .describe("The variable: stage.z, objective.slot, laser_488.power."),
+        className: classNameSchema,
+      })
+      .describe(
+        "The control of one variable, whatever it is, by its name in the description.",
+      ),
+  },
+  ({ component, schema }) => {
+    const blok = useBlok(component, schema);
+    const name = useValue(blok.name) ?? "";
+    const className = useValue(blok.className);
+    const locked = usePanelLocked(["move_one", "swap", "tune"]);
+    return (
+      <div
+        className={className}
+        data-locked={locked ? "" : undefined}
+        title={locked}
+      >
+        <VariableControl name={name} />
+      </div>
+    );
+  },
+);
+
 export const microscopeBlokComponents: BlokComponentDefinition[] = [
+  VariableBlok,
   panelBlok(
     "SettingsPanel",
     "The microscope's settings column: live view, capture, and the camera, filter, illumination and objective controls.",
@@ -73,38 +105,28 @@ export const microscopeBlokComponents: BlokComponentDefinition[] = [
     ["start_live_view", "stop_live_view", "capture_image", "clear_expanse"],
   ),
   panelBlok(
-    "CameraControl",
-    "Detectors: switch them on and off, set gain and exposure.",
-    CameraControl,
-    ["activate_detector", "deactivate_detector", "update_detector"],
+    "DetectorControl",
+    "Detectors: switch them on and off, and tune whatever each can tune.",
+    DetectorControl,
+    ["activate_detector", "deactivate_detector", "tune"],
   ),
   panelBlok(
-    "IlluminationControl",
-    "Illumination channels: switch them on and off, set intensity.",
-    IlluminationControl,
-    [
-      "turn_on_illumination",
-      "turn_off_illumination_channel",
-      "set_illumination_intensity",
-    ],
+    "SourceControl",
+    "Light sources: switch them on and off, set their power.",
+    SourceControl,
+    ["tune"],
   ),
   panelBlok(
-    "FilterBankControl",
-    "The filter wheel: switch or toggle the active filter.",
-    FilterBankControl,
-    ["switch_filter", "toggle_filter"],
+    "SwapsControl",
+    "Everything that is swapped: put another thing in place.",
+    SwapsControl,
+    ["swap"],
   ),
   panelBlok(
-    "ObjectiveControl",
-    "The objective turret: switch the active objective.",
-    ObjectiveControl,
-    ["switch_objective", "toggle_objective"],
-  ),
-  panelBlok(
-    "StageControl",
-    "Stage position and moves, with the move's progress.",
-    StageControl,
-    ["move_stage", "move_home"],
+    "MoveControl",
+    "Everything that moves, with the move's progress: a pad for what moves the view, up and down for what focuses it, when it is clear which those are.",
+    MoveControl,
+    ["move", "move_one", "move_home"],
   ),
   panelBlok(
     "MultidimensionalAcquisitionControl",

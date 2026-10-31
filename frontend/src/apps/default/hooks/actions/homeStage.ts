@@ -31,7 +31,7 @@ export const HomeStageDefinition: ActionDefinition<
     'Home stage axes sequentially in a mechanically safe order (Z first).',
   argsSchema: HomeStageArgsSchema,
   returnSchema: HomeStageReturnSchema,
-  lockKeys: ['stage_position'],
+  lockKeys: ['motion'],
 };
 
 /**

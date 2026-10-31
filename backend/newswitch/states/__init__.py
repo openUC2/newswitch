@@ -2,28 +2,25 @@
 
 from .autofocus import AutofocusState
 from .calibration import CalibrationState
-from .detector import CameraState
+from .detector import DetectorState
 from .expanse import ExpanseState
-from .filter_bank import FilterBankState
 from .hooks import HookState
-from .illumination import IlluminationState
 from .io import IOState
 from .optics import OpticsState
-from .objective import ObjectiveState
-from .stage import StageState
+from .values import MoveState, SourceState, SwapState, TuneState
 from .uc2 import UC2State
 
 __all__ = [
     "AutofocusState",
     "CalibrationState",
-    "CameraState",
+    "DetectorState",
     "ExpanseState",
-    "FilterBankState",
     "HookState",
     "IOState",
-    "IlluminationState",
     "OpticsState",
-    "ObjectiveState",
-    "StageState",
+    "MoveState",
+    "SwapState",
+    "TuneState",
+    "SourceState",
     "UC2State",
 ]

@@ -600,10 +600,11 @@ class Component:
 #: What each kind of element must be able to change, for the server to have a control for it, and
 #: what its numbers mean to the optics.
 _NEEDS_TUNES = {
-    "source": {"power": "mW"},
-    "sensor": {"exposure": "ms", "gain": "dB", "binning": ""},
-    "point_detector": {"exposure": "ms", "gain": "dB", "binning": ""},  # exposure: to scan a frame
+    "sensor": {"exposure": "ms"},
+    "point_detector": {"exposure": "ms"},  # exposure: to a scan, the time of a whole frame
 }
+#: What a tune of this name has to be in, wherever one is stated; what has no tune is fixed.
+_TUNE_UNITS = {"power": "mW", "exposure": "ms", "gain": "dB", "binning": "", "frame_rate": "Hz"}
 
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
@@ -648,8 +649,8 @@ class Cube:
             missing = set(needs) - set(self.tunes)
             if missing:
                 raise ValueError(f"a {self.element.kind} must tune {sorted(missing)}")
-            for name, unit in needs.items():
-                if self.tunes[name].unit != unit:
+            for name, unit in _TUNE_UNITS.items():
+                if name in self.tunes and self.tunes[name].unit != unit:
                     raise ValueError(
                         f"{name} is in {unit or 'no unit'}, not {self.tunes[name].unit or 'no unit'}"
                     )
@@ -721,47 +722,6 @@ class DetectorAxis:
     delivered_by: str
 
 
-@dataclass(frozen=True, config=STRICT)
-class Objective:
-    """The swap that changes objectives."""
-
-    swap: str  # "objective.slot"
-
-
-@dataclass(frozen=True, config=STRICT)
-class Filters:
-    """The swap that changes filters."""
-
-    swap: str  # "filter_wheel.slot"
-
-
-@dataclass(frozen=True, config=STRICT)
-class SourcePart:
-    """A light source the server controls."""
-
-    cube: str
-    full_intensity: Annotated[StrictFloat, Field(gt=0.0)]  # its intensity runs from 0 to this
-
-
-@dataclass(frozen=True, config=STRICT)
-class DetectorPart:
-    """A detector the server controls."""
-
-    cube: str
-    frame_rate: Hertz  # how often it streams
-
-
-@dataclass(frozen=True, config=STRICT)
-class Parts:
-    """What the server has a control for, in which role, and by which slot. Nothing is inferred."""
-
-    stage: str | None = None  # the cube holding the sample, if something moves it
-    objective: Objective | None = None
-    filters: Filters | None = None
-    sources: dict[StrictInt, SourcePart] = field(default_factory=dict)
-    detectors: dict[StrictInt, DetectorPart] = field(default_factory=dict)
-
-
 @dataclass(frozen=True, config=STRICT, kw_only=True)
 class Instrument:
     """A whole ``microscope.yml``: only ever read. `load` adds where it is."""
@@ -772,7 +732,6 @@ class Instrument:
     cubes: dict[str, Cube]
     illumination: tuple[Edge, ...]
     detection: tuple[Edge, ...]
-    parts: Parts
     settings: Settings
     drives: tuple[Drive, ...] = ()
     ui: UiConfig | None = None  # what the frontend shows
@@ -819,11 +778,11 @@ class Instrument:
             for detector in self.detectors()
             if not self.routes(self.detection, self.sample_cube(), detector)
         ]
-        problems += _parts_problems(self)
         problems += _hardware_problems(self)
         problems += _drive_problems(self)
         problems += _sheet_problems(self)
         problems += _lit_problems(self)
+        problems += _objective_problems(self)
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -859,12 +818,24 @@ class Instrument:
                 }
 
     def detectors(self) -> list[str]:
-        """The cubes of the detectors, by slot."""
-        return [part.cube for _, part in sorted(self.parts.detectors.items())]
+        """The cubes of the detectors, in the order they are described."""
+        return self._holding(Sensor, PointDetector)
 
     def sources(self) -> list[str]:
-        """The cubes of the light sources, by slot."""
-        return [part.cube for _, part in sorted(self.parts.sources.items())]
+        """The cubes of the light sources, in the order they are described."""
+        return self._holding(Source)
+
+    def _holding(self, *kinds: type) -> list[str]:
+        return [
+            name
+            for name, cube in self.cubes.items()
+            if isinstance(cube.element, kinds)
+            or any(
+                isinstance(element, kinds)
+                for swap in cube.swaps.values()
+                for element in swap.slots.values()
+            )
+        ]
 
     def sample_cube(self) -> str:
         """The cube holding the sample."""
@@ -900,7 +871,8 @@ class Instrument:
         """The wire through which the events of `detector`, or of its scan, step the stage's z."""
         senders = (detector, self.scanner_of(detector))
         for drive in self.drives:
-            if drive.sender[0] in senders and drive.target == f"{self.parts.stage}.z":
+            target = self.variables.get(drive.target)
+            if drive.sender[0] in senders and getattr(target, "along", None) == "axis":
                 return drive
         return None
 
@@ -961,85 +933,6 @@ class Instrument:
 _INSTRUMENT = TypeAdapter(Instrument)
 
 
-def _slot_problems(role: str, slots: Iterable[int]) -> list[str]:
-    """Slots count from 1 without a gap: the managers keep their parts in a list."""
-    slots = sorted(slots)
-    return (
-        []
-        if slots == list(range(1, len(slots) + 1))
-        else [f"parts.{role}: slots {slots} must count from 1"]
-    )
-
-
-def _listed_problems(
-    instrument: Instrument, role: str, kind: str, listed: list[str], also: tuple[str, ...] = ()
-) -> list[str]:
-    """Each cube of `kind`, or of a kind in `also`, has one slot in `role`, and only those have."""
-    holding = [
-        cube.name
-        for cube in instrument.cubes.values()
-        if cube.element is not None and cube.element.kind in (kind, *also)
-    ]
-    problems = [f"parts.{role}: {name!r} holds no {kind}" for name in listed if name not in holding]
-    problems += [
-        f"parts.{role}: the {kind} {name!r} has no slot" for name in holding if name not in listed
-    ]
-    problems += [
-        f"parts.{role}: {name!r} has two slots" for name in set(listed) if listed.count(name) > 1
-    ]
-    return problems
-
-
-def _swap_problems(instrument: Instrument, role: str, swap: str, kind: type) -> list[str]:
-    """What is wrong with the swap that `role` says changes elements of `kind`."""
-    variable = instrument.variables.get(swap)
-    if variable is None or variable.verb != "swaps":
-        return [f"parts.{role}: there is no swap {swap!r}"]
-    return [
-        f"parts.{role}: slot {slot} of {swap} is no {kind.__name__.lower()}"
-        for slot, element in variable.slots.items()
-        if not isinstance(element, kind)
-    ]
-
-
-def _parts_problems(instrument: Instrument) -> list[str]:
-    """What the ``parts`` section says that the description does not have."""
-    parts = instrument.parts
-    problems = _slot_problems("sources", parts.sources) + _slot_problems(
-        "detectors", parts.detectors
-    )
-    problems += _listed_problems(instrument, "sources", "source", instrument.sources())
-    problems += _listed_problems(
-        instrument, "detectors", "sensor", instrument.detectors(), also=("point_detector",)
-    )
-    if parts.stage is not None:
-        cube = instrument.cubes.get(parts.stage)
-        if cube is None or cube.element is None or cube.element.kind != "sample":
-            problems.append(f"parts.stage: {parts.stage!r} holds no sample")
-        elif not cube.moves:
-            problems.append(f"parts.stage: nothing moves {parts.stage!r}")
-        else:
-            problems += [
-                f"parts.stage: a stage moves along x, y, z and a, not {short!r}"
-                for short in cube.moves
-                if short not in ("x", "y", "z", "a")
-            ]
-    if parts.objective is not None:
-        swap = parts.objective.swap
-        problems += _swap_problems(instrument, "objective", swap, Lens)
-        variable = instrument.variables.get(swap)
-        if variable is not None and variable.verb == "swaps":
-            problems += [
-                f"{swap}: an objective needs its f, na and magnification, slot {slot} has not"
-                for slot, element in variable.slots.items()
-                if isinstance(element, Lens)
-                and (element.f is None or element.na is None or element.magnification is None)
-            ]
-    if parts.filters is not None:
-        problems += _swap_problems(instrument, "filters", parts.filters.swap, Filter)
-    return problems
-
-
 def _hardware_problems(instrument: Instrument) -> list[str]:
     """What its ``hardware`` section names that the description does not have."""
     named = {variable.actuator for variable in instrument.variables.values()}
@@ -1053,15 +946,6 @@ def _hardware_problems(instrument: Instrument) -> list[str]:
         for name in instrument.hardware.cameras
         if not isinstance(_element(instrument, name), Sensor)
     ]
-    # A stage manager moves x along the board's X: another axis would silently not move.
-    stage = instrument.parts.stage
-    moves = instrument.cubes[stage].moves if stage in instrument.cubes else {}
-    for short, variable in moves.items():
-        actuator = instrument.hardware.actuators.get(variable.actuator or "")
-        if actuator is not None and actuator.axis != short.upper():
-            problems.append(
-                f"hardware: {variable.name} must be on axis {short.upper()}, not {actuator.axis!r}"
-            )
     return problems
 
 
@@ -1160,6 +1044,31 @@ def _microtime_problems(instrument: Instrument) -> list[str]:
     return problems
 
 
+def _objective_problems(instrument: Instrument) -> list[str]:
+    """Each lens that can be the nearest to the sample on the way to a detector: how much it gathers
+    is how bright an image is, and that takes its NA."""
+    problems = set()
+    sample = instrument.sample_cube()
+    for detector in instrument.detectors():
+        for route in instrument.routes(instrument.detection, sample, detector):
+            for edge in route:
+                cube = instrument.cubes[edge.target]
+                elements = [
+                    (f"{swap.name}: slot {slot}", element)
+                    for swap in cube.swaps.values()
+                    for slot, element in swap.slots.items()
+                ] or [(f"cubes.{cube.name}", cube.element)]
+                lenses = [(where, e) for where, e in elements if isinstance(e, Lens)]
+                problems |= {
+                    f"{where}: the lens nearest the sample needs its na"
+                    for where, lens in lenses
+                    if lens.na is None
+                }
+                if lenses:
+                    break
+    return sorted(problems)
+
+
 def _lit_problems(instrument: Instrument) -> list[str]:
     """How much of the sample each source lights: it decides how bright a pixel is."""
     problems = []
@@ -1207,8 +1116,10 @@ def _drive_problems(instrument: Instrument) -> list[str]:
         moved.append(drive.target)
         if drive.by is None:
             problems.append(f"drives: {drive.target} is a move, so it needs 'by'")
-        if drive.target != f"{instrument.parts.stage}.z":
-            problems.append(f"drives: only the stage's z can be stepped, not {drive.target}")
+        if instrument.variables[drive.target].along != "axis":
+            problems.append(
+                f"drives: only a move along the axis can be stepped, not {drive.target}"
+            )
         elif drive.sender[0] not in (*instrument.detectors(), *scanners):
             problems.append(f"drives: {drive.source} is no detector, so it cannot deliver z")
     problems += [

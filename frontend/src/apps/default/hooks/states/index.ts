@@ -1,15 +1,15 @@
 import type { StateDefinition } from '@/lib/arkitekt/state';
 import { AutofocusStateDefinition } from './AutofocusState';
 import { CalibrationStateDefinition } from './CalibrationState';
-import { CameraStateDefinition } from './CameraState';
+import { DetectorStateDefinition } from './DetectorState';
 import { ExpanseStateDefinition } from './ExpanseState';
-import { FilterBankStateDefinition } from './FilterBankState';
 import { HookStateDefinition } from './HookState';
 import { IOStateDefinition } from './IOState';
-import { IlluminationStateDefinition } from './IlluminationState';
-import { ObjectiveStateDefinition } from './ObjectiveState';
+import { MoveStateDefinition } from './MoveState';
 import { OpticsStateDefinition } from './OpticsState';
-import { StageStateDefinition } from './StageState';
+import { SourceStateDefinition } from './SourceState';
+import { SwapStateDefinition } from './SwapState';
+import { TuneStateDefinition } from './TuneState';
 import { UC2StateDefinition } from './UC2State';
 
 export { createIndexedUnion } from './utils';
@@ -33,17 +33,17 @@ export type {
 export {
   DetectorAxisSchema,
   DetectorSchema,
-  CameraStateSchema,
-  CameraStateDefinition,
-  useCameraState,
-} from './CameraState';
+  DetectorStateSchema,
+  DetectorStateDefinition,
+  useDetectorState,
+} from './DetectorState';
 export type {
   DetectorAxis,
   DetectorAxisOutput,
   Detector,
   DetectorOutput,
-  CameraState,
-} from './CameraState';
+  DetectorState,
+} from './DetectorState';
 export {
   LightPathSnapshotSchema,
   MetadataSchema,
@@ -71,13 +71,6 @@ export type {
   ExpanseState,
 } from './ExpanseState';
 export {
-  FilterSchema,
-  FilterBankStateSchema,
-  FilterBankStateDefinition,
-  useFilterBankState,
-} from './FilterBankState';
-export type { Filter, FilterOutput, FilterBankState } from './FilterBankState';
-export {
   RegisteredHookSchema,
   HookStateSchema,
   HookStateDefinition,
@@ -91,27 +84,12 @@ export type {
 export { IOStateSchema, IOStateDefinition, useIOState } from './IOState';
 export type { IOState } from './IOState';
 export {
-  IlluminationSchema,
-  IlluminationStateSchema,
-  IlluminationStateDefinition,
-  useIlluminationState,
-} from './IlluminationState';
-export type {
-  Illumination,
-  IlluminationOutput,
-  IlluminationState,
-} from './IlluminationState';
-export {
-  ObjectiveLensSchema,
-  ObjectiveStateSchema,
-  ObjectiveStateDefinition,
-  useObjectiveState,
-} from './ObjectiveState';
-export type {
-  ObjectiveLens,
-  ObjectiveLensOutput,
-  ObjectiveState,
-} from './ObjectiveState';
+  MoveValueSchema,
+  MoveStateSchema,
+  MoveStateDefinition,
+  useMoveState,
+} from './MoveState';
+export type { MoveValue, MoveValueOutput, MoveState } from './MoveState';
 export {
   LightPathSchema,
   DetectorOpticsSchema,
@@ -133,26 +111,52 @@ export type {
   OpticsState,
 } from './OpticsState';
 export {
-  StageStateSchema,
-  StageStateDefinition,
-  useStageState,
-} from './StageState';
-export type { StageState } from './StageState';
+  LightSourceSchema,
+  SourceStateSchema,
+  SourceStateDefinition,
+  useSourceState,
+} from './SourceState';
+export type {
+  LightSource,
+  LightSourceOutput,
+  SourceState,
+} from './SourceState';
+export {
+  SwapOptionSchema,
+  SwapValueSchema,
+  SwapStateSchema,
+  SwapStateDefinition,
+  useSwapState,
+} from './SwapState';
+export type {
+  SwapOption,
+  SwapOptionOutput,
+  SwapValue,
+  SwapValueOutput,
+  SwapState,
+} from './SwapState';
+export {
+  TuneValueSchema,
+  TuneStateSchema,
+  TuneStateDefinition,
+  useTuneState,
+} from './TuneState';
+export type { TuneValue, TuneValueOutput, TuneState } from './TuneState';
 export { UC2StateSchema, UC2StateDefinition, useUC2State } from './UC2State';
 export type { UC2State } from './UC2State';
 
 export const globalStateDefinition = {
   AutofocusState: AutofocusStateDefinition,
   CalibrationState: CalibrationStateDefinition,
-  CameraState: CameraStateDefinition,
+  DetectorState: DetectorStateDefinition,
   ExpanseState: ExpanseStateDefinition,
-  FilterBankState: FilterBankStateDefinition,
   HookState: HookStateDefinition,
   IOState: IOStateDefinition,
-  IlluminationState: IlluminationStateDefinition,
-  ObjectiveState: ObjectiveStateDefinition,
+  MoveState: MoveStateDefinition,
   OpticsState: OpticsStateDefinition,
-  StageState: StageStateDefinition,
+  SourceState: SourceStateDefinition,
+  SwapState: SwapStateDefinition,
+  TuneState: TuneStateDefinition,
   UC2State: UC2StateDefinition,
 } satisfies Record<string, StateDefinition<unknown>>;
 

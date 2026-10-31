@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Literal, Optional, TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
@@ -31,8 +31,10 @@ class Settings(BaseModel):
     # a misspelled key is an error, not ignored
     model_config = ConfigDict(extra="forbid")
 
-    use_virtual_microscope: StrictBool
-    """Simulated, or the real hardware of the description's ``hardware`` section."""
+    simulate: Literal["everything", "unwired", "nothing"]
+    """What has no hardware: all of it, to run a description dry; what its ``hardware`` section
+    does not wire, so that a real camera can sit beside a simulated stage; or nothing, so that what
+    is not wired is refused."""
     simulation: str
     """Which of the sample holder's ``simulations`` is on it: what a simulation draws, and what
     predictions assume, on real hardware too."""

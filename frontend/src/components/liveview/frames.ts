@@ -11,7 +11,6 @@ const COMPRESSION_NONE = 0;
 const COMPRESSION_SHUFFLED_ZSTD = 1;
 
 export interface LiveFrame {
-  slot: number;
   sequence: number;
   width: number;
   height: number;
@@ -47,7 +46,6 @@ export function parseFrame(message: ArrayBuffer): LiveFrame {
     throw new Error("A live view frame this viewer cannot read");
   }
   return {
-    slot: view.getUint16(6, true),
     binning: view.getUint8(5),
     sequence: view.getUint32(8, true),
     width,

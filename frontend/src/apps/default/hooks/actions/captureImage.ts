@@ -133,8 +133,12 @@ export type Frame = z.input<typeof FrameSchema>;
 export type FrameOutput = z.infer<typeof FrameSchema>;
 
 // --- Schemas ---
-export const CaptureImageArgsSchema = z.object({});
+export const CaptureImageArgsSchema = z.object({
+  /** The detector. */
+  name: z.string().describe('The detector.').nullable().optional(),
+});
 export const CaptureImageReturnSchema = z.object({
+  /** The frames taken, cached and added to the expanse. */
   return0: z.array(
     FrameSchema.describe(
       'Represents a single 3D volume captured by the detector.',
@@ -155,14 +159,14 @@ export const CaptureImageDefinition: ActionDefinition<
 > = {
   name: 'capture_image',
   appKey: 'default',
-  description: 'Capture an image from the detector and save it to disk.',
+  description: 'Take an image with one detector, or with each that is on.',
   argsSchema: CaptureImageArgsSchema,
   returnSchema: CaptureImageReturnSchema,
-  lockKeys: ['camera_parameters', 'expanse_state', 'io'],
+  lockKeys: ['detector', 'expanse_state', 'io'],
 };
 
 /**
- * Capture an image from the detector and save it to disk.
+ * Take an image with one detector, or with each that is on.
  */
 export const useCaptureImage = () => {
   return useAction(CaptureImageDefinition);

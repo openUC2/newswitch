@@ -115,7 +115,7 @@ def assemble(
 ) -> Answer:
     """An `Answer` from what the tracer found and the current values."""
     *_, axis_y, axis_x = instrument.detector_axes(detector)
-    binning = state[f"{detector}.binning"]
+    binning = state.get(f"{detector}.binning", 1)
     flip = -1.0 if imaging["reflections"] % 2 else 1.0
     magnification = imaging["magnification"]
     pixel_x = axis_x.step * binning / (magnification * flip)
@@ -140,7 +140,7 @@ def assemble(
     def electrons(source: str, arriving: Mapping[str, Any], per_mw_ms: float) -> float:
         """What a source makes in a pixel, where a bead is."""
         return (
-            float(state[f"{source}.power"])
+            float(state.get(f"{source}.power", instrument.cubes[source].element.max_power))
             * per_mw_ms
             * exposure
             * _share(arriving, pixel_area, abs(pixel_x) / binning, abs(pixel_y) / binning, pixels)

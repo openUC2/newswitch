@@ -52,9 +52,10 @@ cubes:
         g: {center: 530 nm, width: 70 nm}
         b: {center: 460 nm, width: 70 nm}
     tunes:
+      frame_rate: {initial: 30 Hz, min: 1 Hz, max: 100 Hz, step: 1 Hz}
       exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
       gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
-      binning: {initial: 1, step: 1}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
 
 illumination:
   - {from: laser_488, to: dichroic}
@@ -68,16 +69,8 @@ detection:
   - {from: dichroic, via: transmit, to: tube, distance: 30 mm}
   - {from: tube, to: camera, distance: focus}
 
-parts:
-  stage: stage
-  sources:
-    1: {cube: laser_488, full_intensity: 100.0}
-    2: {cube: led_625, full_intensity: 100.0}
-  detectors:
-    1: {cube: camera, frame_rate: 30 Hz}
-
 settings:
-  use_virtual_microscope: true
+  simulate: everything
   simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
@@ -86,7 +79,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@3
+  catalog: newswitch@4
   bloks:
     view-fluorescence:
       description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
@@ -97,7 +90,7 @@ ui:
             <ScrollArea className="h-full w-[380px] shrink-0">
                 <div className="flex flex-col gap-3 pb-4 pr-3">
         <div className="flex flex-wrap gap-1.5">
-            <if when={list.contains(value: list.pluck(value: self.IlluminationState.illuminations, key: "is_active"), item: true)}>
+            <if when={list.contains(value: list.pluck(value: obj.values(value: self.SourceState.sources), key: "on"), item: true)}>
                 <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-info backdrop-blur">
                     <span className="size-1.5 rounded-full bg-info shadow-[0_0_8px_2px] shadow-info/60" />
                     <span>Lit</span>
@@ -109,7 +102,7 @@ ui:
                 </div>
             </else>
             </if>
-            <if when={self.CameraState.is_acquiring}>
+            <if when={self.DetectorState.is_acquiring}>
                 <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive backdrop-blur">
                     <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
                     <span>Streaming</span>
@@ -135,10 +128,10 @@ ui:
             </if>
         </div>
         <div className="flex flex-col gap-3">
-            <foreach items={self.IlluminationState.illuminations} let="light" key={light.slot}>
+            <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
         <if when={light.wavelength < 430}>
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
-            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-violet/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-violet/5 blur-3xl"} />
+            <div className={light.on ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-violet/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-violet/5 blur-3xl"} />
             <div className="relative flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-violet">DAPI · Hoechst</span>
@@ -146,18 +139,18 @@ ui:
                         <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
                         <span className="text-sm text-muted-foreground">nm</span>
                     </div>
-                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.emits} · excitation</span>
                 </div>
                 <div className="past:pointer-events-none past:opacity-50">
-                    <if when={light.is_active}>
-                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-violet" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <if when={light.on}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-violet" onChange={self.tune(name: light.power_variable, to: 0)} />
                     <else>
-                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                        <Switch checked={false} onChange={self.tune(name: light.power_variable, to: light.lit_power)} />
                     </else>
                     </if>
                 </div>
             </div>
-            <if when={light.is_active}>
+            <if when={light.on}>
                 <div className="relative">
                     <div className="mt-4 flex items-center gap-1.5">
                         <span className="size-2.5 rounded-full bg-spectrum-violet shadow-[0_0_14px_3px] shadow-spectrum-violet/70" />
@@ -169,9 +162,9 @@ ui:
                     </div>
                     <div className="mt-5 flex items-end justify-between">
                         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
-                        <span className="text-2xl font-semibold tabular-nums text-spectrum-violet">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-violet">{fmt.percent(value: math.div(a: light.power, b: light.max_power))}</span>
                     </div>
-                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-violet [&amp;_[data-slot=slider-thumb]]:border-spectrum-violet" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-violet [&amp;_[data-slot=slider-thumb]]:border-spectrum-violet" value={light.power} min={0} max={light.max_power} onCommit={self.tune(name: light.power_variable, to: event.value)} />
                 </div>
             <else>
                 <div className="relative">
@@ -190,7 +183,7 @@ ui:
         <else>
         <if when={light.wavelength < 520}>
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
-            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-cyan/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-cyan/5 blur-3xl"} />
+            <div className={light.on ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-cyan/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-cyan/5 blur-3xl"} />
             <div className="relative flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-cyan">GFP · FITC</span>
@@ -198,18 +191,18 @@ ui:
                         <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
                         <span className="text-sm text-muted-foreground">nm</span>
                     </div>
-                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.emits} · excitation</span>
                 </div>
                 <div className="past:pointer-events-none past:opacity-50">
-                    <if when={light.is_active}>
-                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-cyan" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <if when={light.on}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-cyan" onChange={self.tune(name: light.power_variable, to: 0)} />
                     <else>
-                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                        <Switch checked={false} onChange={self.tune(name: light.power_variable, to: light.lit_power)} />
                     </else>
                     </if>
                 </div>
             </div>
-            <if when={light.is_active}>
+            <if when={light.on}>
                 <div className="relative">
                     <div className="mt-4 flex items-center gap-1.5">
                         <span className="size-2.5 rounded-full bg-spectrum-cyan shadow-[0_0_14px_3px] shadow-spectrum-cyan/70" />
@@ -221,9 +214,9 @@ ui:
                     </div>
                     <div className="mt-5 flex items-end justify-between">
                         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
-                        <span className="text-2xl font-semibold tabular-nums text-spectrum-cyan">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-cyan">{fmt.percent(value: math.div(a: light.power, b: light.max_power))}</span>
                     </div>
-                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-cyan [&amp;_[data-slot=slider-thumb]]:border-spectrum-cyan" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-cyan [&amp;_[data-slot=slider-thumb]]:border-spectrum-cyan" value={light.power} min={0} max={light.max_power} onCommit={self.tune(name: light.power_variable, to: event.value)} />
                 </div>
             <else>
                 <div className="relative">
@@ -242,7 +235,7 @@ ui:
         <else>
         <if when={light.wavelength < 600}>
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
-            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-yellow/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-yellow/5 blur-3xl"} />
+            <div className={light.on ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-yellow/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-yellow/5 blur-3xl"} />
             <div className="relative flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-yellow">mCherry · RFP</span>
@@ -250,18 +243,18 @@ ui:
                         <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
                         <span className="text-sm text-muted-foreground">nm</span>
                     </div>
-                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.emits} · excitation</span>
                 </div>
                 <div className="past:pointer-events-none past:opacity-50">
-                    <if when={light.is_active}>
-                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-yellow" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <if when={light.on}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-yellow" onChange={self.tune(name: light.power_variable, to: 0)} />
                     <else>
-                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                        <Switch checked={false} onChange={self.tune(name: light.power_variable, to: light.lit_power)} />
                     </else>
                     </if>
                 </div>
             </div>
-            <if when={light.is_active}>
+            <if when={light.on}>
                 <div className="relative">
                     <div className="mt-4 flex items-center gap-1.5">
                         <span className="size-2.5 rounded-full bg-spectrum-yellow shadow-[0_0_14px_3px] shadow-spectrum-yellow/70" />
@@ -273,9 +266,9 @@ ui:
                     </div>
                     <div className="mt-5 flex items-end justify-between">
                         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
-                        <span className="text-2xl font-semibold tabular-nums text-spectrum-yellow">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-yellow">{fmt.percent(value: math.div(a: light.power, b: light.max_power))}</span>
                     </div>
-                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-yellow [&amp;_[data-slot=slider-thumb]]:border-spectrum-yellow" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-yellow [&amp;_[data-slot=slider-thumb]]:border-spectrum-yellow" value={light.power} min={0} max={light.max_power} onCommit={self.tune(name: light.power_variable, to: event.value)} />
                 </div>
             <else>
                 <div className="relative">
@@ -293,7 +286,7 @@ ui:
         </div>
         <else>
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
-            <div className={light.is_active ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-red/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-red/5 blur-3xl"} />
+            <div className={light.on ? "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-red/25 blur-3xl" : "pointer-events-none absolute -right-12 -top-12 size-44 rounded-full bg-spectrum-red/5 blur-3xl"} />
             <div className="relative flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-red">Cy5 · far red</span>
@@ -301,18 +294,18 @@ ui:
                         <span className="text-4xl font-semibold tracking-tight tabular-nums">{light.wavelength}</span>
                         <span className="text-sm text-muted-foreground">nm</span>
                     </div>
-                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.kind} · excitation</span>
+                    <span className="text-xs lowercase text-muted-foreground first-letter:uppercase">{light.emits} · excitation</span>
                 </div>
                 <div className="past:pointer-events-none past:opacity-50">
-                    <if when={light.is_active}>
-                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-red" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                    <if when={light.on}>
+                        <Switch checked={true} className="data-[state=checked]:bg-spectrum-red" onChange={self.tune(name: light.power_variable, to: 0)} />
                     <else>
-                        <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                        <Switch checked={false} onChange={self.tune(name: light.power_variable, to: light.lit_power)} />
                     </else>
                     </if>
                 </div>
             </div>
-            <if when={light.is_active}>
+            <if when={light.on}>
                 <div className="relative">
                     <div className="mt-4 flex items-center gap-1.5">
                         <span className="size-2.5 rounded-full bg-spectrum-red shadow-[0_0_14px_3px] shadow-spectrum-red/70" />
@@ -324,9 +317,9 @@ ui:
                     </div>
                     <div className="mt-5 flex items-end justify-between">
                         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Power</span>
-                        <span className="text-2xl font-semibold tabular-nums text-spectrum-red">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                        <span className="text-2xl font-semibold tabular-nums text-spectrum-red">{fmt.percent(value: math.div(a: light.power, b: light.max_power))}</span>
                     </div>
-                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-red [&amp;_[data-slot=slider-thumb]]:border-spectrum-red" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                    <Slider className="mt-2 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-red [&amp;_[data-slot=slider-thumb]]:border-spectrum-red" value={light.power} min={0} max={light.max_power} onCommit={self.tune(name: light.power_variable, to: event.value)} />
                 </div>
             <else>
                 <div className="relative">
@@ -351,7 +344,7 @@ ui:
             </foreach>
         </div>
         <div className="flex flex-col gap-3">
-            <foreach items={self.CameraState.detectors} let="camera" key={camera.slot}>
+            <foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
                 <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
                     <div className="flex items-center gap-2">
                         <div className="flex flex-col">
@@ -359,7 +352,7 @@ ui:
                             <span className="truncate text-sm font-medium">{camera.name}</span>
                         </div>
                         <div className="ml-auto">
-                            <if when={self.CameraState.is_acquiring}>
+                            <if when={self.DetectorState.is_acquiring}>
                                 <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
                                     <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
                                     <span>Live</span>
@@ -373,27 +366,21 @@ ui:
                             </if>
                         </div>
                     </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                        <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
-                            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Exposure</span>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-2xl font-semibold tabular-nums">{fmt.number(value: math.mul(a: camera.current_exposure_time, b: 1000), digits: 1)}</span>
-                                <span className="text-xs text-muted-foreground">ms</span>
+                    <div className="mt-4 grid grid-cols-2 gap-3 past:hidden">
+                        <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
+                            <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{list.last(value: str.split(value: tune.name, separator: "."))}</span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.value, digits: 1)}</span>
+                                    <span className="text-xs text-muted-foreground">{tune.unit}</span>
+                                </div>
+                                <Slider className="min-w-0" step={tune.step} value={tune.value} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
                             </div>
-                            <Slider className="min-w-0 past:hidden" step={0.1} value={math.mul(a: camera.current_exposure_time, b: 1000)} min={math.mul(a: camera.min_exposure_time, b: 1000)} max={math.mul(a: camera.max_exposure_time, b: 1000)} onCommit={self.update_detector(slot: camera.slot, exposure_time: math.div(a: event.value, b: 1000))} />
-                        </div>
-                        <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
-                            <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-2xl font-semibold tabular-nums">{fmt.number(value: camera.current_gain, digits: 1)}</span>
-                                <span className="text-xs text-muted-foreground">dB</span>
-                            </div>
-                            <Slider className="min-w-0 past:hidden" step={0.1} value={camera.current_gain} min={camera.min_gain} max={camera.max_gain} onCommit={self.update_detector(slot: camera.slot, gain: event.value)} />
-                        </div>
+                        </foreach>
                     </div>
                     <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning/15 bg-warning/5 px-3 py-2">
                         <span className="text-xs text-warning/80">Light per frame</span>
-                        <span className="ml-auto text-xs font-medium tabular-nums text-warning">{fmt.number(value: math.mul(a: camera.current_exposure_time, b: 1000), digits: 1)} ms at {fmt.percent(value: math.div(a: obj.get(value: list.first(value: self.IlluminationState.illuminations), key: "intensity"), b: obj.get(value: list.first(value: self.IlluminationState.illuminations), key: "max_intensity")))}</span>
+                        <span className="ml-auto text-xs font-medium tabular-nums text-warning">{fmt.number(value: camera.current_exposure_ms, digits: 1)} ms at {fmt.percent(value: math.div(a: obj.get(value: list.first(value: obj.values(value: self.SourceState.sources)), key: "power"), b: obj.get(value: list.first(value: obj.values(value: self.SourceState.sources)), key: "max_power")))}</span>
                     </div>
                     <span className="mt-2 block text-[11px] text-muted-foreground">Longer and brighter collects more photons, and bleaches more.</span>
                 </div>
@@ -467,7 +454,7 @@ ui:
             <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
                 <ScrollArea className="h-full">
                     <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
-                        <StageControl className="locked:opacity-60" />
+                        <MoveControl className="locked:opacity-60" />
 
         <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
             <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
@@ -481,7 +468,7 @@ ui:
             <Button icon="camera" size="lg" fullWidth={true} className="h-12 rounded-full text-base shadow-xl past:hidden" onClick={self.capture_image()}>Acquire</Button>
         </else>
         </if>
-                        <CameraControl className="locked:opacity-60" />
+                        <DetectorControl className="locked:opacity-60" />
                     </div>
                 </ScrollArea>
             </ResizablePanel>
@@ -507,7 +494,7 @@ ui:
             <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
                 <ScrollArea className="h-full">
                     <div className="p-4 past:opacity-70 past:grayscale">
-                        <StageControl className="locked:opacity-60" />
+                        <MoveControl className="locked:opacity-60" />
 
         <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
             <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">

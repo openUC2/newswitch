@@ -1,6 +1,6 @@
 {
   "name": "newswitch",
-  "version": 3,
+  "version": 4,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
     {
@@ -40,24 +40,6 @@
       ]
     },
     {
-      "name": "CameraControl",
-      "description": "Detectors: switch them on and off, set gain and exposure.",
-      "acceptsChildren": false,
-      "context": "HTML",
-      "childrenContext": null,
-      "inheritsContext": false,
-      "downstreamOf": [],
-      "notDownstreamOf": [],
-      "props": [
-        {
-          "key": "className",
-          "kind": "STRING",
-          "required": false,
-          "description": "Extra Tailwind classes appended to the element."
-        }
-      ]
-    },
-    {
       "name": "DebugOverlay",
       "description": "Debug tools over the scene.",
       "acceptsChildren": false,
@@ -71,21 +53,8 @@
       "props": []
     },
     {
-      "name": "ElementPanel",
-      "description": "What the selected element on a light path is made of, and set to.",
-      "acceptsChildren": false,
-      "context": "HTML",
-      "childrenContext": null,
-      "inheritsContext": false,
-      "downstreamOf": [
-        "StageView"
-      ],
-      "notDownstreamOf": [],
-      "props": []
-    },
-    {
-      "name": "FilterBankControl",
-      "description": "The filter wheel: switch or toggle the active filter.",
+      "name": "DetectorControl",
+      "description": "Detectors: switch them on and off, and tune whatever each can tune.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,
@@ -100,6 +69,19 @@
           "description": "Extra Tailwind classes appended to the element."
         }
       ]
+    },
+    {
+      "name": "ElementPanel",
+      "description": "What the selected element on a light path is made of, and set to.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
     },
     {
       "name": "FrameLightPathLayer",
@@ -139,24 +121,6 @@
       ],
       "notDownstreamOf": [],
       "props": []
-    },
-    {
-      "name": "IlluminationControl",
-      "description": "Illumination channels: switch them on and off, set intensity.",
-      "acceptsChildren": false,
-      "context": "HTML",
-      "childrenContext": null,
-      "inheritsContext": false,
-      "downstreamOf": [],
-      "notDownstreamOf": [],
-      "props": [
-        {
-          "key": "className",
-          "kind": "STRING",
-          "required": false,
-          "description": "Extra Tailwind classes appended to the element."
-        }
-      ]
     },
     {
       "name": "ImageMetadataPanel",
@@ -247,8 +211,8 @@
       ]
     },
     {
-      "name": "MultidimensionalAcquisitionControl",
-      "description": "The multidimensional acquisition form: timepoints, positions, stacks and channels; start, pause and resume.",
+      "name": "MoveControl",
+      "description": "Everything that moves, with the move's progress: a pad for what moves the view, up and down for what focuses it, when it is clear which those are.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,
@@ -265,8 +229,8 @@
       ]
     },
     {
-      "name": "ObjectiveControl",
-      "description": "The objective turret: switch the active objective.",
+      "name": "MultidimensionalAcquisitionControl",
+      "description": "The multidimensional acquisition form: timepoints, positions, stacks and channels; start, pause and resume.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,
@@ -340,21 +304,8 @@
       ]
     },
     {
-      "name": "StageAxis",
-      "description": "The stage's axes and travel limits.",
-      "acceptsChildren": false,
-      "context": "SCENE",
-      "childrenContext": null,
-      "inheritsContext": false,
-      "downstreamOf": [
-        "StageScene"
-      ],
-      "notDownstreamOf": [],
-      "props": []
-    },
-    {
-      "name": "StageControl",
-      "description": "Stage position and moves, with the move's progress.",
+      "name": "SourceControl",
+      "description": "Light sources: switch them on and off, set their power.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,
@@ -369,6 +320,19 @@
           "description": "Extra Tailwind classes appended to the element."
         }
       ]
+    },
+    {
+      "name": "StageAxis",
+      "description": "The stage's axes and travel limits.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
     },
     {
       "name": "StagePlane",
@@ -461,6 +425,48 @@
           "kind": "STRING",
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "SwapsControl",
+      "description": "Everything that is swapped: put another thing in place.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
+    {
+      "name": "VariableControl",
+      "description": "The control of one variable, whatever it is, by its name in the description.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        },
+        {
+          "key": "name",
+          "kind": "STRING",
+          "required": true,
+          "description": "The variable: stage.z, objective.slot, laser_488.power."
         }
       ]
     }

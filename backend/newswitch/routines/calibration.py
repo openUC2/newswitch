@@ -8,6 +8,8 @@ from newswitch.routines.affine_matrix import calibrate_pixel_to_stage
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import AffineMatrix
 from newswitch.routines.common import field_of_view
+from newswitch.services.stage import Stage, stage_of
+from newswitch.services.values import Values
 
 #: How much of the frame the measuring move should shift the image by: long enough for a
 #: fraction of a pixel to be a small error, short enough to keep most of the image in common.
@@ -20,18 +22,18 @@ AGREEMENT = 0.05
 
 
 def _moves_and_frames(
-    stage_manager: protocols.StageManager,
+    stage_manager: Stage,
     detector_manager: protocols.DetectorManager,
-    slot: int,
+    name: str,
     step_x: float,
     step_y: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """An image, one after moving in x only, one after moving in y only; ends where it started."""
-    reference = detector_manager.capture_image(slot=slot).data
+    reference = detector_manager.capture_image(name).data
     stage_manager.move(x=step_x)
-    moved_x = detector_manager.capture_image(slot=slot).data
+    moved_x = detector_manager.capture_image(name).data
     stage_manager.move(x=-step_x, y=step_y)
-    moved_y = detector_manager.capture_image(slot=slot).data
+    moved_y = detector_manager.capture_image(name).data
     stage_manager.move(y=-step_y)
     return reference, moved_x, moved_y
 
@@ -43,7 +45,7 @@ def _within_travel(position: float, low: float, high: float, step: float) -> flo
 
 
 def _measure(
-    stage_manager: protocols.StageManager,
+    stage_manager: Stage,
     detector_manager: protocols.DetectorManager,
     detector: Detector,
     predicted_um_per_px: float,
@@ -63,7 +65,7 @@ def _measure(
     def measured(step: float) -> np.ndarray:
         step_x = _within_travel(stage.x, stage.min_x, stage.max_x, step)
         step_y = _within_travel(stage.y, stage.min_y, stage.max_y, step)
-        frames = _moves_and_frames(stage_manager, detector_manager, detector.slot, step_x, step_y)
+        frames = _moves_and_frames(stage_manager, detector_manager, detector.name, step_x, step_y)
         return np.array(calibrate_pixel_to_stage(*frames, step_x, step_y))
 
     def sized(um_per_px: float) -> float:
@@ -87,9 +89,9 @@ def calibrate_light_path(
     optics_manager: protocols.OpticsManager,
     metadata_manager: protocols.MetadataManager,
     calibration_manager: protocols.CalibrationManager,
-    stage_manager: protocols.StageManager,
+    values: Values,
     detector_manager: protocols.DetectorManager,
-    detector_state: states.CameraState,
+    detector_state: states.DetectorState,
 ) -> list[CalibratedLightPath]:
     """Calibrate the light path of every active detector: its pixel-to-stage transform.
 
@@ -105,11 +107,14 @@ def calibrate_light_path(
     for detector in detector_state.detectors:
         if not detector.is_active:
             continue
-        light_path = optics_manager.get_light_path_for_detector(detector_slot=detector.slot)
+        light_path = optics_manager.get_light_path_for_detector(detector.name)
         light_path_state = metadata_manager.get_current_state_for_light_path(light_path)
         known = metadata_manager.get_metadata_for_light_path(light_path).affine_matrix
         affine_matrix = _measure(
-            stage_manager, detector_manager, detector, float(np.hypot(known[0][0], known[1][0]))
+            stage_of(values, detector.name),
+            detector_manager,
+            detector,
+            float(np.hypot(known[0][0], known[1][0])),
         )
 
         fov_width, fov_height = field_of_view(

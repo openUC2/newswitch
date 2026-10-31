@@ -1,8 +1,8 @@
 """Tests for capture_image with IO manager to verify PNG output.
 
-This module tests the integration between VirtualDetectorManager and LocalFileIOManager,
-verifying that captured images are correctly saved as PNG files with proper content
-and that file operations (save, stream, delete) work correctly.
+This module tests the integration between the simulated detector of the reference microscope and
+LocalFileIOManager, verifying that captured images are correctly saved as PNG files with proper
+content and that file operations (save, stream, delete) work correctly.
 """
 
 import os
@@ -13,19 +13,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from newswitch.drivers.virtual import VirtualDetectorManager
-from newswitch.drivers.virtual.virtual_detector import DetectorConfig
-from newswitch.models.devices import Illumination
+from newswitch.microscope.parts import Microscope
 from newswitch.models.io import FileFormat
+from newswitch.protocols import DetectorManager
 from newswitch.services.io import LocalFileConfig, LocalFileIOManager
-from newswitch.states.detector import CameraState
-from newswitch.states.illumination import IlluminationState
 from newswitch.states.io import IOState
-from newswitch.states.objective import ObjectiveState
-from newswitch.states.stage import StageState
 
 # Type alias for the detector with IO fixture return type
-DetectorWithIO = tuple[VirtualDetectorManager, LocalFileIOManager, IOState, Path]
+DetectorWithIO = tuple[DetectorManager, LocalFileIOManager, IOState, Path]
 
 
 @pytest.fixture
@@ -43,109 +38,60 @@ def temp_output_dir(tmp_path: Path) -> Path:
     return output_dir
 
 
-@pytest.fixture
-def illuminated_detector_with_io(
-    tmp_path: Path,
-) -> Generator[DetectorWithIO, None, None]:
-    """Create a complete test setup with detector, IO manager, and all states.
-
-    Uses settings that produce visible images:
-        - High illumination intensity (5000.0)
-        - Longer exposure (1.0s)
-        - Higher gain (10.0)
-        - Astigmatism sample type for consistent, visible frames
-
-    Note:
-        Camera settings must be set AFTER detector creation because the
-        VirtualDetectorManager constructor resets them to config defaults.
-
-    Args:
-        tmp_path: Pytest's built-in temporary path fixture.
-
-    Yields:
-        A tuple of (VirtualDetectorManager, LocalFileIOManager, IOState, output_dir).
-    """
-    # Create states
-    camera_state = CameraState()
-    stage_state = StageState()
-    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-    illumination_state = IlluminationState(
-        illuminations=[
-            Illumination(
-                slot=1,
-                intensity=5000.0,
-                wavelength=488.0,
-                max_intensity=10000.0,
-                is_active=True,
-            )
-        ],
-    )
+def _io_manager(output_dir: Path) -> tuple[LocalFileIOManager, IOState]:
+    """An IO manager writing PNGs into `output_dir`, and its state."""
     io_state = IOState()
-
-    # Create detector with astigmatism sample type for consistent visible frames
-    detector = VirtualDetectorManager(
-        camera_state=camera_state,
-        stage_state=stage_state,
-        objective_state=objective_state,
-        illumination_state=illumination_state,
-        config=DetectorConfig(sample_type="astigmatism"),
-    )
-    # Activate and configure detector
-    detector.activate_detector(1)
-    detector.update_detector(slot=1, exposure_time=1.0, gain=10.0)
-
-    # Create IO manager
-    output_dir = tmp_path / "test_output"
-    output_dir.mkdir(parents=True, exist_ok=True)
     io_config = LocalFileConfig(
         base_path=str(output_dir),
         create_dirs=True,
         default_format=FileFormat.PNG,
     )
-    io_manager = LocalFileIOManager(state=io_state, config=io_config)
-
-    yield detector, io_manager, io_state, output_dir
+    return LocalFileIOManager(state=io_state, config=io_config), io_state
 
 
 @pytest.fixture
-def default_illumination_detector_with_io(
-    tmp_path: Path,
+def illuminated_detector_with_io(
+    microscope: Microscope, temp_output_dir: Path
 ) -> Generator[DetectorWithIO, None, None]:
-    """Create a test setup with default (zero) illumination.
+    """The reference microscope's detector, rendering a sample it can see, and an IO manager.
 
-    Creates a detector with no active illumination sources, useful for testing
-    behavior with minimal or no light input.
+    Uses settings that produce visible images: half of the laser's power, a longer exposure (1 s)
+    and a higher gain (10 dB).
 
     Args:
-        tmp_path: Pytest's built-in temporary path fixture.
+        microscope: The reference microscope.
+        temp_output_dir: Where the IO manager writes.
 
     Yields:
-        A tuple of (VirtualDetectorManager, LocalFileIOManager, IOState, output_dir).
+        A tuple of (detector manager, LocalFileIOManager, IOState, output_dir).
     """
-    camera_state = CameraState()
-    stage_state = StageState()
-    objective_state = ObjectiveState(slot=1, magnification=10.0, name="10x Air")
-    illumination_state = IlluminationState()  # Default: empty sources
-    io_state = IOState()
-    detector = VirtualDetectorManager(
-        camera_state=camera_state,
-        stage_state=stage_state,
-        objective_state=objective_state,
-        illumination_state=illumination_state,
-    )
-    # Activate detector
-    detector.activate_detector(1)
+    assert microscope.detector is not None and microscope.values is not None
+    microscope.detector.activate_detector("camera")
+    microscope.values.set({"laser_488.power": 25.0, "camera.exposure": 1000.0, "camera.gain": 10.0})
+    io_manager, io_state = _io_manager(temp_output_dir)
+    yield microscope.detector, io_manager, io_state, temp_output_dir
 
-    output_dir = tmp_path / "test_output"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    io_config = LocalFileConfig(
-        base_path=str(output_dir),
-        create_dirs=True,
-        default_format=FileFormat.PNG,
-    )
-    io_manager = LocalFileIOManager(state=io_state, config=io_config)
 
-    yield detector, io_manager, io_state, output_dir
+@pytest.fixture
+def unlit_detector_with_io(
+    microscope: Microscope, temp_output_dir: Path
+) -> Generator[DetectorWithIO, None, None]:
+    """The reference microscope's detector with every light source off, and an IO manager.
+
+    Useful for testing behavior with no light input.
+
+    Args:
+        microscope: The reference microscope.
+        temp_output_dir: Where the IO manager writes.
+
+    Yields:
+        A tuple of (detector manager, LocalFileIOManager, IOState, output_dir).
+    """
+    assert microscope.detector is not None and microscope.values is not None
+    microscope.values.set({"laser_488.power": 0.0, "led_625.power": 0.0})
+    microscope.detector.activate_detector("camera")
+    io_manager, io_state = _io_manager(temp_output_dir)
+    yield microscope.detector, io_manager, io_state, temp_output_dir
 
 
 class TestCaptureImagePNGOutput:
@@ -167,7 +113,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture image
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
 
         # Save using IO manager
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
@@ -188,13 +134,13 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Open with PIL - this will raise if invalid
         with Image.open(file_path) as img:
             assert img.format == "PNG"
-            assert img.size == (512, 512)  # Default DetectorConfig dimensions
+            assert img.size == (512, 512)  # The size of the reference microscope's sensor
             assert img.mode in ("L", "RGB", "RGBA")  # Grayscale or color
 
     def test_png_contains_visible_content(
@@ -209,7 +155,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Load the saved image
@@ -234,7 +180,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Load the saved image
@@ -266,7 +212,7 @@ class TestCaptureImagePNGOutput:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
 
         # Should be uint16 as per protocol
         assert image.dtype == np.uint16
@@ -281,19 +227,19 @@ class TestCaptureImagePNGOutput:
             "Expected some visible content above noise floor."
         )
 
-    def test_default_illumination_produces_valid_image(
+    def test_no_illumination_produces_valid_image(
         self,
-        default_illumination_detector_with_io: DetectorWithIO,
+        unlit_detector_with_io: DetectorWithIO,
     ) -> None:
-        """Test that even with default settings, we get a valid (if dim) image.
+        """Test that even with no light, we get a valid (if dim) image.
 
         Args:
-            default_illumination_detector_with_io: The detector fixture with no illumination.
+            unlit_detector_with_io: The detector fixture with no illumination.
         """
-        detector, io_manager, io_state, output_dir = default_illumination_detector_with_io
+        detector, io_manager, io_state, output_dir = unlit_detector_with_io
 
-        # This uses the default IlluminationState (no active illumination)
-        image = detector.capture_image(slot=1).data
+        # With every source off
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Load and check
@@ -301,9 +247,7 @@ class TestCaptureImagePNGOutput:
             img_array = np.array(img)
 
         # Even with no illumination, the image should be valid structure
-        assert img_array.shape == (512, 512), (
-            "Image dimensions don't match (uses default DetectorConfig)"
-        )
+        assert img_array.shape == (512, 512), "Image dimensions don't match the sensor"
 
     def test_multiple_captures_produce_different_files(
         self,
@@ -317,8 +261,8 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture multiple images
-        image1 = detector.capture_image(slot=1).data
-        image2 = detector.capture_image(slot=1).data
+        image1 = detector.capture_image("camera").data
+        image2 = detector.capture_image("camera").data
 
         file_path1 = io_manager.save_numpy_array(image1, format=FileFormat.PNG)
         file_path2 = io_manager.save_numpy_array(image2, format=FileFormat.PNG)
@@ -350,7 +294,7 @@ class TestIOManagerFileOperations:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Stream the file
@@ -371,7 +315,7 @@ class TestIOManagerFileOperations:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         assert io_manager.file_exists(file_path) is True
@@ -387,7 +331,7 @@ class TestIOManagerFileOperations:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # File should exist
@@ -411,7 +355,7 @@ class TestIOManagerFileOperations:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1).data
+        image = detector.capture_image("camera").data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         assert io_state.last_saved_file == file_path

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jondaPayload from "./jonda.fixture.json";
-import { SwitchObjectiveArgsSchema } from "@/apps/default/hooks/actions/switchObjective";
+import { z } from "zod";
 import {
   actionArgOrder,
   blokModel,
@@ -24,6 +24,8 @@ import { type BlokDispatchActionHandler } from "@arkitektio/bsx/renderer/runtime
 const jonda = jondaPayload as unknown as NewswitchBlokDeclaration;
 const jondaRoots = blokRoots(jonda);
 const jondaModel = blokModel(jonda, jondaRoots);
+
+const SwitchObjectiveArgsSchema = z.object({ slot: z.number() });
 
 const lens = (slot: number, name: string) => ({
   slot,
@@ -192,7 +194,7 @@ describe("locked controls", () => {
 
 describe("microscope panel locks", () => {
   it("are the locks the panel's actions take", () => {
-    expect(locksOf(["move_stage", "move_home"])).toContain("stage_position");
+    expect(locksOf(["move", "move_home"])).toContain("motion");
     expect(locksOf(["no_such_action"])).toEqual([]);
   });
 });
