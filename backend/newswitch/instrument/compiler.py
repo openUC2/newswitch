@@ -39,8 +39,7 @@ def _trace(
     errors: tracing.Errors = tracing.Errors(),
 ) -> tuple[dict[str, float], dict[str, dict[str, Any]]]:
     coupling = tracing.coupling(instrument, detector, state)
-    bands = [a["band_mean_nm"] for a in coupling.values() if a["band_mean_nm"] is not None]
-    wavelength = bands[0] if bands else 550.0
+    wavelength = tracing.design_wavelength(instrument, detector, state)
     return asdict(tracing.imaging(instrument, detector, state, wavelength, errors)), coupling
 
 

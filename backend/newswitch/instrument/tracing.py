@@ -197,6 +197,30 @@ def _emitted(
     return (on_sample * excitation).sum() * absorbed * fluorophore.quantum_yield * emission
 
 
+def design_wavelength(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> float:
+    """The wavelength a route is traced at: what its filters pass, whatever is on the sample.
+
+    So that what the optics predict for an instrument does not depend on a simulated sample. With
+    no filter to say, it is what the first source emits; with no source, the middle of the spectrum.
+    """
+    grid = wavelengths(instrument)
+    stage = instrument.sample_cube()
+    for route in instrument.routes(instrument.detection, stage, detector):
+        filters = [
+            element
+            for edge in route
+            if isinstance(element := instrument.cubes[edge.target].element_at(state), Filter)
+            and element.curve is not None
+        ]
+        if filters:
+            passed = np.prod([curve_at(element.curve, grid) for element in filters], axis=0)
+            return float((passed * grid).sum() / passed.sum())
+    sources = instrument.sources()
+    if sources:
+        return instrument.cubes[sources[0]].element_at(state).wavelength
+    return float(grid[len(grid) // 2])
+
+
 def _sheet(lens: Element, along: str, wavelength_nm: float) -> dict[str, Any]:
     """A light sheet as the Gaussian beam `lens` focuses: how thin it is, and for how far."""
     wavelength_um = wavelength_nm / 1000.0
