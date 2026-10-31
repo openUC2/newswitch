@@ -17,6 +17,7 @@ from tests.conftest import run_settings
 pytest.importorskip("mikro")
 
 from newswitch.services import mikro_app  # noqa: E402  (needs the extra "mikro")
+from newswitch.services.mikro_store import MikroDatasetStore  # noqa: E402
 
 
 class FakeClient:
@@ -47,7 +48,9 @@ def test_the_client_lives_as_long_as_the_agent(
 
     async def lifetime() -> None:
         hook = mikro_app.provide_mikro(run)
-        assert await anext(hook) is client
+        provided, store = await anext(hook)
+        assert provided is client
+        assert isinstance(store, MikroDatasetStore) and store.client is client
         assert client.events == ["entered"]
         with pytest.raises(StopAsyncIteration):
             await anext(hook)

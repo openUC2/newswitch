@@ -1,7 +1,7 @@
 """What light does on its way: ray tracing for geometry, and transmission curves for colour.
 
-The only module that imports optiland, and only when it traces, because this runs at compile time
-on a real computer: a microscope only ever reads what came out (`newswitch.instrument.predict`).
+The only module that imports optiland, and only when it traces: a scan needs no ray tracing, so an
+instrument with nothing else never loads it. A server traces when it starts (`compiler`).
 
 Each route is traced on its own, as a straight line with mirrors unfolded: optiland traces one
 sequence of surfaces, and branching is the job of the routes. Filters and dichroics only shape the
@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from newswitch.instrument.spec import Edge, Element, Instrument
+from newswitch.instrument.spec import Edge, Element, Fluorophore, Instrument, Sensor
 
 #: The spectrum everything is computed on, in nanometres.
 WAVELENGTHS = np.arange(350.0, 801.0, 1.0)
@@ -78,38 +78,73 @@ def _route_transmission(
     return curve
 
 
+def _emitted(fluorophore: Fluorophore | None, on_sample: np.ndarray) -> np.ndarray:
+    """What a sample emits for the light on it."""
+    if fluorophore is None:
+        return np.zeros(WAVELENGTHS.shape)
+    excitation = _gaussian(fluorophore.excitation, fluorophore.excitation_width)
+    emission = _gaussian(fluorophore.emission, fluorophore.emission_width)
+    emission = emission / emission.sum()
+    return (on_sample * excitation).sum() * fluorophore.quantum_yield * emission
+
+
+def _sheet(lens: Element, along: str, wavelength_nm: float) -> dict[str, Any]:
+    """A light sheet as the Gaussian beam `lens` focuses: how thin it is, and for how far."""
+    wavelength_um = wavelength_nm / 1000.0
+    waist = wavelength_um / (math.pi * lens.na)
+    return {
+        "waist_um": waist,
+        "rayleigh_um": math.pi * waist**2 / wavelength_um,
+        "along": along,
+    }
+
+
 def coupling(
     instrument: Instrument, detector: str, state: Mapping[str, Any]
 ) -> dict[str, dict[str, Any]]:
     """How much of each source reaches `detector` through the sample, per milliwatt.
 
     A source on the same side as the detector reaches it by what the sample reflects and by what
-    it emits; one on the other side by what it lets through, and also by what it emits.
+    it emits; one on the other side by what it lets through, and also by what it emits; a sheet,
+    from across, only by what it emits.
     """
-    sample = instrument.sample
+    sample = instrument.simulation_at(state)
     stage = instrument.sample_cube()
     detection = instrument.routes(instrument.detection, stage, detector)
-    fluorophore = sample.fluorophore
-    excitation = _gaussian(fluorophore.excitation, fluorophore.excitation_width)
-    emission = _gaussian(fluorophore.emission, fluorophore.emission_width)
-    emission = emission / emission.sum()
+    element = instrument.cubes[detector].element_at(state)
+    colors = element.colors if isinstance(element, Sensor) else {}
     result: dict[str, dict[str, Any]] = {}
     for source in instrument.sources():
         element = instrument.cubes[source].element_at(state)
         spectrum = _gaussian(element.wavelength, element.width)
         spectrum = spectrum / spectrum.sum()
         arriving = np.zeros(WAVELENGTHS.shape)
+        sheet = None
         for edges in instrument.routes(instrument.illumination, source, stage):
             on_sample = spectrum * _route_transmission(instrument, edges, state)
-            direct = sample.reflect if edges[-1].side == "epi" else sample.transmit
-            emitted = (on_sample * excitation).sum() * fluorophore.quantum_yield * emission
-            arriving = arriving + on_sample * direct + emitted
+            side = edges[-1].side
+            direct = (
+                0.0
+                if side == "orthogonal"
+                else (sample.reflect if side == "epi" else sample.transmit)
+            )
+            if side == "orthogonal":
+                lens = instrument.cubes[edges[-1].source].element_at(state)
+                sheet = _sheet(lens, edges[-1].along, element.wavelength)
+            arriving = arriving + on_sample * direct + _emitted(sample.fluorophore, on_sample)
         through = np.zeros(WAVELENGTHS.shape)
         for edges in detection:
             through = through + arriving * _route_transmission(instrument, edges, state)
         total = float(through.sum())
         mean = float((through * WAVELENGTHS).sum() / total) if total > 1e-12 else None
         result[source] = {"light_per_mw": total, "band_mean_nm": mean}
+        if sheet is not None:
+            result[source]["sheet"] = sheet
+        if colors:
+            result[source]["colors"] = {
+                name: float((through * _gaussian(color.center, color.width)).sum())
+                for name, color in colors.items()
+            }
     return result
 
 
@@ -217,6 +252,71 @@ def _lens(pending: Mapping[str, Any], after: float) -> tuple[Any, ...]:
     return ("ideal", pending["what"], after)
 
 
+def _scan_route(instrument: Instrument, scanner: str) -> tuple[Edge, ...]:
+    return instrument.routes(instrument.illumination, scanner, instrument.sample_cube())[0]
+
+
+def scan_um_per_degree(
+    instrument: Instrument, scanner: str, state: Mapping[str, Any], errors: Errors = Errors()
+) -> float:
+    """How far the spot moves on the sample per degree of `scanner`, by a ray through thin lenses.
+
+    Signed like a magnification: a relay inverts.
+    """
+    route = _scan_route(instrument, scanner)
+    elements = [instrument.cubes[edge.target].element_at(state) for edge in route]
+    lenses = [index for index, element in enumerate(elements) if element.kind == "lens"]
+    height, angle = 0.0, 1.0  # in millimetres, and per radian
+    for index, edge in enumerate(route):
+        if edge.distance == "focus":
+            # the lens this distance belongs to, as the detection path reads it
+            lens = elements[index] if index in lenses else elements[index - 1]
+            distance = lens.f * (
+                errors.objective_focal_factor if lens is elements[lenses[-1]] else 1.0
+            )
+        else:
+            distance = edge.distance
+        height += distance * angle
+        if index in lenses:
+            focal = elements[index].f
+            if index == lenses[-1]:
+                focal *= errors.objective_focal_factor
+            angle -= height / focal
+    return height * 1000.0 * math.pi / 180.0
+
+
+def _scan_imaging(
+    instrument: Instrument, scanner: str, state: Mapping[str, Any], errors: Errors
+) -> Imaging:
+    """A scan as a sensor measured in angle: a step for a pitch, degrees for micrometres.
+
+    So ``pitch / magnification`` is still micrometres per pixel, and an Airy disc in the same terms
+    still comes out in pixels.
+    """
+    route = _scan_route(instrument, scanner)
+    last = [
+        element
+        for edge in route
+        if (element := instrument.cubes[edge.target].element_at(state)).kind == "lens"
+    ][-1]
+    um_per_degree = scan_um_per_degree(instrument, scanner, state, errors)
+    magnification = 1.0 / um_per_degree
+    defocus_um = sum(
+        state[variable.name]
+        for variable in instrument.cubes[instrument.sample_cube()].variables.values()
+        if variable.verb == "moves" and variable.along == "axis"
+    )
+    return Imaging(
+        magnification=magnification,
+        reflections=sum(1 for edge in route if edge.via == "reflect"),
+        distortion_percent=0.0,
+        relative_illumination=1.0,
+        spot_center_um=abs(defocus_um) * last.na * abs(magnification),
+        spot_corner_um=abs(defocus_um) * last.na * abs(magnification),
+        numerical_aperture=last.na / abs(magnification),
+    )
+
+
 def imaging(
     instrument: Instrument,
     detector: str,
@@ -225,6 +325,9 @@ def imaging(
     errors: Errors = Errors(),
 ) -> Imaging:
     """Trace the route from the sample to `detector` under `state`."""
+    scanner = instrument.scanner_of(detector)
+    if scanner is not None:
+        return _scan_imaging(instrument, scanner, state, errors)
     stage = instrument.sample_cube()
     routes = instrument.routes(instrument.detection, stage, detector)
     if len(routes) != 1:

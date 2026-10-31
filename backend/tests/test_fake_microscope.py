@@ -2,15 +2,14 @@
 
 import ast
 import shutil
-import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from newswitch.instrument import spec
-from newswitch.instrument.predict import Compiled, NotCompiled
+from newswitch.instrument.compiler import compile_instrument, impacts
+from newswitch.instrument.predict import Compiled
 
 BACKEND = Path(__file__).parent.parent
 INSTRUMENT = BACKEND / "instruments" / "fake-microscope"
@@ -25,15 +24,15 @@ def instrument() -> spec.Instrument:
 
 @pytest.fixture(scope="module")
 def compiled(instrument: spec.Instrument) -> Compiled:
-    """What is compiled for the microscope, as a server reads it."""
-    return Compiled.load(instrument)
+    """What is compiled for the microscope, as a server does when it starts."""
+    return compile_instrument(instrument)
 
 
 def changes(compiled: Compiled, variable: str, detector: str = "camera-a") -> dict[str, float]:
     """What nudging `variable` changes for `detector`, as the compiler calculated."""
     return next(
         row["changes"]
-        for row in compiled.impacts
+        for row in impacts(compiled.instrument, compiled.instrument.initial_state())
         if row["variable"] == variable and row["detector"] == detector
     )
 
@@ -73,7 +72,6 @@ def test_nothing_that_predicts_can_see_the_truth(module: str) -> None:
     """Comparing predictions with images only means something if the two are kept apart."""
     source = (BACKEND / "newswitch" / "instrument" / module).read_text()
     assert "truth.yml" not in source
-    assert "compiled.truth" not in source
     imported = {
         name
         for node in ast.walk(ast.parse(source))
@@ -87,21 +85,11 @@ def test_nothing_that_predicts_can_see_the_truth(module: str) -> None:
     assert not {name for name in imported if "drivers" in name or "check_instrument" in name}
 
 
-def test_the_microscope_side_runs_without_the_optics_library() -> None:
-    """Predicting and rendering read files: optiland is too heavy for a Pi."""
-    code = (
-        "import sys, newswitch.instrument.predict, newswitch.drivers.optics.simulator; "
-        "assert 'optiland' not in sys.modules"
-    )
-    subprocess.run([sys.executable, "-c", code], check=True, cwd=BACKEND)
-
-
 # --- the optics
 
 
 def test_the_prescription_is_the_lens_it_says_it_is() -> None:
     """Loaded from its file: a typed-in radius once made this lens f = 135."""
-    pytest.importorskip("optiland")
     from optiland.fileio import load_optiland_file
 
     lens = load_optiland_file(str(INSTRUMENT / "lenses" / "AC254-100-A.optiland"))
@@ -110,7 +98,6 @@ def test_the_prescription_is_the_lens_it_says_it_is() -> None:
 
 def test_magnification_comes_from_the_pair_of_lenses(instrument: spec.Instrument) -> None:
     """Tube over objective, inverted: and each detector has its own tube lens."""
-    pytest.importorskip("optiland")
     from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
@@ -128,7 +115,6 @@ def test_magnification_comes_from_the_pair_of_lenses(instrument: spec.Instrument
 
 def test_a_reflection_is_counted_along_the_route(instrument: spec.Instrument) -> None:
     """Camera b sits behind the splitter's reflection, camera a behind its transmission."""
-    pytest.importorskip("optiland")
     from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
@@ -138,7 +124,6 @@ def test_a_reflection_is_counted_along_the_route(instrument: spec.Instrument) ->
 
 def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.Instrument) -> None:
     """A prediction nobody declared: only the camera behind the real lens's aperture is affected."""
-    pytest.importorskip("optiland")
     from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
@@ -208,40 +193,10 @@ def test_tuning_one_camera_leaves_the_other_alone(compiled: Compiled) -> None:
     assert changes(compiled, "camera-a.exposure", "camera-b") == {}
 
 
-# --- the table
-
-
-def test_the_committed_tables_are_what_compiling_gives_now(tmp_path: Path) -> None:
-    """A server trusts these files: they must come from the description and optics next to them."""
-    pytest.importorskip("optiland")
-    from newswitch.drivers.optics.simulator import TRUTH_TABLE, optical_errors
-    from newswitch.instrument.compiler import compile_instrument
-
-    copy = tmp_path / "instrument"
-    shutil.copytree(INSTRUMENT, copy)
-    again = spec.load(copy)
-    for name, errors in (("compiled.json", None), (TRUTH_TABLE, optical_errors(again))):
-        written = compile_instrument(again, name, errors)
-        assert written.read_text() == (INSTRUMENT / name).read_text(), (
-            f"run: just compile-fake ({name})"
-        )
-
-
-def test_a_table_of_another_description_is_refused(tmp_path: Path) -> None:
-    """Its numbers would be about another microscope."""
-    copy = tmp_path / "instrument"
-    shutil.copytree(INSTRUMENT, copy)
-    description = copy / spec.DESCRIPTION
-    description.write_text(description.read_text().replace("f: 50 mm", "f: 40 mm"))
-    with pytest.raises(NotCompiled, match="compile it again"):
-        Compiled.load(spec.load(copy))
-
-
 def test_the_table_answers_what_a_trace_would(
     instrument: spec.Instrument, compiled: Compiled
 ) -> None:
     """What the microscope reads is what the tracer found."""
-    pytest.importorskip("optiland")
     from newswitch.instrument.compiler import traced_answer
 
     state = {**instrument.initial_state(), "objective.slot": 2, "filter-wheel.slot": 2}
@@ -256,7 +211,6 @@ def test_the_table_follows_a_move_along_the_axis(
     instrument: spec.Instrument, compiled: Compiled
 ) -> None:
     """Scale and blur through the sensitivities, close to tracing it."""
-    pytest.importorskip("optiland")
     from newswitch.instrument.compiler import traced_answer
 
     state = {**instrument.initial_state(), "tube-a.dz": 500.0}
@@ -314,3 +268,24 @@ def test_a_predicted_black_image_is_black(microscope, compiled) -> None:  # noqa
     assert compiled.answer("camera-a", microscope.state).black
     assert np.mean(microscope.image("camera-a")) < 101.0
     microscope.set({"filter-wheel.slot": 1, "laser-488.power": 20.0, "led-625.power": 0.0})
+
+
+def test_compiling_writes_nothing(tmp_path: Path) -> None:
+    """A server works it out when it starts, and a folder stays what its author wrote."""
+    copy = tmp_path / "instrument"
+    shutil.copytree(INSTRUMENT, copy)
+    before = sorted(path.name for path in copy.rglob("*"))
+    compile_instrument(spec.load(copy))
+    assert sorted(path.name for path in copy.rglob("*")) == before
+
+
+def test_a_changed_description_only_takes_loading_it_again(tmp_path: Path) -> None:
+    """There is no table that could be about another microscope."""
+    copy = tmp_path / "instrument"
+    shutil.copytree(INSTRUMENT, copy)
+    state = spec.load(copy).initial_state()
+    before = compile_instrument(spec.load(copy)).answer("camera-b", state).pixel_to_stage[0][0]
+    description = copy / spec.DESCRIPTION
+    description.write_text(description.read_text().replace("f: 200 mm", "f: 100 mm"))
+    after = compile_instrument(spec.load(copy)).answer("camera-b", state).pixel_to_stage[0][0]
+    assert abs(after) > abs(before)

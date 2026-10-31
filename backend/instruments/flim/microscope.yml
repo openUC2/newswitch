@@ -1,0 +1,116 @@
+# FLIM: a point scanner whose detector also times each photon against the laser's pulse, so that
+# every pixel is a histogram of arrival times. See `drives`, and the detector's `microtime` axis.
+# Simulated only: nothing here reads a real point detector yet, and one lifetime holds everywhere.
+#
+# Run it:      NEWSWITCH_CONFIG=instruments/flim just dev
+
+spec: newswitch/instrument/v0
+name: flim
+
+cubes:
+  laser-488:
+    element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true, repetition: 40 MHz}
+    signals:
+      out: {sync: {}}   # a pulse per laser pulse
+    tunes:
+      power: {initial: 0.0, step: 1.0, units: mW}
+
+  dichroic:
+    element: {kind: dichroic, cut: 500 nm}
+
+  galvo:
+    component: generic-galvo-512
+
+  scan-lens:
+    element: {kind: lens, f: 50 mm}
+
+  tube:
+    element: {kind: lens, f: 200 mm}
+
+  objective:
+    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
+
+  stage:
+    element:
+      kind: sample
+      simulations:   # what can be on it; settings.simulation says which is
+        gfp-beads:
+          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02, lifetime: 2.5 ns}
+          transmit: 0.9   # light going straight through (transmitted light)
+          reflect: 0.001  # light coming back the way it came (epi)
+          pattern: {beads: 3600, radius: 10 um}
+    moves:
+      x: {along: x, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
+      y: {along: y, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
+      z: {along: axis, initial: 0.0, step: 100.0, min: -500.0, max: 500.0, speed: 500.0, units: um}
+
+  filter-green:
+    element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
+
+  pinhole:
+    element: {kind: pinhole, diameter: 50 um}
+
+  spad:
+    component: generic-spad-64
+    tunes:   # exposure is the time to scan a frame
+      exposure: {initial: 1000.0, step: 100.0, units: ms}
+      gain: {initial: 0.0, step: 1.0, units: dB}
+      binning: {initial: 1, step: 1}
+
+illumination:
+  - {from: laser-488, to: dichroic}
+  - {from: dichroic, via: reflect, to: galvo}
+  - {from: galvo, to: scan-lens, distance: focus}
+  - {from: scan-lens, to: tube, distance: 250 mm}
+  - {from: tube, to: objective, distance: 220 mm}
+  - {from: objective, to: stage, side: epi, distance: focus}
+
+detection:
+  - {from: stage, to: objective}
+  - {from: objective, to: tube}
+  - {from: tube, to: scan-lens}
+  - {from: scan-lens, to: galvo}
+  - {from: galvo, to: dichroic}
+  - {from: dichroic, via: transmit, to: filter-green}
+  - {from: filter-green, to: pinhole}
+  - {from: pinhole, to: spad}
+
+drives:
+  - {from: galvo.pixel, to: spad.sample}
+  - {from: laser-488.sync, to: spad.sync}
+
+parts:
+  stage: stage
+  sources:
+    1: {cube: laser-488, full_intensity: 100.0}
+  detectors:
+    1: {cube: spad, frame_rate: 1 Hz}
+
+settings:
+  use_virtual_microscope: true
+  simulation: gfp-beads
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: false
+
+ui:
+  catalog: newswitch@2
+  bloks:
+    view-flim:
+      description: 'FLIM: the photons per pixel, summed over arrival time, and the stage.'
+      default: true
+      bsx: |
+        <Html>
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex gap-2 past:hidden">
+                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
+                <LiveView className="h-full" />
+            </div>
+            <StageControl className="locked:opacity-60" />
+        </div>
+        </Html>

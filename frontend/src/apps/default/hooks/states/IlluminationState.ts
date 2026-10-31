@@ -18,6 +18,7 @@ export const IlluminationSchema = z
     slot: z.number(),
     intensity: z.number(),
     wavelength: z.number(),
+    key: z.string().nullable().optional(),
     channel: z.number(),
     max_intensity: z.number(),
     min_intensity: z.number(),

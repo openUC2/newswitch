@@ -29,6 +29,18 @@ class Colormap(str, Enum):
 # manager cannot know stay None. The docstring stays one line: it goes into the generated
 # frontend code, and Python 3.12 and 3.13 indent multi-line docstrings differently.
 @dataclass
+class DetectorAxis:
+    """One axis a detector delivers by itself, through its parts and what is wired to it."""
+
+    name: str
+    size: Optional[int] = None
+    """None: set per acquisition."""
+    step: Optional[float] = None
+    """In the unit of what delivers it: a stage's z in um."""
+    delivered_by: str = ""
+
+
+@dataclass
 class Detector:
     """Shared state for detector parameters."""
 
@@ -53,6 +65,10 @@ class Detector:
     min_gain: float = 0.0
     is_acquiring: bool = False
     data_type: str = "uint8"
+    colors: list[str] = field(default_factory=list)
+    """A color camera's channels by name (an image each per exposure); empty for a mono one."""
+    axes: list[DetectorAxis] = field(default_factory=list)
+    """What it delivers by itself; empty for a detector no instrument describes."""
 
     # --- device: from the configuration, replaced by what the device reports once open
     key: Optional[str] = None
@@ -142,6 +158,8 @@ class Illumination:
     slot: int = 1
     intensity: float = 10000.0
     wavelength: float = 0.0
+    key: Optional[str] = None
+    """Name of the source in the instrument: what an acquisition's stream names it by."""
     channel: int = 1
     max_intensity: float = 100000.0
     min_intensity: float = 0.0

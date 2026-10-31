@@ -1,0 +1,10 @@
+spec: newswitch/component/v0
+description: A generic mono camera with a trigger input and frame and exposure outputs.
+element:
+  kind: sensor
+  axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+signals:
+  out:
+    frame: {}      # a pulse after each frame
+    exposing: {}   # high during an exposure
+  in: [trigger]

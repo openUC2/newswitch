@@ -1,15 +1,9 @@
 # A microscope with every part and no bloks: what the frontend's hooks are generated from
 # (`newswitch.tools.export_schemas`), and what the tests run on. Not a real one.
 #
-# After edits: just compile-reference
 
 spec: newswitch/instrument/v0
 name: complete-microscope
-
-sample:
-  fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
-  transmit: 0.9
-  reflect: 0.001
 
 cubes:
   laser-488:
@@ -23,7 +17,14 @@ cubes:
       power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
 
   stage:
-    element: {kind: sample}
+    element:
+      kind: sample
+      simulations:   # what can be on it; settings.simulation says which is
+        gfp-beads:
+          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          transmit: 0.9
+          reflect: 0.001
+          pattern: {beads: 3600, radius: 10 um}
     moves:
       x: {actuator: stg-x, along: x, initial: 0.0, step: 10.0, min: -50000.0, max: 50000.0, speed: 50000.0, units: um}
       y: {actuator: stg-y, along: y, initial: 0.0, step: 10.0, min: -50000.0, max: 50000.0, speed: 50000.0, units: um}
@@ -87,6 +88,7 @@ parts:
 
 settings:
   use_virtual_microscope: true
+  simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache

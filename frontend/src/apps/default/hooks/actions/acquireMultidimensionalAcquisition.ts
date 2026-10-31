@@ -21,17 +21,17 @@ export type StreamIlluminationOutput = z.infer<typeof StreamIlluminationSchema>;
 export const StreamsSchema = z
   .object({
     __identifier: z.literal('@newswitch/streams').default('@newswitch/streams'),
-    /** Name or slot of the detector to use for this stream (e.g., 'Camera1' or '1') */
-    detector: z
-      .string()
+    /** The detectors that image this stream, by name or slot; each becomes a channel, a color camera one per color */
+    detectors: z
+      .array(z.string())
       .describe(
-        "Name or slot of the detector to use for this stream (e.g., 'Camera1' or '1')",
+        'The detectors that image this stream, by name or slot; each becomes a channel, a color camera one per color',
       ),
-    /** Mapping name for this stream (e.g., 'GFP', 'RFP') to be used in file naming and metadata */
+    /** What this stream shows (e.g., 'GFP', 'RFP'): the start of its channels' labels */
     mapping: z
       .string()
       .describe(
-        "Mapping name for this stream (e.g., 'GFP', 'RFP') to be used in file naming and metadata",
+        "What this stream shows (e.g., 'GFP', 'RFP'): the start of its channels' labels",
       ),
     /** List of illuminations to use for this stream (e.g., [{'source': 'LED1', 'wavelength': 488, 'intensity': 0.8}]) */
     illuminations: z.array(
@@ -41,6 +41,55 @@ export const StreamsSchema = z
     ),
   })
   .superRefine((val, ctx) => {
+    {
+      // len(value) > 0
+      const call = {
+        operation: 'gt',
+        arguments: [
+          {
+            key: 'a',
+            valueLiteral: null,
+            valuePath: null,
+            agentCall: null,
+            utilCall: {
+              operation: 'len',
+              arguments: [
+                {
+                  key: 'a',
+                  valueLiteral: null,
+                  valuePath: 'value',
+                  agentCall: null,
+                  utilCall: null,
+                  valueList: null,
+                  valueDict: null,
+                },
+              ],
+            },
+            valueList: null,
+            valueDict: null,
+          },
+          {
+            key: 'b',
+            valueLiteral: 0,
+            valuePath: null,
+            agentCall: null,
+            utilCall: null,
+            valueList: null,
+            valueDict: null,
+          },
+        ],
+      } as UtilCall;
+      const scope = { value: val['detectors'], dependencies: {} };
+
+      if (!validatorAccepts(call, scope)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'We need at least one detector to acquire this stream',
+          path: ['detectors'],
+        });
+      }
+    }
+
     {
       // len(value) > 0
       const call = {
@@ -92,7 +141,9 @@ export const StreamsSchema = z
     }
   })
   .brand('@newswitch/streams')
-  .describe('Represents which channels to acquire at each position.');
+  .describe(
+    'One lighting of the sample, and the detectors that take an image of it.',
+  );
 export type Streams = z.input<typeof StreamsSchema>;
 export type StreamsOutput = z.infer<typeof StreamsSchema>;
 
@@ -144,7 +195,7 @@ export const StackSchema = z
     z_step: z.number(),
     channels: z.array(
       StreamsSchema.describe(
-        'Represents which channels to acquire at each position.',
+        'One lighting of the sample, and the detectors that take an image of it.',
       ),
     ),
     /** List of hooks to execute at each z-slice (e.g., 'autofocus', 'z_calibration') */
@@ -264,14 +315,12 @@ export const MultidimensionalAcquisitionSchema = z
         'Represents a timepoint in a temporal sequence.',
       ),
     ),
-    /** Base file name for acquired images (e.g., 'experiment1') */
+    /** Name of the datasets created (e.g., 'experiment1'); with several positions, each ends in its own P<n> */
     file_name: z
       .string()
-      .describe("Base file name for acquired images (e.g., 'experiment1')"),
-    /** File format for saving acquired images (e.g., 'TIFF', 'PNG') */
-    file_format: z
-      .string()
-      .describe("File format for saving acquired images (e.g., 'TIFF', 'PNG')"),
+      .describe(
+        "Name of the datasets created (e.g., 'experiment1'); with several positions, each ends in its own P<n>",
+      ),
     /** List of hooks to execute at the start of the acquisition (e.g., 'autofocus', 'z_calibration') */
     m_hooks: z
       .array(MHookUnionSchema)
@@ -338,494 +387,22 @@ export type MultidimensionalAcquisitionOutput = z.infer<
   typeof MultidimensionalAcquisitionSchema
 >;
 
-export const ScaleSchema = z
-  .object({
-    __identifier: z.literal('@newswitch/scale').default('@newswitch/scale'),
-    x: z.number(),
-    y: z.number(),
-    z: z.number(),
-    cached_id: z.string().nullable().optional(),
-    affine_matrix: z.array(z.array(z.number())).nullable().optional(),
-  })
-  .brand('@newswitch/scale')
-  .describe('Represents a scale factor for a 3D volume.');
-export type Scale = z.input<typeof ScaleSchema>;
-export type ScaleOutput = z.infer<typeof ScaleSchema>;
-
-export const ObjectiveKubeStateSchema = z
+export const AcquiredDatasetSchema = z
   .object({
     __identifier: z
-      .literal('@newswitch/objective_kube_state')
-      .default('@newswitch/objective_kube_state'),
-    kube_id: z.string(),
-    slot_id: z.number(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the objective lens (e.g., 'Plan-Apochromat 63x/1.4 Oil DIC M27') */
-    model_name: z
-      .string()
-      .describe(
-        "Model name of the objective lens (e.g., 'Plan-Apochromat 63x/1.4 Oil DIC M27')",
-      )
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the objective lens */
-    model_file: z
-      .string()
-      .describe(
-        'Path to a file containing the physical model of the objective lens',
-      )
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/objective_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type ObjectiveKubeState = z.input<typeof ObjectiveKubeStateSchema>;
-export type ObjectiveKubeStateOutput = z.infer<typeof ObjectiveKubeStateSchema>;
-
-export const DetectorKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/detector_kube_state')
-      .default('@newswitch/detector_kube_state'),
-    kube_id: z.string(),
-    gain: z.number(),
-    exposure_time: z.number(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the detector (e.g., 'Pco Edge 4.2m') */
-    model_name: z
-      .string()
-      .describe("Model name of the detector (e.g., 'Pco Edge 4.2m')")
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the detector */
-    model_file: z
-      .string()
-      .describe('Path to a file containing the physical model of the detector')
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/detector_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type DetectorKubeState = z.input<typeof DetectorKubeStateSchema>;
-export type DetectorKubeStateOutput = z.infer<typeof DetectorKubeStateSchema>;
-
-export const FilterKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/filter_kube_state')
-      .default('@newswitch/filter_kube_state'),
-    kube_id: z.string(),
-    wavelength: z.number(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the objective lens (e.g., 'Plan-Apochromat 63x/1.4 Oil DIC M27') */
-    model_name: z
-      .string()
-      .describe(
-        "Model name of the objective lens (e.g., 'Plan-Apochromat 63x/1.4 Oil DIC M27')",
-      )
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the objective lens */
-    model_file: z
-      .string()
-      .describe(
-        'Path to a file containing the physical model of the objective lens',
-      )
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/filter_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type FilterKubeState = z.input<typeof FilterKubeStateSchema>;
-export type FilterKubeStateOutput = z.infer<typeof FilterKubeStateSchema>;
-
-export const IlluminationKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/illumination_kube_state')
-      .default('@newswitch/illumination_kube_state'),
-    kube_id: z.string(),
-    slot_id: z.number(),
-    intensity: z.number(),
-    wavelength: z.number(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the objective lens (e.g., 'Plan-Apochromat 63x/1.4 Oil DIC M27') */
-    model_name: z
-      .string()
-      .describe(
-        "Model name of the objective lens (e.g., 'Plan-Apochromat 63x/1.4 Oil DIC M27')",
-      )
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the objective lens */
-    model_file: z
-      .string()
-      .describe(
-        'Path to a file containing the physical model of the objective lens',
-      )
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/illumination_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type IlluminationKubeState = z.input<typeof IlluminationKubeStateSchema>;
-export type IlluminationKubeStateOutput = z.infer<
-  typeof IlluminationKubeStateSchema
->;
-
-export const GenericKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/generic_kube_state')
-      .default('@newswitch/generic_kube_state'),
-    kube_id: z.string(),
-    other_metadata: z.record(z.string(), z.string()),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the stage (e.g., 'Stage 100x/0.8 NA') */
-    model_name: z
-      .string()
-      .describe("Model name of the stage (e.g., 'Stage 100x/0.8 NA')")
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the stage */
-    model_file: z
-      .string()
-      .describe('Path to a file containing the physical model of the stage')
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/generic_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type GenericKubeState = z.input<typeof GenericKubeStateSchema>;
-export type GenericKubeStateOutput = z.infer<typeof GenericKubeStateSchema>;
-
-export const StageKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/stage_kube_state')
-      .default('@newswitch/stage_kube_state'),
-    kube_id: z.string(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the stage (e.g., 'Stage 100x/0.8 NA') */
-    model_name: z
-      .string()
-      .describe("Model name of the stage (e.g., 'Stage 100x/0.8 NA')")
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the stage */
-    model_file: z
-      .string()
-      .describe('Path to a file containing the physical model of the stage')
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/stage_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type StageKubeState = z.input<typeof StageKubeStateSchema>;
-export type StageKubeStateOutput = z.infer<typeof StageKubeStateSchema>;
-
-export const DichroicKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/dichroic_kube_state')
-      .default('@newswitch/dichroic_kube_state'),
-    kube_id: z.string(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the dichroic mirror (e.g., 'Dichroic 405/488/561/640 nm') */
-    model_name: z
-      .string()
-      .describe(
-        "Model name of the dichroic mirror (e.g., 'Dichroic 405/488/561/640 nm')",
-      )
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the dichroic mirror */
-    model_file: z
-      .string()
-      .describe(
-        'Path to a file containing the physical model of the dichroic mirror',
-      )
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/dichroic_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type DichroicKubeState = z.input<typeof DichroicKubeStateSchema>;
-export type DichroicKubeStateOutput = z.infer<typeof DichroicKubeStateSchema>;
-
-export const FilterBankKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/filter_bank_kube_state')
-      .default('@newswitch/filter_bank_kube_state'),
-    kube_id: z.string(),
-    slot_id: z.number(),
-    center_wavelength: z.number(),
-    bandwidth: z.number(),
-    transmission: z.number(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the filter bank (e.g., 'Filter Bank 405/488/561/640 nm') */
-    model_name: z
-      .string()
-      .describe(
-        "Model name of the filter bank (e.g., 'Filter Bank 405/488/561/640 nm')",
-      )
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the objective lens */
-    model_file: z
-      .string()
-      .describe(
-        'Path to a file containing the physical model of the objective lens',
-      )
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/filter_bank_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type FilterBankKubeState = z.input<typeof FilterBankKubeStateSchema>;
-export type FilterBankKubeStateOutput = z.infer<
-  typeof FilterBankKubeStateSchema
->;
-
-export const ObjectiveTurretKubeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/objective_turret_kube_state')
-      .default('@newswitch/objective_turret_kube_state'),
-    kube_id: z.string(),
-    slot: z.number(),
-    magnification: z.number(),
-    numerical_aperture: z.number(),
-    /** Affine transformation matrix of the kube */
-    affine_matrix: z
-      .array(z.array(z.number()))
-      .describe('Affine transformation matrix of the kube'),
-    /** Model name of the objective turret (e.g., 'Objective Turret 40x/0.6 NA') */
-    model_name: z
-      .string()
-      .describe(
-        "Model name of the objective turret (e.g., 'Objective Turret 40x/0.6 NA')",
-      )
-      .nullable()
-      .optional(),
-    /** Path to a file containing the physical model of the objective turret */
-    model_file: z
-      .string()
-      .describe(
-        'Path to a file containing the physical model of the objective turret',
-      )
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/objective_turret_kube_state')
-  .describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  );
-export type ObjectiveTurretKubeState = z.input<
-  typeof ObjectiveTurretKubeStateSchema
->;
-export type ObjectiveTurretKubeStateOutput = z.infer<
-  typeof ObjectiveTurretKubeStateSchema
->;
-
-export const KubeUnionSchema = createIndexedUnion([
-  ObjectiveKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  DetectorKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  FilterKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  IlluminationKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  GenericKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  StageKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  DichroicKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  FilterBankKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-  ObjectiveTurretKubeStateSchema.describe(
-    'Data class representing metadata for a kube, including its ID and affine transformation matrix.',
-  ),
-]);
-
-export const LightEdgeStateSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/light_edge_state')
-      .default('@newswitch/light_edge_state'),
-    /** Source identifier (e.g., ID of LED or laser) */
-    source: z.string().describe('Source identifier (e.g., ID of LED or laser)'),
-    /** Target identifier (e.g., ID of sample or detector) */
-    target: z
-      .string()
-      .describe('Target identifier (e.g., ID of sample or detector)'),
-    /** Intensity of the light source (arbitrary units) */
-    intensity: z
-      .number()
-      .describe('Intensity of the light source (arbitrary units)')
-      .nullable()
-      .optional(),
-    /** Polarization state of the light (e.g., 'linear', 'circular') */
-    polarization: z
-      .string()
-      .describe("Polarization state of the light (e.g., 'linear', 'circular')")
-      .nullable()
-      .optional(),
-  })
-  .brand('@newswitch/light_edge_state')
-  .describe(
-    'Data class representing the light path used for an image, including illumination settings.',
-  );
-export type LightEdgeState = z.input<typeof LightEdgeStateSchema>;
-export type LightEdgeStateOutput = z.infer<typeof LightEdgeStateSchema>;
-
-export const LightPathSnapshotSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/light_path_snapshot')
-      .default('@newswitch/light_path_snapshot'),
-    /** Hash of the optical setup of this image: the transformation hash, the active light sources and the filters */
-    hash: z
-      .string()
-      .describe(
-        'Hash of the optical setup of this image: the transformation hash, the active light sources and the filters',
-      ),
-    /** List of kubes representing the optical components in the light path (e.g., objective, detector) */
-    kubes: z
-      .array(KubeUnionSchema)
-      .describe(
-        'List of kubes representing the optical components in the light path (e.g., objective, detector)',
-      ),
-    /** List of edges representing the light path from source to sample */
-    edges: z.array(
-      LightEdgeStateSchema.describe(
-        'Data class representing the light path used for an image, including illumination settings.',
-      ),
-    ),
-    /** Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it */
-    transformation_hash: z
-      .string()
-      .describe(
-        'Hash of what the optics do to a pixel (detector, objective, their poses), which keys the calibration of this light path. Where the sample is, is not part of it',
-      ),
-  })
-  .brand('@newswitch/light_path_snapshot')
-  .describe(
-    'Data class representing the light path used for an image, including illumination settings.',
-  );
-export type LightPathSnapshot = z.input<typeof LightPathSnapshotSchema>;
-export type LightPathSnapshotOutput = z.infer<typeof LightPathSnapshotSchema>;
-
-export const MetadataSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/metadata')
-      .default('@newswitch/metadata'),
-    affine_matrix: z.array(z.array(z.number())),
-    fov_width: z.number(),
-    fov_height: z.number(),
-    /** Data class representing the light path used for an image, including illumination settings. */
-    light_state: LightPathSnapshotSchema.describe(
-      'Data class representing the light path used for an image, including illumination settings.',
-    ),
-    acquisition_time: z.string(),
-    colormap: z.string(),
-    min_value: z.number().nullable().optional(),
-    max_value: z.number().nullable().optional(),
-  })
-  .brand('@newswitch/metadata')
-  .describe(
-    'Data class representing metadata for an image, including its ID and affine transformation matrix.',
-  );
-export type Metadata = z.input<typeof MetadataSchema>;
-export type MetadataOutput = z.infer<typeof MetadataSchema>;
-
-export const ArrayMetadataSchema = z
-  .object({
-    __identifier: z
-      .literal('@newswitch/array_metadata')
-      .default('@newswitch/array_metadata'),
-    min_value: z.number(),
-    max_value: z.number(),
-  })
-  .brand('@newswitch/array_metadata')
-  .describe(
-    'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
-  );
-export type ArrayMetadata = z.input<typeof ArrayMetadataSchema>;
-export type ArrayMetadataOutput = z.infer<typeof ArrayMetadataSchema>;
-
-export const FrameSchema = z
-  .object({
-    __identifier: z.literal('@newswitch/frame').default('@newswitch/frame'),
+      .literal('@newswitch/acquired_dataset')
+      .default('@newswitch/acquired_dataset'),
     id: z.string(),
-    scales: z.array(
-      ScaleSchema.describe('Represents a scale factor for a 3D volume.'),
-    ),
-    /** Data class representing metadata for an image, including its ID and affine transformation matrix. */
-    metadata: MetadataSchema.describe(
-      'Data class representing metadata for an image, including its ID and affine transformation matrix.',
-    ),
-    /** Metadata for a raw array before it is saved as an image, including the light path and acquisition settings. */
-    array_metadata: ArrayMetadataSchema.describe(
-      'Metadata for a raw array before it is saved as an image, including the light path and acquisition settings.',
-    ),
+    name: z.string(),
+    /** Which position of the acquisition it holds, from 0 */
+    position: z
+      .number()
+      .describe('Which position of the acquisition it holds, from 0'),
   })
-  .brand('@newswitch/frame')
-  .describe('Represents a single 3D volume captured by the detector.');
-export type Frame = z.input<typeof FrameSchema>;
-export type FrameOutput = z.infer<typeof FrameSchema>;
+  .brand('@newswitch/acquired_dataset')
+  .describe('A dataset an acquisition created, in the store it went to.');
+export type AcquiredDataset = z.input<typeof AcquiredDatasetSchema>;
+export type AcquiredDatasetOutput = z.infer<typeof AcquiredDatasetSchema>;
 
 // --- Schemas ---
 export const AcquireMultidimensionalAcquisitionArgsSchema = z.object({
@@ -835,10 +412,10 @@ export const AcquireMultidimensionalAcquisitionArgsSchema = z.object({
   ),
 });
 export const AcquireMultidimensionalAcquisitionReturnSchema = z.object({
-  /** The frames, in the order acquired. */
+  /** The datasets created, one per position. */
   return0: z.array(
-    FrameSchema.describe(
-      'Represents a single 3D volume captured by the detector.',
+    AcquiredDatasetSchema.describe(
+      'A dataset an acquisition created, in the store it went to.',
     ),
   ),
 });
@@ -861,25 +438,23 @@ export const AcquireMultidimensionalAcquisitionDefinition: ActionDefinition<
   name: 'acquire_multidimensional_acquisition',
   appKey: 'default',
   description:
-    "Acquire a multidimensional dataset: timepoints x positions x z stacks x channels.\n\nPer timepoint the stage visits each position, then each plane of its stacks, and every\nstream's detector acquires a frame there; hooks (`m_hooks`, `t_hooks`, `p_hooks`,\n`z_hooks`) run at the start, per timepoint, per position and per plane.",
+    'Acquire timepoints x positions x z planes x channels, into one dataset per position.\n\nPer timepoint the stage visits each position, then each plane of its stack, and every stream\nlights the sample for its detectors; hooks (`m_hooks`, `t_hooks`, `p_hooks`, `z_hooks`) run at\nthe start, per timepoint, per position and per plane.',
   argsSchema: AcquireMultidimensionalAcquisitionArgsSchema,
   returnSchema: AcquireMultidimensionalAcquisitionReturnSchema,
   lockKeys: [
     'camera_parameters',
-    'expanse_state',
     'hook_registry',
     'illumination',
-    'io',
     'stage_position',
   ],
 };
 
 /**
- * Acquire a multidimensional dataset: timepoints x positions x z stacks x channels.
+ * Acquire timepoints x positions x z planes x channels, into one dataset per position.
 
-Per timepoint the stage visits each position, then each plane of its stacks, and every
-stream's detector acquires a frame there; hooks (`m_hooks`, `t_hooks`, `p_hooks`,
-`z_hooks`) run at the start, per timepoint, per position and per plane.
+Per timepoint the stage visits each position, then each plane of its stack, and every stream
+lights the sample for its detectors; hooks (`m_hooks`, `t_hooks`, `p_hooks`, `z_hooks`) run at
+the start, per timepoint, per position and per plane.
  */
 export const useAcquireMultidimensionalAcquisition = () => {
   return useAction(AcquireMultidimensionalAcquisitionDefinition);

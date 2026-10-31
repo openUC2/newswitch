@@ -20,20 +20,28 @@ class PositionOrder(str, Enum):
 class StreamIllumination:
     """Represents an illumination channel to acquire."""
 
-    source: str  # Name of the illumination source (e.g., "LED1", "Laser2")
+    source: str  # The source by its name in the instrument (e.g., "laser-488"), or its slot
     wavelength: float  # Wavelength of the illumination in nm
     intensity: float  # Intensity of the illumination (0-1)
 
 
 @dataclass
 class Streams:
-    """Represents which channels to acquire at each position."""
+    """One lighting of the sample, and the detectors that take an image of it."""
 
-    detector: str = model_field(
-        description="Name or slot of the detector to use for this stream (e.g., 'Camera1' or '1')"
+    detectors: list[str] = model_field(
+        default_factory=list,
+        validators=[
+            withValidator(
+                "len(value) > 0",
+                error_message="We need at least one detector to acquire this stream",
+            )
+        ],
+        description="The detectors that image this stream, by name or slot; each becomes a channel, a color camera one per color",
     )
     mapping: str = model_field(
-        description="Mapping name for this stream (e.g., 'GFP', 'RFP') to be used in file naming and metadata"
+        default="",
+        description="What this stream shows (e.g., 'GFP', 'RFP'): the start of its channels' labels",
     )
     # This is using a validator input, which will run on the frontend to ensure the user has entered at least one illumination with valid intensity before allowing them to start the acquisition
     illuminations: list[StreamIllumination] = model_field(
@@ -114,16 +122,21 @@ class MultidimensionalAcquisition:
     )
     file_name: str = model_field(
         default="acquisition",
-        description="Base file name for acquired images (e.g., 'experiment1')",
-    )
-    file_format: str = model_field(
-        default="TIFF",
-        description="File format for saving acquired images (e.g., 'TIFF', 'PNG')",
+        description="Name of the datasets created (e.g., 'experiment1'); with several positions, each ends in its own P<n>",
     )
     m_hooks: list[Hook] = model_field(
         default_factory=list,
         description="List of hooks to execute at the start of the acquisition (e.g., 'autofocus', 'z_calibration')",
     )
+
+
+@dataclass
+class AcquiredDataset:
+    """A dataset an acquisition created, in the store it went to."""
+
+    id: str
+    name: str
+    position: int = model_field(description="Which position of the acquisition it holds, from 0")
 
 
 class ScanOrder(str, Enum):

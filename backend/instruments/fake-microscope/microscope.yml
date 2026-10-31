@@ -3,17 +3,11 @@
 # Nothing here says what impacts what: the compiler works that out by nudging each variable.
 #
 # Run it:      NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev (or: just dev-fake)
-# After edits: just compile-fake
 #
 # The hidden truth about this microscope is in truth.yml, which only the simulator may read.
 
 spec: newswitch/instrument/v0
 name: fake-microscope
-
-sample:
-  fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
-  transmit: 0.9   # light going straight through (transmitted light)
-  reflect: 0.001  # light coming back the way it came (epi)
 
 cubes:
   laser-488:
@@ -27,7 +21,18 @@ cubes:
       power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
 
   stage:
-    element: {kind: sample}
+    element:
+      kind: sample
+      simulations:   # what can be on it; settings.simulation says which is
+        gfp-beads:
+          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          transmit: 0.9   # light going straight through (transmitted light)
+          reflect: 0.001  # light coming back the way it came (epi)
+          pattern: {beads: 3600, radius: 10 um}
+        empty-slide:
+          transmit: 0.95
+          reflect: 0.001
+          pattern: {beads: 0, radius: 10 um}
     moves:
       x: {actuator: stg-x, along: x, initial: 0.0, step: 10.0, min: -2000.0, max: 2000.0, speed: 2000.0, units: um}
       y: {actuator: stg-y, along: y, initial: 0.0, step: 10.0, min: -2000.0, max: 2000.0, speed: 2000.0, units: um}
@@ -120,6 +125,7 @@ parts:
 # How it runs. Relative folders are taken relative to backend/; db_path to the working directory.
 settings:
   use_virtual_microscope: true   # false: the real hardware of a `hardware` section
+  simulation: gfp-beads
   db_path: arkitekt_agent.db     # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache   # cleared on every start

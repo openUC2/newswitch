@@ -2,7 +2,7 @@
 
     uv run python -m newswitch.tools.check_instrument instruments/fake-microscope
 
-Reads the compiled tables, so it needs no optics library. Images land in the instrument's ``out/``.
+Images land in the instrument's ``out/``.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 
 from newswitch.drivers.optics.simulator import SimulatedMicroscope
-from newswitch.instrument.predict import Compiled
+from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.spec import load
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
 
@@ -72,21 +72,44 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("instrument", type=Path, help="the instrument's folder")
     instrument = load(parser.parse_args(argv).instrument)
-    compiled = Compiled.load(instrument)
+    compiled = compile_instrument(instrument)
     out = instrument.folder / "out"
     print(f"=== {len(compiled.states)} combinations, {len(instrument.detectors())} detectors")
 
     print("\n=== What impacts what: calculated, nothing declared this")
-    for row in compiled.impacts:
-        if row["detector"] != "camera-a" and row["variable"] not in (
-            "camera-b.exposure",
-            "tube-a.dz",
+    for row in impacts(instrument, instrument.initial_state()):
+        if (
+            "camera-a" in instrument.detectors()
+            and row["detector"] != "camera-a"
+            and row["variable"] not in ("camera-b.exposure", "tube-a.dz")
         ):
             continue
         changes = ", ".join(f"{k} {v:.3g}" for k, v in row["changes"].items()) or "nothing"
         print(f"  {row['variable']:20} {row['verb']:6} {row['detector']:9} -> {changes}")
 
     state = instrument.initial_state()
+    print("\n=== The logical detectors: what each delivers, from its parts and its wires")
+    for detector in instrument.detectors():
+        axes = ", ".join(
+            f"{axis.name}{'*' if axis.size is None else ''}"
+            for axis in instrument.detector_axes(detector)
+        )
+        print(f"  {detector}: ({axes})")
+    for drive in instrument.drives:
+        print(f"  wire: {drive.source} -> {drive.target}")
+
+    print("\n=== The channels each simulation has: calculated, nothing declared these")
+    for simulation in instrument.sample_holder().simulations:
+        current = {**state, instrument.simulation_key(): simulation}
+        for channel in compiled.channels(current):
+            print(
+                f"  {simulation}: {channel.source} -> {channel.detector}, "
+                f"{channel.light_per_mw:.4g} per mW at {channel.band_nm:.0f} nm"
+            )
+
+    if "camera-a" not in instrument.detectors():
+        return  # what follows compares the fake microscope's parts with its hidden errors
+
     print("\n=== What each detector will see, from the table")
     for slot in (1, 2):
         current = {**state, "filter-wheel.slot": slot}

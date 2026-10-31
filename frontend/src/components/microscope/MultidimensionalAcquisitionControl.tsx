@@ -39,6 +39,7 @@ import {
   useStageState,
 } from "@/apps/default/hooks/states";
 import { cn } from "@/lib/utils";
+import { DetectorPicker } from "./DetectorPicker";
 import { usePauseTask } from "@/apps/default/hooks/usePauseTask";
 import { useResumeTask } from "@/apps/default/hooks/useResumeTask";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -58,8 +59,8 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useCallback, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useCallback, useEffect, useState } from "react";
+import { useFieldArray, useForm, useFormContext } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
@@ -77,27 +78,64 @@ function stringToZSlices(raw: string): number[] {
     .filter((n) => !isNaN(n));
 }
 
+/** Offsets around the position, evenly spaced: anything else is no array, and refused. */
+function zPlanes(step: number, planes: number): number[] {
+  const count = Math.max(planes, 1);
+  const first = -Math.floor(count / 2);
+  return Array.from({ length: count }, (_, index) =>
+    Number(((first + index) * step).toFixed(6)),
+  );
+}
+
+/** How far apart a detector that steps the stage itself puts its planes, if there is one. */
+function drivenZStep(
+  detectors?: { axes?: { name: string; step?: number | null }[] }[],
+): number | undefined {
+  const axes = (detectors ?? []).flatMap((detector) => detector.axes ?? []);
+  return axes.find((axis) => axis.name === "z")?.step ?? undefined;
+}
+
+/** While it is typed, `-5,` must stay as it is: it only parses to what comes before the comma. */
+function ZSlicesInput(props: {
+  value: number[];
+  onChange: (slices: number[]) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <Input
+      value={draft ?? zSlicesToString(props.value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        props.onChange(stringToZSlices(e.target.value));
+      }}
+      onBlur={() => setDraft(null)}
+      placeholder="-5,0,5"
+      className="h-6 text-[10px]"
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Default factories from live state
 // ---------------------------------------------------------------------------
 
 function makeDefaultIllumination(): StreamIllumination {
-  return { source: "LED1", wavelength: 488, intensity: 0.8 };
+  return { source: "1", wavelength: 488, intensity: 0.8 };
 }
 
 function makeDefaultStream(): Streams {
   return {
-    detector: "camera_1",
+    detectors: [],
     mapping: "default",
     illuminations: [makeDefaultIllumination()],
   };
 }
 
-function makeDefaultStack(channels?: Streams[]): Stack {
+function makeDefaultStack(channels?: Streams[], zStep = 1): Stack {
   return {
     z_offset: 0,
-    z_step: 1,
-    z_slices: [-5, -3, -1, 0, 1, 3, 5],
+    z_step: zStep,
+    z_slices: zPlanes(zStep, 11),
     channels: channels ?? [makeDefaultStream()],
     z_hooks: [],
   };
@@ -108,12 +146,13 @@ function makeDefaultPosition(
   y = 0,
   z = 0,
   channels?: Streams[],
+  zStep?: number,
 ): Position {
   return {
     x,
     y,
     z,
-    stacks: [makeDefaultStack(channels)],
+    stacks: [makeDefaultStack(channels, zStep)],
     p_hooks: [],
   };
 }
@@ -134,7 +173,6 @@ function makeDefaultConfig(
     config: {
       timepoints: [makeDefaultTimepoint(positions)],
       file_name: "acquisition_001",
-      file_format: "tiff",
       m_hooks: [],
     },
   };
@@ -180,23 +218,25 @@ export function MultidimensionalAcquisitionControl() {
     const illuminations = illuminationState?.illuminations ?? [];
     const activeIlluminations = illuminations.filter((i) => i.is_active);
 
-    if (activeDetectors.length === 0) {
-      return [makeDefaultStream()];
-    }
-
-    return activeDetectors.map((det) => ({
-      detector: det.name,
-      mapping: det.current_colormap || "default",
-      illuminations:
-        activeIlluminations.length > 0
-          ? activeIlluminations.map((ill) => ({
-              source: ill.kind ?? `slot_${ill.slot}`,
-              wavelength: ill.wavelength ?? 488,
-              intensity: ill.intensity / (ill.max_intensity || 100),
-            }))
-          : [makeDefaultIllumination()],
-    }));
+    // One stream: what is lit now, seen by every active detector
+    return [
+      {
+        detectors: activeDetectors.map((det) => det.name),
+        mapping: "default",
+        illuminations:
+          activeIlluminations.length > 0
+            ? activeIlluminations.map((ill) => ({
+                source: ill.key ?? String(ill.slot),
+                wavelength: ill.wavelength ?? 488,
+                intensity: ill.intensity / (ill.max_intensity || 100),
+              }))
+            : [makeDefaultIllumination()],
+      },
+    ];
   }, [cameraState, illuminationState]);
+
+  // A detector that steps the stage itself says how far apart the planes are.
+  const drivenStep = drivenZStep(cameraState?.detectors);
 
   // Build position from current state
   const buildPositionFromState = useCallback((): Position => {
@@ -205,8 +245,9 @@ export function MultidimensionalAcquisitionControl() {
       stageState?.y ?? 0,
       stageState?.z ?? 0,
       buildChannelsFromState(),
+      drivenStep,
     );
-  }, [stageState, buildChannelsFromState]);
+  }, [stageState, buildChannelsFromState, drivenStep]);
 
   // Build defaults from current microscope state
   const buildDefaultsFromState = useCallback((): FormValues => {
@@ -223,6 +264,26 @@ export function MultidimensionalAcquisitionControl() {
     control: form.control,
     name: "config.timepoints",
   });
+
+  // Here and not in a stack's editor: what is sent is the form, editor open or not.
+  // Only a stack not on the step yet, so that planes typed on it stay as they are.
+  useEffect(() => {
+    if (drivenStep === undefined) return;
+    form.getValues("config.timepoints").forEach((timepoint, t) => {
+      timepoint.positions.forEach((position, p) => {
+        position.stacks.forEach((stack, s) => {
+          if (stack.z_step === drivenStep) return;
+          const base =
+            `config.timepoints.${t}.positions.${p}.stacks.${s}` as const;
+          form.setValue(`${base}.z_step`, drivenStep);
+          form.setValue(
+            `${base}.z_slices`,
+            zPlanes(drivenStep, stack.z_slices?.length || 11),
+          );
+        });
+      });
+    });
+  }, [drivenStep, form]);
 
   // Ensure indices stay valid
   const safeTP = Math.min(
@@ -343,21 +404,6 @@ export function MultidimensionalAcquisitionControl() {
                     />
                   </FormControl>
                   <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="config.file_format"
-              render={({ field }) => (
-                <FormItem className="w-20">
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder="tiff"
-                      className="h-8 text-sm"
-                    />
-                  </FormControl>
                 </FormItem>
               )}
             />
@@ -752,9 +798,7 @@ function PositionEditor({
             name={`config.timepoints.${timepointIndex}.positions.${positionIndex}.${axis}`}
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[10px] uppercase">
-                  {axis} (µm)
-                </FormLabel>
+                <FormLabel className="text-[10px]">{axis} (µm)</FormLabel>
                 <FormControl>
                   <Input
                     type="number"
@@ -827,6 +871,26 @@ function StackEditor({
   const stackBase =
     `config.timepoints.${timepointIndex}.positions.${positionIndex}.stacks.${stackIndex}` as const;
 
+  const { getValues, setValue } = useFormContext<FormValues>();
+  const { data: cameraState } = useCameraState({ subscribe: true });
+  const drivenStep = drivenZStep(cameraState?.detectors);
+
+  const spacePlanes = useCallback(
+    (step: number) => {
+      const slices = getValues(`${stackBase}.z_slices`) ?? [];
+      setValue(`${stackBase}.z_slices`, zPlanes(step, slices.length || 11));
+    },
+    [getValues, setValue, stackBase],
+  );
+
+  // A stack added while this is open starts on the default step.
+  useEffect(() => {
+    if (drivenStep === undefined) return;
+    if (getValues(`${stackBase}.z_step`) === drivenStep) return;
+    setValue(`${stackBase}.z_step`, drivenStep);
+    spacePlanes(drivenStep);
+  }, [drivenStep, getValues, setValue, spacePlanes, stackBase]);
+
   return (
     <div className="rounded-lg border p-2 space-y-2 bg-muted/20">
       <div className="flex items-center justify-between">
@@ -882,12 +946,15 @@ function StackEditor({
               <FormControl>
                 <Input
                   type="number"
-                  step="0.1"
-                  min="0.01"
+                  step="any"
+                  min="0"
+                  disabled={drivenStep !== undefined}
                   value={field.value}
-                  onChange={(e) =>
-                    field.onChange(parseFloat(e.target.value) || 1)
-                  }
+                  onChange={(e) => {
+                    const step = parseFloat(e.target.value);
+                    field.onChange(step || 1);
+                    if (step > 0) spacePlanes(step);
+                  }}
                   className="h-6 text-[10px]"
                 />
               </FormControl>
@@ -903,13 +970,9 @@ function StackEditor({
                 {t("acquisition.slices")}
               </FormLabel>
               <FormControl>
-                <Input
-                  value={zSlicesToString(field.value ?? [])}
-                  onChange={(e) =>
-                    field.onChange(stringToZSlices(e.target.value))
-                  }
-                  placeholder="-5,0,5"
-                  className="h-6 text-[10px]"
+                <ZSlicesInput
+                  value={field.value ?? []}
+                  onChange={field.onChange}
                 />
               </FormControl>
             </FormItem>
@@ -1001,16 +1064,17 @@ function ChannelEditor({
         </Button>
         <FormField
           control={control}
-          name={`${basePath}.detector`}
+          name={`${basePath}.detectors`}
           render={({ field }) => (
             <FormItem className="flex-1">
               <FormControl>
-                <Input
-                  {...field}
-                  placeholder={t("acquisition.detector")}
-                  className="h-6 text-[10px]"
+                <DetectorPicker
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  size="xs"
                 />
               </FormControl>
+              <FormMessage />
             </FormItem>
           )}
         />

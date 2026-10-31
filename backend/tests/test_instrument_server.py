@@ -1,8 +1,5 @@
 """The server running on an instrument: its description is all it needs."""
 
-import shutil
-import subprocess
-import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -148,33 +145,6 @@ def test_a_quick_move_does_not_flood_the_clients(microscope: Microscope) -> None
     assert microscope.stage_state.x == pytest.approx(100.0)
 
 
-def test_rewording_a_comment_does_not_outdate_the_tables(tmp_path: Path) -> None:
-    """Only what a description says does."""
-    copy = tmp_path / "instrument"
-    shutil.copytree(INSTRUMENT, copy)
-    description = copy / spec.DESCRIPTION
-    description.write_text("# reworded\n" + description.read_text())
-    assert spec.load(copy).digest == spec.load(INSTRUMENT).digest
-
-
-def test_rewiring_it_does_not_outdate_the_tables(tmp_path: Path) -> None:
-    """The ``hardware`` section is no part of the optics the tables are about."""
-    copy = tmp_path / "instrument"
-    shutil.copytree(INSTRUMENT, copy)
-    description = copy / spec.DESCRIPTION
-    description.write_text(description.read_text() + "\nhardware: {cameras: {}}\n")
-    assert spec.load(copy).digest == spec.load(INSTRUMENT).digest
-
-
-def test_changing_its_ui_does_not_outdate_the_tables(tmp_path: Path) -> None:
-    """The bloks are no part of the optics the tables are about."""
-    copy = tmp_path / "instrument"
-    shutil.copytree(INSTRUMENT, copy)
-    description = copy / spec.DESCRIPTION
-    description.write_text(description.read_text().replace("Minimal: the live", "Small: the live"))
-    assert spec.load(copy).digest == spec.load(INSTRUMENT).digest
-
-
 def test_its_objectives_have_a_control() -> None:
     """Which the blok in its description names."""
     ui = spec.load(INSTRUMENT).ui
@@ -192,17 +162,6 @@ def test_the_ui_is_the_bloks_it_holds() -> None:
     assert [name for name, blok in registry.get_declared_bloks().items() if blok.default] == [
         "view-fluorescence"
     ]
-
-
-def test_the_server_starts_without_the_optics_library() -> None:
-    """Only compiling needs it."""
-    code = (
-        "import sys; from pathlib import Path; from main_fastapi import create_fastapi_registry; "
-        "from newswitch.instrument import spec; "
-        "create_fastapi_registry(spec.load(Path('instruments/fake-microscope'))); "
-        "assert 'optiland' not in sys.modules"
-    )
-    subprocess.run([sys.executable, "-W", "ignore", "-c", code], check=True, cwd=BACKEND)
 
 
 # --- what it does
@@ -390,3 +349,52 @@ def test_an_uncalibrated_image_is_placed_by_what_the_design_predicts(
     )
     assert a.fov_width == pytest.approx(512 * 4.998, rel=0.01)
     assert b.fov_width == pytest.approx(512 * 2.5, rel=0.01)
+
+
+# --- what the frontend is served
+
+
+@pytest.mark.parametrize(
+    "folder",
+    sorted(path.parent for path in (BACKEND / "instruments").glob("*/microscope.yml")),
+    ids=lambda path: path.name,
+)
+def test_every_instruments_bloks_can_be_served(folder: Path) -> None:
+    """Checked strictly only here: a refused blok drops the frontend to its built-in view."""
+    registry = create_fastapi_registry(spec.load(folder)).registry
+    assert registry.snapshot().get_declared_bloks() is not None
+
+
+def test_a_blok_that_cannot_be_served_is_caught_by_that_check(tmp_path: Path) -> None:
+    """A loop over objects with no key passes when a server starts, and fails when it is served."""
+    folder = BACKEND / "instruments" / "light-sheet"
+    description = (folder / spec.DESCRIPTION).read_text()
+    keyed = 'items={camera.axes} let="dim" key={dim.name}'
+    assert keyed in description
+    path = tmp_path / spec.DESCRIPTION
+    path.write_text(description.replace(keyed, 'items={camera.axes} let="dim"'))
+    registry = create_fastapi_registry(spec.load(path)).registry
+    with pytest.raises(ValueError, match="has no key"):
+        registry.snapshot().get_declared_bloks()
+
+
+def test_the_light_sheet_has_its_own_views() -> None:
+    """Its sheet first, then a stack and the stage; none of them a generic one."""
+    ui = spec.load(BACKEND / "instruments" / "light-sheet").ui
+    assert ui is not None
+    assert list(ui.bloks) == ["view-sheet", "view-stack", "view-stage"]
+    assert ui.bloks["view-sheet"].default
+    sheet = ui.bloks["view-sheet"].bsx
+    assert "self.StageState.z" in sheet and "camera.axes" in sheet and "<LiveView" in sheet
+    assert "<MultidimensionalAcquisitionControl" in ui.bloks["view-stack"].bsx
+
+
+def test_the_point_scanner_has_its_own_views() -> None:
+    """The scan first, then a stack and the stage; none of them a generic one."""
+    ui = spec.load(BACKEND / "instruments" / "point-scanner").ui
+    assert ui is not None
+    assert list(ui.bloks) == ["view-scan", "view-stack", "view-stage"]
+    assert ui.bloks["view-scan"].default
+    scan = ui.bloks["view-scan"].bsx
+    assert "self.StageState.z" in scan and "pmt.axes" in scan and "<LiveView" in scan
+    assert "<MultidimensionalAcquisitionControl" in ui.bloks["view-stack"].bsx

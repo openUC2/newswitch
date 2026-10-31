@@ -552,7 +552,7 @@ a fake lovekit client.
 | `main.py` | **Start here**: the steps both ways of serving share (settings, instrument, registry, serve); `python main.py fastapi\|arkitekt`. |
 | `main_fastapi.py` | Served by FastAPI: the startup hook `provide_frame_broadcaster` (a `FrameBroadcaster` as the `FrameSink`), `create_fastapi_registry(instrument, with_mikro)` → `App` (`create_registry`, that startup hook, the mikro part when asked for, `declare_ui`), `create_app` (`configure_fastapi`, auth, accounts, the routers of `newswitch/routes/`), the uvicorn factory `create`, `main`. |
 | `main_arkitekt.py` | Served as an arkitekt agent: `cameras_of(instrument)`, the startup hook `provide_lovekit_sink` (a `LovekitSink` as the `FrameSink`, and `CameraStreams`), `create_arkitekt_registry(instrument)` → `App` (`create_registry` with `lovekit_service` and `mikro_service`, the state `CameraStreams`, that startup hook, `publish_camera_streams`, `declare_agent_ui`), `create(current)`, `main` (`arkitekt.run`). |
-| `newswitch/tools/` | Tools beside the servers: `compile_instrument.py` (`just compile-fake`, `just compile-reference`), `check_instrument.py` (prediction, measurement and truth compared), `export_schemas.py` (`just export-schemas`: `create_fastapi_registry` on `REFERENCE_INSTRUMENT`, its registry snapshot written to `frontend/schemas/`), `accounts.py` (account recovery from a shell). |
+| `newswitch/tools/` | Tools beside the servers: `check_instrument.py` (prediction, measurement and truth compared), `export_schemas.py` (`just export-schemas`: `create_fastapi_registry` on `REFERENCE_INSTRUMENT`, its registry snapshot written to `frontend/schemas/`), `accounts.py` (account recovery from a shell). |
 | `newswitch/settings.py` | `Settings` (the app context: `use_virtual_microscope`, `db_path`, `instrument`, `camera_recording_dir`, `camera_debug_window`, `image_dir`, `cache_dir`), the description's `settings` section, `load_settings` (`NEWSWITCH_CONFIG` names the instrument; unset or invalid, a `SpecError`) and `load_devices(config)` → `Instrument \| None`: the settings and instrument both servers start from. |
 | `newswitch/microscope/registry.py` | `create_registry(instrument, services=())`: creates a fresh `App("newswitch", app_context=Run, services=services)` and merges the part registries the instrument has; no UI, no streams (the entry files add those). |
 | `newswitch/microscope/apps/` | One registry per part, an `app` each: `models`, `core` (with the context `FrameSink`, which the entry file provides), `stage`, `illumination`, `detector`, `objective`, `filter_bank`, `uc2`, and what needs several parts: `focus`, `acquisition`, `uc2_stage`. Plain module-level hooks; a part merges the parts it names things of. |
@@ -561,6 +561,7 @@ a fake lovekit client.
 | `newswitch/microscope/locks.py` | The lock names, one constant per part (and shared service): `STAGE` = `"stage_position"`, `ILLUMINATION`, `DETECTOR` = `"camera_parameters"`, `OBJECTIVE`, `FILTER_BANK`, `GALVO`, `IO`, `HOOKS` = `"hook_registry"`, `EXPANSE` = `"expanse_state"`, `CACHE`. |
 | `newswitch/routes/` | The routes `main_fastapi.py` serves beside the agent (section 6.1), each a module-level `router`: `liveview.py` (`/stream` websockets, from the running `FrameBroadcaster`), `files.py` (`/files/...`, the `IOManager`), `cache.py` (`/cache/...`, the `CacheManager`); `__init__.py`: `running_context(connection, cls)`, the running agent's context for a request or websocket (503 before startup; the live view closes with 1013). |
 | `newswitch/actions/` | Plain action, background and shutdown functions, one module per part, registered by the part registries of `newswitch/microscope/apps/`: `core.py` (`clear_expanse`), `stage.py`, `illumination.py`, `detector.py` (also `run_detector_loop`, `close_detector`), `objective.py`, `filter_bank.py`, `uc2.py` (home/stop/LED/galvo/node-scan actions, `run_uc2_bus`, `run_uc2_event_dispatch`). |
+| `newswitch/protocols/dataset_store.py`, `newswitch/services/mikro_store.py` | Where a multidimensional acquisition goes: `DatasetStore`, provided by the entry file like `FrameSink`. `MikroDatasetStore` writes one `ArrayDataset` of `(t, c, z, y, x)` per stage position, with its anchors and its place in the stage's space; `NoDatasetStore` refuses, when a server has no mikro. |
 | `newswitch/routines/` | Multi-step procedures registered as actions: `region_scan.py`, `multidimensional_acquisition.py`, `calibration.py`, `autofocus.py`; `common.py` holds what they share (`z_sweep`, `field_of_view`, `acquire_step`). The template for porting ImSwitch "apps".; `affine_matrix.py` (pixel shifts, the pixel→stage affine). |
 | `newswitch/protocols/` | The **contracts**: the manager protocols only (`app.register_context`), one module per part or service — `stage`, `illumination`, `detector` (+ `DetectorFrame`), `objective`, `filter_bank`, `uc2` (`UC2BusManager`), `acquisition`, `cache`, `calibration`, `expanse`, `io`, `light_path`, `metadata`, `hook_manager` (+ `HookContext`, `UnsupportedHook`). |
 | `newswitch/states/` | The states (`app.register_state`), one module per state: `StageState`, `IlluminationState`, `CameraState`, `ObjectiveState`, `FilterBankState`, `UC2State`, `IOState`, `HookState`, `ExpanseState`, `CalibrationState`, `LightPathState`, `AutofocusState`. |
@@ -573,7 +574,7 @@ a fake lovekit client.
 | `newswitch/services/` | The managers every microscope shares: `acquisition.py`, `cache/`, `calibration.py`, `expanse.py`, `io/`, `light_path.py`, `metadata.py`, `hooks/` (`manager.py`: `PythonHookManager`; `software_autofocus.py`). |
 | `newswitch/broadcasters/` | The `FrameSink` protocol (`sink.py`, runtime-checkable; the context the detectors stream to, provided by the entry file), `FrameBroadcaster` (`frame.py`, the newest frame per slot) and the live view's message format (`wire.py`) for `main_fastapi.py`; `lovekit.py` for `main_arkitekt.py` (`LovekitSink`, `CameraStream`, `CameraStreams`, `publish_camera_streams`, `MAX_FPS`; not imported by the package). |
 | `newswitch/accounts/` | Users and auth of the FastAPI server: `auth.py` (login, tokens, middleware), `store.py` (the account database), `routes.py` (account management). (Live view, files and cache are in `newswitch/routes/`.) |
-| `newswitch/reference/complete-microscope/` | The reference microscope (`microscope.yml`, `compiled.json`): every part, no views; what the frontend's schemas are exported from. |
+| `newswitch/reference/complete-microscope/` | The reference microscope (`microscope.yml`): every part, no views; what the frontend's schemas are exported from. |
 | `instruments/` | The microscopes newswitch runs, a folder each, only ever read (see `instruments/README.md`): `fake-microscope/`, the default in the root `.env`; `cam-test/`, one simulated uc2_cam_py camera, in real-hardware mode. |
 | `tests/` | pytest; agent-level tests drive the app through `AsyncAgentTestClient` (`arkitekt_fastapi.testing`). |
 
@@ -599,21 +600,27 @@ restarts from each variable's `initial`. It runs in both ways of serving (sectio
 
 - `microscope.yml` holds cubes around optical elements, what an actuator does to each (moves, swaps, tunes) and
   how light connects them. A sensor's size is on its axes and nowhere else. Nothing says what impacts what.
-- `newswitch/instrument/compiler.py` works that out: it ray traces every combination of swaps with optiland and
-  nudges every variable. It writes `compiled.json`, which is committed. `just compile-fake` (`just compile-reference`
-  for the reference microscope) runs it again, needed after a change to what the description says; a simulated run
-  refuses tables of another version of it, a real one runs without a predicted pixel size, with a warning. Optiland
-  is never installed with the server, and `tracing.py` is the only module importing it.
+- The sample holder is a cube too: its `simulations` name what can be on it, and `settings.simulation` picks one.
+  Nothing declares a channel either: `Compiled.channels` reads from the tables which source reaches which detector.
+- A cube can name an entry of the components library (`newswitch/instrument/components/`) for its element and its
+  hardware signals, and `drives` wires signals together; all of it is validated when the description is parsed. A
+  logical detector is a physical detector and what is wired to it: `Instrument.detector_axes` computes what it
+  delivers, and a multidimensional acquisition only loops over the rest, so a detector that steps the stage itself
+  takes a stack as one sweep (`DetectorManager.capture_stack`). Point scanners, light sheets and FLIM are built on
+  this (`backend/instruments/README.md`), in simulation only.
+- `newswitch/instrument/compiler.py` works that out when a server starts: it ray traces every combination of swaps
+  with optiland, and keeps the result in memory. Nothing is written or cached, so a changed description only takes a
+  restart. `tracing.py` is the only module importing optiland. What each variable impacts (`compiler.impacts`, nudging
+  every one) is only worked out for `tools/check_instrument.py`.
 - The top-level `hardware:` section (`newswitch/instrument/hardware.py`: boards, actuators, cameras; documented in
-  `backend/instruments/README.md`) says what the cubes' actuator names are wired to. It is not part of the digest, so
-  rewiring outdates no table. A simulated run ignores it, apart from a board giving it the UC2 actions on a
+  `backend/instruments/README.md`) says what the cubes' actuator names are wired to. A simulated run ignores it, apart from a board giving it the UC2 actions on a
   `VirtualUC2Bus`. A real one (`use_virtual_microscope: false`) refuses to start until everything with a control is
   wired (`check_wired`) and reaches the board over its `transport` (`rest`, `canopen`).
 - `newswitch/instrument/parts.py` gives the models the managers take and the cameras to open (`cameras`). The bloks
   are the description's own `ui` and `agent_ui` sections. The detectors are a `UC2DetectorManager` for wired cameras on real hardware,
   otherwise an `OpticsDetectorManager`.
 - `newswitch/drivers/optics/` is the simulator. Only it may read `truth.yml`, the errors the real thing has and
-  the description does not know of, and `compiled.truth.json`, the same trace with those applied. Calibration has to
+  the description does not know of, which it traces with those applied. Calibration has to
   find them from the images: `python -m newswitch.tools.check_instrument instruments/fake-microscope` compares
   prediction, measurement and truth.
 
@@ -650,7 +657,7 @@ everything that has been imaged. `ExpanseState` (`states/expanse.py`) holds
 placed `Image`s, each with its stage-space affine transform (position, pixel
 size, orientation come from the `MetadataManager`/Kube optics model: the 4×4
 pixel→stage affine `calibrate_light_path` measured for the frame's light path, or
-without one what the compiled tables predict, or without those the nominal pixel size,
+without one what the optics predict, or without those the nominal pixel size,
 the detector's `pixel_size_um` / the objective's magnification).
 `ExpanseManager` adds/clears entries; acquisitions push their frames into it.
 The frontend renders it as the three.js scene in `frontend/src/components/stage/`

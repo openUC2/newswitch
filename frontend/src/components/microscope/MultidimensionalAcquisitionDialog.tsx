@@ -38,6 +38,7 @@ import {
   type StageState,
 } from "@/apps/default/hooks/states";
 import { cn } from "@/lib/utils";
+import { DetectorPicker } from "./DetectorPicker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ChevronRight,
@@ -75,12 +76,12 @@ function stringToZSlices(raw: string): number[] {
 // ---------------------------------------------------------------------------
 
 function makeDefaultIllumination(): StreamIllumination {
-  return { source: "LED1", wavelength: 488, intensity: 0.8 };
+  return { source: "1", wavelength: 488, intensity: 0.8 };
 }
 
 function makeDefaultStream(): Streams {
   return {
-    detector: "camera_1",
+    detectors: [],
     mapping: "default",
     illuminations: [makeDefaultIllumination()],
   };
@@ -90,7 +91,7 @@ function makeDefaultStack(channels?: Streams[]): Stack {
   return {
     z_offset: 0,
     z_step: 1,
-    z_slices: [-5, -3, -1, 0, 1, 3, 5],
+    z_slices: [-4, -2, 0, 2, 4],
     channels: channels ?? [makeDefaultStream()],
     z_hooks: [],
   };
@@ -127,7 +128,6 @@ function makeDefaultConfig(
     config: {
       timepoints: [makeDefaultTimepoint(positions)],
       file_name: "acquisition_001",
-      file_format: "tiff",
       m_hooks: [],
     },
   };
@@ -167,24 +167,21 @@ export function MultidimensionalAcquisitionDialog() {
     const illuminations = illuminationState?.illuminations ?? [];
     const activeIlluminations = illuminations.filter((i) => i.is_active);
 
-    // Build channels from active detectors + illumination combos
-    const channels: Streams[] =
-      activeDetectors.length > 0
-        ? activeDetectors.map((det) => ({
-            detector: det.name,
-            mapping: det.current_colormap || "default",
-            illuminations:
-              activeIlluminations.length > 0
-                ? activeIlluminations.map((ill) => {
-                    return {
-                      source: ill.kind ?? `slot_${ill.slot}`,
-                      wavelength: ill.wavelength ?? 488,
-                      intensity: ill.intensity / (ill.max_intensity || 100),
-                    };
-                  })
-                : [makeDefaultIllumination()],
-          }))
-        : [makeDefaultStream()];
+    // One stream: what is lit now, seen by every active detector
+    const channels: Streams[] = [
+      {
+        detectors: activeDetectors.map((det) => det.name),
+        mapping: "default",
+        illuminations:
+          activeIlluminations.length > 0
+            ? activeIlluminations.map((ill) => ({
+                source: ill.key ?? String(ill.slot),
+                wavelength: ill.wavelength ?? 488,
+                intensity: ill.intensity / (ill.max_intensity || 100),
+              }))
+            : [makeDefaultIllumination()],
+      },
+    ];
 
     const pos = makeDefaultPosition(
       stageState?.x ?? 0,
@@ -292,21 +289,6 @@ export function MultidimensionalAcquisitionDialog() {
                     </FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="acquisition_001" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="config.file_format"
-                render={({ field }) => (
-                  <FormItem className="w-28">
-                    <FormLabel className="text-xs">
-                      {t("acquisition.format")}
-                    </FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="tiff" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -769,8 +751,8 @@ function StackEditor({
               <FormControl>
                 <Input
                   type="number"
-                  step="0.1"
-                  min="0.01"
+                  step="any"
+                  min="0"
                   value={field.value}
                   onChange={(e) =>
                     field.onChange(parseFloat(e.target.value) || 1)
@@ -880,15 +862,19 @@ function ChannelEditor({
       <div className="flex gap-2 items-end">
         <FormField
           control={control}
-          name={`${basePath}.detector`}
+          name={`${basePath}.detectors`}
           render={({ field }) => (
             <FormItem className="flex-1">
               <FormLabel className="text-xs">
                 {t("acquisition.detector")}
               </FormLabel>
               <FormControl>
-                <Input {...field} placeholder="camera_1" />
+                <DetectorPicker
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                />
               </FormControl>
+              <FormMessage />
             </FormItem>
           )}
         />

@@ -2,7 +2,7 @@
 
 The cubes say what the microscope is and name their actuators; this section says what those names
 are wired to. It is read only with ``use_virtual_microscope: false``, and is no part of what the
-compiler looks at, so rewiring outdates no table::
+compiler looks at::
 
     hardware:
       boards:

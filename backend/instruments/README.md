@@ -1,7 +1,9 @@
 # Instruments
 
-An instrument is a folder: its description (`microscope.yml`), the optics files it names, and what
-the compiler found (`compiled.json`). **newswitch only ever reads it.** What changes while it runs
+An instrument is a folder: its description (`microscope.yml`) and the optics files it names.
+**newswitch only ever reads it.** What it does is worked out from those when a server starts, ray
+tracing with optiland, and kept in memory: nothing is written or cached, so a changed description
+only takes a restart. What changes while it runs
 (exposure, gain, positions) lives in its states and starts from each variable's `initial`.
 
 ```bash
@@ -35,6 +37,110 @@ parts:
 
 A source's `power` and a sensor's `exposure`, `gain` and `binning` are tunes every such cube must have.
 
+## What is on the stage
+
+The sample holder is a cube like any other. Its `simulations` name what can be on it, at least one,
+and `settings.simulation` picks which is. That is what a simulated run draws, and what predictions
+assume on real hardware too.
+
+```yaml
+stage:
+  element:
+    kind: sample
+    simulations:
+      gfp-beads:
+        fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+        transmit: 0.9   # light going straight through (transmitted light)
+        reflect: 0.001  # light coming back the way it came (epi)
+        pattern: {beads: 3600, radius: 10 um}   # what is drawn: random beads
+      empty-slide:      # no fluorophore: it emits nothing
+        transmit: 0.95
+        reflect: 0.001
+        pattern: {beads: 0, radius: 10 um}
+```
+
+The compiler covers every simulation when a server starts. Calibration needs something to correlate: on an empty slide its arithmetic gives a meaningless
+pixel size, without an error. An epi source's light is drawn from the beads, also what a sample
+reflects: a mirror is predicted right, but drawn dark.
+
+Channels are not declared. A channel is a source whose light gets through the sample to a detector,
+which the optics decide: the cubes, `illumination` and `detection` are the same for every sample, and
+the sample's numbers say what comes out. Light too faint to see (`CHANNEL_LIGHT`) is no channel.
+`Compiled.channels` lists them for a state, and
+`newswitch.tools.check_instrument` prints them per simulation.
+
+## What drives what
+
+A part is an element, and the hardware signals it has: what it sends (`out`, each with the `axes` its
+events walk through) and what it accepts (`in`). A cube states them itself, or names an entry of the
+components library (`newswitch/instrument/components/`), which states both.
+
+```yaml
+camera:
+  component: generic-camera-512   # instead of element and signals
+  tunes: {...}
+stage:
+  element: {...}
+  signals:
+    in: [z]                       # an input named after a move steps that move
+```
+
+`drives` connects a sent signal to an accepted one. All of this is checked when the description is
+parsed: an unknown component, a signal a part does not have, or a wire that cannot work stops the start.
+
+```yaml
+drives:
+  - {from: galvo.pixel, to: pmt.sample}             # the scan makes the detector's image
+  - {from: laser-488.sync, to: spad.sync}           # arrival times are measured from the pulse
+  - {from: camera.frame, to: stage.z, by: 0.5 um}   # each frame steps the stage
+  - {from: camera.exposing, to: laser-488.power}    # declared only: nothing executes this yet
+```
+
+This is not the `hardware` section: `hardware` says how a name reaches a board, and `drives` what the
+parts do to each other, which is also what the compiler reads.
+
+**A logical detector** is a physical detector and what is wired to it, and what it delivers is its
+axes. Nothing declares them: they follow from its parts and wires, and
+`newswitch.tools.check_instrument` prints them. An acquisition only loops over what a detector does
+not deliver.
+
+| Detector | Delivers | From |
+| --- | --- | --- |
+| A camera | `y, x` | its sensor |
+| A color camera | `c, y, x` | its `colors` and sensor |
+| A point detector and a scan | `y, x` | the scan |
+| The same, timing its photons | `m, y, x` | its `microtime` axis, and the scan |
+| Whatever a wire steps the stage for | `z`, and the above | `frame -> stage.z`, with a size per acquisition |
+
+A stack whose z a detector delivers is one sweep per stream: the routine brings the stage to the first
+plane, and the wire does the rest. So its plane spacing has to be the wire's `by`, its detector takes
+the stack alone, nothing can run between its planes (`z_hooks`), and its planes have to be within the
+stage's travel. All of that is refused before anything moves. A live view never steps the stage.
+
+Real hardware refuses every wire for now, and any point detector: cameras run free, with no trigger,
+and nothing reads a point detector. All of this runs in simulation only.
+
+## Scanners, light sheets and FLIM
+
+**A point scanner** has a `scanner` with `axes` of `size` and `step` (the optical angle, not the
+mirror's, which is half of it), a `pinhole`, and a `point_detector` wired to the scan. The pixel size
+follows from a thin-lens ray along the illumination route from the scanner to the sample, so every
+edge on it needs a `distance`, every lens its `f`, and the last lens its `na`. A point detector's
+`exposure` is the time to scan a frame. The sample is flat, so the pinhole rejects nothing: moving z
+only blurs.
+
+**A light sheet** is an illumination edge into the sample with `side: orthogonal` and `along: x` or
+`y`, from a lens with an `na`, which alone says how thin the sheet is and how far it reaches (a Gaussian
+beam). It only gives a fluorescence channel. The image fades along `along`, and a flat sample goes dark
+as it leaves the sheet, which is all a flat sample can show: a stack does not slice through a volume.
+Scanned beams, tilted sheets and two sheets for one source are not modelled.
+
+**FLIM** is a `point_detector` with `axes: {microtime: {size, step}}`, a wire to its `sync` from a
+source with a `repetition`, a window that fits in a pulse period, and a `lifetime` on every simulation's
+fluorophore. An acquisition's dataset then has the axes `(t, c, m, z, y, x)`, and what expects one image
+(a live view) gets the sum over `m`. One lifetime holds everywhere, with no instrument response or
+pile-up. Detectors with and without `m` cannot share a dataset.
+
 ## How it runs
 
 `settings` has every key, with no built-in defaults. Relative folders start at `backend/`, `db_path`
@@ -43,6 +149,7 @@ at the working directory.
 ```yaml
 settings:
   use_virtual_microscope: true       # false: the real hardware of the `hardware` section
+  simulation: gfp-beads              # which of the holder's `simulations` is on it
   db_path: arkitekt_agent.db         # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images   # where the file IO writes
   cache_dir: /tmp/newswitch/cache    # acquired frames; cleared on every start
@@ -72,14 +179,56 @@ ui:
 
 A blok the catalog refuses, or one naming an action this microscope does not have, stops the start.
 
+## Which ones there are
+
+| Instrument | What it is |
+| --- | --- |
+| `fake-microscope` | Two cameras behind a splitter, objectives and a filter wheel, with hidden errors to calibrate away. |
+| `dual-camera` | Two cameras, each behind a filter of its own (BP 525/50, BP 625/50), seeing the sample at once. |
+| `rgb-camera` | One color camera: every exposure gives an image per color. |
+| `cam-test` | One simulated uc2_cam_py camera and nothing else, in real-hardware mode. |
+| `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image. |
+| `light-sheet` | A sheet from the side and a camera above, whose frames step the stage. |
+| `flim` | The point scanner, timing each photon against a pulsed laser. |
+
+A color camera states its bands on its sensor, by name:
+
+```yaml
+element:
+  kind: sensor
+  axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+  colors:
+    r: {center: 620 nm, width: 70 nm}
+    g: {center: 530 nm, width: 70 nm}
+    b: {center: 460 nm, width: 70 nm}
+```
+
+## Where an acquisition goes
+
+A multidimensional acquisition is stored in mikro (`just mikro`, then `just dev-mikro`), not in the
+local cache, and is refused before anything moves when a server has no mikro. Each stage position
+becomes one `ArrayDataset` of `(t, c, z, y, x)`, placed in a stage space shared by this microscope:
+
+- **`c`**: a stream lights the sample for its `detectors`. Each detector is a channel, and a color
+  camera one per color. A detector whose image comes out mirrored (a splitter's reflected arm) is
+  turned back, so every channel shows the sample the same way round.
+- **Anchors**: `c` has its label and light path; each `t, c, z` has the microscope's state and when
+  the image was taken.
+- **Placement**: the middle of the image is where the stage was. It counts as validated once every
+  detector's light path is calibrated, and as inferred from the optics until then.
+
+An array is regular, so what cannot be one is refused before anything moves: a position that moves
+between timepoints, several stacks at a position, uneven z planes, detectors that disagree on image
+size or on pixel size by more than 1%. Images stay in memory until everything is taken, so an
+acquisition larger than the free memory is refused too, and stopping one part way keeps nothing.
+
 ## How it reaches hardware
 
 `settings.use_virtual_microscope` says whether a run is simulated. A simulated
 run ignores the `hardware` section apart from a board giving it the UC2 actions, on a virtual bus;
 a real one refuses to start until everything with a control is wired.
 
-The cubes name their actuators; `hardware` says what those names are wired to. It is not part of
-the digest, so rewiring outdates no compiled table.
+The cubes name their actuators; `hardware` says what those names are wired to.
 
 | Key | Means |
 | --- | --- |

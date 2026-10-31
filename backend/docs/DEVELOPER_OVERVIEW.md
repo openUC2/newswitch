@@ -50,7 +50,7 @@ states what the server has a control for, in which role and by which slot. newsw
 arkitekt states and restart from each variable's `initial`. `instrument/parts.py` turns it into the managers' dataclasses
 (`Illumination`, `Detector`, `ObjectiveLens`, `Filter`, stage limits;
 for cameras the `Detector` with its camera fields plus the vendor options).
-Its top-level `hardware:` section (`instrument/hardware.py`: boards, actuators, cameras; not part of the digest)
+Its top-level `hardware:` section (`instrument/hardware.py`: boards, actuators, cameras)
 says what the cubes' actuators are wired to. A simulated run ignores it, apart from a board giving it the UC2 actions
 on a `VirtualUC2Bus`; a real one reaches the board over its `transport` (`rest`, `canopen`) and refuses to start until
 everything with a control is wired (`check_wired`). Details: `backend/instruments/README.md`.
@@ -84,7 +84,7 @@ Managers are protocol implementations that mutate state and provide behavior:
   `DetectorConfig`): the image is sharp only in focus. The autofocus scores a plane by the
   variance of its Laplacian of Gaussian (σ = 1).
 - **OpticsDetectorManager** (`drivers/optics/detector.py`) is the detector of a simulated run: a
-  `VirtualDetectorManager` whose images come from the instrument's compiled tables
+  `VirtualDetectorManager` whose images come from what the instrument's compiler finds at startup
   (`drivers/optics/simulator.py`).
 - **UC2DetectorManager** (`drivers/uc2/uc2_detector.py`) drives real cameras through the
   camera library uc2_cam_py (extra `camera`, see below); acquisition sessions are recorded to
@@ -116,7 +116,7 @@ records; the managers keep it up to date, so the frontend sees all of it.
   (scale, rotation and flip included), stored per light path in `CalibrationState`. The
   stage ends where it started.
 - **MetadataManager** (`services/metadata.py`) places each frame with the calibrated affine of
-  its light path; without a calibration it falls back to what the compiled tables predict
+  its light path; without a calibration it falls back to what the optics predict
   (`instrument.parts.nominal_pixel_scale`), and without those to the nominal pixel size (the
   detector's `pixel_size_um` / the objective's magnification).
 

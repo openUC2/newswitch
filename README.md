@@ -215,8 +215,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 1. Copy `instruments/cam-test` and change its camera in `hardware.cameras`: `protocol:
    gige-vision` or `usb3-vision`, and the vendor as uc2_cam_py names it, e.g. `vendor: HikRobot`.
-   Set the sensor's size and pitch in its cube, then compile the folder:
-   `uv run --with optiland python -m newswitch.tools.compile_instrument instruments/<name>`.
+   Set the sensor's size and pitch in its cube.
 2. Select the camera with `serial_number` in its entry. List the connected cameras with:
 
    ```bash

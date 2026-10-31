@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from typing import Any
+
 import numpy as np
 
 from newswitch.drivers.optics.simulator import Simulator
@@ -14,6 +17,11 @@ from newswitch.states.filter_bank import FilterBankState
 from newswitch.states.illumination import IlluminationState
 from newswitch.states.objective import ObjectiveState
 from newswitch.states.stage import StageState
+
+
+def _times_photons(detector: Detector) -> bool:
+    """Whether `detector` delivers when its photons arrive, as an axis of its own."""
+    return any(axis.name == "m" for axis in detector.axes)
 
 
 class OpticsDetectorManager(VirtualDetectorManager):
@@ -43,10 +51,8 @@ class OpticsDetectorManager(VirtualDetectorManager):
             detectors=detectors,
         )
 
-    def _generate_frame(self, detector: Detector) -> np.ndarray:
-        """The whole sensor; `_read_out` cuts the region out and bins it, as for any detector."""
-        name = self.instrument.detectors()[detector.slot - 1]
-        state = runtime_state(
+    def _runtime_state(self) -> dict[str, Any]:
+        return runtime_state(
             self.instrument,
             self.state,
             self.stage_state,
@@ -54,4 +60,45 @@ class OpticsDetectorManager(VirtualDetectorManager):
             self.illumination_state,
             self.filter_bank_state,
         )
-        return self.simulator.render(name, state)
+
+    def _generate_frame(self, detector: Detector) -> np.ndarray:
+        """The whole sensor; `_read_out` cuts the region out and bins it, as for any detector.
+
+        What a color camera shows on its own (the live view, an autofocus) is the mean of its
+        colors: everything that expects one image gets one.
+        """
+        name = self.instrument.detectors()[detector.slot - 1]
+        if detector.colors:
+            colors = self.simulator.render_colors(name, self._runtime_state())
+            return np.mean(list(colors.values()), axis=0).astype(np.uint16)
+        if _times_photons(detector):
+            histogram = self.simulator.render_microtime(name, self._runtime_state())
+            return histogram.sum(axis=0).clip(0, 65535).astype(np.uint16)
+        return self.simulator.render(name, self._runtime_state())
+
+    def capture_stack(self, slot: int, planes: int) -> Iterator[np.ndarray]:
+        """Each event of the detector steps the stage, as the wire says; the sweep ends on its last plane."""
+        steps = [
+            axis.step for axis in self.state.get_detector_for_slot(slot).axes if axis.name == "z"
+        ]
+        if not steps:
+            raise ValueError(f"Detector {slot} delivers no z")
+        first = self.stage_state.z
+        for plane in range(planes):
+            self.stage_state.z = first + plane * steps[0]
+            yield self.capture_channels(slot)
+
+    def capture_channels(self, slot: int) -> np.ndarray:
+        """One exposure as ``(c, H, W)``, in the order of the detector's `colors`.
+
+        A detector timing its photons gives ``(c, m, H, W)``.
+        """
+        detector = self.state.get_detector_for_slot(slot)
+        name = self.instrument.detectors()[slot - 1]
+        if _times_photons(detector):
+            histogram = self.simulator.render_microtime(name, self._runtime_state())
+            return np.stack([self._read_out(plane, detector) for plane in histogram])[np.newaxis]
+        if not detector.colors:
+            return super().capture_channels(slot)
+        colors = self.simulator.render_colors(name, self._runtime_state())
+        return np.stack([self._read_out(colors[color], detector) for color in detector.colors])

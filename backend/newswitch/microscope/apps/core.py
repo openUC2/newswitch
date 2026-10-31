@@ -11,6 +11,7 @@ from newswitch.microscope.apps import models
 from newswitch.microscope.run import Run
 from newswitch.protocols.cache import CacheManager
 from newswitch.protocols.calibration import CalibrationManager
+from newswitch.protocols.dataset_store import DatasetStore
 from newswitch.protocols.expanse import ExpanseManager
 from newswitch.protocols.hook_manager import HookManager
 from newswitch.protocols.io import IOManager
@@ -38,6 +39,7 @@ app.register_context(LightPathManager)
 app.register_context(MetadataManager)
 app.register_context(CacheManager, locks=[locks.CACHE])
 app.register_context(FrameSink)  # provided by the entrypoint
+app.register_context(DatasetStore)  # provided by the entrypoint
 
 
 async def provide_core(

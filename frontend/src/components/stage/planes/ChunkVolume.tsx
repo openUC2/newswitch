@@ -103,8 +103,6 @@ export const ChunkVolume = ({ chunk }: { chunk: ChunkData }) => {
 
         const { data, type, dataScale } = getTextureConfig(chunkData.data);
 
-        console.log(Math.max(...data), Math.min(...data));
-
         const tex = new THREE.Data3DTexture(
           data,
           chunkWidth,

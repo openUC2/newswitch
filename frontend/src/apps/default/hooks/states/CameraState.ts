@@ -2,6 +2,23 @@ import { z } from 'zod';
 import { buildUseState, type StateDefinition } from '@/lib/arkitekt/state';
 
 // --- Sub-Schemas ---
+export const DetectorAxisSchema = z
+  .object({
+    __identifier: z
+      .literal('@newswitch/detector_axis')
+      .default('@newswitch/detector_axis'),
+    name: z.string(),
+    size: z.number().nullable().optional(),
+    step: z.number().nullable().optional(),
+    delivered_by: z.string(),
+  })
+  .brand('@newswitch/detector_axis')
+  .describe(
+    'One axis a detector delivers by itself, through its parts and what is wired to it.',
+  );
+export type DetectorAxis = z.input<typeof DetectorAxisSchema>;
+export type DetectorAxisOutput = z.infer<typeof DetectorAxisSchema>;
+
 export const DetectorSchema = z
   .object({
     __identifier: z
@@ -28,6 +45,12 @@ export const DetectorSchema = z
     min_gain: z.number(),
     is_acquiring: z.boolean(),
     data_type: z.string(),
+    colors: z.array(z.string()),
+    axes: z.array(
+      DetectorAxisSchema.describe(
+        'One axis a detector delivers by itself, through its parts and what is wired to it.',
+      ),
+    ),
     key: z.string().nullable().optional(),
     manufacturer: z.string().nullable().optional(),
     model: z.string().nullable().optional(),

@@ -12,6 +12,7 @@ of it) numbers its images.
 
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -866,6 +867,14 @@ class VirtualDetectorManager:
             if not readout.streaming:
                 self._start_session(detector, readout)
             return self._next_frame(detector, readout)
+
+    def capture_channels(self, slot: int) -> np.ndarray:
+        """One exposure as ``(c, H, W)``: a virtual detector has one channel."""
+        return self.capture_image(slot).data[np.newaxis]
+
+    def capture_stack(self, slot: int, planes: int) -> Iterator[np.ndarray]:
+        """Nothing is wired to a virtual detector: the optics' detectors can do this."""
+        raise ValueError(f"Detector {slot} delivers no z")
 
     def _compose_rgb_frame(self) -> np.ndarray:
         """

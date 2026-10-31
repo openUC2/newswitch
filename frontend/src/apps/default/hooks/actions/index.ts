@@ -44,6 +44,7 @@ export {
   TimepointSchema,
   MHookUnionSchema,
   MultidimensionalAcquisitionSchema,
+  AcquiredDatasetSchema,
   AcquireMultidimensionalAcquisitionArgsSchema,
   AcquireMultidimensionalAcquisitionReturnSchema,
   AcquireMultidimensionalAcquisitionDefinition,
@@ -66,6 +67,8 @@ export type {
   TimepointOutput,
   MultidimensionalAcquisition,
   MultidimensionalAcquisitionOutput,
+  AcquiredDataset,
+  AcquiredDatasetOutput,
   AcquireMultidimensionalAcquisitionArgs,
   AcquireMultidimensionalAcquisitionReturn,
 } from './acquireMultidimensionalAcquisition';
@@ -306,6 +309,7 @@ export {
 } from './uc2ScanNodes';
 export type { Uc2ScanNodesArgs, Uc2ScanNodesReturn } from './uc2ScanNodes';
 export {
+  DetectorAxisSchema,
   DetectorSchema,
   UpdateDetectorArgsSchema,
   UpdateDetectorReturnSchema,
@@ -313,6 +317,8 @@ export {
   useUpdateDetector,
 } from './updateDetector';
 export type {
+  DetectorAxis,
+  DetectorAxisOutput,
   Detector,
   DetectorOutput,
   UpdateDetectorArgs,

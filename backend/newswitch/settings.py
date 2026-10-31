@@ -33,6 +33,9 @@ class Settings(BaseModel):
 
     use_virtual_microscope: StrictBool
     """Simulated, or the real hardware of the description's ``hardware`` section."""
+    simulation: str
+    """Which of the sample holder's ``simulations`` is on it: what a simulation draws, and what
+    predictions assume, on real hardware too."""
     db_path: str
     """SQLite file of the arkitekt agent (state history, journal); relative to the working
     directory."""

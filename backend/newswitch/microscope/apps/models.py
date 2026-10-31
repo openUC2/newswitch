@@ -6,7 +6,7 @@ from newswitch import models
 from newswitch.actions import uc2
 from newswitch.microscope.run import Run
 from newswitch.models.calibration import CalibratedLightPath
-from newswitch.models.devices import Detector, Filter, Illumination, ObjectiveLens
+from newswitch.models.devices import Detector, DetectorAxis, Filter, Illumination, ObjectiveLens
 from newswitch.models.hooks import RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 
 app = App("newswitch", app_context=Run)
@@ -14,6 +14,7 @@ app = App("newswitch", app_context=Run)
 for model in (
     Illumination,
     Detector,
+    DetectorAxis,
     ObjectiveLens,
     Filter,
     models.ObjectiveKube,
@@ -49,6 +50,7 @@ for model in (
     CalibratedLightPath,
     models.StreamIllumination,
     models.Streams,
+    models.AcquiredDataset,
     models.Stack,
     models.Position,
     models.Timepoint,

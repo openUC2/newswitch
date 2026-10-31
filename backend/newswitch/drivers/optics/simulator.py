@@ -1,10 +1,9 @@
 """What is really there, and the images it really makes.
 
 The only place that may read ``truth.yml``: how the real thing differs from its description. An
-instrument without one is exactly what it says. It renders from a compiled table, so it needs no
-optics library: errors the optics can express are in that table (`TRUTH_TABLE`), and it adds what
-the description has no notion of. Everything else has to find those out from the images, as with
-a real instrument.
+instrument without one is exactly what it says. It renders from what the compiler finds: errors the
+optics can express go in there, and it adds what the description has no notion of. Everything else
+has to find those out from the images, as with a real instrument.
 """
 
 from __future__ import annotations
@@ -17,20 +16,17 @@ import numpy as np
 import yaml
 from scipy import ndimage
 
-from newswitch.instrument.predict import COMPILED, Compiled
-from newswitch.instrument.spec import Instrument
+from newswitch.instrument.compiler import compile_instrument
+from newswitch.instrument.predict import Answer
+from newswitch.instrument.spec import Instrument, Pattern
 from newswitch.instrument.tracing import Errors
 
 #: The hidden errors, in an instrument's folder.
 TRUTH = "truth.yml"
-#: What the compiler found with those errors applied, in an instrument's folder.
-TRUTH_TABLE = "compiled.truth.json"
 
-#: The sample: random beads on a slide, and how finely it is rendered.
+#: How much of the sample there is, and how finely it is rendered.
 _SAMPLE_HALF_WIDTH_UM = 3000.0
 _SAMPLE_UM_PER_PX = 2.0
-_BEADS = 3600
-_BEAD_RADIUS_UM = 10.0
 #: The camera's offset and read noise, in counts.
 _OFFSET = 100.0
 _READ_NOISE = 5.0
@@ -43,20 +39,22 @@ def load_truth(instrument: Instrument) -> dict[str, Any]:
 
 
 def optical_errors(instrument: Instrument) -> Errors | None:
-    """The errors the tracer can apply, for compiling `TRUTH_TABLE`; None when there are none."""
+    """The errors the tracer can apply; None when there are none."""
     truth = load_truth(instrument)
     if not truth:
         return None
     return Errors(objective_focal_factor=truth.get("objective_focal_error", 1.0))
 
 
-def _sample() -> np.ndarray:
+def _sample(pattern: Pattern) -> np.ndarray:
     """Random beads: random so that a shift between two images has only one answer."""
     size = int(2 * _SAMPLE_HALF_WIDTH_UM / _SAMPLE_UM_PER_PX)
     field = np.zeros((size, size), dtype=np.float32)
+    if pattern.beads == 0:
+        return field
     rng = np.random.default_rng(7)
-    field[rng.integers(0, size, _BEADS), rng.integers(0, size, _BEADS)] = 1.0
-    blurred = ndimage.gaussian_filter(field, _BEAD_RADIUS_UM / _SAMPLE_UM_PER_PX)
+    field[rng.integers(0, size, pattern.beads), rng.integers(0, size, pattern.beads)] = 1.0
+    blurred = ndimage.gaussian_filter(field, pattern.radius / _SAMPLE_UM_PER_PX)
     return blurred / blurred.max()
 
 
@@ -67,8 +65,8 @@ class Simulator:
         """A simulator of `instrument`, with its hidden errors if it has any."""
         self.instrument = instrument
         self.truth = load_truth(instrument)
-        self._table = Compiled.load(instrument, TRUTH_TABLE if self.truth else COMPILED)
-        self._sample_image: np.ndarray | None = None
+        self._table = compile_instrument(instrument, optical_errors(instrument))
+        self._sample_images: dict[Pattern, np.ndarray] = {}
         self._noise = np.random.default_rng(11)
         self._transmitted = {
             source
@@ -83,9 +81,50 @@ class Simulator:
 
     def render(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
         """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names."""
-        if self._sample_image is None:
-            self._sample_image = _sample()
-        answer = self._table.answer(detector, {**state, f"{detector}.binning": 1})
+        answer = self._answer(detector, state)
+        return self._expose(answer, answer.light_by_source, *self._view(detector, state, answer))
+
+    def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
+        """A color camera's whole sensor: per color, what its band lets through, as uint16."""
+        answer = self._answer(detector, state)
+        beads, radius, positions = self._view(detector, state, answer)
+        return {
+            color: self._expose(answer, light, beads, radius, positions)
+            for color, light in answer.light_by_color.items()
+        }
+
+    def render_microtime(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
+        """A detector timing its photons, as ``(m, H, W)``: each pixel's counts by arrival time.
+
+        Counted, so with neither a camera's offset nor its read noise. What no fluorophore emits
+        arrives with the pulse.
+        """
+        answer = self._answer(detector, state)
+        counts = self._counts(answer, answer.light_by_source, *self._view(detector, state, answer))
+        bins = next(axis for axis in self.instrument.detector_axes(detector) if axis.name == "m")
+        fluorophore = self.instrument.simulation_at(state).fluorophore
+        if fluorophore is None:
+            shares = np.zeros(bins.size)
+            shares[0] = 1.0
+        else:
+            edges = np.arange(bins.size + 1) * bins.step / 1000.0
+            decay = np.exp(-edges / fluorophore.lifetime)
+            shares = -np.diff(decay) / (1.0 - decay[-1])
+        expected = np.clip(counts, 0, None)[np.newaxis] * shares[:, np.newaxis, np.newaxis]
+        return self._noise.poisson(expected).clip(0, 65535).astype(np.uint16)
+
+    def _answer(self, detector: str, state: Mapping[str, Any]) -> Answer:
+        return self._table.answer(detector, {**state, f"{detector}.binning": 1})
+
+    def _view(
+        self, detector: str, state: Mapping[str, Any], answer: Answer
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """What of the sample lands on each pixel, how far each is from the middle (0 to 1), and
+        where each is from the middle along x and y, in micrometres of the sample."""
+        pattern = self.instrument.simulation_at(state).pattern
+        if pattern not in self._sample_images:
+            self._sample_images[pattern] = _sample(pattern)
+        sample = self._sample_images[pattern]
         width, height = answer.size
         columns, rows = np.meshgrid(np.arange(width, dtype=float), np.arange(height, dtype=float))
 
@@ -102,29 +141,54 @@ class Simulator:
         to_sample = turn @ np.array(answer.pixel_to_stage)
         sample_x, sample_y = np.tensordot(to_sample, centred, axes=1)
 
-        to_raster = (self._sample_image.shape[0] - 1) / 2
+        to_raster = (sample.shape[0] - 1) / 2
         coordinates = np.stack(
             [
                 (sample_y + answer.centre[1]) / _SAMPLE_UM_PER_PX + to_raster,
                 (sample_x + answer.centre[0]) / _SAMPLE_UM_PER_PX + to_raster,
             ]
         )
-        beads = ndimage.map_coordinates(self._sample_image, coordinates, order=1, mode="constant")
-
-        # what emits comes from the beads; what passes through is darkened by them
-        counts = np.zeros(beads.shape)
-        for source, amount in answer.light_by_source.items():
-            counts = counts + amount * (
-                (1.0 - 0.6 * beads) if source in self._transmitted else beads
-            )
-        counts = ndimage.gaussian_filter(counts, answer.spot_px)
-
+        beads = ndimage.map_coordinates(sample, coordinates, order=1, mode="constant")
         radius = np.hypot(centred[0], centred[1]) / np.hypot((width - 1) / 2, (height - 1) / 2)
-        counts = counts * (1.0 - (1.0 - answer.relative_illumination) * radius**2)
+        scale = np.abs(np.diag(answer.pixel_to_stage))[:, np.newaxis, np.newaxis]
+        return beads, radius, centred * scale
+
+    def _expose(
+        self,
+        answer: Answer,
+        light_by_source: Mapping[str, float],
+        beads: np.ndarray,
+        radius: np.ndarray,
+        positions: np.ndarray,
+    ) -> np.ndarray:
+        """The counts `light_by_source` makes of `beads`, as a sensor reads them."""
+        counts = self._counts(answer, light_by_source, beads, radius, positions)
         noisy = self._noise.poisson(np.clip(counts, 0, None)) + self._noise.normal(
             _OFFSET, _READ_NOISE, counts.shape
         )
         return noisy.clip(0, 65535).astype(np.uint16)
+
+    def _counts(
+        self,
+        answer: Answer,
+        light_by_source: Mapping[str, float],
+        beads: np.ndarray,
+        radius: np.ndarray,
+        positions: np.ndarray,
+    ) -> np.ndarray:
+        """The counts `light_by_source` is expected to make of `beads`, before any noise."""
+        # what emits comes from the beads; what passes through is darkened by them
+        counts = np.zeros(beads.shape)
+        for source, amount in light_by_source.items():
+            lit = amount * ((1.0 - 0.6 * beads) if source in self._transmitted else beads)
+            sheet = answer.sheet_by_source.get(source)
+            if sheet is not None:
+                # It widens away from its waist: fixed to the microscope, not to the stage.
+                along = positions["xy".index(sheet["along"])]
+                lit = lit / np.sqrt(1.0 + (along / sheet["rayleigh_um"]) ** 2)
+            counts = counts + lit
+        counts = ndimage.gaussian_filter(counts, answer.spot_px)
+        return counts * (1.0 - (1.0 - answer.relative_illumination) * radius**2)
 
 
 class SimulatedMicroscope:

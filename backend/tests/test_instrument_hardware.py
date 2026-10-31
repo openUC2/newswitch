@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 import shutil
 import dataclasses
@@ -22,8 +21,6 @@ from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.drivers.uc2.stage_manager import UC2StageManager
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument import hardware, parts, spec
-from newswitch.instrument.predict import NotCompiled
-from newswitch.microscope import parts as microscope_parts
 from newswitch.microscope.parts import build_microscope, build_uc2_bus
 from newswitch.settings import Settings
 from newswitch.states.uc2 import UC2State
@@ -270,20 +267,6 @@ def test_cameras_are_what_it_wires(tmp_path: Path) -> None:
     assert options == {1: {"frame_rate": 20.0}}
 
 
-def test_real_hardware_runs_uncompiled_with_a_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Only the predicted pixel size is missing, and a simulation cannot do without it."""
-    instrument = rewired(tmp_path)
-    (instrument.folder / "compiled.json").unlink()
-    states = (None, None, None, None, None)  # read only once a table answers
-    with caplog.at_level(logging.WARNING, logger=microscope_parts.logger.name):
-        assert microscope_parts._nominal_scale(instrument, True, *states) is None
-    assert "compile" in caplog.text
-    with pytest.raises(NotCompiled, match="does not exist"):
-        microscope_parts._nominal_scale(instrument, False, *states)
-
-
 # --- the description as a whole
 
 
@@ -298,11 +281,24 @@ def edited(tmp_path: Path, change: Callable[[dict[str, Any]], None]) -> Path:
     return copy
 
 
+def _simulation(data: dict[str, Any]) -> dict[str, Any]:
+    """What the description says is on the holder."""
+    return data["cubes"]["stage"]["element"]["simulations"]["gfp-beads"]
+
+
 @pytest.mark.parametrize(
     "change, finding",
     [
         (lambda d: d.update(colour="red"), "colour"),
-        (lambda d: d.pop("sample"), "sample"),
+        (lambda d: d.update(sample={}), "sample"),
+        (
+            lambda d: d["cubes"]["stage"].update(element={"kind": "filter"}),
+            "no cube holds the sample",
+        ),
+        (lambda d: d["cubes"]["stage"]["element"].pop("simulations"), "simulations"),
+        (lambda d: d["cubes"]["stage"]["element"].update(simulations={}), "simulations"),
+        (lambda d: d["settings"].pop("simulation"), "simulation"),
+        (lambda d: d["settings"].update(simulation="moon"), "'moon' is none of the simulations"),
         (lambda d: d["cubes"]["stage"].update(tilts={}), "cubes.stage.tilts"),
         (lambda d: d["cubes"]["laser-488"]["element"].update(wavelength="488 mW"), "wavelength"),
         (lambda d: d["cubes"]["laser-488"]["element"].update(kind="plasma"), "plasma"),
@@ -318,8 +314,10 @@ def edited(tmp_path: Path, change: Callable[[dict[str, Any]], None]) -> Path:
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"].update(initial=7), "none of the slots"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"]["slots"][1].pop("na"), "f and na"),
         (lambda d: d["cubes"]["filter-wheel"]["swaps"]["slot"]["slots"][2].pop("width"), "both"),
-        (lambda d: d["sample"].update(transmit=1.5), "transmit"),
-        (lambda d: d["sample"]["fluorophore"].pop("emission"), "emission"),
+        (lambda d: _simulation(d).update(transmit=1.5), "transmit"),
+        (lambda d: _simulation(d)["fluorophore"].pop("emission"), "emission"),
+        (lambda d: _simulation(d).pop("pattern"), "pattern"),
+        (lambda d: _simulation(d)["pattern"].update(beads=-1), "beads"),
         (lambda d: d["detection"][0].update(via="absorb"), "absorb"),
         (lambda d: d["detection"][1].update(distance="far"), "distance"),
         (lambda d: d.pop("parts"), "parts"),
@@ -363,12 +361,12 @@ def test_every_problem_is_listed_at_once(tmp_path: Path) -> None:
 
     def change(data: dict[str, Any]) -> None:
         data["cubes"]["laser-488"]["element"]["wavelength"] = "488 mW"
-        data["sample"]["transmit"] = 1.5
+        _simulation(data)["transmit"] = 1.5
 
     with pytest.raises(spec.SpecError) as info:
         spec.load(edited(tmp_path, change))
     assert "cubes.laser-488.element.source.wavelength" in str(info.value)
-    assert "sample.transmit" in str(info.value)
+    assert "cubes.stage.element.sample.simulations.gfp-beads.transmit" in str(info.value)
 
 
 def test_the_loaded_values_are_typed_and_in_their_units() -> None:
@@ -382,7 +380,8 @@ def test_the_loaded_values_are_typed_and_in_their_units() -> None:
     assert (sensor.axes["x"].size, sensor.axes["x"].pitch) == (512, 6.5)
     assert instrument.detection[-1].distance == "focus"
     assert instrument.detection[1].distance == 100.0
-    assert instrument.sample.fluorophore.excitation == 488.0
+    fluorophore = instrument.sample_holder().simulations["gfp-beads"].fluorophore
+    assert fluorophore is not None and fluorophore.excitation == 488.0
     assert instrument.parts.objective is not None
     assert instrument.parts.objective.reference_tube == 200.0
     assert instrument.parts.detectors[1].frame_rate == 30.0
@@ -447,13 +446,3 @@ def test_a_cube_with_moves_is_no_stage_until_the_file_says_so(tmp_path: Path) ->
     instrument = spec.load(edited(tmp_path, lambda d: d["parts"].pop("stage")))
     assert "move_stage" not in registry_names(instrument)[1]
     assert parts.stage_moves(instrument) == {}
-
-
-def test_parts_and_settings_outdate_no_table(tmp_path: Path) -> None:
-    """They are not the optics the tables are about."""
-
-    def change(data: dict[str, Any]) -> None:
-        data["parts"]["objective"]["reference_tube"] = "180 mm"
-        data["settings"]["db_path"] = "other.db"
-
-    assert spec.load(edited(tmp_path, change)).digest == spec.load(REFERENCE_INSTRUMENT).digest

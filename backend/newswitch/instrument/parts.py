@@ -5,10 +5,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import CAMERA_PROTOCOLS, Actuator
-from newswitch.instrument.spec import Instrument, Move, Swap, Variable
-from newswitch.models.devices import Detector, Filter, Illumination, IlluminationKind, ObjectiveLens
+from newswitch.instrument.spec import Instrument, Move, Sensor, Swap, Variable
+from newswitch.instrument.tracing import scan_um_per_degree
+from newswitch.models.devices import (
+    Detector,
+    DetectorAxis,
+    Filter,
+    Illumination,
+    IlluminationKind,
+    ObjectiveLens,
+)
 from newswitch.states.detector import CameraState
 from newswitch.states.filter_bank import FilterBankState
 from newswitch.states.illumination import IlluminationState
@@ -35,16 +44,15 @@ def filter_swap(instrument: Instrument) -> Swap | None:
 
 
 def sensor_size(instrument: Instrument) -> tuple[int, int]:
-    """The (width, height) of the sensors, read off their axes.
+    """The (width, height) of the images of the detectors, read off their axes.
 
     Raises:
         ValueError: They differ: a virtual detector has one size for all its sensors.
     """
     sizes = set()
     for name in instrument.detectors():
-        element = instrument.cubes[name].element
-        assert element is not None
-        sizes.add((element.axes["x"].size, element.axes["y"].size))
+        *_, axis_y, axis_x = instrument.detector_axes(name)
+        sizes.add((axis_x.size, axis_y.size))
     if len(sizes) != 1:
         raise ValueError(f"{instrument.name}: its sensors differ in size: {sorted(sizes)}")
     return next(iter(sizes))
@@ -63,6 +71,7 @@ def illuminations(instrument: Instrument) -> list[Illumination] | None:
                 kind=IlluminationKind.LASER if element.coherent else IlluminationKind.LED,
                 slot=slot,
                 wavelength=element.wavelength,
+                key=part.cube,
                 channel=slot,
                 max_intensity=part.full_intensity,
                 min_intensity=0.0,
@@ -126,18 +135,30 @@ def detectors(instrument: Instrument) -> list[Detector] | None:
         cube = instrument.cubes[name]
         element = cube.element
         assert element is not None
-        axes = element.axes
+        delivered = instrument.detector_axes(name)
+        *_, axis_y, axis_x = delivered
+        scanner = instrument.scanner_of(name)
         found.append(
             Detector(
                 slot=slot,
                 name=name,
                 key=name,
-                width=axes["x"].size,
-                height=axes["y"].size,
-                sensor_width=axes["x"].size,
-                sensor_height=axes["y"].size,
+                width=axis_x.size,
+                height=axis_y.size,
+                sensor_width=axis_x.size,
+                sensor_height=axis_y.size,
                 is_active=True,
-                pixel_size_um=axes["x"].pitch,
+                pixel_size_um=axis_x.step
+                if scanner is None
+                else abs(
+                    axis_x.step
+                    * scan_um_per_degree(instrument, scanner, instrument.initial_state())
+                ),
+                colors=list(element.colors) if isinstance(element, Sensor) else [],
+                axes=[
+                    DetectorAxis(axis.name, axis.size, axis.step, axis.delivered_by)
+                    for axis in delivered
+                ],
                 current_exposure_time=cube.variables["exposure"].initial / 1000.0,
                 current_gain=cube.variables["gain"].initial,
                 current_binning=cube.variables["binning"].initial,
@@ -257,6 +278,11 @@ def check_wired(instrument: Instrument) -> None:
             f"{turret.name}: only a canopen board takes positions, a {board.transport} board's "
             "firmware keeps its own"
         )
+    # A rig really wired this way while the software steps too would move twice per plane.
+    problems += [
+        f"{drive.source} -> {drive.target}: no driver can arm this wire yet"
+        for drive in instrument.drives
+    ]
     if problems:
         raise SpecError(f"{instrument.name} cannot run on real hardware: " + "; ".join(problems))
 
@@ -333,9 +359,7 @@ def nominal_pixel_scale(
     `predict.Answer.pixel_to_stage`, which sample point a pixel sees: an image must not flip when
     it gets calibrated.
     """
-    from newswitch.instrument.predict import Compiled
-
-    table = Compiled.load(instrument)
+    table = compile_instrument(instrument)
 
     def scale(detector_slot: int) -> tuple[float, float, float, float]:
         state = runtime_state(

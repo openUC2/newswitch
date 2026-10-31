@@ -1,20 +1,19 @@
 """Work out what the microscope does, from what it is made of.
 
-Run through ``newswitch.tools.compile_instrument``. Traces every combination of what the swaps can put in place, for each detector, and nudges every
-variable to see what changes. So what impacts what is calculated, with a size, and nothing declares
-it. The result is a plain file, which is all a microscope needs to read.
+A server does this when it starts, and keeps the result in memory: nothing is written, so a changed
+description only takes a restart. Traces every combination of what the swaps can put in place, for
+each detector. Nudging every variable to see what changes (`impacts`) says what impacts what, with a
+size, and nothing declares it; only `newswitch.tools.check_instrument` asks that.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import asdict
-from pathlib import Path
 from typing import Any
 
 from newswitch.instrument import tracing
-from newswitch.instrument.predict import COMPILED, Answer, assemble, state_key
+from newswitch.instrument.predict import Answer, Compiled, assemble, state_key
 from newswitch.instrument.spec import Instrument
 
 #: How much of a change counts: below these, a nudge did not matter.
@@ -123,13 +122,11 @@ def impacts(instrument: Instrument, state: Mapping[str, Any]) -> list[dict[str, 
     return rows
 
 
-def compile_instrument(
-    instrument: Instrument, name: str = COMPILED, errors: tracing.Errors | None = None
-) -> Path:
-    """Write what `instrument` does to the file `name` in its folder.
+def compile_instrument(instrument: Instrument, errors: tracing.Errors | None = None) -> Compiled:
+    """What `instrument` does, for every simulation and combination of swaps.
 
     With `errors`, what a microscope with those errors really does, so that a simulator can render
-    it without tracing. Those are passed in: the compiler itself knows only the description.
+    it. Those are passed in: the compiler itself knows only the description.
     """
     applied = errors or tracing.Errors()
     states: dict[str, dict[str, Any]] = {}
@@ -143,17 +140,4 @@ def compile_instrument(
                 "axial": _axial(instrument, detector, state, imaging, applied),
             }
         states[state_key(instrument, state)] = entry
-    path = instrument.folder / name
-    path.write_text(
-        json.dumps(
-            {
-                "instrument": instrument.name,
-                "digest": instrument.digest,
-                "states": states,
-                "impacts": [] if errors else impacts(instrument, instrument.initial_state()),
-            },
-            indent=1,
-        )
-        + "\n"
-    )
-    return path
+    return Compiled(instrument, states)

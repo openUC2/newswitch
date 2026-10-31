@@ -1,7 +1,7 @@
 """The microscope as the designer describes it: cubes, their elements, and how light connects them.
 
-An instrument is a folder: its description (``microscope.yml``), the optics files it names, and
-what the compiler found (`newswitch.instrument.compiler`). A server can run from it directly
+An instrument is a folder: its description (``microscope.yml``) and the optics files it names. A
+server computes what it does when it starts (`newswitch.instrument.compiler`), and runs from it directly
 (``NEWSWITCH_CONFIG=instruments/<name>/microscope.yml``).
 
 `Instrument` is that file, validated, all the way down in pydantic dataclasses: unknown keys, a
@@ -11,9 +11,7 @@ all reported at once with their path in the file.
 
 from __future__ import annotations
 
-import hashlib
 import itertools
-import json
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import field
 from pathlib import Path
@@ -42,6 +40,9 @@ from newswitch.settings import Settings
 DESCRIPTION = "microscope.yml"
 #: What a description states it is, followed by its version.
 SPEC = "newswitch/instrument/"
+#: The library of components a description can name, and what an entry states it is.
+COMPONENTS = Path(__file__).parent / "components"
+COMPONENT_SPEC = "newswitch/component/"
 
 _UNITS = pint.UnitRegistry()
 
@@ -64,6 +65,9 @@ def _in_unit(unit: str) -> Callable[[Any], Any]:
 Nanometres = Annotated[StrictFloat, BeforeValidator(_in_unit("nm"))]
 Millimetres = Annotated[StrictFloat, BeforeValidator(_in_unit("mm"))]
 Micrometres = Annotated[StrictFloat, BeforeValidator(_in_unit("um"))]
+Degrees = Annotated[StrictFloat, BeforeValidator(_in_unit("deg"))]
+Picoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ps"))]
+Nanoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ns"))]
 Milliwatts = Annotated[StrictFloat, BeforeValidator(_in_unit("mW"))]
 Hertz = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("Hz"))]
 #: A fraction of the light: of what arrives, or of a filter's band.
@@ -81,6 +85,7 @@ class Source:
     width: Nanometres
     max_power: Milliwatts
     coherent: StrictBool = False
+    repetition: Hertz | None = None  # a pulsed source's rate
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -103,10 +108,41 @@ class Lens:
 
 
 @dataclass(frozen=True, config=STRICT)
+class Fluorophore:
+    """What a sample emits, and what makes it."""
+
+    excitation: Nanometres
+    excitation_width: Nanometres
+    emission: Nanometres
+    emission_width: Nanometres
+    quantum_yield: Fraction
+    lifetime: Nanoseconds | None = None  # what a detector timing its photons sees
+
+
+@dataclass(frozen=True, config=STRICT)
+class Pattern:
+    """What a simulated sample looks like: random beads on a slide."""
+
+    beads: Annotated[StrictInt, Field(ge=0)]
+    radius: Micrometres
+
+
+@dataclass(frozen=True, config=STRICT)
+class Simulation:
+    """One thing that can be on the holder: without a fluorophore, it emits nothing."""
+
+    transmit: Fraction  # light going straight through (transmitted light)
+    reflect: Fraction  # light coming back the way it came (epi)
+    pattern: Pattern
+    fluorophore: Fluorophore | None = None
+
+
+@dataclass(frozen=True, config=STRICT)
 class SampleHolder:
-    """Where the sample is."""
+    """Where the sample is, and what can be on it, by name: `Settings.simulation` picks one."""
 
     kind: Literal["sample"]
+    simulations: Annotated[dict[str, Simulation], Field(min_length=1)]
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -118,11 +154,23 @@ class SensorAxis:
 
 
 @dataclass(frozen=True, config=STRICT)
+class ColorFilter:
+    """The band one color of a sensor sees."""
+
+    center: Nanometres
+    width: Nanometres
+
+
+@dataclass(frozen=True, config=STRICT)
 class Sensor:
-    """What light ends on: its size lives on its axes, and nowhere else."""
+    """What light ends on: its size lives on its axes, and nowhere else.
+
+    `colors` makes it a color camera: one image per color, each through its own band, by name.
+    """
 
     kind: Literal["sensor"]
     axes: dict[Literal["x", "y"], SensorAxis]
+    colors: dict[str, ColorFilter] = field(default_factory=dict)
 
     @model_validator(mode="after")
     def _both_axes(self) -> Self:
@@ -165,9 +213,67 @@ class Splitter:
     transmit: Fraction
 
 
+@dataclass(frozen=True, config=STRICT)
+class ScanAxis:
+    """One direction of a scan: how many steps, and the optical angle of one.
+
+    Optical, not mechanical: a mirror turned by a degree turns the beam by two.
+    """
+
+    size: Annotated[StrictInt, Field(gt=0)]
+    step: Degrees
+
+
+@dataclass(frozen=True, config=STRICT)
+class Scanner:
+    """Turns the beam: a scanned image's size lives on its axes, as a sensor's does."""
+
+    kind: Literal["scanner"]
+    axes: dict[Literal["x", "y"], ScanAxis]
+
+    @model_validator(mode="after")
+    def _both_axes(self) -> Self:
+        if set(self.axes) != {"x", "y"}:
+            raise ValueError("a scanner needs the axes x and y")
+        return self
+
+
+@dataclass(frozen=True, config=STRICT)
+class Pinhole:
+    """An aperture in the detection path. Nothing rejects out-of-focus light yet: a sample is flat."""
+
+    kind: Literal["pinhole"]
+    diameter: Micrometres
+
+
+@dataclass(frozen=True, config=STRICT)
+class MicrotimeAxis:
+    """How a detector bins when a photon arrives after its pulse."""
+
+    size: Annotated[StrictInt, Field(gt=0)]
+    step: Picoseconds
+
+
+@dataclass(frozen=True, config=STRICT)
+class PointDetector:
+    """Light ends on one point: what is wired to it walks it through an image."""
+
+    kind: Literal["point_detector"]
+    axes: dict[Literal["microtime"], MicrotimeAxis] = field(default_factory=dict)
+
+
 #: An optical element: what it is, and the numbers that say what it does to light.
 Element = Annotated[
-    Source | Lens | SampleHolder | Sensor | Filter | Dichroic | Splitter,
+    Source
+    | Lens
+    | SampleHolder
+    | Sensor
+    | Filter
+    | Dichroic
+    | Splitter
+    | Scanner
+    | Pinhole
+    | PointDetector,
     Field(discriminator="kind"),
 ]
 
@@ -231,8 +337,46 @@ class Swap:
 #: A value of the instrument, and what changing it does to its cube's element.
 Variable = Move | Tune | Swap
 
+
+@dataclass(frozen=True, config=STRICT)
+class OutSignal:
+    """What a part sends down a wire: the axes its events walk through, if any."""
+
+    axes: tuple[Literal["y", "x"], ...] = ()
+
+
+@dataclass(frozen=True, config=STRICT)
+class Signals:
+    """The hardware signals of a part: what it sends, and what it accepts."""
+
+    outputs: dict[str, OutSignal] = field(default_factory=dict)
+    inputs: tuple[str, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _named_as_in_the_file(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        if not isinstance(data, Mapping) or not {"out", "in"} & set(data):
+            return data
+        renamed = {"out": "outputs", "in": "inputs"}
+        return {renamed.get(key, key): value for key, value in data.items()}
+
+
+@dataclass(frozen=True, config=STRICT)
+class Component:
+    """An entry of the components library: what a part is, and which signals it has."""
+
+    spec: Annotated[str, Field(pattern=f"^{COMPONENT_SPEC}")]
+    description: str
+    element: Element
+    signals: Signals = field(default_factory=Signals)
+
+
 #: What each kind of element must be able to change, for the server to have a control for it.
-_NEEDS_TUNES = {"source": {"power"}, "sensor": {"exposure", "gain", "binning"}}
+_NEEDS_TUNES = {
+    "source": {"power"},
+    "sensor": {"exposure", "gain", "binning"},
+    "point_detector": {"exposure", "gain", "binning"},  # exposure: the time to scan a frame
+}
 
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
@@ -240,7 +384,9 @@ class Cube:
     """Housing around an optical element, and what its actuators do to it."""
 
     name: str  # its key in the description
+    component: str | None = None  # the library entry its element and signals came from
     element: Element | None = None
+    signals: Signals = field(default_factory=Signals)
     moves: dict[str, Move] = field(default_factory=dict)
     tunes: dict[str, Tune] = field(default_factory=dict)
     swaps: dict[str, Swap] = field(default_factory=dict)
@@ -295,28 +441,46 @@ class Edge:
     source: str = Field(validation_alias="from")
     target: str = Field(validation_alias="to")
     via: Literal["reflect", "transmit"] | None = None
-    side: Literal["epi", "transmitted"] | None = None
+    side: Literal["epi", "transmitted", "orthogonal"] | None = None
     distance: Millimetres | Literal["focus"] | None = None  # or the lens's own focal length
+    along: Literal["x", "y"] | None = None  # which way of the image a sheet travels
+
+    @model_validator(mode="after")
+    def _a_sheet_travels(self) -> Self:
+        if (self.side == "orthogonal") != (self.along is not None):
+            raise ValueError("a sheet has side: orthogonal and along, and only a sheet has them")
+        return self
 
 
 @dataclass(frozen=True, config=STRICT)
-class Fluorophore:
-    """What the sample emits, and what makes it."""
+class Drive:
+    """A wire: one part's signal driving another's input, such as ``camera.frame`` to ``stage.z``."""
 
-    excitation: Nanometres
-    excitation_width: Nanometres
-    emission: Nanometres
-    emission_width: Nanometres
-    quantum_yield: Fraction
+    source: str = Field(validation_alias="from")
+    target: str = Field(validation_alias="to")
+    by: Micrometres | None = None  # how far each event steps a move
+
+    @property
+    def sender(self) -> tuple[str, str]:
+        """The cube sending, and its signal."""
+        cube, _, signal = self.source.rpartition(".")
+        return cube, signal
+
+    @property
+    def receiver(self) -> tuple[str, str]:
+        """The cube receiving, and its input."""
+        cube, _, signal = self.target.rpartition(".")
+        return cube, signal
 
 
-@dataclass(frozen=True, config=STRICT)
-class Sample:
-    """What is on the stage."""
+@dataclass(frozen=True)
+class DetectorAxis:
+    """One axis a logical detector delivers: a physical detector and what is wired to it."""
 
-    fluorophore: Fluorophore
-    transmit: Fraction  # light going straight through (transmitted light)
-    reflect: Fraction  # light coming back the way it came (epi)
+    name: str
+    size: int | None  # None: set per acquisition
+    step: float | None  # in the unit of what delivers it
+    delivered_by: str
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -363,18 +527,17 @@ class Parts:
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
 class Instrument:
-    """A whole ``microscope.yml``: only ever read. `load` adds where it is and what it says."""
+    """A whole ``microscope.yml``: only ever read. `load` adds where it is."""
 
     folder: Path
-    digest: str
     spec: Annotated[str, Field(pattern=f"^{SPEC}")]
     name: str
-    sample: Sample
     cubes: dict[str, Cube]
     illumination: tuple[Edge, ...]
     detection: tuple[Edge, ...]
     parts: Parts
     settings: Settings
+    drives: tuple[Drive, ...] = ()
     ui: UiConfig | None = None  # what the frontend shows
     agent_ui: UiConfig | None = None  # what Orkestrator shows
     hardware: Hardware = field(default_factory=Hardware)
@@ -399,7 +562,16 @@ class Instrument:
             for cube in self.cubes.values()
         ):
             raise ValueError("no cube holds the sample")
-        problems = [
+        simulations = self.sample_holder().simulations
+        problems = (
+            []
+            if self.settings.simulation in simulations
+            else [
+                f"settings.simulation: {self.settings.simulation!r} is none of the simulations "
+                f"{sorted(simulations)}"
+            ]
+        )
+        problems += [
             f"an edge names no cube {name!r}"
             for edge in (*self.illumination, *self.detection)
             for name in (edge.source, edge.target)
@@ -412,6 +584,8 @@ class Instrument:
         ]
         problems += _parts_problems(self)
         problems += _hardware_problems(self)
+        problems += _drive_problems(self)
+        problems += _sheet_problems(self)
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -426,14 +600,25 @@ class Instrument:
         }
 
     def initial_state(self) -> dict[str, Any]:
-        """Every variable at its initial value."""
-        return {name: variable.initial for name, variable in self.variables.items()}
+        """Every variable at its initial value, and the simulation the settings name."""
+        return {
+            **{name: variable.initial for name, variable in self.variables.items()},
+            self.simulation_key(): self.settings.simulation,
+        }
 
     def swap_states(self) -> Iterator[dict[str, Any]]:
-        """Every combination of what the swaps can put in place, the rest at its initial value."""
+        """Every simulation under every combination of what the swaps can put in place.
+
+        The rest is at its initial value.
+        """
         swaps = [variable for variable in self.variables.values() if variable.verb == "swaps"]
-        for values in itertools.product(*(list(v.slots) for v in swaps)):
-            yield {**self.initial_state(), **{v.name: value for v, value in zip(swaps, values)}}
+        for simulation in self.sample_holder().simulations:
+            for values in itertools.product(*(list(v.slots) for v in swaps)):
+                yield {
+                    **self.initial_state(),
+                    self.simulation_key(): simulation,
+                    **{v.name: value for v, value in zip(swaps, values)},
+                }
 
     def detectors(self) -> list[str]:
         """The cubes of the detectors, by slot."""
@@ -450,6 +635,64 @@ class Instrument:
             for cube in self.cubes.values()
             if cube.element is not None and cube.element.kind == "sample"
         )
+
+    def sample_holder(self) -> SampleHolder:
+        """The element holding the sample."""
+        element = self.cubes[self.sample_cube()].element
+        assert isinstance(element, SampleHolder)
+        return element
+
+    def simulation_key(self) -> str:
+        """Where a state says what is on the holder: ``"stage.simulation"``. No variable changes it."""
+        return f"{self.sample_cube()}.simulation"
+
+    def simulation_at(self, state: Mapping[str, Any]) -> Simulation:
+        """What is on the holder under `state`."""
+        return self.sample_holder().simulations[state[self.simulation_key()]]
+
+    def scanner_of(self, detector: str) -> str | None:
+        """The cube whose events walk `detector` through an image, if there is one."""
+        for drive in self.drives:
+            cube, signal = drive.sender
+            if drive.receiver[0] == detector and self.cubes[cube].signals.outputs[signal].axes:
+                return cube
+        return None
+
+    def z_drive(self, detector: str) -> Drive | None:
+        """The wire through which the events of `detector`, or of its scan, step the stage's z."""
+        senders = (detector, self.scanner_of(detector))
+        for drive in self.drives:
+            if drive.sender[0] in senders and drive.target == f"{self.parts.stage}.z":
+                return drive
+        return None
+
+    def detector_axes(self, detector: str) -> tuple[DetectorAxis, ...]:
+        """What the logical detector `detector` delivers, in the order of a dataset's axes."""
+        element = self.cubes[detector].element
+        found = []
+        if isinstance(element, Sensor) and element.colors:
+            found.append(DetectorAxis("c", len(element.colors), None, f"{detector}.colors"))
+        if isinstance(element, PointDetector) and element.axes:
+            bins = element.axes["microtime"]
+            found.append(DetectorAxis("m", bins.size, bins.step, detector))
+        stepped = self.z_drive(detector)
+        if stepped is not None:
+            found.append(
+                DetectorAxis("z", None, stepped.by, f"{stepped.source} -> {stepped.target}")
+            )
+        scanner = self.scanner_of(detector)
+        if scanner is None:
+            assert isinstance(element, Sensor)
+            found += [
+                DetectorAxis(name, element.axes[name].size, element.axes[name].pitch, detector)
+                for name in ("y", "x")
+            ]
+        else:
+            axes = self.cubes[scanner].element.axes
+            found += [
+                DetectorAxis(name, axes[name].size, axes[name].step, scanner) for name in ("y", "x")
+            ]
+        return tuple(found)
 
     def routes(self, edges: tuple[Edge, ...], start: str, end: str) -> list[tuple[Edge, ...]]:
         """Every way light can go from `start` to `end` along `edges`."""
@@ -469,16 +712,6 @@ class Instrument:
 
 _INSTRUMENT = TypeAdapter(Instrument)
 
-#: The sections of a description the compiler does not look at.
-_NOT_OPTICS = ("hardware", "ui", "agent_ui", "parts", "settings")
-
-
-def _digest(data: Mapping[str, Any]) -> str:
-    """What a description says of its optics: nothing but a change to them outdates a table."""
-    optics = {key: value for key, value in data.items() if key not in _NOT_OPTICS}
-    encoded = json.dumps(optics, sort_keys=True, default=str).encode()
-    return hashlib.blake2b(encoded, digest_size=8).hexdigest()
-
 
 def _slot_problems(role: str, slots: Iterable[int]) -> list[str]:
     """Slots count from 1 without a gap: the managers keep their parts in a list."""
@@ -490,12 +723,14 @@ def _slot_problems(role: str, slots: Iterable[int]) -> list[str]:
     )
 
 
-def _listed_problems(instrument: Instrument, role: str, kind: str, listed: list[str]) -> list[str]:
-    """Each cube of `kind` has one slot in `role`, and only those have."""
+def _listed_problems(
+    instrument: Instrument, role: str, kind: str, listed: list[str], also: tuple[str, ...] = ()
+) -> list[str]:
+    """Each cube of `kind`, or of a kind in `also`, has one slot in `role`, and only those have."""
     holding = [
         cube.name
         for cube in instrument.cubes.values()
-        if cube.element is not None and cube.element.kind == kind
+        if cube.element is not None and cube.element.kind in (kind, *also)
     ]
     problems = [f"parts.{role}: {name!r} holds no {kind}" for name in listed if name not in holding]
     problems += [
@@ -526,7 +761,9 @@ def _parts_problems(instrument: Instrument) -> list[str]:
         "detectors", parts.detectors
     )
     problems += _listed_problems(instrument, "sources", "source", instrument.sources())
-    problems += _listed_problems(instrument, "detectors", "sensor", instrument.detectors())
+    problems += _listed_problems(
+        instrument, "detectors", "sensor", instrument.detectors(), also=("point_detector",)
+    )
     if parts.stage is not None:
         cube = instrument.cubes.get(parts.stage)
         if cube is None or cube.element is None or cube.element.kind != "sample":
@@ -565,7 +802,7 @@ def _hardware_problems(instrument: Instrument) -> list[str]:
     problems += [
         f"hardware: there is no sensor {name!r} for a camera"
         for name in instrument.hardware.cameras
-        if name not in instrument.detectors()
+        if not isinstance(_element(instrument, name), Sensor)
     ]
     # A stage manager moves x along the board's X: another axis would silently not move.
     stage = instrument.parts.stage
@@ -577,6 +814,194 @@ def _hardware_problems(instrument: Instrument) -> list[str]:
                 f"hardware: {variable.name} must be on axis {short.upper()}, not {actuator.axis!r}"
             )
     return problems
+
+
+def _element(instrument: Instrument, name: str) -> Element | None:
+    """The one element of a cube, when `name` is a cube that has one."""
+    cube = instrument.cubes.get(name)
+    return None if cube is None else cube.element
+
+
+def _scan_problems(instrument: Instrument) -> list[str]:
+    """What is wrong with the point detectors, and the scans that make their images."""
+    problems = []
+    for detector in instrument.detectors():
+        if not isinstance(_element(instrument, detector), PointDetector):
+            continue
+        scans = [
+            drive
+            for drive in instrument.drives
+            if drive.receiver[0] == detector
+            and instrument.cubes[drive.sender[0]].signals.outputs[drive.sender[1]].axes
+        ]
+        if len(scans) != 1:
+            problems.append(
+                f"{detector}: a point detector needs one scan wired to it, not {len(scans)}"
+            )
+            continue
+        scanner = scans[0].sender[0]
+        if not isinstance(_element(instrument, scanner), Scanner):
+            problems.append(f"{scans[0].source}: only a scanner walks a detector through an image")
+            continue
+        routes = instrument.routes(instrument.illumination, scanner, instrument.sample_cube())
+        if len(routes) != 1:
+            problems.append(
+                f"{scanner}: {len(routes)} illumination routes to the sample; one is handled"
+            )
+            continue
+        problems += [
+            f"{edge.source} -> {edge.target}: a scan's route needs the distance"
+            for edge in routes[0]
+            if edge.distance is None
+        ]
+        lenses = [
+            element
+            for edge in routes[0]
+            if isinstance(element := _element(instrument, edge.target), Lens)
+        ]
+        if not lenses or lenses[-1].na is None or any(lens.f is None for lens in lenses):
+            problems.append(f"{scanner}: a scan's lenses need f, and the last one its na")
+    return problems
+
+
+def _sheet_problems(instrument: Instrument) -> list[str]:
+    """What is wrong with the light sheets: where one comes from says how thin it is."""
+    problems = []
+    sheets = [edge for edge in instrument.illumination if edge.side == "orthogonal"]
+    for edge in sheets:
+        lens = _element(instrument, edge.source)
+        if not isinstance(lens, Lens) or lens.na is None:
+            problems.append(f"{edge.source}: a sheet comes from a lens with its na")
+    sample = instrument.sample_cube()
+    for source in instrument.sources():
+        routes = instrument.routes(instrument.illumination, source, sample)
+        if sum(1 for route in routes if route[-1].side == "orthogonal") > 1:
+            problems.append(f"{source}: one sheet per source is handled")
+    return problems
+
+
+def _microtime_problems(instrument: Instrument) -> list[str]:
+    """What is wrong with the detectors timing their photons: the pulse they time them from."""
+    problems = []
+    for detector in instrument.detectors():
+        element = _element(instrument, detector)
+        if not isinstance(element, PointDetector) or not element.axes:
+            continue
+        syncs = [drive for drive in instrument.drives if drive.target == f"{detector}.sync"]
+        if len(syncs) != 1:
+            problems.append(
+                f"{detector}: arrival times need one wire to its sync, not {len(syncs)}"
+            )
+        else:
+            source = _element(instrument, syncs[0].sender[0])
+            rate = source.repetition if isinstance(source, Source) else None
+            window = element.axes["microtime"].size * element.axes["microtime"].step
+            if rate is None:
+                problems.append(f"{syncs[0].source}: its source needs a repetition")
+            elif window > 1e12 / rate:
+                problems.append(
+                    f"{detector}: a window of {window:g} ps does not fit in a pulse period of "
+                    f"{1e12 / rate:g} ps"
+                )
+        problems += [
+            f"{detector}: the simulation {name!r} needs its fluorophore's lifetime"
+            for name, simulation in instrument.sample_holder().simulations.items()
+            if simulation.fluorophore is not None and simulation.fluorophore.lifetime is None
+        ]
+    return problems
+
+
+def _drive_problems(instrument: Instrument) -> list[str]:
+    """What its ``drives`` section connects that the parts do not have."""
+    problems = []
+    moved: list[str] = []
+    scanners = [
+        drive.sender[0]
+        for drive in instrument.drives
+        if drive.sender[0] in instrument.cubes
+        and drive.sender[1] in instrument.cubes[drive.sender[0]].signals.outputs
+        and instrument.cubes[drive.sender[0]].signals.outputs[drive.sender[1]].axes
+    ]
+    for drive in instrument.drives:
+        name, signal = drive.sender
+        sender = instrument.cubes.get(name)
+        if sender is None or signal not in sender.signals.outputs:
+            problems.append(f"drives: {name!r} sends no signal {signal!r}")
+        elif sender.signals.outputs[signal].axes and not isinstance(
+            _element(instrument, drive.receiver[0]), PointDetector
+        ):
+            problems.append(f"drives: {drive.source} can only walk a point detector")
+        name, signal = drive.receiver
+        receiver = instrument.cubes.get(name)
+        if receiver is None or signal not in receiver.signals.inputs:
+            problems.append(f"drives: {name!r} accepts no signal {signal!r}")
+            continue
+        if signal not in receiver.moves:
+            if drive.by is not None:
+                problems.append(f"drives: {drive.target} moves nothing, so it takes no 'by'")
+            continue
+        moved.append(drive.target)
+        if drive.by is None:
+            problems.append(f"drives: {drive.target} is a move, so it needs 'by'")
+        if drive.target != f"{instrument.parts.stage}.z":
+            problems.append(f"drives: only the stage's z can be stepped, not {drive.target}")
+        elif drive.sender[0] not in (*instrument.detectors(), *scanners):
+            problems.append(f"drives: {drive.source} is no detector, so it cannot deliver z")
+    problems += [
+        f"drives: {name} is stepped by two wires" for name in set(moved) if moved.count(name) > 1
+    ]
+    # Only once every wire connects something: this follows them.
+    return problems or _scan_problems(instrument) + _microtime_problems(instrument)
+
+
+def component_names() -> list[str]:
+    """The entries of the components library."""
+    return sorted(path.stem for path in COMPONENTS.glob("*.yml"))
+
+
+def component_data(name: str) -> dict[str, Any]:
+    """What an entry of the components library states, once it has validated.
+
+    Raises:
+        SpecError: There is no such entry, or it does not validate.
+    """
+    if name not in component_names():
+        raise SpecError(f"there is no component {name!r}: there are {component_names()}")
+    data = yaml.safe_load((COMPONENTS / f"{name}.yml").read_text())
+    try:
+        TypeAdapter(Component).validate_python(data)
+    except ValidationError as exc:
+        raise SpecError(f"component {name}: " + "; ".join(problems_of(exc))) from exc
+    return data
+
+
+def _with_components(data: Mapping[str, Any]) -> dict[str, Any]:
+    """`data` with what the components it names state.
+
+    Raises:
+        SpecError: A cube names no entry, or states what its entry already does. Every such
+            problem is listed; the rest of the description is looked at once these are fixed.
+    """
+    if not isinstance(data.get("cubes"), Mapping):
+        return dict(data)
+    cubes = {}
+    problems = []
+    for name, cube in data["cubes"].items():
+        if not isinstance(cube, Mapping) or "component" not in cube:
+            cubes[name] = cube
+            continue
+        stated = sorted({"element", "signals", "swaps"} & set(cube))
+        if stated:
+            problems.append(f"cubes.{name}: its component already states {stated}")
+        try:
+            entry = component_data(cube["component"])
+        except SpecError as exc:
+            problems.append(f"cubes.{name}: {exc}")
+            continue
+        cubes[name] = {**cube, "element": entry["element"], "signals": entry.get("signals", {})}
+    if problems:
+        raise SpecError("; ".join(problems))
+    return {**data, "cubes": cubes}
 
 
 def load(path: str | Path) -> Instrument:
@@ -593,9 +1018,8 @@ def load(path: str | Path) -> Instrument:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict) or not str(data.get("spec", "")).startswith(SPEC):
         raise SpecError(f"{path} does not say it is an instrument description")
+    data = _with_components(data)
     try:
-        return _INSTRUMENT.validate_python(
-            {**data, "folder": path.parent.resolve(), "digest": _digest(data)}
-        )
+        return _INSTRUMENT.validate_python({**data, "folder": path.parent.resolve()})
     except ValidationError as exc:
         raise SpecError(f"{path}: " + "; ".join(problems_of(exc))) from exc

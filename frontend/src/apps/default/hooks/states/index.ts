@@ -31,12 +31,19 @@ export type {
   CalibrationState,
 } from './CalibrationState';
 export {
+  DetectorAxisSchema,
   DetectorSchema,
   CameraStateSchema,
   CameraStateDefinition,
   useCameraState,
 } from './CameraState';
-export type { Detector, DetectorOutput, CameraState } from './CameraState';
+export type {
+  DetectorAxis,
+  DetectorAxisOutput,
+  Detector,
+  DetectorOutput,
+  CameraState,
+} from './CameraState';
 export {
   ObjectiveKubeStateSchema,
   DetectorKubeStateSchema,

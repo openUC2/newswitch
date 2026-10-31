@@ -1,0 +1,7 @@
+spec: newswitch/component/v0
+description: A generic single-photon detector binning arrival times against a sync, 64 bins of 200 ps.
+element:
+  kind: point_detector
+  axes: {microtime: {size: 64, step: 200 ps}}
+signals:
+  in: [sample, sync]

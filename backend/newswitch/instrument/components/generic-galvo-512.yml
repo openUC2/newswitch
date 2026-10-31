@@ -1,0 +1,10 @@
+spec: newswitch/component/v0
+description: A generic two-axis galvo scanning 512 x 512 steps of 0.02 degrees (optical).
+element:
+  kind: scanner
+  axes: {x: {size: 512, step: 0.02 deg}, y: {size: 512, step: 0.02 deg}}
+signals:
+  out:
+    pixel: {axes: [y, x]}   # a pulse per scan position: what it drives sees an image of these axes
+    line: {}                # a pulse per line
+    frame: {}               # a pulse per frame

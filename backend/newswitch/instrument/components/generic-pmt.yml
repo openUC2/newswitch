@@ -1,0 +1,5 @@
+spec: newswitch/component/v0
+description: A generic photomultiplier that takes one sample per pulse at its input.
+element: {kind: point_detector}
+signals:
+  in: [sample]

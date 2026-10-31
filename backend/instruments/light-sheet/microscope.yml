@@ -1,0 +1,363 @@
+# A light sheet: a lens lights one thin plane from the side, and a camera looks at it from above.
+# Each frame of the camera steps the stage, so the camera delivers z: an acquisition takes a stack
+# as one sweep, with no stage move per plane. See `drives`.
+# Simulated only: no camera is triggered on real hardware yet, and with a flat sample a stack shows
+# the sample leaving the sheet, not slices through a volume.
+#
+# Run it:      NEWSWITCH_CONFIG=instruments/light-sheet just dev
+
+spec: newswitch/instrument/v0
+name: light-sheet
+
+cubes:
+  laser-488:
+    element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
+    tunes:
+      power: {initial: 5.0, step: 1.0, units: mW}   # on from the start: a sheet only shows when lit
+
+  sheet-lens:
+    element: {kind: lens, name: sheet NA 0.02, f: 50 mm, na: 0.02}
+
+  stage:
+    element:
+      kind: sample
+      simulations:   # what can be on it; settings.simulation says which is
+        gfp-beads:
+          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          transmit: 0.9   # light going straight through (transmitted light)
+          reflect: 0.001  # light coming back the way it came (epi)
+          pattern: {beads: 3600, radius: 10 um}
+        empty-slide:
+          transmit: 0.95
+          reflect: 0.001
+          pattern: {beads: 0, radius: 10 um}
+    signals:
+      in: [z]   # its z takes a step per pulse
+    moves:
+      x: {along: x, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
+      y: {along: y, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
+      z: {along: axis, initial: 0.0, step: 5.0, min: -500.0, max: 500.0, speed: 500.0, units: um}
+
+  objective:
+    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
+
+  filter-green:
+    element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
+
+  tube:
+    element: {kind: lens, f: 200 mm}
+
+  camera:
+    component: generic-camera-512
+    tunes:
+      exposure: {initial: 100.0, step: 10.0, units: ms}
+      gain: {initial: 0.0, step: 1.0, units: dB}
+      binning: {initial: 1, step: 1}
+
+illumination:
+  - {from: laser-488, to: sheet-lens}
+  - {from: sheet-lens, to: stage, side: orthogonal, along: x}   # it travels along the image's x
+
+detection:
+  - {from: stage, to: objective, distance: focus}
+  - {from: objective, to: filter-green, distance: 100 mm}
+  - {from: filter-green, to: tube, distance: 30 mm}
+  - {from: tube, to: camera, distance: focus}
+
+drives:
+  - {from: camera.frame, to: stage.z, by: 0.5 um}
+
+parts:
+  stage: stage
+  sources:
+    1: {cube: laser-488, full_intensity: 100.0}
+  detectors:
+    1: {cube: camera, frame_rate: 30 Hz}
+
+settings:
+  use_virtual_microscope: true
+  simulation: gfp-beads
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: false
+
+ui:
+  catalog: newswitch@2
+  bloks:
+    view-sheet:
+      description: 'Sheet: the sheet through the sample, the live plane, and where z is.'
+      default: true
+      bsx: |
+        <Html>
+        <div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-spectrum-cyan/10 via-transparent to-spectrum-green/5 p-3">
+            <ScrollArea className="h-full w-[430px] shrink-0">
+                <div className="flex flex-col gap-3 pb-3 pr-3">
+
+                    <div className="flex items-center justify-between px-1 pt-1">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-spectrum-cyan">Selective plane</span>
+                            <span className="text-xl font-semibold tracking-tight">Light sheet</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                            <if when={list.contains(value: list.pluck(value: self.IlluminationState.illuminations, key: "is_active"), item: true)}>
+                                <div className="flex items-center gap-1.5 rounded-full border border-spectrum-cyan/40 bg-spectrum-cyan/10 px-2.5 py-1 text-[11px] text-spectrum-cyan">
+                                    <span className="size-1.5 animate-pulse rounded-full bg-spectrum-cyan shadow-[0_0_8px_2px] shadow-spectrum-cyan/60" />
+                                    <span>Sheet on</span>
+                                </div>
+                            <else>
+                                <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
+                                    <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+                                    <span>Sheet off</span>
+                                </div>
+                            </else>
+                            </if>
+                            <if when={self.CameraState.is_acquiring}>
+                                <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
+                                    <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
+                                    <span>Live</span>
+                                </div>
+                            </if>
+                        </div>
+                    </div>
+
+                    <foreach items={self.IlluminationState.illuminations} let="light" key={light.slot}>
+                        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-xl">
+                            <div className={light.is_active ? "pointer-events-none absolute left-1/2 top-1/3 size-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-spectrum-cyan/15 blur-3xl" : "hidden"} />
+                            <div className="relative h-[262px] w-full">
+                                <ActionLogo viewBox="0 0 580 340" width="100%" height="100%" title="The light sheet from the side, not to scale">
+                                    <!-- the detection objective, looking down at the plane -->
+                                    <Polygon points="272,14 368,14 368,66 346,104 294,104 272,66" fill="muted" fillOpacity={0.14} stroke="muted" strokeOpacity={0.5} strokeWidth={1.5} />
+                                    <Line x1={320} y1={2} x2={320} y2={14} stroke="spectrum-green" strokeWidth={2} strokeDasharray="4 4" />
+                                    <SvgText x={380} y={46} text="detection" fill="muted" fontSize={18} />
+                                    <SvgText x={380} y={70} text="10x · NA 0.25" fill="muted" fontSize={18} fontWeight="600" />
+
+                                    <!-- what the plane emits, gathered by the objective -->
+                                    <Polygon points="320,190 294,104 346,104" fill="spectrum-green" fillOpacity={light.is_active ? 0.32 : 0.04} />
+
+                                    <!-- the laser, its lens and the sheet they make -->
+                                    <Rect x={10} y={168} width={62} height={44} rx={8} fill="muted" fillOpacity={0.14} stroke="muted" strokeOpacity={0.5} strokeWidth={1.5} />
+                                    <SvgText x={41} y={195} text={fmt.number(value: light.wavelength, digits: 0)} textAnchor="middle" fill="muted" fontSize={18} fontWeight="600" />
+                                    <Line x1={72} y1={190} x2={104} y2={190} stroke="spectrum-cyan" strokeWidth={3} strokeDasharray="6 5" opacity={light.is_active ? 1 : 0.2} />
+                                    <Ellipse cx={116} cy={190} rx={11} ry={50} fill="muted" fillOpacity={0.14} stroke="muted" strokeOpacity={0.6} strokeWidth={1.5} />
+
+                                    <G opacity={light.is_active ? 1 : 0.12}>
+                                        <Path d="M128,144 C230,176 280,180 320,180 C360,180 410,176 522,146 L522,234 C410,204 360,200 320,200 C280,200 230,204 128,236 Z" fill="spectrum-cyan" fillOpacity={0.12} />
+                                        <Path d="M128,158 C230,182 280,184 320,184 C360,184 410,182 522,160 L522,220 C410,198 360,196 320,196 C280,196 230,198 128,222 Z" fill="spectrum-cyan" fillOpacity={0.24} />
+                                        <Path d="M128,176 C230,187 280,188 320,188 C360,188 410,187 522,178 L522,202 C410,193 360,192 320,192 C280,192 230,193 128,204 Z" fill="spectrum-cyan" fillOpacity={0.85} />
+                                    </G>
+                                    <Circle cx={320} cy={190} r={7} fill="ink" opacity={light.is_active ? 0.95 : 0.1} />
+
+                                    <!-- the sample, where the stage has it -->
+                                    <Rect x={214} y={math.clamp(value: math.add(a: 184, b: math.mul(a: self.StageState.z, b: 3)), min: 112, max: 296)} width={212} height={12} rx={3} fill="spectrum-green" fillOpacity={0.3} stroke="spectrum-green" strokeOpacity={0.9} strokeWidth={1.5} />
+                                    <SvgText x={320} y={math.clamp(value: math.add(a: 216, b: math.mul(a: self.StageState.z, b: 3)), min: 136, max: 248)} text="sample" textAnchor="middle" fill="spectrum-green" fontSize={17} fontWeight="600" />
+
+                                    <!-- what the field sees of the sheet, and how far the sheet holds -->
+                                    <Line x1={254} y1={266} x2={386} y2={266} stroke="spectrum-green" strokeWidth={2} />
+                                    <Line x1={254} y1={260} x2={254} y2={272} stroke="spectrum-green" strokeWidth={2} />
+                                    <Line x1={386} y1={260} x2={386} y2={272} stroke="spectrum-green" strokeWidth={2} />
+                                    <SvgText x={320} y={258} text="field 333 µm" textAnchor="middle" fill="spectrum-green" fontSize={17} />
+                                    <Line x1={165} y1={306} x2={475} y2={306} stroke="spectrum-cyan" strokeWidth={2} />
+                                    <Line x1={165} y1={300} x2={165} y2={312} stroke="spectrum-cyan" strokeWidth={2} />
+                                    <Line x1={475} y1={300} x2={475} y2={312} stroke="spectrum-cyan" strokeWidth={2} />
+                                    <SvgText x={320} y={330} text="stays thin for ±388 µm" textAnchor="middle" fill="spectrum-cyan" fontSize={17} />
+                                    <SvgText x={536} y={186} text="x" fill="spectrum-cyan" fontSize={18} fontWeight="600" />
+                                    <SvgText x={536} y={206} text="sheet" fill="spectrum-cyan" fontSize={16} />
+                                </ActionLogo>
+                            </div>
+                            <div className="relative grid grid-cols-3 divide-x divide-border/50 border-t border-border/50">
+                                <div className="flex flex-col px-3 py-2">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Waist</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-cyan">7.8 µm</span>
+                                </div>
+                                <div className="flex flex-col px-3 py-2">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Rayleigh</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-cyan">388 µm</span>
+                                </div>
+                                <div className="flex flex-col px-3 py-2">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Edge of field</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-green">92%</span>
+                                </div>
+                            </div>
+                            <div className="relative border-t border-border/50 p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-cyan">{light.key} · sheet power</span>
+                                        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.percent(value: math.div(a: light.intensity, b: light.max_intensity))}</span>
+                                    </div>
+                                    <div className="past:pointer-events-none past:opacity-50">
+                                        <if when={light.is_active}>
+                                            <Switch checked={true} className="data-[state=checked]:bg-spectrum-cyan" onChange={self.turn_off_illumination_channel(channel: light.slot)} />
+                                        <else>
+                                            <Switch checked={false} onChange={self.turn_on_illumination(channel: light.slot)} />
+                                        </else>
+                                        </if>
+                                    </div>
+                                </div>
+                                <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-cyan [&amp;_[data-slot=slider-thumb]]:border-spectrum-cyan" value={light.intensity} min={light.min_intensity} max={light.max_intensity} onCommit={self.set_illumination_intensity(intensity: event.value, channel: light.slot)} />
+                            </div>
+                        </div>
+                    </foreach>
+
+                    <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Sample through the sheet</span>
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.StageState.z, digits: 1)}</span>
+                                    <span className="text-sm text-muted-foreground">µm</span>
+                                </div>
+                            </div>
+                            <if when={math.abs(value: self.StageState.z) < 3.9}>
+                                <div className="flex items-center gap-1.5 rounded-full bg-spectrum-green/15 px-2.5 py-1 text-[11px] font-medium text-spectrum-green">
+                                    <span className="size-1.5 rounded-full bg-spectrum-green" />
+                                    <span>In the sheet</span>
+                                </div>
+                            <else>
+                                <if when={math.abs(value: self.StageState.z) < 7.8}>
+                                    <div className="flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">
+                                        <span className="size-1.5 rounded-full bg-warning" />
+                                        <span>Leaving the sheet</span>
+                                    </div>
+                                <else>
+                                    <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
+                                        <span className="size-1.5 rounded-full bg-destructive" />
+                                        <span>Outside: only noise</span>
+                                    </div>
+                                </else>
+                                </if>
+                            </else>
+                            </if>
+                        </div>
+                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={0.5} value={self.StageState.z} min={-30} max={30} onCommit={self.move_stage(z: event.value, is_absolute: true)} />
+                        <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
+                            <Button size="sm" variant="outline" onClick={self.move_stage(z: -5.0)}>-5</Button>
+                            <Button size="sm" variant="outline" onClick={self.move_stage(z: -0.5)}>-0.5</Button>
+                            <Button size="sm" variant="secondary" onClick={self.move_stage(z: 0.0, is_absolute: true)}>0</Button>
+                            <Button size="sm" variant="outline" onClick={self.move_stage(z: 0.5)}>+0.5</Button>
+                            <Button size="sm" variant="outline" onClick={self.move_stage(z: 5.0)}>+5</Button>
+                        </div>
+                        <span className="mt-2 block text-[11px] text-muted-foreground">A flat sample stays lit within about one waist of the sheet, and blurs as it leaves. The live view stretches its contrast, so what is left shows as noise.</span>
+                    </div>
+
+                    <foreach items={self.CameraState.detectors} let="camera" key={camera.slot}>
+                        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">What {camera.name} delivers</span>
+                            </div>
+                            <div className="mt-2 flex gap-1.5">
+                                <foreach items={camera.axes} let="dim" key={dim.name}>
+                                    <div className={dim.size == null ? "flex min-w-0 flex-1 flex-col rounded-lg border border-spectrum-green/40 bg-spectrum-green/10 px-2 py-1.5" : "flex min-w-0 flex-1 flex-col rounded-lg bg-muted/40 px-2 py-1.5"}>
+                                        <span className={dim.size == null ? "text-base font-semibold text-spectrum-green" : "text-base font-semibold"}>{dim.name}</span>
+                                        <span className="truncate text-[10px] text-muted-foreground">{dim.size ?? "per stack"}</span>
+                                    </div>
+                                </foreach>
+                            </div>
+                            <span className="mt-2 block text-[11px] text-muted-foreground">Its frames step the stage, so a stack is one sweep with no stage move per plane.</span>
+                            <div className="mt-3 grid grid-cols-2 gap-3 past:hidden">
+                                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Exposure</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: math.mul(a: camera.current_exposure_time, b: 1000), digits: 0)}</span>
+                                        <span className="text-xs text-muted-foreground">ms</span>
+                                    </div>
+                                    <Slider className="min-w-0" step={1} value={math.mul(a: camera.current_exposure_time, b: 1000)} min={1} max={1000} onCommit={self.update_detector(slot: camera.slot, exposure_time: math.div(a: event.value, b: 1000))} />
+                                </div>
+                                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: camera.current_gain, digits: 1)}</span>
+                                        <span className="text-xs text-muted-foreground">dB</span>
+                                    </div>
+                                    <Slider className="min-w-0" step={0.1} value={camera.current_gain} min={camera.min_gain} max={camera.max_gain} onCommit={self.update_detector(slot: camera.slot, gain: event.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    </foreach>
+                </div>
+            </ScrollArea>
+
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+                <div className="h-full past:opacity-40">
+                    <LiveView className="h-full" />
+                </div>
+                <div className="pointer-events-none absolute inset-x-0 top-9 flex flex-col gap-1 px-4">
+                    <div className="h-1 w-full rounded-full bg-gradient-to-r from-spectrum-cyan/40 via-spectrum-cyan to-spectrum-cyan/40 shadow-[0_0_12px_1px] shadow-spectrum-cyan/40" />
+                    <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.2em] text-spectrum-cyan">
+                        <span>Sheet</span>
+                        <span>Waist</span>
+                        <span>x</span>
+                    </div>
+                </div>
+                <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border/60 bg-card/80 p-1 shadow-xl backdrop-blur past:hidden">
+                    <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Live</Button>
+                    <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
+                    <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+                        <Button icon="wand" size="sm" variant="ghost" className="rounded-full text-warning" onClick={self.calibrate_light_path()}>Calibrate</Button>
+                    </if>
+                    <Button icon="camera" size="sm" className="rounded-full bg-spectrum-cyan text-background hover:bg-spectrum-cyan/80" onClick={self.capture_image()}>Plane</Button>
+                </div>
+            </div>
+        </div>
+        </Html>
+    view-stack:
+      description: 'Stack: sweep the sample through the sheet, stored in mikro.'
+      bsx: |
+        <Html>
+        <div className="flex h-full w-full flex-col gap-3 overflow-auto bg-gradient-to-br from-spectrum-green/10 via-transparent to-spectrum-cyan/5 p-4">
+            <foreach items={self.CameraState.detectors} let="camera" key={camera.slot}>
+                <div className="rounded-2xl border border-spectrum-green/30 bg-card/70 p-4 shadow-xl">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-spectrum-green">A stack is one sweep</span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <foreach items={camera.axes} let="dim" key={dim.name}>
+                            <if when={dim.size == null}>
+                                <div className="flex flex-col rounded-xl bg-spectrum-green/10 px-3 py-2">
+                                    <span className="text-xl font-semibold tabular-nums text-spectrum-green">{dim.step} µm</span>
+                                    <span className="text-[11px] text-muted-foreground">between planes, set by {dim.delivered_by}</span>
+                                </div>
+                            </if>
+                        </foreach>
+                    </div>
+                    <span className="mt-2 block text-xs text-muted-foreground">The form spaces your planes by this for you, and locks its Step. Slices are offsets around the position, and nothing can run between planes.</span>
+                </div>
+            </foreach>
+            <MultidimensionalAcquisitionControl />
+        </div>
+        </Html>
+    view-stage:
+      description: 'Stage: where the sample is, with the planes taken there.'
+      bsx: |
+        <Html>
+        <Resizable direction="row" className="h-full w-full">
+            <ResizablePanel defaultSize={70}>
+                <div className="flex h-full flex-col overflow-hidden bg-muted/30">
+                    <StageView className="flex-1">
+                        <StageScene>
+                            <StageAxis />
+                            <StagePlane />
+                            <FramesLayer />
+                            <ImagesLayer />
+                            <LivesLayer />
+                            <FrameLightPathLayer />
+                            <StagePositioner />
+                            <RectangleDrawer />
+                        </StageScene>
+                        <ScanRegionPanel />
+                        <ImageMetadataPanel />
+                        <FramePanel />
+                        <SceneOverlay />
+                    </StageView>
+                </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle={true} />
+            <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
+                <ScrollArea className="h-full">
+                    <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
+                        <StageControl className="locked:opacity-60" />
+                        <CameraControl className="locked:opacity-60" />
+                    </div>
+                </ScrollArea>
+            </ResizablePanel>
+        </Resizable>
+        </Html>

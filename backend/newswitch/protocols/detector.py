@@ -10,6 +10,7 @@ it is configured and opened, what the device reports, its current settings and r
 The dataclasses here do not depend on a camera library.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
 
@@ -86,6 +87,29 @@ class DetectorManager(Manager, Protocol):
     """Protocol defining the interface for detector/camera managers."""
 
     state: CameraState
+
+    def capture_channels(self, slot: int) -> np.ndarray:
+        """Capture one exposure as ``(c, H, W)``: one image per color, one for a mono camera.
+
+        Args:
+            slot: Detector slot number.
+
+        Returns:
+            The images, in the order of the detector's `colors`.
+        """
+        ...
+
+    def capture_stack(self, slot: int, planes: int) -> Iterator[np.ndarray]:
+        """Capture a stack whose z the detector delivers: each event of it steps the stage.
+
+        Args:
+            slot: Detector slot number; its `axes` have a ``z``.
+            planes: How many planes, starting from where the stage is.
+
+        Yields:
+            Each plane as `capture_channels` gives it, while the stage is there.
+        """
+        ...
 
     def capture_image(self, slot: int) -> DetectorFrame:
         """Capture a single image from a specific detector.

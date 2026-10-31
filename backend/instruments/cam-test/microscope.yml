@@ -7,14 +7,16 @@
 spec: newswitch/instrument/v0
 name: cam-test
 
-sample:
-  fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
-  transmit: 0.9
-  reflect: 0.001
-
 cubes:
   sample:
-    element: {kind: sample}
+    element:
+      kind: sample
+      simulations:   # what can be on it; settings.simulation says which is
+        gfp-beads:
+          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          transmit: 0.9
+          reflect: 0.001
+          pattern: {beads: 3600, radius: 10 um}
 
   # Nothing can be imaged without lenses: two alike, so a pixel on the sample is a pixel on the sensor.
   lens-a:
@@ -46,6 +48,7 @@ parts:
 # A camera only runs on real hardware; set it true to see what the optics render instead.
 settings:
   use_virtual_microscope: false
+  simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache

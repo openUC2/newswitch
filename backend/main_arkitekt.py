@@ -20,7 +20,7 @@ from typing import Tuple
 
 from arkitekt import App, run
 from lovekit import lovekit_service
-from mikro import mikro_service
+from mikro import Mikro, mikro_service
 
 from newswitch.bloks import declare_agent_ui
 from newswitch.broadcasters.lovekit import (
@@ -33,6 +33,8 @@ from newswitch.instrument.spec import Instrument
 from newswitch.microscope.registry import create_registry
 from newswitch.broadcasters import FrameSink
 from newswitch.microscope.run import Run
+from newswitch.protocols.dataset_store import DatasetStore
+from newswitch.services.mikro_store import MikroDatasetStore
 from newswitch.settings import load_settings
 
 
@@ -52,12 +54,18 @@ async def provide_lovekit_sink(current: Run) -> Tuple[FrameSink, CameraStreams]:
     return LovekitSink(cameras_of(current.instrument)), CameraStreams()
 
 
+async def provide_dataset_store(current: Run, client: Mikro) -> DatasetStore:
+    """Startup: acquisitions are stored in the mikro the server provides."""
+    return MikroDatasetStore(client, current.instrument, current.microscope)
+
+
 def create_arkitekt_registry(instrument: Instrument | None) -> App:
     """Step 3: the registry of `instrument` for Orkestrator: a lovekit stream per detector, and
     the mikro the server provides."""
     app = create_registry(instrument, services=(lovekit_service, mikro_service))
     app.register_state(CameraStreams)
     app.register_startup(provide_lovekit_sink)
+    app.register_startup(provide_dataset_store)
     if cameras_of(instrument):
         app.register_background(publish_camera_streams)
     declare_agent_ui(app, instrument)

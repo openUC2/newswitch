@@ -57,7 +57,6 @@ from newswitch.drivers.optics.detector import OpticsDetectorManager
 from newswitch.drivers.virtual import StageConfig as VirtualStageConfig
 from newswitch.instrument import parts as instrument_parts
 from newswitch.instrument.errors import SpecError
-from newswitch.instrument.predict import NotCompiled
 from newswitch.instrument.spec import Instrument, Parts
 from newswitch.protocols import (
     DetectorManager,
@@ -181,27 +180,6 @@ class Microscope:
     filter_bank: Optional[FilterBankManager]
 
 
-def _nominal_scale(
-    instrument: Optional[Instrument],
-    hardware: bool,
-    *states_: Any,  # noqa: ANN401
-) -> Any:  # noqa: ANN401
-    """What the design predicts a detector's pixels are.
-
-    Real hardware can run without a compiled table, with a warning: images no calibration covers
-    then have no predicted pixel size. A simulation renders from the table, so it cannot.
-    """
-    if instrument is None:
-        return None
-    try:
-        return instrument_parts.nominal_pixel_scale(instrument, *states_)
-    except NotCompiled as exc:
-        if not hardware:
-            raise
-        logger.warning("No predicted pixel size until it is compiled: %s", exc)
-        return None
-
-
 def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Microscope:
     """Build the managers and states of every part `instrument` has (see the module).
 
@@ -303,9 +281,10 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         illumination_state=illumination_state,
         camera_state=camera_state,
         calibration_state=calibration_state,
-        nominal_scale=_nominal_scale(
+        nominal_scale=None
+        if instrument is None
+        else instrument_parts.nominal_pixel_scale(
             instrument,
-            hardware,
             camera_state,
             stage_state,
             objective_state,

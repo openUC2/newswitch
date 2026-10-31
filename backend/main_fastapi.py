@@ -36,6 +36,8 @@ from newswitch.routes.cache import router as cache_router
 from newswitch.routes.files import router as files_router
 from newswitch.routes.liveview import router as liveview_router
 from newswitch.microscope.run import Run
+from newswitch.protocols.dataset_store import DatasetStore
+from newswitch.services.dataset_store import NoDatasetStore
 from newswitch.services.mikro_connection import MikroConnection
 from newswitch.settings import Settings, load_settings
 
@@ -45,6 +47,11 @@ logger = logging.getLogger(__name__)
 async def provide_frame_broadcaster(run: Run) -> FrameSink:
     """Startup: the detectors stream to a broadcaster, which the live view encodes."""
     return FrameBroadcaster()
+
+
+async def provide_no_dataset_store(run: Run) -> DatasetStore:
+    """Startup: no mikro is configured, so an acquisition says so instead of starting."""
+    return NoDatasetStore()
 
 
 def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = False) -> App:
@@ -61,6 +68,8 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
         from newswitch.services import mikro_app  # needs the extra mikro
 
         app.registry.merge(mikro_app.app.registry)
+    else:
+        app.register_startup(provide_no_dataset_store)
     declare_ui(app, instrument)
     return app
 

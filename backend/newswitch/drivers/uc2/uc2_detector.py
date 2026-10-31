@@ -30,11 +30,13 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import koil
+import numpy as np
 import uc2_cam_py
 
 from newswitch.models.devices import Detector, Roi
@@ -329,6 +331,18 @@ class UC2DetectorManager:
                 _mirror_recording(cam.detector, cam.camera)
 
     # ------------------------------------------------------ DetectorManager
+
+    def capture_channels(self, slot: int) -> np.ndarray:
+        """One exposure as ``(c, H, W)``: a color camera's ``(H, W, 3)`` moved, a mono one's kept.
+
+        A raw Bayer format comes back as one mono image: nothing here demosaics it.
+        """
+        data = self.capture_image(slot).data
+        return np.moveaxis(data, -1, 0) if data.ndim == 3 else data[np.newaxis]
+
+    def capture_stack(self, slot: int, planes: int) -> Iterator[np.ndarray]:
+        """The cameras run free, so nothing here can step a stage (`parts.check_wired`)."""
+        raise ValueError(f"Detector {slot} delivers no z: no camera is triggered")
 
     def capture_image(self, slot: int | None = None) -> DetectorFrame:
         """Capture one image exposed after this call.

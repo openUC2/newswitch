@@ -133,7 +133,7 @@ export function CameraControl() {
                     {detector.width}×{detector.height}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {detector.pixel_size_um}µm
+                    {Number(detector.pixel_size_um.toFixed(2))}µm
                   </span>
                   <span className="hidden text-xs text-muted-foreground @[360px]:inline">
                     {t("common.slot", { slot: detector.slot })}
