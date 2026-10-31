@@ -13,12 +13,12 @@ cubes:
   laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
-      power: {actuator: laser-dac, initial: 20.0, step: 1.0, units: mW}
+      power: {actuator: laser-dac, initial: 20 mW, step: 1 mW}
 
   led_625:
     element: {kind: source, wavelength: 625 nm, width: 15 nm, max_power: 2 mW}
     tunes:
-      power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
+      power: {actuator: led-dac, initial: 0 mW, step: 1 mW}
 
   stage:
     element:
@@ -34,9 +34,9 @@ cubes:
           reflect: 0.001
           pattern: {beads: 0, radius: 10 um}
     moves:
-      x: {actuator: stg-x, along: x, initial: 0.0, step: 10.0, min: -2000.0, max: 2000.0, speed: 2000.0, units: um}
-      y: {actuator: stg-y, along: y, initial: 0.0, step: 10.0, min: -2000.0, max: 2000.0, speed: 2000.0, units: um}
-      z: {actuator: stg-z, along: axis, initial: 0.0, step: 100.0, min: -500.0, max: 500.0, speed: 500.0, units: um}
+      x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -2000 um, max: 2000 um, speed: 2000 um/s}
+      y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -2000 um, max: 2000 um, speed: 2000 um/s}
+      z: {actuator: stg-z, along: axis, initial: 0 um, step: 100 um, min: -500 um, max: 500 um, speed: 500 um/s}
 
   objective:
     swaps:
@@ -66,15 +66,15 @@ cubes:
     # A real achromat, from its prescription; it can be focused.
     element: {kind: lens, prescription: lenses/AC254-100-A.optiland, clear_radius: 6 mm}
     moves:
-      dz: {actuator: tube-focus, along: axis, initial: 0.0, step: 1000.0, units: um}
+      dz: {actuator: tube-focus, along: axis, initial: 0 um, step: 1000 um}
 
   camera_a:
     element:
       kind: sensor
       axes: {x: {size: 512, pitch: 10 um}, y: {size: 512, pitch: 10 um}}
     tunes:
-      exposure: {initial: 100.0, step: 10.0, units: ms}
-      gain: {initial: 0.0, step: 1.0, units: dB}
+      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
       binning: {initial: 1, step: 1}
 
   tube_b:
@@ -86,8 +86,8 @@ cubes:
       kind: sensor
       axes: {x: {size: 512, pitch: 10 um}, y: {size: 512, pitch: 10 um}}
     tunes:
-      exposure: {initial: 100.0, step: 10.0, units: ms}
-      gain: {initial: 0.0, step: 1.0, units: dB}
+      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
       binning: {initial: 1, step: 1}
 
 # How light connects the elements, each edge in the direction light travels. Routes are found by

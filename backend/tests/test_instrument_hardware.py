@@ -309,7 +309,7 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["cubes"]["tube"]["element"].pop("f"), "focal length"),
         (lambda d: d["cubes"]["camera"]["element"]["axes"].pop("y"), "axes x and y"),
         (lambda d: d["cubes"]["camera"]["element"]["axes"]["x"].update(size="512"), "size"),
-        (lambda d: d["cubes"]["stage"]["moves"]["x"].update(initial=99999.0), "above max"),
+        (lambda d: d["cubes"]["stage"]["moves"]["x"].update(initial="99999 um"), "above max"),
         (lambda d: d["cubes"]["stage"]["moves"]["x"].update(along="sideways"), "sideways"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"].update(initial=7), "none of the slots"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"]["slots"][1].pop("na"), "f and na"),

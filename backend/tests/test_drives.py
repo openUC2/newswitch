@@ -27,7 +27,7 @@ BASE = {
                 "max_power": "50 mW",
             },
             "signals": {"in": ["power"]},
-            "tunes": {"power": {"initial": 10.0, "step": 1.0, "units": "mW"}},
+            "tunes": {"power": {"initial": "10 mW", "step": "1 mW"}},
         },
         "stage": {
             "element": {
@@ -49,9 +49,27 @@ BASE = {
             },
             "signals": {"in": ["z"]},
             "moves": {
-                "x": {"along": "x", "initial": 0.0, "step": 10.0, "min": -5000.0, "max": 5000.0},
-                "y": {"along": "y", "initial": 0.0, "step": 10.0, "min": -5000.0, "max": 5000.0},
-                "z": {"along": "axis", "initial": 0.0, "step": 10.0, "min": -50.0, "max": 50.0},
+                "x": {
+                    "along": "x",
+                    "initial": "0 um",
+                    "step": "10 um",
+                    "min": "-5000 um",
+                    "max": "5000 um",
+                },
+                "y": {
+                    "along": "y",
+                    "initial": "0 um",
+                    "step": "10 um",
+                    "min": "-5000 um",
+                    "max": "5000 um",
+                },
+                "z": {
+                    "along": "axis",
+                    "initial": "0 um",
+                    "step": "10 um",
+                    "min": "-50 um",
+                    "max": "50 um",
+                },
             },
         },
         "objective": {"element": {"kind": "lens", "f": "20 mm", "na": 0.25}},
@@ -59,8 +77,8 @@ BASE = {
         "camera": {
             "component": "generic-camera-512",
             "tunes": {
-                "exposure": {"initial": 100.0, "step": 10.0, "units": "ms"},
-                "gain": {"initial": 0.0, "step": 1.0, "units": "dB"},
+                "exposure": {"initial": "100 ms", "step": "10 ms"},
+                "gain": {"initial": "0 dB", "step": "1 dB"},
                 "binning": {"initial": 1, "step": 1},
             },
         },
@@ -147,7 +165,7 @@ def test_a_component_makes_up_a_cube(tmp_path: Path) -> None:
         (lambda d: d["drives"][0].update(by="2 mW"), "by"),
         (
             lambda d: d["drives"].append(
-                {"from": "camera.exposing", "to": "laser.power", "by": 1.0}
+                {"from": "camera.exposing", "to": "laser.power", "by": "1 um"}
             ),
             "takes no 'by'",
         ),
@@ -155,14 +173,14 @@ def test_a_component_makes_up_a_cube(tmp_path: Path) -> None:
         (
             lambda d: (
                 d["cubes"]["stage"]["signals"]["in"].append("x"),
-                d["drives"].append({"from": "camera.frame", "to": "stage.x", "by": 1.0}),
+                d["drives"].append({"from": "camera.frame", "to": "stage.x", "by": "1 um"}),
             ),
             "only the stage's z",
         ),
         (
             lambda d: (
                 d["cubes"]["laser"]["signals"].update(out={"sync": {}}),
-                d["drives"].__setitem__(0, {"from": "laser.sync", "to": "stage.z", "by": 1.0}),
+                d["drives"].__setitem__(0, {"from": "laser.sync", "to": "stage.z", "by": "1 um"}),
             ),
             "is no detector",
         ),

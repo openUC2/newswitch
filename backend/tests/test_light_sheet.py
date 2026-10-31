@@ -118,7 +118,9 @@ def test_calibrating_finds_the_predicted_pixel(
         (lambda d: d["cubes"]["sheet_lens"]["element"].pop("na"), "a sheet comes from a lens"),
         (
             lambda d: (
-                d["cubes"].update({"other": {"element": {"kind": "lens", "f": 50.0, "na": 0.1}}}),
+                d["cubes"].update(
+                    {"other": {"element": {"kind": "lens", "f": "50 mm", "na": 0.1}}}
+                ),
                 d["illumination"].extend(
                     [
                         {"from": "laser_488", "to": "other"},

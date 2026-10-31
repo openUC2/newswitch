@@ -48,11 +48,11 @@ _UNITS = pint.UnitRegistry()
 
 
 def _in_unit(unit: str) -> Callable[[Any], Any]:
-    """Validator of a quantity: ``"488 nm"`` becomes a number in `unit`; a bare number already is."""
+    """Validator of a quantity: ``"488 nm"`` becomes a number in `unit`; a bare number is refused."""
 
     def convert(value: Any) -> Any:  # noqa: ANN401 - raw input of any shape
         if not isinstance(value, str):
-            return value
+            raise ValueError(f"{value!r} needs its unit: a quantity in {unit}, such as '1 {unit}'")
         try:
             return float(_UNITS.Quantity(value).to(unit).magnitude)
         except (pint.errors.PintError, TypeError, ValueError, AttributeError, SyntaxError) as exc:
@@ -70,6 +70,8 @@ Picoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ps"))]
 Nanoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ns"))]
 Milliwatts = Annotated[StrictFloat, BeforeValidator(_in_unit("mW"))]
 Hertz = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("Hz"))]
+#: How fast something moves.
+MicrometresPerSecond = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("um/s"))]
 #: A fraction of the light: of what arrives, or of a filter's band.
 Fraction = Annotated[StrictFloat, Field(ge=0.0, le=1.0)]
 #: A value of the instrument: whole numbers (a binning) stay whole.
@@ -278,6 +280,57 @@ Element = Annotated[
 ]
 
 
+#: The unit each dimension of a variable is kept in; what is stated can be in any unit of it.
+_VARIABLE_UNITS = (("[length]", "um"), ("[time]", "ms"), ("[power]", "mW"), ("[frequency]", "Hz"))
+
+
+def _variable_quantity(text: str) -> tuple[float, str]:
+    """A variable's value as stated, as a number in the unit kept for its dimension, and that unit."""
+    stripped = text.strip()
+    try:
+        if stripped.endswith("dB"):  # a ratio: pint would take it for one, and lose the unit
+            return float(stripped.removesuffix("dB")), "dB"
+        quantity = _UNITS.Quantity(stripped)
+        for dimension, unit in _VARIABLE_UNITS:
+            if quantity.check(dimension):
+                return float(quantity.to(unit).magnitude), unit
+        if str(quantity.units) in ("degree", "radian"):
+            return float(quantity.to("deg").magnitude), "deg"
+    except (pint.errors.PintError, TypeError, ValueError, AttributeError, SyntaxError) as exc:
+        raise ValueError(f"{text!r} is not a quantity") from exc
+    raise ValueError(f"{text!r} is in no unit a variable can have")
+
+
+def _in_one_unit(data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+    """A variable's numbers, all in one unit, which it then names: a bare number has none."""
+    if not isinstance(data, Mapping):
+        return data
+    stated = {
+        key: data[key] for key in ("initial", "step", "min", "max") if data.get(key) is not None
+    }
+    if not any(isinstance(value, str) for value in stated.values()):
+        return data
+    converted = {}
+    units = set()
+    for key, value in stated.items():
+        if not isinstance(value, str):
+            raise ValueError(f"{key}: {value!r} needs its unit, as the others have one")
+        converted[key], unit = _variable_quantity(value)
+        units.add(unit)
+    if len(units) > 1:
+        raise ValueError(f"its values are of different kinds: {sorted(units)}")
+    return {**data, **converted, "unit": units.pop()}
+
+
+def _starts_in_range(variable: Any) -> Any:  # noqa: ANN401 - a move or a tune
+    """A variable whose initial value is within its limits, or an error."""
+    if variable.min is not None and variable.initial < variable.min:
+        raise ValueError(f"initial {variable.initial} is below min {variable.min}")
+    if variable.max is not None and variable.initial > variable.max:
+        raise ValueError(f"initial {variable.initial} is above max {variable.max}")
+    return variable
+
+
 @dataclass(frozen=True, config=STRICT, kw_only=True)
 class Move:
     """A value of the instrument: an actuator moves its cube's element."""
@@ -289,18 +342,19 @@ class Move:
     initial: Number
     actuator: str | None = None
     step: Number | None = None
-    min: StrictFloat | None = None
-    max: StrictFloat | None = None
-    speed: Annotated[StrictFloat, Field(gt=0.0)] | None = None
-    units: str | None = None
+    min: Number | None = None
+    max: Number | None = None
+    speed: MicrometresPerSecond | None = None
+    unit: str = ""  # what its numbers are in, from how they are stated
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_unit(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        return _in_one_unit(data)
 
     @model_validator(mode="after")
     def _starts_in_range(self) -> Self:
-        if self.min is not None and self.initial < self.min:
-            raise ValueError(f"initial {self.initial} is below min {self.min}")
-        if self.max is not None and self.initial > self.max:
-            raise ValueError(f"initial {self.initial} is above max {self.max}")
-        return self
+        return _starts_in_range(self)
 
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
@@ -313,7 +367,18 @@ class Tune:
     initial: Number
     actuator: str | None = None
     step: Number | None = None
-    units: str | None = None
+    min: Number | None = None
+    max: Number | None = None
+    unit: str = ""  # what its numbers are in, from how they are stated
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_unit(cls, data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        return _in_one_unit(data)
+
+    @model_validator(mode="after")
+    def _starts_in_range(self) -> Self:
+        return _starts_in_range(self)
 
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
@@ -371,11 +436,12 @@ class Component:
     signals: Signals = field(default_factory=Signals)
 
 
-#: What each kind of element must be able to change, for the server to have a control for it.
+#: What each kind of element must be able to change, for the server to have a control for it, and
+#: what its numbers mean to the optics.
 _NEEDS_TUNES = {
-    "source": {"power"},
-    "sensor": {"exposure", "gain", "binning"},
-    "point_detector": {"exposure", "gain", "binning"},  # exposure: the time to scan a frame
+    "source": {"power": "mW"},
+    "sensor": {"exposure": "ms", "gain": "dB", "binning": ""},
+    "point_detector": {"exposure": "ms", "gain": "dB", "binning": ""},  # exposure: to scan a frame
 }
 
 
@@ -417,9 +483,18 @@ class Cube:
         if (self.element is None) == (not self.swaps):
             raise ValueError("a cube has an element, or swaps between some: exactly one of them")
         if self.element is not None:
-            missing = _NEEDS_TUNES.get(self.element.kind, set()) - set(self.tunes)
+            needs = _NEEDS_TUNES.get(self.element.kind, {})
+            missing = set(needs) - set(self.tunes)
             if missing:
                 raise ValueError(f"a {self.element.kind} must tune {sorted(missing)}")
+            for name, unit in needs.items():
+                if self.tunes[name].unit != unit:
+                    raise ValueError(
+                        f"{name} is in {unit or 'no unit'}, not {self.tunes[name].unit or 'no unit'}"
+                    )
+        for move in self.moves.values():
+            if move.unit != "um":
+                raise ValueError(f"{move.name} moves in a length, not {move.unit or 'no unit'}")
         return self
 
     @property

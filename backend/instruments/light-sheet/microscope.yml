@@ -13,7 +13,7 @@ cubes:
   laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
-      power: {initial: 5.0, step: 1.0, units: mW}   # on from the start: a sheet only shows when lit
+      power: {initial: 5 mW, step: 1 mW}   # on from the start: a sheet only shows when lit
 
   sheet_lens:
     element: {kind: lens, name: sheet NA 0.02, f: 50 mm, na: 0.02}
@@ -34,9 +34,9 @@ cubes:
     signals:
       in: [z]   # its z takes a step per pulse
     moves:
-      x: {along: x, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
-      y: {along: y, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
-      z: {along: axis, initial: 0.0, step: 5.0, min: -500.0, max: 500.0, speed: 500.0, units: um}
+      x: {along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      y: {along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      z: {along: axis, initial: 0 um, step: 5 um, min: -500 um, max: 500 um, speed: 500 um/s}
 
   objective:
     element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
@@ -50,8 +50,8 @@ cubes:
   camera:
     component: generic-camera-512
     tunes:
-      exposure: {initial: 100.0, step: 10.0, units: ms}
-      gain: {initial: 0.0, step: 1.0, units: dB}
+      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
       binning: {initial: 1, step: 1}
 
 illumination:

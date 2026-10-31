@@ -30,8 +30,8 @@ cubes:
       kind: sensor
       axes: {x: {size: 640, pitch: 5.86 um}, y: {size: 480, pitch: 5.86 um}}
     tunes:
-      exposure: {initial: 10.0, step: 1.0, units: ms}
-      gain: {initial: 0.0, step: 1.0, units: dB}
+      exposure: {initial: 10 ms, step: 1 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
       binning: {initial: 1, step: 1}
 
 illumination: []
