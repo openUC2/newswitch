@@ -197,7 +197,7 @@ export const ScanRegionDefinition: ActionDefinition<
     'Scan a rectangular region of the stage tile by tile.\n\nThe region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered\nwith fields of view of the detector (`detector_name`, else the first active one),\noverlapping by `overlap`, visited in `scan_order`; every active detector acquires a\nframe at each tile.',
   argsSchema: ScanRegionArgsSchema,
   returnSchema: ScanRegionReturnSchema,
-  lockKeys: ['motion'],
+  lockKeys: ['detector', 'expanse_state', 'io', 'motion'],
 };
 
 /**

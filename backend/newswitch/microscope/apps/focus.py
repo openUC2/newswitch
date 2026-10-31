@@ -22,6 +22,6 @@ async def provide_focus(run: Run) -> AutofocusState:
 
 
 app.register_startup(provide_focus)
-app.register_action(run_autofocus, locks=[locks.MOTION])
-app.register_action(calibrate_light_path, locks=[locks.MOTION])
-app.register_action(scan_region, locks=[locks.MOTION])
+app.register_action(run_autofocus, locks=[locks.MOTION, locks.DETECTOR])
+app.register_action(calibrate_light_path, locks=[locks.MOTION, locks.DETECTOR])
+app.register_action(scan_region, locks=[locks.MOTION, locks.DETECTOR, locks.EXPANSE, locks.IO])

@@ -47,7 +47,7 @@ def test_the_environment_names_the_instrument(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.chdir("/")
     settings = load_settings()
     assert settings.instrument == BACKEND_DIR / "instruments" / "cam-test" / "microscope.yml"
-    assert settings.simulate == "nothing"
+    assert settings.simulate == "unwired"
     instrument = load_devices(settings)
     assert instrument is not None and instrument.name == "cam-test"
 

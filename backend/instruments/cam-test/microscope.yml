@@ -45,7 +45,7 @@ detection:
   - {from: lens_b, to: sim_cam, distance: focus}
 
 settings:
-  simulate: nothing
+  simulate: unwired
   simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images

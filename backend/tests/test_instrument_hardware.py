@@ -35,6 +35,12 @@ def real(tmp_path: Path) -> Settings:
     return run_settings(tmp_path, simulate="nothing")
 
 
+@pytest.fixture
+def wired(tmp_path: Path) -> Settings:
+    """What is wired is real, for what is about actuators: no camera library is needed for those."""
+    return run_settings(tmp_path, simulate="unwired")
+
+
 def rewired(tmp_path: Path, **changes: Any) -> spec.Instrument:  # noqa: ANN401
     """The reference microscope with `changes` to its ``hardware`` section (None: removed)."""
     copy = tmp_path / "instrument"
@@ -165,7 +171,7 @@ def test_every_control_must_be_wired(tmp_path: Path, real: Settings) -> None:
         assert finding in str(info.value)
 
 
-def test_a_wheel_needs_its_positions(tmp_path: Path, real: Settings) -> None:
+def test_a_wheel_needs_its_positions(tmp_path: Path, wired: Settings) -> None:
     """One position per slot, or some slot would drive the wheel nowhere."""
     instrument = rewired(
         tmp_path,
@@ -174,10 +180,10 @@ def test_a_wheel_needs_its_positions(tmp_path: Path, real: Settings) -> None:
         ),
     )
     with pytest.raises(spec.SpecError, match="a position for each of the slots"):
-        build_microscope(real, instrument)
+        build_microscope(wired, instrument)
 
 
-def test_each_source_has_its_own_pwm_scale(tmp_path: Path, real: Settings) -> None:
+def test_each_source_has_its_own_pwm_scale(tmp_path: Path, wired: Settings) -> None:
     """Each has a driver of its own, so differing ones drive each source at its own power."""
     instrument = rewired(
         tmp_path,
@@ -185,26 +191,26 @@ def test_each_source_has_its_own_pwm_scale(tmp_path: Path, real: Settings) -> No
             **{"led-dac": {"driver": "uc2.laser", "board": "uc2", "channel": 2, "pwm_max": 255}}
         ),
     )
-    built = build_microscope(real, instrument)
+    built = build_microscope(wired, instrument)
     assert built.values.drivers["laser_488.power"].config.pwm_max == 1023
     assert built.values.drivers["led_625.power"].config.pwm_max == 255
 
 
-def test_a_power_with_no_max_has_no_full_scale(tmp_path: Path, real: Settings) -> None:
+def test_a_power_with_no_max_has_no_full_scale(tmp_path: Path, wired: Settings) -> None:
     """A board's counts are a share of something: the description has to say of what."""
 
     def change(data: dict[str, Any]) -> None:
         data["cubes"]["laser_488"]["tunes"]["power"].pop("max")
 
     with pytest.raises(spec.SpecError, match="a laser's power needs a max"):
-        build_microscope(real, spec.load(edited(tmp_path, change)))
+        build_microscope(wired, spec.load(edited(tmp_path, change)))
 
 
-def test_a_rest_board_keeps_its_own_objective_positions(tmp_path: Path, real: Settings) -> None:
+def test_a_rest_board_keeps_its_own_objective_positions(tmp_path: Path, wired: Settings) -> None:
     """Saying them would be ignored, so it is refused."""
     instrument = rewired(tmp_path, boards={"uc2": {"transport": "rest"}})
     with pytest.raises(spec.SpecError, match="only a canopen board takes positions"):
-        build_microscope(real, instrument)
+        build_microscope(wired, instrument)
 
 
 def test_an_option_the_driver_does_not_have_is_refused(tmp_path: Path, real: Settings) -> None:
@@ -240,9 +246,9 @@ def test_what_is_not_wired_can_be_simulated_beside_what_is(tmp_path: Path) -> No
     assert isinstance(built.detector, SimulatedDetectorManager)
 
 
-def test_it_runs_on_what_the_description_wires(real: Settings) -> None:
+def test_it_runs_on_what_the_description_wires(wired: Settings) -> None:
     """Every variable gets its UC2 driver, configured from the section and the optics."""
-    built = build_microscope(real, spec.load(REFERENCE_INSTRUMENT))
+    built = build_microscope(wired, spec.load(REFERENCE_INSTRUMENT))
 
     assert isinstance(built.uc2_bus, UC2CanBus)
     assert built.uc2_bus.config.channel == "can0"
@@ -504,3 +510,18 @@ def test_sources_are_in_the_order_of_the_file(tmp_path: Path) -> None:
     data["cubes"] = {"led_625": cubes.pop("led_625"), "laser_488": cubes.pop("laser_488"), **cubes}
     path.write_text(yaml.safe_dump(data, sort_keys=False))
     assert spec.load(copy).sources() == ["led_625", "laser_488"]
+
+
+def test_real_and_simulated_detectors_are_refused_together(tmp_path: Path) -> None:
+    """One manager runs them all: it would leave the simulated ones out without a word."""
+    data = yaml.safe_load(
+        (
+            Path(__file__).parent.parent / "instruments" / "dual-camera" / spec.DESCRIPTION
+        ).read_text()
+    )
+    data.pop("ui", None)
+    data.pop("agent_ui", None)
+    data["hardware"] = {"cameras": {"camera_green": {"protocol": "usb3-vision"}}}
+    (tmp_path / spec.DESCRIPTION).write_text(yaml.safe_dump(data))
+    with pytest.raises(spec.SpecError, match="camera_red has no camera beside those that do"):
+        build_microscope(run_settings(tmp_path, simulate="unwired"), spec.load(tmp_path))

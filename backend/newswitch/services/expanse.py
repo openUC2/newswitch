@@ -7,7 +7,7 @@ from newswitch.states.expanse import ExpanseState
 
 
 class ExpanseManager:
-    """Registry and execution for acquisition hooks."""
+    """Keeps what the expanse holds."""
 
     def __init__(self, expanse: ExpanseState) -> None:
         """Initialize the ExpanseManager with the provided ExpanseState and an empty registry."""

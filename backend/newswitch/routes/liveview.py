@@ -107,7 +107,7 @@ async def _send_frames(
         if message is None:
             if not told_unshowable:
                 logger.warning(
-                    "Slot %s sends frames the live view cannot show: shape %s, dtype %s",
+                    "%s sends frames the live view cannot show: shape %s, dtype %s",
                     frame.detector,
                     frame.data.shape,
                     frame.data.dtype,

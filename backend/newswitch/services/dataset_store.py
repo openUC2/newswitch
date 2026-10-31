@@ -10,7 +10,7 @@ class NoDatasetStore:
     """Refuses an acquisition before it starts, and says what is missing."""
 
     MESSAGE = (
-        "A multidimensional acquisition is stored in mikro, and this server has none: "
+        "An acquisition is stored in mikro, and this server has none: "
         "set MIKRO_URL, MIKRO_DATALAYER_URL and MIKRO_TOKEN (just dev-mikro)"
     )
 

@@ -15,7 +15,7 @@ from typing import Any
 
 from newswitch.instrument import tracing
 from newswitch.instrument.predict import Answer, Compiled, assemble, state_key
-from newswitch.instrument.spec import Instrument
+from newswitch.instrument.spec import Instrument, Variable
 
 #: How much of a change counts: below these, a nudge did not matter.
 TOLERANCES = {
@@ -105,6 +105,17 @@ def difference(before: Answer, after: Answer) -> dict[str, float]:
     return {name: size for name, size in changes.items() if size >= TOLERANCES[name]}
 
 
+def nudge_of(variable: Variable) -> float:
+    """How far to move a variable to see what it does: a part of its range, not its finest step.
+
+    A piezo's 10 nm step changes nothing a detector can tell, and it is still what focuses.
+    """
+    assert variable.step is not None
+    if variable.min is not None and variable.max is not None:
+        return max(variable.step, (variable.max - variable.min) / 20.0)
+    return variable.step * 10.0
+
+
 def impacts(instrument: Instrument, state: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Nudge every variable, and report what changed for each detector."""
     rows = []
@@ -150,8 +161,7 @@ def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
                     nudges = [slot for slot in variable.slots if slot > state[name]]
                     matter = {"scale", "pixels", "position"}
                 else:
-                    assert variable.step is not None
-                    nudges = [state[name] + variable.step]
+                    nudges = [state[name] + nudge_of(variable)]
                     matter = {"scale", "pixels"}
                 for nudge in nudges:
                     after = traced_answer(instrument, detector, {**state, name: nudge})

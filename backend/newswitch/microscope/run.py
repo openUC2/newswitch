@@ -1,7 +1,7 @@
 """What one run of newswitch has: the app context every startup hook takes.
 
 A hook is handed only the app context, and sees no other hook's result, yet the parts depend on each
-other (the simulated detector reads the stage's, objective's, illumination's and filter's states;
+other (the simulated detector reads every variable;
 acquisition and hooks use several managers; the UC2 parts share one bus). So the context holds the
 one `build_microscope` they all hand out, made when the first hook asks. Every app has its own
 `Run`: two apps share nothing.

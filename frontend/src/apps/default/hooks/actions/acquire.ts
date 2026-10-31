@@ -412,7 +412,7 @@ export const AcquireDefinition: ActionDefinition<AcquireArgs, AcquireReturn> = {
     'Acquire times x positions x planes x channels, into one dataset per position.\n\nEach time it visits each position, then each plane of the stack, and every channel sets what it\nsets and its detectors take their images; hooks run at the start (`m_hooks`), each time\n(`t_hooks`), at each position (`p_hooks`) and at each plane (`z_hooks`).',
   argsSchema: AcquireArgsSchema,
   returnSchema: AcquireReturnSchema,
-  lockKeys: ['motion', 'swap', 'tune'],
+  lockKeys: ['detector', 'motion', 'swap', 'tune'],
 };
 
 /**

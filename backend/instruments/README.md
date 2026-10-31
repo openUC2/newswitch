@@ -186,7 +186,7 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `fake-microscope` | Two cameras behind a splitter, objectives and a filter wheel, with hidden errors to calibrate away. |
 | `dual-camera` | Two cameras, each behind a filter of its own (BP 525/50, BP 625/50), seeing the sample at once. |
 | `rgb-camera` | One color camera: every exposure gives an image per color. |
-| `cam-test` | One simulated uc2_cam_py camera and nothing else, with nothing simulated. |
+| `cam-test` | One simulated uc2_cam_py camera and nothing else. Without that library, the optics stand in, with a warning. |
 | `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image. |
 | `light-sheet` | A sheet from the side and a camera above, whose frames step the stage. |
 | `flim` | The point scanner, timing each photon against a pulsed laser. |
@@ -244,8 +244,8 @@ the free memory is refused too, and stopping one part way keeps nothing.
 | Value | Means |
 | --- | --- |
 | `everything` | Run a description dry: its `hardware` section opens nothing, apart from a board giving it the UC2 actions on a virtual bus. |
-| `unwired` | What the section wires is real, the rest simulated: a real camera beside a simulated stage. |
-| `nothing` | What the section does not wire stops the start, and every such thing is listed. |
+| `unwired` | What the section wires is real, the rest simulated: a real camera beside a simulated stage. Detectors are all real or all simulated, and without `uc2_cam_py` the optics stand in, with a warning. |
+| `nothing` | What the section does not wire stops the start, and every such thing is listed. So does a wired camera without `uc2_cam_py`: nothing here shows a rendered image in its place. |
 
 The cubes name their actuators; `hardware` says which driver reaches each, and with what.
 

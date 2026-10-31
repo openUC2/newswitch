@@ -13,7 +13,9 @@ from arkitekt import Task
 
 from newswitch.actions import values as actions
 from newswitch.drivers.base import Simulated, register_driver
+from main_fastapi import create_fastapi_registry
 from newswitch.instrument import spec
+from newswitch.instrument.compiler import influences
 from newswitch.instrument.roles import Roles
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.routines.autofocus import run_autofocus
@@ -395,3 +397,24 @@ def test_a_driver_that_needs_a_board_says_so(tmp_path: Path) -> None:
 
     with pytest.raises(spec.SpecError, match="needs a board"):
         build_microscope(run_settings(tmp_path, simulate="unwired"), spec.load(folder))
+
+
+def test_what_is_finely_stepped_still_counts_for_a_calibration(tmp_path: Path) -> None:
+    """A zoom whose step changes nothing a detector can tell is still a zoom."""
+    data = yaml.safe_load((FAKE / "microscope.yml").read_text())
+    data.pop("ui", None)
+    data.pop("agent_ui", None)
+    data["cubes"]["tube_a"]["moves"]["dz"].update(step="1 um", min="-20 mm", max="20 mm")
+    folder = tmp_path / "instrument"
+    shutil.copytree(FAKE, folder)
+    (folder / "microscope.yml").write_text(yaml.safe_dump(data))
+    assert "tube_a.dz" in influences(spec.load(folder))["camera_a"]
+
+
+def test_every_action_that_acquires_holds_what_it_depends_on(tmp_path: Path) -> None:
+    """Locks an action states replace those it would have had inferred: nothing may change a
+    detector's image size under an array it is filling."""
+    registry = create_fastapi_registry(spec.load(FAKE)).registry.snapshot()
+    for name in ("acquire", "run_autofocus", "calibrate_light_path", "scan_region"):
+        assert "detector" in registry.implementations[name].locks, name
+    assert {"motion", "swap", "tune"} <= set(registry.implementations["acquire"].locks)

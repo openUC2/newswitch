@@ -9,7 +9,7 @@ from newswitch.states.calibration import CalibrationState
 
 
 class CalibrationManager:
-    """Registry and execution for acquisition hooks."""
+    """Keeps what was measured of each light path."""
 
     #: Called once a value of this part has changed.
     on_change: Callable[[], None] = staticmethod(lambda: None)

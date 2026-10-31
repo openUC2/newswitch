@@ -63,7 +63,7 @@ export const CalibrateLightPathDefinition: ActionDefinition<
     'Calibrate the light path of every active detector: its pixel-to-stage transform.\n\nThe stage moves in x only, then in y only, at a fixed focus, by as much as shifts the image\nby `SHIFT_OF_FRAME`; the image shifts give the pixel scale (rotation and flip included),\nstored per light path for the frames acquired through it. The stage ends where it started.',
   argsSchema: CalibrateLightPathArgsSchema,
   returnSchema: CalibrateLightPathReturnSchema,
-  lockKeys: ['motion'],
+  lockKeys: ['detector', 'motion'],
 };
 
 /**

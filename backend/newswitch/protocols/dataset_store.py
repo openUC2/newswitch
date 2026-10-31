@@ -1,4 +1,4 @@
-"""Where a multidimensional acquisition ends up: a store of datasets, not the local cache."""
+"""Where an acquisition ends up: a store of datasets, not the local cache."""
 
 from dataclasses import dataclass
 from datetime import datetime

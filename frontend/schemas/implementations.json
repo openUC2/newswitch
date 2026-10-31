@@ -1746,7 +1746,8 @@
       "params": null,
       "instanceId": null,
       "locks": [
-        "motion"
+        "motion",
+        "detector"
       ],
       "optimistics": [],
       "manipulates": [
@@ -1924,7 +1925,8 @@
       "params": null,
       "instanceId": null,
       "locks": [
-        "motion"
+        "motion",
+        "detector"
       ],
       "optimistics": [],
       "manipulates": [
@@ -2827,7 +2829,10 @@
       "params": null,
       "instanceId": null,
       "locks": [
-        "motion"
+        "motion",
+        "detector",
+        "expanse_state",
+        "io"
       ],
       "optimistics": [],
       "manipulates": [],
@@ -4006,7 +4011,8 @@
       "locks": [
         "motion",
         "swap",
-        "tune"
+        "tune",
+        "detector"
       ],
       "optimistics": [],
       "manipulates": [],
@@ -4107,7 +4113,7 @@
     },
     "stop_stage": {
       "definition": {
-        "description": "Immediately stop one stage axis (or all axes when none is given).\n\nDeliberately lock-free so it works while a move holds the stage lock.",
+        "description": "Immediately stop one stage axis (or all axes when none is given).\n\nDeliberately lock-free so it works while a move holds the motion lock.",
         "collections": [],
         "key": "stop_stage",
         "version": "1",
@@ -4155,7 +4161,7 @@
       "provenanceAudience": null,
       "effects": "UNKNOWN",
       "execution": "PLAIN",
-      "codeHash": "9424464014ff0384ce56c2aea071f09130dbddd29aef2923ce24922ff9ea50b1",
+      "codeHash": "c5e3c2de4302070bfb2c40de61558994cdfe62ab377032d2a6722f4d34dc41f0",
       "logo": null,
       "asks": null,
       "informs": null,
@@ -4404,7 +4410,7 @@
     },
     "home_objective": {
       "definition": {
-        "description": "Home the objective changer.",
+        "description": "Home the objective changer, which leaves it at its first slot.",
         "collections": [],
         "key": "home_objective",
         "version": "1",
@@ -4435,7 +4441,7 @@
       "provenanceAudience": null,
       "effects": "UNKNOWN",
       "execution": "PLAIN",
-      "codeHash": "c934c67bc5698eea8ef29ff67a14bff3a160c9d094c559bc073017e91b0fc843",
+      "codeHash": "87d75c21ee2475b3dcdbe7a02e87078d10fbf05217423037ff45bfe761bbc1dd",
       "logo": null,
       "asks": null,
       "informs": null,

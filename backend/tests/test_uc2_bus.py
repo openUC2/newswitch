@@ -3,8 +3,10 @@
 import asyncio
 
 import pytest
+from koil import Koil
 
-from newswitch.drivers.uc2.actuators import Stepper, StepperConfig
+from newswitch.actions.uc2 import home_objective
+from newswitch.drivers.uc2.actuators import Stepper, StepperConfig, Turret
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.dispatch import apply_uc2_event
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
@@ -123,3 +125,37 @@ def test_apply_uc2_event_updates_states() -> None:
 
     apply_uc2_event(BusError(message="boom"), values, uc2_state)
     assert uc2_state.last_error == "boom"
+
+
+def test_what_moved_by_itself_reaches_the_optics() -> None:
+    """A spontaneous move is known about like a commanded one, or what is published goes stale."""
+    bus = make_virtual_bus()
+    values = Values(
+        spec.load(REFERENCE_INSTRUMENT),
+        MoveState(),
+        SwapState(),
+        TuneState(),
+        SourceState(),
+        {"stage.z": Stepper(bus, StepperConfig(axis="Z", steps_per_um=3.2), None)},
+    )
+    told: list[float] = []
+    values.on_change = lambda: told.append(values["stage.z"])
+    apply_uc2_event(MotionDone(axis="Z", position=-7.5), values, UC2State())
+    assert told == [-7.5]
+
+
+def test_homing_the_objective_changer_says_where_it_is_now() -> None:
+    """Its first slot, whichever it was on: the board does not report it."""
+    bus = make_virtual_bus()
+    values = Values(
+        spec.load(REFERENCE_INSTRUMENT),
+        MoveState(),
+        SwapState(),
+        TuneState(),
+        SourceState(),
+        {"objective.slot": Turret(bus)},
+    )
+    values.stepped("objective.slot", 2)
+    with Koil():
+        home_objective(bus, values)
+    assert values.swap_state.swaps["objective"]["slot"].value == 1

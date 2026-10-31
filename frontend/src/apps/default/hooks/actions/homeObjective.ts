@@ -20,14 +20,14 @@ export const HomeObjectiveDefinition: ActionDefinition<
 > = {
   name: 'home_objective',
   appKey: 'default',
-  description: 'Home the objective changer.',
+  description: 'Home the objective changer, which leaves it at its first slot.',
   argsSchema: HomeObjectiveArgsSchema,
   returnSchema: HomeObjectiveReturnSchema,
   lockKeys: ['swap'],
 };
 
 /**
- * Home the objective changer.
+ * Home the objective changer, which leaves it at its first slot.
  */
 export const useHomeObjective = () => {
   return useAction(HomeObjectiveDefinition);

@@ -101,6 +101,14 @@ def check_wired(
             for name in instrument.detectors()
             if name not in instrument.hardware.cameras
         ]
+    if simulate == "unwired" and instrument.hardware.cameras:
+        # One manager runs all the detectors: it would leave these out without a word.
+        problems += [
+            f"the detector {name} has no camera beside those that do: real and simulated "
+            "detectors cannot run together yet"
+            for name in instrument.detectors()
+            if name not in instrument.hardware.cameras
+        ]
     if simulate != "everything":
         # A rig really wired this way while the software steps too would move twice per plane.
         problems += [

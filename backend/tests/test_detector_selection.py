@@ -92,9 +92,22 @@ def test_missing_camera_library_falls_back(
         monkeypatch.delitem(sys.modules, name, raising=False)
     monkeypatch.setitem(sys.modules, "uc2_cam_py", None)  # makes the import fail
     with caplog.at_level(logging.WARNING, logger=microscope.logger.name):
-        manager = _build(_settings(tmp_path, simulate="nothing"), camera_instrument)
+        manager = _build(_settings(tmp_path, simulate="unwired"), camera_instrument)
     assert isinstance(manager, SimulatedDetectorManager)
     assert "uv sync --extra camera" in caplog.text
+
+
+def test_with_nothing_to_simulate_a_missing_library_stops_the_start(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    camera_instrument: spec.Instrument,
+) -> None:
+    """Rendered images would pass for what the camera sees."""
+    for name in CAMERA_MODULES:
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.setitem(sys.modules, "uc2_cam_py", None)  # makes the import fail
+    with pytest.raises(spec.SpecError, match="uv sync --extra camera"):
+        _build(_settings(tmp_path, simulate="nothing"), camera_instrument)
 
 
 def test_real_hardware_opens_the_cameras(

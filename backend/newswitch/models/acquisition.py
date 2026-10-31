@@ -1,4 +1,4 @@
-"""What an acquisition is asked to do: a multidimensional acquisition, a region scan."""
+"""What an acquisition is asked to do: a plan, a region scan."""
 
 from dataclasses import dataclass
 from enum import Enum

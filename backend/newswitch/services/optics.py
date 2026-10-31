@@ -199,13 +199,7 @@ class OpticsManager:
         assert self.table is not None and self.instrument is not None
         answer: Answer = self.table.answer(name, values)
         path = self._path(name, values)
-        snapshot = self.snapshot(path)
-        try:
-            found = self.calibration_state.get_calibrated_path(snapshot)
-            calibrated = True
-        except ValueError:
-            found = self.predicted(name)
-            calibrated = False
+        found, calibrated = self.scale_under(name, values)
         matrix = found.affine_matrix
         return DetectorOptics(
             name=name,

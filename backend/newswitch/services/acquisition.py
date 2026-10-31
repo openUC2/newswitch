@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class AcquisitionManager:
-    """Registry and execution for acquisition hooks."""
+    """Takes an image with each detector that is on, and keeps it."""
 
     def __init__(
         self,

@@ -134,8 +134,9 @@ def build_detector_manager(
     """Real cameras through uc2_cam_py, as the description wires them, else rendering from the optics.
 
     With ``simulate: everything`` a description's cameras are not opened. Without the extra "camera"
-    (uc2_cam_py not importable) the optics stand in, with a warning. A camera that cannot be opened is
-    an error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
+    (uc2_cam_py not importable) the optics stand in with a warning on ``unwired``, and it is an error
+    on ``nothing``. A camera that cannot be opened is an error: startup fails.
+    ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
     """
     found = None if settings.simulate == "everything" else instrument_parts.cameras(instrument)
     if found:
@@ -143,6 +144,13 @@ def build_detector_manager(
         try:
             from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager
         except ImportError as exc:
+            if settings.simulate == "nothing":
+                # Someone looking at rendered images would take them for what the camera sees.
+                raise SpecError(
+                    f"{len(cameras)} camera(s) are wired and nothing is to be simulated, but "
+                    f"uc2_cam_py cannot be imported ({exc}). Install the extra: uv sync --extra "
+                    "camera"
+                ) from exc
             logger.warning(
                 "%d camera(s) configured, but uc2_cam_py cannot be imported (%s); "
                 "rendering from the optics. Install the extra: uv sync --extra camera",

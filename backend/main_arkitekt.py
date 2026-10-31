@@ -40,13 +40,10 @@ from newswitch.settings import load_settings
 
 def cameras_of(instrument: Instrument | None) -> list[CameraStream]:
     """A stream per detector, keyed by its cube (lovekit keeps a stream's id by its key over
-    restarts; slots follow the description's order), titled by that too."""
+    restarts), titled by that too."""
     if instrument is None:
         return []
-    return [
-        CameraStream(detector=name, key=name, title=name)
-        for index, name in enumerate(instrument.detectors())
-    ]
+    return [CameraStream(detector=name, key=name, title=name) for name in instrument.detectors()]
 
 
 async def provide_lovekit_sink(current: Run) -> Tuple[FrameSink, CameraStreams]:

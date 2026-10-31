@@ -1,7 +1,7 @@
 """Dispatch of spontaneous UC2 hardware events into shared reactive states.
 
 This is the §6.4 path: telemetry that belongs to no task (live positions,
-e-stop, buttons, node discovery) is mirrored into ``@state`` objects so the
+e-stop, buttons, node discovery) is mirrored into states so the
 frontend updates via JSON-patch without any polling. The apply function is
 pure enough to unit-test without an arkitekt agent.
 """
@@ -32,7 +32,7 @@ def apply_uc2_event(event: UC2Event, values: Values, uc2_state: UC2State) -> Non
     if isinstance(event, (PositionUpdate, MotionDone)):
         for name, driver in values.drivers.items():
             if isinstance(driver, Stepper) and driver.config.axis == event.axis.upper():
-                values.reporter(name)(event.position)
+                values.stepped(name, event.position)
     elif isinstance(event, EStopChanged):
         uc2_state.estop_active = event.active
     elif isinstance(event, NodeSeen):

@@ -1,4 +1,4 @@
-"""Multidimensional acquisition: moving a stage, lighting a sample, and imaging it."""
+"""Acquisition: going where a plan says, setting what it says, and imaging it."""
 
 from arkitekt import App
 
@@ -11,4 +11,5 @@ app = App("newswitch", app_context=Run)
 app.registry.merge(values.app.registry)
 app.registry.merge(detector.app.registry)
 
-app.register_action(acquire, locks=[locks.MOTION, locks.SWAP, locks.TUNE])
+# Stated, so nothing is inferred from what it takes: everything it depends on staying as it is.
+app.register_action(acquire, locks=[locks.MOTION, locks.SWAP, locks.TUNE, locks.DETECTOR])

@@ -6,6 +6,7 @@ from typing import Optional
 from arkitekt import Task
 from koil import unkoil
 
+from newswitch.drivers.uc2.actuators import Turret
 from newswitch.drivers.uc2.dispatch import dispatch_uc2_events
 from newswitch.models.uc2 import STAGE_AXES
 from newswitch.protocols.uc2 import UC2BusManager
@@ -56,7 +57,7 @@ def home_stage(uc2_bus: UC2BusManager, task: Task, axes: Optional[list[str]] = N
 def stop_stage(uc2_bus: UC2BusManager, axis: Optional[str] = None) -> None:
     """Immediately stop one stage axis (or all axes when none is given).
 
-    Deliberately lock-free so it works while a move holds the stage lock.
+    Deliberately lock-free so it works while a move holds the motion lock.
     """
     targets = [axis.upper()] if axis else list(STAGE_AXES)
     for target in targets:
@@ -78,9 +79,13 @@ def uc2_scan_nodes(uc2_bus: UC2BusManager, uc2_state: UC2State, timeout: float =
     return unkoil(uc2_bus.ascan_nodes, timeout)
 
 
-def home_objective(uc2_bus: UC2BusManager) -> None:
-    """Home the objective changer."""
+def home_objective(uc2_bus: UC2BusManager, values: Values) -> None:
+    """Home the objective changer, which leaves it at its first slot."""
     unkoil(uc2_bus.aobjective_home)
+    for name, driver in values.drivers.items():
+        if isinstance(driver, Turret):
+            slots = values.instrument.variables[name].slots
+            values.stepped(name, min(slots))
 
 
 def galvo_set_position(uc2_bus: UC2BusManager, x: int, y: int) -> None:

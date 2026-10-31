@@ -5,7 +5,7 @@ relative paths are taken relative to ``backend/``). There is no other file: ever
 microscope, how it runs included, is read from its description, and only ever read. What changes
 while it runs lives in its states.
 
-`Settings` is the app context of the registry, so every action and startup hook can take it.
+`Run` holds them, as the app context of the registry (`newswitch.microscope.run`).
 """
 
 from __future__ import annotations

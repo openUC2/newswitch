@@ -23,7 +23,7 @@ export const StopStageDefinition: ActionDefinition<
   name: 'stop_stage',
   appKey: 'default',
   description:
-    'Immediately stop one stage axis (or all axes when none is given).\n\nDeliberately lock-free so it works while a move holds the stage lock.',
+    'Immediately stop one stage axis (or all axes when none is given).\n\nDeliberately lock-free so it works while a move holds the motion lock.',
   argsSchema: StopStageArgsSchema,
   returnSchema: StopStageReturnSchema,
   lockKeys: [],
@@ -32,7 +32,7 @@ export const StopStageDefinition: ActionDefinition<
 /**
  * Immediately stop one stage axis (or all axes when none is given).
 
-Deliberately lock-free so it works while a move holds the stage lock.
+Deliberately lock-free so it works while a move holds the motion lock.
  */
 export const useStopStage = () => {
   return useAction(StopStageDefinition);

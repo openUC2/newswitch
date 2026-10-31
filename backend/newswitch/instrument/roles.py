@@ -15,19 +15,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cached_property
 
-from newswitch.instrument.compiler import difference, traced_answer
-from newswitch.instrument.spec import Instrument, Move, Variable
-
-
-def _nudge(variable: Variable) -> float:
-    """How far to move a variable to see what it does: a part of its range, not its finest step.
-
-    A piezo's 10 nm step changes nothing a detector can tell, and it is still what focuses.
-    """
-    assert variable.step is not None
-    if variable.min is not None and variable.max is not None:
-        return max(variable.step, (variable.max - variable.min) / 20.0)
-    return variable.step * 10.0
+from newswitch.instrument.compiler import difference, nudge_of, traced_answer
+from newswitch.instrument.spec import Instrument, Move
 
 
 @dataclass(frozen=True)
@@ -48,7 +37,7 @@ class Roles:
                 if variable.verb == "swaps":
                     nudges = [slot for slot in variable.slots if slot != state[name]]
                 else:
-                    nudges = [state[name] + _nudge(variable)]
+                    nudges = [state[name] + nudge_of(variable)]
                 changes: set[str] = set()
                 for nudge in nudges:
                     after = traced_answer(self.instrument, detector, {**state, name: nudge})

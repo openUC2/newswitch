@@ -67,7 +67,7 @@ export const RunAutofocusDefinition: ActionDefinition<
     'Autofocus: sweep Z around the current position and move to the sharpest plane.',
   argsSchema: RunAutofocusArgsSchema,
   returnSchema: RunAutofocusReturnSchema,
-  lockKeys: ['motion'],
+  lockKeys: ['detector', 'motion'],
 };
 
 /**

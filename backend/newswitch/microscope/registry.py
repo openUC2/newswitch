@@ -1,12 +1,12 @@
-"""The app registry of one newswitch: the parts its instrument has, merged.
+"""The app registry of one newswitch: what its instrument has, merged.
 
-Each part is a registry of its own (`newswitch.microscope.apps`): its states, contexts, startup hook,
+Each is a registry of its own (`newswitch.microscope.apps`): its states, contexts, startup hook,
 actions and background tasks, as plain module-level functions. `create_registry` creates a fresh `App`
-and merges the ones the instrument's ``parts`` section says it has:
+and merges the ones the instrument turns out to have:
 
 1. the core every microscope has (the models, files, the expanse, calibration, light paths, hooks);
-2. one registry per part it has (stage, illumination, detector, objective, filter bank, UC2 board);
-3. what needs several parts, when all of them are there (focus, acquisition, a UC2 stage).
+2. what it has: its variables, its detectors, a UC2 board;
+3. what needs several of those, when all of them are there (focus, acquisition).
 
 How it is served is not registered here. The detectors stream to a `FrameSink` context
 (declared by the core, a protocol); ``main_fastapi.py`` and ``main_arkitekt.py`` each provide it
