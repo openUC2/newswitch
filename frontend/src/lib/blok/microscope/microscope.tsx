@@ -9,7 +9,7 @@ import * as z from "zod";
 import {
   LatestImage,
   LiveView,
-  MultidimensionalAcquisitionControl,
+  AcquisitionControl,
   SettingsPanel,
   StatusPanel,
 } from "@/components/microscope";
@@ -129,10 +129,10 @@ export const microscopeBlokComponents: BlokComponentDefinition[] = [
     ["move", "move_one", "move_home"],
   ),
   panelBlok(
-    "MultidimensionalAcquisitionControl",
-    "The multidimensional acquisition form: timepoints, positions, stacks and channels; start, pause and resume.",
-    MultidimensionalAcquisitionControl,
-    ["acquire_multidimensional_acquisition"],
+    "AcquisitionControl",
+    "An acquisition as a plan over what this microscope has: channels, positions, planes and times.",
+    AcquisitionControl,
+    ["acquire"],
   ),
   panelBlok(
     "CalibrateLightPath",

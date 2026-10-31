@@ -23,6 +23,12 @@ from main_fastapi import create_app, create_fastapi_registry
 from newswitch.accounts.auth import AllowAllAuthenticator
 from newswitch.instrument import spec
 from newswitch.settings import Settings
+from newswitch.models.acquisition import (
+    AcquisitionChannel,
+    AcquisitionPlan,
+    AcquisitionPosition,
+    AcquisitionStack,
+)
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
 
@@ -93,3 +99,26 @@ async def collect_until_completed(
             break
 
     return collected
+
+
+def acquisition(
+    channels: list[AcquisitionChannel],
+    planes: list[float] | None = None,
+    times: int = 1,
+    places: tuple[tuple[float, float], ...] = ((0.0, 0.0),),
+    z: float = 0.0,
+    name: str = "run",
+    **rest: Any,  # noqa: ANN401
+) -> AcquisitionPlan:
+    """The same stack of `channels` at every place, every time."""
+    return AcquisitionPlan(
+        channels=channels,
+        positions=[
+            AcquisitionPosition(set_to={"stage.x": x, "stage.y": y, "stage.z": z})
+            for x, y in places
+        ],
+        stack=AcquisitionStack(offsets=planes or []),
+        times=times,
+        name=name,
+        **rest,
+    )

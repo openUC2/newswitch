@@ -1,7 +1,6 @@
 """What an acquisition is asked to do: a multidimensional acquisition, a region scan."""
 
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 
 from arkitekt import model_field, withValidator
@@ -17,116 +16,103 @@ class PositionOrder(str, Enum):
 
 
 @dataclass
-class StreamIllumination:
-    """Represents an illumination channel to acquire."""
-
-    source: str  # The source by its name in the instrument (e.g., "laser_488"), or its slot
-    wavelength: float  # Wavelength of the illumination in nm
-    intensity: float  # Intensity of the illumination (0-1)
-
-
-@dataclass
-class Streams:
-    """One lighting of the sample, and the detectors that take an image of it."""
+class AcquisitionChannel:
+    """One thing to see: what to set for it, and the detectors that take an image of it."""
 
     detectors: list[str] = model_field(
         default_factory=list,
         validators=[
             withValidator(
                 "len(value) > 0",
-                error_message="We need at least one detector to acquire this stream",
+                error_message="We need at least one detector to acquire this channel",
             )
         ],
-        description="The detectors that image this stream, by name or slot; each becomes a channel, a color camera one per color",
+        description="The detectors that image it, by name; each becomes channels of the dataset.",
     )
-    mapping: str = model_field(
+    name: str = model_field(
         default="",
-        description="What this stream shows (e.g., 'GFP', 'RFP'): the start of its channels' labels",
+        description="What it shows (e.g., 'GFP'): the start of its channels' labels.",
     )
-    # This is using a validator input, which will run on the frontend to ensure the user has entered at least one illumination with valid intensity before allowing them to start the acquisition
-    illuminations: list[StreamIllumination] = model_field(
-        default_factory=list,
-        validators=[
-            withValidator(
-                "len(value) > 0",
-                error_message="We need at least one illumination channel to acquire this stream",
-            )
-        ],
-        description="List of illuminations to use for this stream (e.g., [{'source': 'LED1', 'wavelength': 488, 'intensity': 0.8}])",
+    set_to: dict[str, float] = model_field(
+        default_factory=dict,
+        description="What to set for it, by variable (e.g., 'laser_488.power', 'filter.slot'). A "
+        "source it does not name is off.",
     )
 
 
 @dataclass
-class Stack:
-    """Represents a stack of images at different z-slices."""
+class AcquisitionPosition:
+    """One place to go: each is a dataset of its own."""
 
-    z_offset: float  # Offset from the current z position
-    z_slices: list[float]  # List of z-slice positions
-    z_step: float  # Step size between z-slices
-    channels: list[Streams]  # List of channels to acquire at each z-slice
-    z_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at each z-slice (e.g., 'autofocus', 'z_calibration')",
-    )  # List of hooks to execute at each z-slice (e.g., "autofocus", "z_calibration")
-
-
-@dataclass
-class Position:
-    """Represents a position in 3D space."""
-
-    x: float
-    y: float
-    z: float
-    stacks: list[Stack]
-    p_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at each position (e.g., 'autofocus', 'z_calibration')",
+    set_to: dict[str, float] = model_field(
+        default_factory=dict,
+        description="What to set to get there, by variable (e.g., 'stage.x'); nothing: stay.",
     )
+    name: str = model_field(default="", description="What to call it.")
 
 
 @dataclass
-class Timepoint:
-    """Represents a timepoint in a temporal sequence."""
+class AcquisitionStack:
+    """Planes around where a position is."""
 
-    time: datetime | None = model_field(
+    offsets: list[float] = model_field(
+        default_factory=list,
+        description="Where the planes are, from where the position is; none: one plane, there.",
+    )
+    variable: str | None = model_field(
         default=None,
-        description="Absolute time to acquire this timepoint (e.g., '2024-01-01T12:00:00') or None to acquire immediately after the previous timepoint",
-    )
-    positions: list[Position] = model_field(
-        default_factory=list,
-        description="List of stage positions to acquire at this timepoint",
-    )
-    position_order: PositionOrder = model_field(
-        default=PositionOrder.SEQUENTIAL,
-        description="Order in which to visit stage positions (e.g., 'sequential', 'random')",
-    )
-    t_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at each timepoint (e.g., 'autofocus', 'z_calibration')",
+        description="What to sweep; by default what focuses, if it is clear which that is.",
     )
 
 
 @dataclass
-class MultidimensionalAcquisition:
-    """Configuration for a multidimensional acquisition."""
+class AcquisitionPlan:
+    """What to acquire: every channel, on every plane, at every position, every time."""
 
-    timepoints: list[Timepoint] = model_field(
+    channels: list[AcquisitionChannel] = model_field(
         default_factory=list,
-        description="List of timepoints to acquire, each with its own stage positions and hooks",
+        description="What to see at each plane.",
         validators=[
             withValidator(
                 "len(value) > 0",
-                error_message="You need at least one timepoint to perform an acquisition",
+                error_message="You need at least one channel to perform an acquisition",
             )
         ],
     )
-    file_name: str = model_field(
+    positions: list[AcquisitionPosition] = model_field(
+        default_factory=lambda: [AcquisitionPosition()],
+        description="Where to go; each is a dataset of its own.",
+        validators=[
+            withValidator(
+                "len(value) > 0",
+                error_message="You need at least one position to perform an acquisition",
+            )
+        ],
+    )
+    stack: AcquisitionStack = model_field(
+        default_factory=AcquisitionStack, description="Which planes to take at each position."
+    )
+    times: int = model_field(default=1, description="How many times to do all of it.")
+    every_s: float = model_field(
+        default=0.0,
+        description="Seconds from the start of one time to the next; 0: right after it.",
+    )
+    order: PositionOrder = model_field(
+        default=PositionOrder.SEQUENTIAL, description="In which order to visit the positions."
+    )
+    name: str = model_field(
         default="acquisition",
-        description="Name of the datasets created (e.g., 'experiment1'); with several positions, each ends in its own P<n>",
+        description="Name of the datasets; with several positions, each gets its position's.",
     )
     m_hooks: list[Hook] = model_field(
-        default_factory=list,
-        description="List of hooks to execute at the start of the acquisition (e.g., 'autofocus', 'z_calibration')",
+        default_factory=list, description="What to run at the start (e.g., an autofocus)."
+    )
+    t_hooks: list[Hook] = model_field(default_factory=list, description="What to run each time.")
+    p_hooks: list[Hook] = model_field(
+        default_factory=list, description="What to run at each position, on arrival."
+    )
+    z_hooks: list[Hook] = model_field(
+        default_factory=list, description="What to run at each plane."
     )
 
 

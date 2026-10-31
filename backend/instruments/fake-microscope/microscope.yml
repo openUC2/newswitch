@@ -129,7 +129,7 @@ settings:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@4
+  catalog: newswitch@5
   bloks:
     view-fluorescence:
       description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'

@@ -166,7 +166,7 @@ nothing. Each states the `catalog` it is written against and its `bloks` by name
 
 ```yaml
 ui:
-  catalog: newswitch@4
+  catalog: newswitch@5
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'
@@ -205,22 +205,37 @@ element:
 
 ## Where an acquisition goes
 
-A multidimensional acquisition is stored in mikro (`just mikro`, then `just dev-mikro`), not in the
-local cache, and is refused before anything moves when a server has no mikro. Each stage position
-becomes one `ArrayDataset` of `(t, c, z, y, x)`, placed in a stage space shared by this microscope:
+An acquisition is a plan over variables: every channel, on every plane, at every position, every time.
 
-- **`c`**: a stream lights the sample for its `detectors`. Each detector is a channel, and a color
-  camera one per color. A detector whose image comes out mirrored (a splitter's reflected arm) is
-  turned back, so every channel shows the sample the same way round.
-- **Anchors**: `c` has its label and light path; each `t, c, z` has the microscope's state and when
-  the image was taken.
+```yaml
+channels:
+  - {name: gfp, detectors: [camera], set_to: {laser_488.power: 5.0, filter_wheel.slot: 2, camera.exposure: 100.0}}
+  - {name: red, detectors: [camera], set_to: {led_625.power: 2.0e-5, filter_wheel.slot: 3, camera.exposure: 400.0}}
+positions:
+  - {set_to: {stage.x: 0.0, stage.y: 0.0}}
+  - {set_to: {stage.x: 500.0, stage.y: 0.0}}
+stack: {offsets: [-1.0, -0.5, 0.0, 0.5, 1.0]}  # variable: piezo.z, if several things focus
+times: 10
+every_s: 60.0
+```
+
+A channel sets what it says, and a source it does not name is off. It is stored in mikro (`just mikro`,
+then `just dev-mikro`), not in the local cache, and is refused before anything moves when a server has
+no mikro. Each position becomes one `ArrayDataset` of `(t, c, z, y, x)`, of the type its sensors
+deliver, placed in a stage space shared by this microscope:
+
+- **`c`**: each detector of a channel is a channel of the dataset, and a color camera one per color. A
+  detector whose image comes out mirrored (a splitter's reflected arm) is turned back, so every channel
+  shows the sample the same way round.
+- **Anchors**: `c` has its label and light path; each `t, c, z` has every variable and when the image
+  was taken.
 - **Placement**: the middle of the image is where the stage was. It counts as validated once every
   detector's light path is calibrated, and as inferred from the optics until then.
 
-An array is regular, so what cannot be one is refused before anything moves: a position that moves
-between timepoints, several stacks at a position, uneven z planes, detectors that disagree on image
-size or on pixel size by more than 1%. Images stay in memory until everything is taken, so an
-acquisition larger than the free memory is refused too, and stopping one part way keeps nothing.
+An array is regular, so what cannot be one is refused before anything moves: uneven planes, values out
+of a variable's range, and detectors that disagree on image size or on pixel size by more than 1% under
+what their channels set. Images stay in memory until everything is taken, so an acquisition larger than
+the free memory is refused too, and stopping one part way keeps nothing.
 
 ## How it reaches hardware
 

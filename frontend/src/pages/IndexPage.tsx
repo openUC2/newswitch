@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { BloksPanel } from "../components/bloks/BloksPanel";
 import { NewswitchBlok } from "../components/bloks/NewswitchBlok";
 import {
-  MultidimensionalAcquisitionControl,
+  AcquisitionControl,
   SettingsPanel,
   MoveControl,
 } from "../components/microscope";
@@ -191,7 +191,7 @@ export function LegacyIndexLayout() {
       <ResizablePanel defaultSize={30} minSize={15} maxSize={40}>
         <div className="h-full overflow-y-auto p-4 flex flex-col gap-4">
           <MoveControl />
-          <MultidimensionalAcquisitionControl />
+          <AcquisitionControl />
           <CalibrateLightPath />
           <BloksPanel />
         </div>

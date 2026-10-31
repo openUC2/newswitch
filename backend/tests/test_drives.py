@@ -11,10 +11,10 @@ import yaml
 
 from newswitch.instrument import parts, spec
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.acquisition import StreamIllumination, Streams
-from newswitch.services.stage import Stage
+from newswitch.models.acquisition import AcquisitionChannel
+from newswitch.services.values import Values
 from tests.conftest import run_settings
-from tests.test_multidimensional_acquisition import RecordingStore, acquire, plan
+from tests.test_acquire import RecordingStore, acquire, plan
 
 BASE = {
     "spec": "newswitch/instrument/v0",
@@ -114,11 +114,11 @@ def compiled(tmp_path: Path) -> Microscope:
     return build_microscope(run_settings(tmp_path), spec.load(described(tmp_path)))
 
 
-def stream() -> Streams:
+def stream() -> AcquisitionChannel:
     """The laser for the camera."""
-    return Streams(
+    return AcquisitionChannel(
         detectors=["camera"],
-        illuminations=[StreamIllumination(source="laser", wavelength=488.0, intensity=1.0)],
+        set_to={"laser.power": 50},
     )
 
 
@@ -252,13 +252,14 @@ def test_a_color_camera_delivers_its_colors() -> None:
 def software_moves(monkeypatch: pytest.MonkeyPatch) -> list[float | None]:
     """The z of every move the routine asks of a stage; what a wire steps goes past it."""
     moves: list[float | None] = []
-    original = Stage.move
+    original = Values.set
 
-    def move(self: Stage, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-        moves.append(kwargs.get("z"))
-        return original(self, *args, **kwargs)
+    def recording(self: Values, targets: Any, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        if "stage.z" in targets:
+            moves.append(targets["stage.z"])
+        return original(self, targets, *args, **kwargs)
 
-    monkeypatch.setattr(Stage, "move", move)
+    monkeypatch.setattr(Values, "set", recording)
     return moves
 
 
@@ -304,7 +305,7 @@ def test_a_swept_stack_is_the_stack_software_would_take(tmp_path: Path) -> None:
     "planes, finding",
     [
         ([0.0, 3.0, 6.0], "steps the stage by 2.0 um"),
-        ([40.0, 42.0, 44.0, 46.0, 48.0, 50.0, 52.0], "outside the stage's travel"),
+        ([40.0, 42.0, 44.0, 46.0, 48.0, 50.0, 52.0], "stage.z goes from"),
     ],
 )
 def test_a_stack_the_wire_cannot_do_is_refused_before_anything_moves(
@@ -323,7 +324,7 @@ def test_hooks_between_swept_planes_are_refused(
     """Nothing can run between the planes of a sweep."""
     m = compiled(tmp_path)
     config = plan([stream()], planes=[0.0, 2.0])
-    config.timepoints[0].positions[0].stacks[0].z_hooks = ["anything"]  # type: ignore[list-item]
+    config.z_hooks = ["anything"]  # type: ignore[list-item]
     with pytest.raises(ValueError, match="between the planes"):
         acquire(m, config)
     assert software_moves == []

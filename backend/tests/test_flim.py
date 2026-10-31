@@ -14,10 +14,10 @@ from mikro.api import schema
 from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.acquisition import StreamIllumination, Streams
+from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.services.mikro_store import AXES, MICROTIME_AXES, _dataset_axes, _optical_element
 from tests.conftest import run_settings
-from tests.test_multidimensional_acquisition import acquire, plan
+from tests.test_acquire import acquire, plan
 
 INSTRUMENT = Path(__file__).parent.parent / "instruments" / "flim"
 
@@ -34,11 +34,11 @@ def microscope(tmp_path: Path, instrument: spec.Instrument) -> Microscope:
     return build_microscope(run_settings(tmp_path), instrument)
 
 
-def stream() -> Streams:
+def stream() -> AcquisitionChannel:
     """The laser for the detector."""
-    return Streams(
+    return AcquisitionChannel(
         detectors=["spad"],
-        illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
+        set_to={"laser_488.power": 50},
     )
 
 
@@ -147,9 +147,9 @@ def test_other_datasets_keep_their_axes(tmp_path: Path) -> None:
     instrument = spec.load(INSTRUMENT.parent / "dual-camera")
     m = build_microscope(run_settings(tmp_path), instrument)
     streams = [
-        Streams(
+        AcquisitionChannel(
             detectors=["camera_green"],
-            illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
+            set_to={"laser_488.power": 50},
         )
     ]
     acquired = acquire(m, plan(streams)).published[0]
@@ -178,9 +178,9 @@ def test_detectors_with_and_without_arrival_times_cannot_share_a_dataset(tmp_pat
     m = build_microscope(run_settings(tmp_path), spec.load(edited(tmp_path, change)))
     assert m.values is not None
     moved_from = m.values.snapshot()
-    both = Streams(
+    both = AcquisitionChannel(
         detectors=["spad", "pmt"],
-        illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
+        set_to={"laser_488.power": 50},
     )
     with pytest.raises(ValueError, match="arrival-time bins"):
         acquire(m, plan([both]))

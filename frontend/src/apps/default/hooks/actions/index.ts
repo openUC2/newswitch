@@ -1,5 +1,5 @@
 import type { ActionDefinition } from '@/lib/arkitekt/task';
-import { AcquireMultidimensionalAcquisitionDefinition } from './acquireMultidimensionalAcquisition';
+import { AcquireDefinition } from './acquire';
 import { ActivateDetectorDefinition } from './activateDetector';
 import { CalibrateLightPathDefinition } from './calibrateLightPath';
 import { CaptureImageDefinition } from './captureImage';
@@ -28,46 +28,40 @@ import { Uc2ScanNodesDefinition } from './uc2ScanNodes';
 
 export { createIndexedUnion } from './utils';
 export {
-  StreamIlluminationSchema,
-  StreamsSchema,
+  AcquisitionChannelSchema,
+  AcquisitionPositionSchema,
+  AcquisitionStackSchema,
   SoftwareAutofocusHookSchema,
   ZCalibrationHookSchema,
-  ZHookUnionSchema,
-  StackSchema,
-  PHookUnionSchema,
-  PositionSchema,
-  THookUnionSchema,
-  TimepointSchema,
   MHookUnionSchema,
-  MultidimensionalAcquisitionSchema,
+  THookUnionSchema,
+  PHookUnionSchema,
+  ZHookUnionSchema,
+  AcquisitionPlanSchema,
   AcquiredDatasetSchema,
-  AcquireMultidimensionalAcquisitionArgsSchema,
-  AcquireMultidimensionalAcquisitionReturnSchema,
-  AcquireMultidimensionalAcquisitionDefinition,
-  useAcquireMultidimensionalAcquisition,
-} from './acquireMultidimensionalAcquisition';
+  AcquireArgsSchema,
+  AcquireReturnSchema,
+  AcquireDefinition,
+  useAcquire,
+} from './acquire';
 export type {
-  StreamIllumination,
-  StreamIlluminationOutput,
-  Streams,
-  StreamsOutput,
+  AcquisitionChannel,
+  AcquisitionChannelOutput,
+  AcquisitionPosition,
+  AcquisitionPositionOutput,
+  AcquisitionStack,
+  AcquisitionStackOutput,
   SoftwareAutofocusHook,
   SoftwareAutofocusHookOutput,
   ZCalibrationHook,
   ZCalibrationHookOutput,
-  Stack,
-  StackOutput,
-  Position,
-  PositionOutput,
-  Timepoint,
-  TimepointOutput,
-  MultidimensionalAcquisition,
-  MultidimensionalAcquisitionOutput,
+  AcquisitionPlan,
+  AcquisitionPlanOutput,
   AcquiredDataset,
   AcquiredDatasetOutput,
-  AcquireMultidimensionalAcquisitionArgs,
-  AcquireMultidimensionalAcquisitionReturn,
-} from './acquireMultidimensionalAcquisition';
+  AcquireArgs,
+  AcquireReturn,
+} from './acquire';
 export {
   ActivateDetectorArgsSchema,
   ActivateDetectorReturnSchema,
@@ -269,8 +263,7 @@ export {
 export type { Uc2ScanNodesArgs, Uc2ScanNodesReturn } from './uc2ScanNodes';
 
 export const globalActionDefinition = {
-  AcquireMultidimensionalAcquisition:
-    AcquireMultidimensionalAcquisitionDefinition,
+  Acquire: AcquireDefinition,
   ActivateDetector: ActivateDetectorDefinition,
   CalibrateLightPath: CalibrateLightPathDefinition,
   CaptureImage: CaptureImageDefinition,

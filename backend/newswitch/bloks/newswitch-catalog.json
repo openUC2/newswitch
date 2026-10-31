@@ -1,8 +1,26 @@
 {
   "name": "newswitch",
-  "version": 4,
+  "version": 5,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
+    {
+      "name": "AcquisitionControl",
+      "description": "An acquisition as a plan over what this microscope has: channels, positions, planes and times.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [],
+      "notDownstreamOf": [],
+      "props": [
+        {
+          "key": "className",
+          "kind": "STRING",
+          "required": false,
+          "description": "Extra Tailwind classes appended to the element."
+        }
+      ]
+    },
     {
       "name": "BloksPanel",
       "description": "Lists the other bloks the backend declares and opens one in a dialog.",
@@ -213,24 +231,6 @@
     {
       "name": "MoveControl",
       "description": "Everything that moves, with the move's progress: a pad for what moves the view, up and down for what focuses it, when it is clear which those are.",
-      "acceptsChildren": false,
-      "context": "HTML",
-      "childrenContext": null,
-      "inheritsContext": false,
-      "downstreamOf": [],
-      "notDownstreamOf": [],
-      "props": [
-        {
-          "key": "className",
-          "kind": "STRING",
-          "required": false,
-          "description": "Extra Tailwind classes appended to the element."
-        }
-      ]
-    },
-    {
-      "name": "MultidimensionalAcquisitionControl",
-      "description": "The multidimensional acquisition form: timepoints, positions, stacks and channels; start, pause and resume.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,

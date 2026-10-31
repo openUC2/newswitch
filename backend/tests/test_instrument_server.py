@@ -383,7 +383,7 @@ def test_the_light_sheet_has_its_own_views() -> None:
     assert (
         "self.MoveState.moves.stage.z" in sheet and "camera.axes" in sheet and "<LiveView" in sheet
     )
-    assert "<MultidimensionalAcquisitionControl" in ui.bloks["view-stack"].bsx
+    assert "<AcquisitionControl" in ui.bloks["view-stack"].bsx
 
 
 def test_the_point_scanner_has_its_own_views() -> None:
@@ -394,4 +394,4 @@ def test_the_point_scanner_has_its_own_views() -> None:
     assert ui.bloks["view-scan"].default
     scan = ui.bloks["view-scan"].bsx
     assert "self.MoveState.moves.stage.z" in scan and "pmt.axes" in scan and "<LiveView" in scan
-    assert "<MultidimensionalAcquisitionControl" in ui.bloks["view-stack"].bsx
+    assert "<AcquisitionControl" in ui.bloks["view-stack"].bsx

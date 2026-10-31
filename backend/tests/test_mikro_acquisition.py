@@ -32,25 +32,15 @@ from main_fastapi import create_app  # noqa: E402
 from newswitch.accounts.auth import AllowAllAuthenticator  # noqa: E402
 from newswitch.instrument import spec  # noqa: E402
 from newswitch.microscope.parts import build_microscope  # noqa: E402
-from newswitch.models.acquisition import (  # noqa: E402
-    AcquiredDataset,
-    MultidimensionalAcquisition,
-    Position,
-    Stack,
-    StreamIllumination,
-    Streams,
-    Timepoint,
-)
-from newswitch.routines.multidimensional_acquisition import (  # noqa: E402
-    acquire_multidimensional_acquisition,
-)
+from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel  # noqa: E402
+from newswitch.routines.acquire import acquire  # noqa: E402
 from newswitch.services.mikro_connection import MikroConnection  # noqa: E402
 from newswitch.services.mikro_store import MikroDatasetStore  # noqa: E402
-from tests.conftest import collect_until_completed, run_settings  # noqa: E402
+from tests.conftest import acquisition, collect_until_completed, run_settings  # noqa: E402
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
-LASER = StreamIllumination("laser_488", 488.0, 0.8)
-LED = StreamIllumination("led_625", 625.0, 0.5)
+LASER = {"laser_488.power": 40.0}
+LED = {"led_625.power": 2.5e-5}
 Quantity = pint.UnitRegistry().Quantity
 
 pytestmark = pytest.mark.skipif(
@@ -101,7 +91,7 @@ def run(
     mikro: Mikro,
     tmp_path: Path,
     instrument: str,
-    streams: list[Streams],
+    streams: list[AcquisitionChannel],
     places: tuple[tuple[float, float], ...] = ((0.0, 0.0),),
     planes: list[float] | None = None,
     times: int = 1,
@@ -109,26 +99,12 @@ def run(
     """The routine on a simulated instrument, through the store a server would use."""
     described = spec.load(INSTRUMENTS / instrument)
     m = build_microscope(run_settings(tmp_path), described)
-    positions = [
-        Position(
-            x=x,
-            y=y,
-            z=0.0,
-            stacks=[Stack(z_offset=0.0, z_slices=planes or [], z_step=1.0, channels=streams)],
-        )
-        for x, y in places
-    ]
-    return acquire_multidimensional_acquisition(
-        MultidimensionalAcquisition(
-            timepoints=[Timepoint(positions=positions) for _ in range(times)],
-            file_name=f"test {uuid.uuid4().hex[:8]}",
-        ),
+    return acquire(
+        acquisition(streams, planes, times, places, name=f"test {uuid.uuid4().hex[:8]}"),
         MikroDatasetStore(mikro, described, m),
         m.optics,
         m.detector,
         m.values,
-        m.calibration_state,
-        m.metadata,
         m.hooks,
         Task.local(),
     )
@@ -154,8 +130,8 @@ def test_two_detectors_merge_into_one_dataset(mikro: Mikro, tmp_path: Path) -> N
         tmp_path,
         "dual-camera",
         [
-            Streams(
-                detectors=["camera_green", "camera_red"], mapping="all", illuminations=[LASER, LED]
+            AcquisitionChannel(
+                detectors=["camera_green", "camera_red"], name="all", set_to={**LASER, **LED}
             )
         ],
         planes=[-2.0, 0.0, 2.0],
@@ -177,7 +153,7 @@ def test_every_channel_and_plane_has_its_anchor(mikro: Mikro, tmp_path: Path) ->
         mikro,
         tmp_path,
         "dual-camera",
-        [Streams(detectors=["camera_green", "camera_red"], mapping="gfp", illuminations=[LASER])],
+        [AcquisitionChannel(detectors=["camera_green", "camera_red"], name="gfp", set_to=LASER)],
         planes=[-1.0, 1.0],
     )
     anchors = anchors_of(made.id)
@@ -206,7 +182,7 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
         mikro,
         tmp_path,
         "dual-camera",
-        [Streams(detectors=["camera_green"], mapping="gfp", illuminations=[LASER])],
+        [AcquisitionChannel(detectors=["camera_green"], name="gfp", set_to=LASER)],
         places=((0.0, 0.0), (60.0, 40.0)),
     )
     world = space_3d(mikro, "stage", reference="stage-dual-camera")
@@ -230,7 +206,7 @@ def test_an_rgb_camera_is_three_labelled_channels(mikro: Mikro, tmp_path: Path) 
         mikro,
         tmp_path,
         "rgb-camera",
-        [Streams(detectors=["camera"], mapping="gfp", illuminations=[LASER])],
+        [AcquisitionChannel(detectors=["camera"], name="gfp", set_to=LASER)],
     )
     assert tuple(mikro.get_array_dataset(made.id).shape) == (1, 3, 1, 512, 512)
     labels = {
@@ -248,46 +224,26 @@ async def test_a_served_agent_acquires_into_mikro(tmp_path: Path) -> None:
     app = create_app(settings, AllowAllAuthenticator())
     name = f"served {uuid.uuid4().hex[:8]}"
     config = {
-        "file_name": name,
-        "m_hooks": [],
-        "timepoints": [
+        "channels": [
             {
-                "t_hooks": [],
-                "position_order": "SEQUENTIAL",
-                "positions": [
-                    {
-                        "x": 0.0,
-                        "y": 0.0,
-                        "z": 0.0,
-                        "p_hooks": [],
-                        "stacks": [
-                            {
-                                "z_offset": 0.0,
-                                "z_slices": [],
-                                "z_step": 1.0,
-                                "z_hooks": [],
-                                "channels": [
-                                    {
-                                        "detectors": ["camera_green", "camera_red"],
-                                        "mapping": "gfp",
-                                        "illuminations": [
-                                            {
-                                                "source": "laser_488",
-                                                "wavelength": 488.0,
-                                                "intensity": 0.8,
-                                            }
-                                        ],
-                                    }
-                                ],
-                            }
-                        ],
-                    }
-                ],
+                "detectors": ["camera_green", "camera_red"],
+                "name": "gfp",
+                "set_to": {"laser_488.power": 40.0},
             }
         ],
+        "positions": [{"set_to": {"stage.x": 0.0, "stage.y": 0.0, "stage.z": 0.0}, "name": ""}],
+        "stack": {"offsets": [], "variable": None},
+        "times": 1,
+        "every_s": 0.0,
+        "order": "SEQUENTIAL",
+        "name": name,
+        "m_hooks": [],
+        "t_hooks": [],
+        "p_hooks": [],
+        "z_hooks": [],
     }
     async with AsyncAgentTestClient(app) as client:
-        started = await client.assign("acquire_multidimensional_acquisition", {"config": config})
+        started = await client.assign("acquire", {"plan": config})
         events = await collect_until_completed(client, started.task_id, timeout=60.0)
     # Not the last event: the test client drops frames when its 0.1 s read times out, so whether
     # COMPLETED reaches it is chance. The server holding the dataset is what counts.
@@ -310,7 +266,7 @@ def test_a_stack_the_camera_sweeps_reaches_the_server(mikro: Mikro, tmp_path: Pa
         mikro,
         tmp_path,
         "light-sheet",
-        [Streams(detectors=["camera"], mapping="gfp", illuminations=[LASER])],
+        [AcquisitionChannel(detectors=["camera"], name="gfp", set_to=LASER)],
         planes=[-1.0, -0.5, 0.0, 0.5, 1.0],
     )
     dataset = mikro.get_array_dataset(made.id)
@@ -331,7 +287,7 @@ def test_a_flim_dataset_has_a_microtime_axis_on_the_server(mikro: Mikro, tmp_pat
         mikro,
         tmp_path,
         "flim",
-        [Streams(detectors=["spad"], mapping="gfp", illuminations=[LASER])],
+        [AcquisitionChannel(detectors=["spad"], name="gfp", set_to=LASER)],
     )
     dataset = mikro.get_array_dataset(made.id)
     assert tuple(dataset.axis_names) == ("t", "c", "m", "z", "y", "x")

@@ -279,6 +279,12 @@ class SimulatedDetectorManager:
         self.on_change()
         return detector
 
+    def size_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
+        """The (width, height) of its images, at `binning` or the one it has now."""
+        detector = self.state.get(name)
+        factor = detector.current_binning if binning is None else self._snap_binning(int(binning))
+        return self._image_size(detector, factor, detector.current_roi)
+
     def get_detector_state(self, name: str) -> Optional[Detector]:
         """The detector called `name`, if there is one."""
         return next((d for d in self.state.detectors if d.name == name), None)

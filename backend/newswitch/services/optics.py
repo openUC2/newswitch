@@ -94,17 +94,19 @@ class OpticsManager:
         """The light path of `detector`, as things are now."""
         return self._path(detector, self.values())
 
-    def snapshot(self, path: LightPath) -> LightPathSnapshot:
-        """`path` as things are now, keyed by what a calibration of it depends on."""
+    def snapshot(
+        self, path: LightPath, values: Mapping[str, Any] | None = None
+    ) -> LightPathSnapshot:
+        """`path` under `values`, or as things are now, keyed by what a calibration depends on."""
         assert self.instrument is not None
         if self._influences is None:
             self._influences = influences(self.instrument)
-        values = self.values()
+        at = self.values() if values is None else values
         key = _digest(
             {
                 "detector": path.detector,
                 "region": self.detector_state.get(path.detector).current_roi,
-                **{variable: values[variable] for variable in self._influences[path.detector]},
+                **{variable: at[variable] for variable in self._influences[path.detector]},
             }
         )
         return LightPathSnapshot(
@@ -113,7 +115,7 @@ class OpticsManager:
                 {
                     "key": key,
                     **{
-                        variable.name: values[variable.name]
+                        variable.name: at[variable.name]
                         for variable in self.instrument.variables.values()
                         if variable.verb == "swaps" or variable.cube in self.instrument.sources()
                     },
@@ -123,10 +125,12 @@ class OpticsManager:
             edges=path.edges,
         )
 
-    def predicted(self, detector: str) -> CalibratedLightPath:
+    def predicted(
+        self, detector: str, values: Mapping[str, Any] | None = None
+    ) -> CalibratedLightPath:
         """What the optics predict for a detector, in the terms of a calibration of it."""
         assert self.table is not None
-        answer = self.table.answer(detector, self.values())
+        answer = self.table.answer(detector, self.values() if values is None else values)
         (xx, xy), (yx, yy) = answer.pixel_to_stage
         return CalibratedLightPath(
             # A calibration says how far the stage moves to shift the image by a pixel: the
@@ -140,6 +144,16 @@ class OpticsManager:
             fov_width=answer.field_of_view_um[0],
             fov_height=answer.field_of_view_um[1],
         )
+
+    def scale_under(
+        self, detector: str, values: Mapping[str, Any]
+    ) -> tuple[CalibratedLightPath, bool]:
+        """Where `detector`'s pixels would be under `values`, and whether that was measured."""
+        snapshot = self.snapshot(self._path(detector, values), values)
+        try:
+            return self.calibration_state.get_calibrated_path(snapshot), True
+        except ValueError:
+            return self.predicted(detector, values), False
 
     def depth_of_field_um(self, detector: str) -> float:
         """How deep what `detector` sees sharply is, from its objective's NA."""

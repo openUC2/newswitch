@@ -88,7 +88,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@4
+  catalog: newswitch@5
   bloks:
     view-scan:
       description: 'Scan: the beam path, the raster on the sample, and the image it builds.'
@@ -320,7 +320,7 @@ ui:
                 <span className="mt-2 block text-sm">The scan delivers y and x. Everything else is stepped here: the stage moves between frames, so plane spacing is yours to choose.</span>
                 <span className="mt-1 block text-xs text-muted-foreground">Turn the beam on first if a stack should use its current power; set Step to space the planes evenly.</span>
             </div>
-            <MultidimensionalAcquisitionControl />
+            <AcquisitionControl />
         </div>
         </Html>
     view-stage:

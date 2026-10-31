@@ -79,7 +79,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@4
+  catalog: newswitch@5
   bloks:
     view-sheet:
       description: 'Sheet: the sheet through the sample, the live plane, and where z is.'
@@ -311,7 +311,7 @@ ui:
                     <span className="mt-2 block text-xs text-muted-foreground">The form spaces your planes by this for you, and locks its Step. Slices are offsets around the position, and nothing can run between planes.</span>
                 </div>
             </foreach>
-            <MultidimensionalAcquisitionControl />
+            <AcquisitionControl />
         </div>
         </Html>
     view-stage:

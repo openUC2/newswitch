@@ -116,19 +116,68 @@ class Values:
         self.on_change()
 
     def _target(self, name: str, value: Any, relative: bool) -> Any:  # noqa: ANN401
+        variable = self._known(name)
+        if variable.verb == "swaps":
+            return self._slot(variable, value)
+        wanted = _in_range(variable, value + (self._values[name] if relative else 0.0))
+        limit = self._power_limit(variable)
+        return wanted if limit is None else min(wanted, limit)
+
+    def _known(self, name: str) -> Variable:
         variable = self.instrument.variables.get(name)
         if variable is None:
             raise ValueError(f"{name} is no variable: {sorted(self.instrument.variables)}")
-        if variable.verb == "swaps":
-            if value not in variable.slots:
-                raise ValueError(f"{name} has no slot {value}: {sorted(variable.slots)}")
-            return value
-        wanted = _in_range(variable, value + (self._values[name] if relative else 0.0))
-        if variable.verb == "tunes" and name == f"{variable.cube}.power":
+        return variable
+
+    @staticmethod
+    def _slot(variable: spec.Swap, value: Any) -> int:  # noqa: ANN401
+        """The slot `value` means: a plan's numbers all arrive as floats."""
+        for slot in variable.slots:
+            if slot == value:
+                return slot
+        raise ValueError(f"{variable.name} has no slot {value}: {sorted(variable.slots)}")
+
+    def _power_limit(self, variable: Variable) -> float | None:
+        """How far a source's power goes, whatever its tune states."""
+        if variable.verb == "tunes" and variable.name == f"{variable.cube}.power":
             element = self.instrument.cubes[variable.cube].element_at(self._values)
             if isinstance(element, spec.Source):
-                return min(wanted, element.max_power)
-        return wanted
+                return element.max_power
+        return None
+
+    def resolved(self, targets: Mapping[str, Any]) -> dict[str, Any]:
+        """`targets`, each as what its variable holds: a plan's numbers all arrive as floats."""
+        return {
+            name: self._slot(variable, value)
+            if (variable := self._known(name)).verb == "swaps"
+            else value
+            for name, value in targets.items()
+        }
+
+    def check(self, targets: Mapping[str, Any]) -> None:
+        """Refuse what `set` would otherwise bring into range: a plan says what it means.
+
+        Raises:
+            ValueError: One of them is not a variable, not a slot it has, or out of its range.
+        """
+        for name, value in targets.items():
+            variable = self._known(name)
+            if variable.verb == "swaps":
+                self._slot(variable, value)
+                continue
+            limit = self._power_limit(variable)
+            highest = variable.max if limit is None else limit
+            if (variable.min is not None and value < variable.min) or (
+                highest is not None and value > highest
+            ):
+                raise ValueError(
+                    f"{name} goes from {variable.min} to {highest} {variable.unit}, not to {value}"
+                )
+
+    def stepped(self, name: str, value: Any) -> None:  # noqa: ANN401
+        """A wire took a variable there: nothing is commanded, it is only known to be there now."""
+        self.reporter(name)(value)
+        self.on_change()
 
     def reporter(self, name: str) -> Report:
         """What publishes where a variable got to, on its way."""

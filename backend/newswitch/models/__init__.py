@@ -1,15 +1,13 @@
 """The value types newswitch sends and receives (registered as models)."""
 
 from .acquisition import (
-    MultidimensionalAcquisition,
-    Position,
+    AcquiredDataset,
+    AcquisitionChannel,
+    AcquisitionPlan,
+    AcquisitionPosition,
+    AcquisitionStack,
     PositionOrder,
     ScanOrder,
-    Stack,
-    AcquiredDataset,
-    StreamIllumination,
-    Streams,
-    Timepoint,
 )
 from .calibration import CalibratedLightPath
 from .devices import FULL_SENSOR, Detector, DetectorAxis, Roi
@@ -32,15 +30,13 @@ from .uc2 import (
 )
 
 __all__ = [
-    "MultidimensionalAcquisition",
-    "Position",
     "PositionOrder",
     "ScanOrder",
-    "Stack",
     "AcquiredDataset",
-    "Streams",
-    "StreamIllumination",
-    "Timepoint",
+    "AcquisitionChannel",
+    "AcquisitionPlan",
+    "AcquisitionPosition",
+    "AcquisitionStack",
     "ArrayMetadata",
     "BusError",
     "ButtonPressed",

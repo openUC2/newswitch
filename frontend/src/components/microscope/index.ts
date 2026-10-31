@@ -1,7 +1,5 @@
 export { LatestImage } from "./LatestImage";
 export { LiveView } from "./LiveView";
-export { MultidimensionalAcquisitionControl } from "./MultidimensionalAcquisitionControl";
-export { MultidimensionalAcquisitionDialog } from "./MultidimensionalAcquisitionDialog";
 export { SettingsPanel } from "./SettingsPanel";
 export { StatusPanel } from "./StatusPanel";
 export { DetectorControl } from "./DetectorControl";
@@ -9,3 +7,4 @@ export { MoveControl } from "./MoveControl";
 export { SourceControl } from "./SourceControl";
 export { SwapsControl } from "./SwapsControl";
 export { VariableControl } from "./VariableControl";
+export { AcquisitionControl } from "./AcquisitionControl";

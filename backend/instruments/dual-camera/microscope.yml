@@ -107,7 +107,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@4
+  catalog: newswitch@5
   bloks:
     view-fluorescence:
       description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
@@ -448,7 +448,7 @@ ui:
       bsx: |
         <Html>
         <div className="h-full overflow-auto p-4">
-            <MultidimensionalAcquisitionControl />
+            <AcquisitionControl />
         </div>
         </Html>
     view-stage:

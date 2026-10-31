@@ -471,6 +471,15 @@ class UC2DetectorManager:
         self.on_change()
         return detector
 
+    def size_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
+        """The (width, height) of its images, at `binning` or the one it has now."""
+        detector = self._require_detector(name)
+        factor = detector.current_binning if binning is None else int(binning)
+        width, height = detector.sensor_width, detector.sensor_height
+        if detector.current_roi is not None:
+            _, _, width, height = detector.current_roi
+        return width // factor, height // factor
+
     def get_detector_state(self, name: str) -> Detector | None:
         """Get the state of a detector: what the camera is and can do, its current settings.
 

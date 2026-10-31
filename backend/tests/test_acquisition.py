@@ -4,20 +4,13 @@ import pytest
 from arkitekt import Task
 
 from newswitch.microscope.parts import Microscope
-from newswitch.models.acquisition import (
-    AcquiredDataset,
-    MultidimensionalAcquisition,
-    Position,
-    Stack,
-    StreamIllumination,
-    Streams,
-    Timepoint,
-)
+from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel, AcquisitionPlan
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.hooks import SoftwareAutofocusHook, ZCalibrationHook
 from newswitch.protocols import UnsupportedHook
 from newswitch.protocols.dataset_store import AcquiredPosition
-from newswitch.routines.multidimensional_acquisition import acquire_multidimensional_acquisition
+from newswitch.routines.acquire import acquire
+from tests.conftest import acquisition
 
 
 def calibrated(microscope: Microscope) -> Microscope:
@@ -45,18 +38,10 @@ def calibrated(microscope: Microscope) -> Microscope:
     return microscope
 
 
-def single_position(z: float, **hooks: list) -> MultidimensionalAcquisition:
-    """One timepoint, one position at `z`, one plane, one stream; hooks as given."""
-    p_hooks = hooks.pop("p_hooks", [])
-    z_hooks = hooks.pop("z_hooks", [])
-    stream = Streams(
-        detectors=["camera"],
-        mapping="GFP",
-        illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=0.8)],
-    )
-    stack = Stack(z_offset=0.0, z_slices=[0.0], z_step=1.0, channels=[stream], z_hooks=z_hooks)
-    position = Position(x=0.0, y=0.0, z=z, stacks=[stack], p_hooks=p_hooks)
-    return MultidimensionalAcquisition(timepoints=[Timepoint(positions=[position])], **hooks)
+def single_position(z: float, **hooks: list) -> AcquisitionPlan:
+    """One time, one position at `z`, one plane, one channel; hooks as given."""
+    channel = AcquisitionChannel(detectors=["camera"], name="GFP", set_to={"laser_488.power": 25.0})
+    return acquisition([channel], z=z, **hooks)
 
 
 class Store:
@@ -79,17 +64,15 @@ class Store:
         return AcquiredDataset(id="1", name=acquired.name, position=acquired.position)
 
 
-def run(built: Microscope, config: MultidimensionalAcquisition, store: Store | None = None) -> list:
+def run(built: Microscope, config: AcquisitionPlan, store: Store | None = None) -> list:
     """Run the acquisition on the built microscope's managers."""
-    return acquire_multidimensional_acquisition(
-        config=config,
+    return acquire(
+        plan=config,
         store=store or Store(),
         task=Task.local(),
         optics_manager=built.optics,
         detector_manager=built.detector,
         values=built.values,
-        calibration_state=built.calibration_state,
-        metadata_manager=built.metadata,
         hook_manager=built.hooks,
     )
 

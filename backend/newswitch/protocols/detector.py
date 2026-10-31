@@ -173,6 +173,10 @@ class DetectorManager(Manager, Protocol):
         """
         ...
 
+    def size_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
+        """The (width, height) of its images, at `binning` or the one it has now."""
+        ...
+
     def get_detector_state(self, name: str) -> Optional[Detector]:
         """Get the state of a detector: what it is and can do, with its current settings.
 

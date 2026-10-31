@@ -4,8 +4,10 @@ Optics Manager Protocol
 Defines the protocol for what the optics find, and the light paths they make.
 """
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import Any, Protocol, runtime_checkable
 
+from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightPath, LightPathSnapshot
 from newswitch.protocols.base import Manager
 
@@ -24,6 +26,12 @@ class OpticsManager(Manager, Protocol):
 
     def snapshot(self, path: LightPath) -> LightPathSnapshot:
         """`path` as things are now, keyed by what a calibration of it depends on."""
+        ...
+
+    def scale_under(
+        self, detector: str, values: Mapping[str, Any]
+    ) -> tuple[CalibratedLightPath, bool]:
+        """Where `detector`'s pixels would be under `values`, and whether that was measured."""
         ...
 
     def depth_of_field_um(self, detector: str) -> float:
