@@ -65,6 +65,8 @@ class LightSource:
     """Where most of its light is, in nm."""
     lines: list[float]
     """All it emits, in nm."""
+    color: str
+    """The colour of the theme its wavelength reads as."""
     max_power: float
     """In mW."""
     power: float

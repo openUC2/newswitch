@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import difference, influences
@@ -203,3 +204,61 @@ def test_a_low_na_sweep_reaches_focus_from_where_a_fixed_one_could_not(
     stage.move(z=2.0 * depth, is_absolute=True)
     best, _ = autofocus_sweep(stage, microscope.detector, z_sweep(2.0 * depth, 20.0, 11))
     assert abs(best) > depth / 2.0
+
+
+def test_defocus_counts_from_where_focus_was_found(tmp_path: Path) -> None:
+    """Not from zero, which is only where a stage happens to start."""
+    microscope = built(tmp_path, "dual-camera")
+    assert microscope.values is not None
+    microscope.values.set({"stage.z": 12.0})
+    assert first_detector(microscope).defocus_um == pytest.approx(12.0)
+    microscope.optics.found_focus("camera_green")
+    assert first_detector(microscope).defocus_um == pytest.approx(0.0)
+    microscope.values.set({"stage.z": 10.0})
+    assert first_detector(microscope).defocus_um == pytest.approx(-2.0)
+
+
+def test_a_sheet_says_how_strong_it_is_at_the_edge(tmp_path: Path) -> None:
+    """What a view used to have written in, for one lens."""
+    optics = built(tmp_path, "light-sheet").optics_state
+    sheet = next(iter(optics.sources.values()))
+    assert sheet.reach_um is not None and sheet.edge_share is not None
+    half = next(iter(optics.detectors.values())).field_width_um / 2.0
+    assert sheet.edge_share == pytest.approx((1.0 + (half / sheet.reach_um) ** 2) ** -0.5, rel=0.02)
+
+
+def test_what_a_source_makes_arrive_has_its_colour(tmp_path: Path) -> None:
+    """From one function, and from what arrives, not from guessing a dye by a wavelength."""
+    microscope = built(tmp_path, "dual-camera")
+    laser = microscope.optics_state.sources["laser_488"]
+    assert laser.band_nm is not None and laser.band_color is not None
+    assert microscope.source_state.sources["laser_488"].color == "cyan"
+    assert microscope.source_state.sources["led_625"].color == "red"
+
+
+def test_a_view_reads_any_element_by_its_cube(tmp_path: Path) -> None:
+    """What is in it now, under keys it can name."""
+    elements = built(tmp_path, "point-scanner").optics_state.elements
+    kinds = {element.kind: element for element in elements.values()}
+    assert "per_step" in kinds["scanner"].facts and "diameter" in kinds["pinhole"].facts
+
+
+def test_a_view_can_be_a_file_of_its_own(tmp_path: Path) -> None:
+    """Named, so that nothing is found by what it is called."""
+    (tmp_path / "shared.bsx").write_text("<Html></Html>\n")
+    (tmp_path / "i").mkdir()
+    description = (INSTRUMENTS / "cam-test" / "microscope.yml").read_text()
+    data = yaml.safe_load(description)
+    data["ui"]["bloks"] = {"view-shared": {"file": "../shared.bsx", "description": "Shared: it."}}
+    (tmp_path / "i" / "microscope.yml").write_text(yaml.safe_dump(data))
+    assert spec.load(tmp_path / "i").ui.bloks["view-shared"].bsx == "<Html></Html>\n"
+
+    data["ui"]["bloks"]["view-shared"]["file"] = "../gone.bsx"
+    (tmp_path / "i" / "microscope.yml").write_text(yaml.safe_dump(data))
+    with pytest.raises(spec.SpecError, match="gone.bsx does not exist"):
+        spec.load(tmp_path / "i")
+
+    data["ui"]["bloks"]["view-shared"] = {"file": "../shared.bsx", "bsx": "<Html></Html>"}
+    (tmp_path / "i" / "microscope.yml").write_text(yaml.safe_dump(data))
+    with pytest.raises(spec.SpecError, match="not both"):
+        spec.load(tmp_path / "i")

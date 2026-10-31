@@ -79,7 +79,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@5
+  catalog: newswitch@6
   bloks:
     view-sheet:
       description: 'Sheet: the sheet through the sample, the live plane, and where z is.'
@@ -126,7 +126,7 @@ ui:
                                     <Polygon points="272,14 368,14 368,66 346,104 294,104 272,66" fill="muted" fillOpacity={0.14} stroke="muted" strokeOpacity={0.5} strokeWidth={1.5} />
                                     <Line x1={320} y1={2} x2={320} y2={14} stroke="spectrum-green" strokeWidth={2} strokeDasharray="4 4" />
                                     <SvgText x={380} y={46} text="detection" fill="muted" fontSize={18} />
-                                    <SvgText x={380} y={70} text="10x · NA 0.25" fill="muted" fontSize={18} fontWeight="600" />
+                                    <SvgText x={380} y={70} text={str.concat(values: ["NA ", self.OpticsState.elements.objective.facts.na])} fill="muted" fontSize={18} fontWeight="600" />
 
                                     <!-- what the plane emits, gathered by the objective -->
                                     <Polygon points="320,190 294,104 346,104" fill="spectrum-green" fillOpacity={light.on ? 0.32 : 0.04} />
@@ -145,18 +145,18 @@ ui:
                                     <Circle cx={320} cy={190} r={7} fill="ink" opacity={light.on ? 0.95 : 0.1} />
 
                                     <!-- the sample, where the stage has it -->
-                                    <Rect x={214} y={math.clamp(value: math.add(a: 184, b: math.mul(a: self.MoveState.moves.stage.z.value, b: 3)), min: 112, max: 296)} width={212} height={12} rx={3} fill="spectrum-green" fillOpacity={0.3} stroke="spectrum-green" strokeOpacity={0.9} strokeWidth={1.5} />
-                                    <SvgText x={320} y={math.clamp(value: math.add(a: 216, b: math.mul(a: self.MoveState.moves.stage.z.value, b: 3)), min: 136, max: 248)} text="sample" textAnchor="middle" fill="spectrum-green" fontSize={17} fontWeight="600" />
+                                    <Rect x={214} y={math.clamp(value: math.add(a: 184, b: math.mul(a: self.OpticsState.detectors.camera.defocus_um, b: 3)), min: 112, max: 296)} width={212} height={12} rx={3} fill="spectrum-green" fillOpacity={0.3} stroke="spectrum-green" strokeOpacity={0.9} strokeWidth={1.5} />
+                                    <SvgText x={320} y={math.clamp(value: math.add(a: 216, b: math.mul(a: self.OpticsState.detectors.camera.defocus_um, b: 3)), min: 136, max: 248)} text="sample" textAnchor="middle" fill="spectrum-green" fontSize={17} fontWeight="600" />
 
                                     <!-- what the field sees of the sheet, and how far the sheet holds -->
                                     <Line x1={254} y1={266} x2={386} y2={266} stroke="spectrum-green" strokeWidth={2} />
                                     <Line x1={254} y1={260} x2={254} y2={272} stroke="spectrum-green" strokeWidth={2} />
                                     <Line x1={386} y1={260} x2={386} y2={272} stroke="spectrum-green" strokeWidth={2} />
-                                    <SvgText x={320} y={258} text="field 333 µm" textAnchor="middle" fill="spectrum-green" fontSize={17} />
+                                    <SvgText x={320} y={258} text={str.concat(values: ["field ", fmt.number(value: self.OpticsState.detectors.camera.field_width_um, digits: 0), " µm"])} textAnchor="middle" fill="spectrum-green" fontSize={17} />
                                     <Line x1={165} y1={306} x2={475} y2={306} stroke="spectrum-cyan" strokeWidth={2} />
                                     <Line x1={165} y1={300} x2={165} y2={312} stroke="spectrum-cyan" strokeWidth={2} />
                                     <Line x1={475} y1={300} x2={475} y2={312} stroke="spectrum-cyan" strokeWidth={2} />
-                                    <SvgText x={320} y={330} text="stays thin for ±388 µm" textAnchor="middle" fill="spectrum-cyan" fontSize={17} />
+                                    <SvgText x={320} y={330} text={str.concat(values: ["stays thin for ±", fmt.number(value: self.OpticsState.sources.laser_488.reach_um, digits: 0), " µm"])} textAnchor="middle" fill="spectrum-cyan" fontSize={17} />
                                     <SvgText x={536} y={186} text="x" fill="spectrum-cyan" fontSize={18} fontWeight="600" />
                                     <SvgText x={536} y={206} text="sheet" fill="spectrum-cyan" fontSize={16} />
                                 </ActionLogo>
@@ -164,15 +164,15 @@ ui:
                             <div className="relative grid grid-cols-3 divide-x divide-border/50 border-t border-border/50">
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Waist</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-cyan">7.8 µm</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-cyan">{fmt.number(value: math.div(a: self.OpticsState.sources.laser_488.thickness_um, b: 2), digits: 1)} µm</span>
                                 </div>
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Rayleigh</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-cyan">388 µm</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-cyan">{fmt.number(value: self.OpticsState.sources.laser_488.reach_um, digits: 0)} µm</span>
                                 </div>
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Edge of field</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-green">92%</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-green">{fmt.percent(value: self.OpticsState.sources.laser_488.edge_share)}</span>
                                 </div>
                             </div>
                             <div className="relative border-t border-border/50 p-4">
@@ -204,13 +204,13 @@ ui:
                                     <span className="text-sm text-muted-foreground">µm</span>
                                 </div>
                             </div>
-                            <if when={math.abs(value: self.MoveState.moves.stage.z.value) < 3.9}>
+                            <if when={math.abs(value: self.OpticsState.detectors.camera.defocus_um) < math.div(a: math.div(a: self.OpticsState.sources.laser_488.thickness_um, b: 2), b: 2)}>
                                 <div className="flex items-center gap-1.5 rounded-full bg-spectrum-green/15 px-2.5 py-1 text-[11px] font-medium text-spectrum-green">
                                     <span className="size-1.5 rounded-full bg-spectrum-green" />
                                     <span>In the sheet</span>
                                 </div>
                             <else>
-                                <if when={math.abs(value: self.MoveState.moves.stage.z.value) < 7.8}>
+                                <if when={math.abs(value: self.OpticsState.detectors.camera.defocus_um) < math.div(a: self.OpticsState.sources.laser_488.thickness_um, b: 2)}>
                                     <div className="flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">
                                         <span className="size-1.5 rounded-full bg-warning" />
                                         <span>Leaving the sheet</span>
@@ -251,16 +251,22 @@ ui:
                             </div>
                             <span className="mt-2 block text-[11px] text-muted-foreground">Its frames step the stage, so a stack is one sweep with no stage move per plane.</span>
                             <div className="mt-3 grid grid-cols-2 gap-3 past:hidden">
-                                <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
-                                    <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
-                                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{list.last(value: str.split(value: tune.name, separator: "."))}</span>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.value, digits: 1)}</span>
-                                            <span className="text-xs text-muted-foreground">{tune.unit}</span>
-                                        </div>
-                                        <Slider className="min-w-0" step={tune.step} value={tune.value} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
+                                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Exposure</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.camera.exposure.value, digits: 0)}</span>
+                                        <span className="text-xs text-muted-foreground">{self.TuneState.tunes.camera.exposure.unit}</span>
                                     </div>
-                                </foreach>
+                                    <Slider className="min-w-0" step={self.TuneState.tunes.camera.exposure.step} value={self.TuneState.tunes.camera.exposure.value} min={self.TuneState.tunes.camera.exposure.minimum} max={self.TuneState.tunes.camera.exposure.maximum} onCommit={self.tune(name: "camera.exposure", to: event.value)} />
+                                </div>
+                                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.camera.gain.value, digits: 1)}</span>
+                                        <span className="text-xs text-muted-foreground">{self.TuneState.tunes.camera.gain.unit}</span>
+                                    </div>
+                                    <Slider className="min-w-0" step={self.TuneState.tunes.camera.gain.step} value={self.TuneState.tunes.camera.gain.value} min={self.TuneState.tunes.camera.gain.minimum} max={self.TuneState.tunes.camera.gain.maximum} onCommit={self.tune(name: "camera.gain", to: event.value)} />
+                                </div>
                             </div>
                         </div>
                     </foreach>
@@ -316,39 +322,4 @@ ui:
         </Html>
     view-stage:
       description: 'Stage: where the sample is, with the planes taken there.'
-      bsx: |
-        <Html>
-        <Resizable direction="row" className="h-full w-full">
-            <ResizablePanel defaultSize={70}>
-                <div className="flex h-full flex-col overflow-hidden bg-muted/30">
-                    <StageView className="flex-1">
-                        <StageScene>
-                            <StageAxis />
-                            <StagePlane />
-                            <FramesLayer />
-                            <ImagesLayer />
-                            <LivesLayer />
-                            <FrameLightPathLayer />
-                            <LightPathLayer />
-                            <StagePositioner />
-                            <RectangleDrawer />
-                        </StageScene>
-                        <ElementPanel />
-                        <ScanRegionPanel />
-                        <ImageMetadataPanel />
-                        <FramePanel />
-                        <SceneOverlay />
-                    </StageView>
-                </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle={true} />
-            <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
-                <ScrollArea className="h-full">
-                    <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
-                        <MoveControl className="locked:opacity-60" />
-                        <DetectorControl className="locked:opacity-60" />
-                    </div>
-                </ScrollArea>
-            </ResizablePanel>
-        </Resizable>
-        </Html>
+      file: ../views/stage.bsx

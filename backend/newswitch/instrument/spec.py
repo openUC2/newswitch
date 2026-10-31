@@ -1179,6 +1179,43 @@ def _with_components(data: Mapping[str, Any]) -> dict[str, Any]:
     return {**data, "cubes": cubes}
 
 
+def _with_view_files(data: dict[str, Any], folder: Path) -> dict[str, Any]:
+    """`data`, with each blok that names a `file` holding what that file says.
+
+    A blok names one explicitly, relative to its description, so that instruments can share a view
+    without anything being found by its name.
+
+    Raises:
+        SpecError: A file does not exist, or a blok is written out and names one.
+    """
+    found = dict(data)
+    problems = []
+    for section in ("ui", "agent_ui"):
+        if not isinstance(data.get(section), Mapping) or not isinstance(
+            data[section].get("bloks"), Mapping
+        ):
+            continue
+        bloks = {}
+        for name, entry in data[section]["bloks"].items():
+            if not isinstance(entry, Mapping) or "file" not in entry:
+                bloks[name] = entry
+                continue
+            where = f"{section}.bloks.{name}"
+            if "bsx" in entry:
+                problems.append(f"{where}: a blok is written out or names a file, not both")
+                continue
+            view = folder / str(entry["file"])
+            if not view.is_file():
+                problems.append(f"{where}.file: {view} does not exist")
+                continue
+            rest = {key: value for key, value in entry.items() if key != "file"}
+            bloks[name] = {**rest, "bsx": view.read_text()}
+        found[section] = {**data[section], "bloks": bloks}
+    if problems:
+        raise SpecError("; ".join(problems))
+    return found
+
+
 def load(path: str | Path) -> Instrument:
     """The instrument described at `path`: a description, or a folder holding one.
 
@@ -1193,7 +1230,7 @@ def load(path: str | Path) -> Instrument:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict) or not str(data.get("spec", "")).startswith(SPEC):
         raise SpecError(f"{path} does not say it is an instrument description")
-    data = _with_components(data)
+    data = _with_view_files(_with_components(data), path.parent)
     try:
         return _INSTRUMENT.validate_python({**data, "folder": path.parent.resolve()})
     except ValidationError as exc:

@@ -26,4 +26,5 @@ def software_autofocus_hook(hook: SoftwareAutofocusHook, context: protocols.Hook
     z_positions = z_sweep(stage.state.z, z_range, steps)
     best_z, metrics = autofocus_sweep(stage, context.detector_manager, z_positions, detector)
     stage.move(z=best_z, is_absolute=True)
+    context.optics_manager.found_focus(detector)
     logger.info("Autofocus hook: best z=%.2f (metric %.1f)", best_z, max(metrics))

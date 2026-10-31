@@ -1,4 +1,5 @@
 export const acquisition = {
+  refocus: "Beim Ankommen jeweils neu fokussieren",
   dark: "Alle Quellen stehen auf 0: Dieser Kanal bleibt dunkel.",
   channels: "Kanäle",
   add: "Hinzufügen",

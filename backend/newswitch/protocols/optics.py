@@ -34,6 +34,10 @@ class OpticsManager(Manager, Protocol):
         """Where `detector`'s pixels would be under `values`, and whether that was measured."""
         ...
 
+    def found_focus(self, detector: str) -> None:
+        """What focuses `detector` is in focus where it is now: defocus counts from there."""
+        ...
+
     def depth_of_field_um(self, detector: str) -> float:
         """How deep what `detector` sees sharply is, from its objective's NA."""
         ...

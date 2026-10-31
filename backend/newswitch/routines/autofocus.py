@@ -125,6 +125,7 @@ def run_autofocus(
             on_step=on_step,
         )
         stage.move(z=best_z, is_absolute=True, task=task)
+        optics.found_focus(name)
         autofocus_state.best_z = best_z
         autofocus_state.best_metric = max(metrics)
         task.progress(100, f"focused at z={best_z:.2f}")

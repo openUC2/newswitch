@@ -1,0 +1,37 @@
+<Html>
+<Resizable direction="row" className="h-full w-full">
+    <ResizablePanel defaultSize={70}>
+        <div className="flex h-full flex-col gap-3 p-4">
+            <div className="flex gap-2 past:hidden">
+                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
+                <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
+                <LiveView className="h-full" />
+            </div>
+        </div>
+    </ResizablePanel>
+    <ResizableHandle withHandle={true} />
+    <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
+        <ScrollArea className="h-full">
+            <div className="p-4 past:opacity-70 past:grayscale">
+                <MoveControl className="locked:opacity-60" />
+
+<if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+    <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
+        <div className="flex min-w-0 flex-1 flex-col">
+            <span className="text-sm font-medium text-warning">Light path not calibrated</span>
+            <span className="text-xs text-muted-foreground">Calibrate once: images then get their pixel size and their place on the stage.</span>
+        </div>
+        <Button icon="wand" size="sm" className="shrink-0 rounded-full bg-warning text-warning-foreground hover:bg-warning/80" onClick={self.calibrate_light_path()}>Calibrate</Button>
+    </div>
+<else>
+    <Button icon="camera" size="lg" fullWidth={true} className="h-12 rounded-full text-base shadow-xl past:hidden" onClick={self.capture_image()}>Acquire</Button>
+</else>
+</if>
+            </div>
+        </ScrollArea>
+    </ResizablePanel>
+</Resizable>
+</Html>
+

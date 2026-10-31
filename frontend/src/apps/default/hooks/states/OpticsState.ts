@@ -72,6 +72,7 @@ export const DetectorOpticsSchema = z
     expected_counts: z.number(),
     read_noise_counts: z.number(),
     depth_of_field_um: z.number(),
+    defocus_um: z.number(),
     band_nm: z.number().nullable().optional(),
     /** Every way light can take to one detector, as the description's edges say. */
     path: LightPathSchema.describe(
@@ -97,6 +98,9 @@ export const SourceOpticsSchema = z
     thickness_um: z.number().nullable().optional(),
     reach_um: z.number().nullable().optional(),
     along: z.string().nullable().optional(),
+    edge_share: z.number().nullable().optional(),
+    band_nm: z.number().nullable().optional(),
+    band_color: z.string().nullable().optional(),
   })
   .brand('@newswitch/source_optics')
   .describe("How a source's light lands on the sample.");
@@ -135,6 +139,12 @@ export const OpticsStateSchema = z.object({
   channels: z.array(
     OpticalChannelSchema.describe(
       'A source whose light gets through the sample to a detector: found, and never declared.',
+    ),
+  ),
+  elements: z.record(
+    z.string(),
+    LightElementSchema.describe(
+      'One cube on a light path: what is in place in it, as far as can be shown.',
     ),
   ),
 });

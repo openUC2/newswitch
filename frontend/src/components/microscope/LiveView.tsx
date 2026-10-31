@@ -2,16 +2,20 @@ import { Badge } from "@/components/ui/badge";
 import { useDetectorState } from "@/apps/default/hooks/states";
 import { useStagePosition } from "@/lib/microscope/values";
 import { Camera } from "lucide-react";
+import { useState } from "react";
 import { StreamingView } from "../liveview/StreamingView";
 
-export function LiveView() {
+export function LiveView({ detector: named }: { detector?: string }) {
   const { data: detectorState } = useDetectorState({ subscribe: true });
   const stageState = useStagePosition();
 
   // Use camera state to determine if live view is active
   const isLive = detectorState?.is_acquiring ?? false;
-  // The stream of the first active detector.
-  const detector = detectorState?.detectors.find((d) => d.is_active)?.name;
+  // The one it is told to show, or the one picked, or else the first that is on.
+  const active = detectorState?.detectors.filter((d) => d.is_active) ?? [];
+  const [picked, setPicked] = useState<string | null>(null);
+  const detector =
+    named ?? active.find((d) => d.name === picked)?.name ?? active.at(0)?.name;
 
   return (
     <div className="flex flex-col h-full bg-black rounded-lg overflow-hidden">
@@ -28,6 +32,25 @@ export function LiveView() {
               <Camera className="h-12 w-12 text-zinc-700" />
               Press Live to start
             </div>
+          </div>
+        )}
+
+        {isLive && detector && !named && active.length > 1 && (
+          <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 gap-1 rounded-full bg-black/60 p-1">
+            {active.map((d) => (
+              <button
+                key={d.name}
+                type="button"
+                className={
+                  d.name === detector
+                    ? "rounded-full bg-white/20 px-2 py-0.5 text-[11px] text-white"
+                    : "rounded-full px-2 py-0.5 text-[11px] text-white/60"
+                }
+                onClick={() => setPicked(d.name)}
+              >
+                {d.name}
+              </button>
+            ))}
           </div>
         )}
 

@@ -12,7 +12,9 @@ export const ElementNode: React.FC<ElementNodeProps> = ({ data }) => (
     <div className="mb-1 text-muted-foreground">{data.kind}</div>
     {Object.entries({ ...data.facts, ...data.values }).map(([label, value]) => (
       <div key={label} className="flex justify-between gap-3">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="text-muted-foreground">
+          {label.replaceAll("_", " ")}
+        </span>
         <span>{value}</span>
       </div>
     ))}

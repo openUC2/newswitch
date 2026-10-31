@@ -143,10 +143,10 @@ def test_a_quick_move_does_not_flood_the_clients(microscope: Microscope) -> None
 
 
 def test_its_objectives_have_a_control() -> None:
-    """Which the blok in its description names."""
+    """Which the blok in its description places."""
     ui = spec.load(INSTRUMENT).ui
     assert ui is not None
-    assert "self.swap" in ui.bloks["view-fluorescence"].bsx
+    assert "<SwapsControl" in ui.bloks["view-fluorescence"].bsx
 
 
 def test_the_ui_is_the_bloks_it_holds() -> None:

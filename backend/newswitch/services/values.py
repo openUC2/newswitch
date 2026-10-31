@@ -23,7 +23,7 @@ from newswitch.instrument import spec
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument, Variable
 from newswitch.models.values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
-from newswitch.services.element_facts import facts_of
+from newswitch.services.element_facts import facts_of, spectrum_color
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
 
@@ -32,6 +32,10 @@ def _in_range(variable: Variable, value: float) -> float:
     low = -float("inf") if variable.min is None else variable.min
     high = float("inf") if variable.max is None else variable.max
     return max(low, min(high, value))
+
+
+#: How a unit reads, where its name in the description is what a keyboard has.
+_READS_AS = {"um": "µm", "deg": "°"}
 
 
 def _copied(entries: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -233,7 +237,7 @@ class Values:
                 moves[variable.cube][short] = MoveValue(
                     name=name,
                     value=value,
-                    unit=variable.unit,
+                    unit=_READS_AS.get(variable.unit, variable.unit),
                     along=variable.along,
                     minimum=variable.min,
                     maximum=variable.max,
@@ -260,7 +264,7 @@ class Values:
                 tunes[variable.cube][short] = TuneValue(
                     name=name,
                     value=value,
-                    unit=variable.unit,
+                    unit=_READS_AS.get(variable.unit, variable.unit),
                     minimum=variable.min,
                     maximum=variable.max,
                     step=variable.step,
@@ -280,6 +284,7 @@ class Values:
                 emits=element.emits,
                 wavelength=element.wavelength,
                 lines=[line.center for line in element.spectrum],
+                color=spectrum_color(element.wavelength),
                 max_power=element.max_power,
                 power=power,
                 lit_power=self._lit[source],

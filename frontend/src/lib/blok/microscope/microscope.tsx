@@ -96,8 +96,36 @@ const VariableBlok = createBlokComponent(
   },
 );
 
+const LiveViewBlok = createBlokComponent(
+  {
+    name: "LiveView",
+    schema: z
+      .object({
+        detector: z
+          .string()
+          .optional()
+          .describe(
+            "Which detector to show; without one, a choice of those that are on.",
+          ),
+        className: classNameSchema,
+      })
+      .describe("The live stream of a detector."),
+  },
+  ({ component, schema }) => {
+    const blok = useBlok(component, schema);
+    const detector = useValue(blok.detector);
+    const className = useValue(blok.className);
+    return (
+      <div className={className}>
+        <LiveView detector={detector} />
+      </div>
+    );
+  },
+);
+
 export const microscopeBlokComponents: BlokComponentDefinition[] = [
   VariableBlok,
+  LiveViewBlok,
   panelBlok(
     "SettingsPanel",
     "The microscope's settings column: live view, capture, and the camera, filter, illumination and objective controls.",
@@ -145,7 +173,6 @@ export const microscopeBlokComponents: BlokComponentDefinition[] = [
     "Badges for the camera, stage, illumination and objective state.",
     StatusPanel,
   ),
-  panelBlok("LiveView", "The live camera stream.", LiveView),
   panelBlok("LatestImage", "The most recently written image.", LatestImage),
   panelBlok(
     "BloksPanel",

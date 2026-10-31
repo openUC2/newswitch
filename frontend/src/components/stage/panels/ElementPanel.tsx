@@ -8,7 +8,7 @@ const Rows = ({ rows }: { rows: Record<string, string> }) => (
   <dl className="space-y-1">
     {Object.entries(rows).map(([label, value]) => (
       <div key={label} className="flex justify-between gap-4">
-        <dt className="text-muted-foreground">{label}</dt>
+        <dt className="text-muted-foreground">{label.replaceAll("_", " ")}</dt>
         <dd className="text-right font-medium">{value}</dd>
       </div>
     ))}

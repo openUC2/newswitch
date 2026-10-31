@@ -88,7 +88,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@5
+  catalog: newswitch@6
   bloks:
     view-scan:
       description: 'Scan: the beam path, the raster on the sample, and the image it builds.'
@@ -163,10 +163,10 @@ ui:
                                     <Line x1={100} y1={30} x2={100} y2={62} stroke="ink" strokeWidth={5} strokeLinecap="round" />
                                     <Line x1={100} y1={82} x2={100} y2={114} stroke="ink" strokeWidth={5} strokeLinecap="round" />
                                     <SvgText x={100} y={140} text="pinhole" textAnchor="middle" fill="muted" fontSize={16} />
-                                    <SvgText x={100} y={160} text="50 µm" textAnchor="middle" fill="muted" fontSize={16} />
+                                    <SvgText x={100} y={160} text={self.OpticsState.elements.pinhole.facts.diameter} textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Rect x={126} y={56} width={18} height={32} rx={3} fill="spectrum-green" fillOpacity={0.25} stroke="spectrum-green" strokeOpacity={0.8} strokeWidth={1.5} />
-                                    <SvgText x={135} y={24} text="BP 525" textAnchor="middle" fill="muted" fontSize={16} />
+                                    <SvgText x={135} y={24} text={self.OpticsState.elements.filter_green.label} textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Line x1={154} y1={94} x2={198} y2={36} stroke="ink" strokeWidth={4} strokeLinecap="round" />
                                     <SvgText x={206} y={108} text="dichroic" fill="muted" fontSize={16} />
@@ -181,7 +181,7 @@ ui:
                                     <SvgText x={402} y={24} text="tube" textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Polygon points="456,30 512,44 526,56 526,74 512,86 456,100" fill="muted" fillOpacity={0.18} stroke="muted" strokeOpacity={0.7} strokeWidth={1.5} />
-                                    <SvgText x={490} y={24} text="NA 0.25" textAnchor="middle" fill="muted" fontSize={16} />
+                                    <SvgText x={490} y={24} text={str.concat(values: ["NA ", self.OpticsState.elements.objective.facts.na])} textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Rect x={590} y={26} width={18} height={78} rx={3} fill="spectrum-green" fillOpacity={0.3} stroke="spectrum-green" strokeOpacity={0.9} strokeWidth={1.5} />
                                     <SvgText x={599} y={124} text="sample" textAnchor="middle" fill="spectrum-green" fontSize={16} fontWeight="600" />
@@ -192,7 +192,7 @@ ui:
                                         <Polyline points="460,158 602,158 460,180 602,180 460,202 602,202 460,224 602,224 460,246 602,246 460,268 602,268 460,290 602,290" fill="none" stroke="spectrum-cyan" strokeWidth={2} />
                                         <Circle cx={602} cy={290} r={6} fill="ink" />
                                     </G>
-                                    <SvgText x={531} y={332} text="512 × 512, row by row" textAnchor="middle" fill="spectrum-blue" fontSize={16} />
+                                    <SvgText x={531} y={332} text={str.concat(values: [self.OpticsState.elements.galvo.facts.steps, ", row by row"])} textAnchor="middle" fill="spectrum-blue" fontSize={16} />
                                     <SvgText x={20} y={332} text="Every pixel is a moment: the image" fill="muted" fontSize={16} />
                                     <SvgText x={20} y={354} text="only exists once the scan has passed." fill="muted" fontSize={16} />
                                 </ActionLogo>
@@ -200,15 +200,15 @@ ui:
                             <div className="relative grid grid-cols-3 divide-x divide-border/50 border-t border-border/50">
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Per step</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">0.02°</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{self.OpticsState.elements.galvo.facts.per_step}</span>
                                 </div>
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">1.75 µm</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{fmt.number(value: self.OpticsState.detectors.pmt.pixel_um, digits: 2)} µm</span>
                                 </div>
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Field</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">893 µm</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{fmt.number(value: self.OpticsState.detectors.pmt.field_width_um, digits: 0)} µm</span>
                                 </div>
                             </div>
                             <div className="relative border-t border-border/50 p-4">
@@ -251,16 +251,22 @@ ui:
                                 </div>
                             </div>
                             <div className="mt-3 grid grid-cols-2 gap-3 past:hidden">
-                                <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: pmt.name))} let="tune" key={tune.name}>
-                                    <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
-                                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{list.last(value: str.split(value: tune.name, separator: "."))}</span>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.value, digits: 1)}</span>
-                                            <span className="text-xs text-muted-foreground">{tune.unit}</span>
-                                        </div>
-                                        <Slider className="min-w-0" step={tune.step} value={tune.value} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
+                                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Frame time</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.pmt.exposure.value, digits: 0)}</span>
+                                        <span className="text-xs text-muted-foreground">{self.TuneState.tunes.pmt.exposure.unit}</span>
                                     </div>
-                                </foreach>
+                                    <Slider className="min-w-0" step={self.TuneState.tunes.pmt.exposure.step} value={self.TuneState.tunes.pmt.exposure.value} min={self.TuneState.tunes.pmt.exposure.minimum} max={self.TuneState.tunes.pmt.exposure.maximum} onCommit={self.tune(name: "pmt.exposure", to: event.value)} />
+                                </div>
+                                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.pmt.gain.value, digits: 1)}</span>
+                                        <span className="text-xs text-muted-foreground">{self.TuneState.tunes.pmt.gain.unit}</span>
+                                    </div>
+                                    <Slider className="min-w-0" step={self.TuneState.tunes.pmt.gain.step} value={self.TuneState.tunes.pmt.gain.value} min={self.TuneState.tunes.pmt.gain.minimum} max={self.TuneState.tunes.pmt.gain.maximum} onCommit={self.tune(name: "pmt.gain", to: event.value)} />
+                                </div>
                             </div>
                             <span className="mt-2 block text-[11px] text-muted-foreground">A longer frame collects more light per pixel, and scans slower.</span>
                         </div>
@@ -275,13 +281,13 @@ ui:
                                     <span className="text-sm text-muted-foreground">µm</span>
                                 </div>
                             </div>
-                            <if when={math.abs(value: self.MoveState.moves.stage.z.value) < 3.5}>
+                            <if when={math.abs(value: self.OpticsState.detectors.pmt.defocus_um) < math.div(a: self.OpticsState.detectors.pmt.depth_of_field_um, b: 2)}>
                                 <div className="flex items-center gap-1.5 rounded-full bg-spectrum-green/15 px-2.5 py-1 text-[11px] font-medium text-spectrum-green">
                                     <span className="size-1.5 rounded-full bg-spectrum-green" />
                                     <span>Sharp</span>
                                 </div>
                             <else>
-                                <if when={math.abs(value: self.MoveState.moves.stage.z.value) < 14}>
+                                <if when={math.abs(value: self.OpticsState.detectors.pmt.defocus_um) < math.mul(a: self.OpticsState.detectors.pmt.depth_of_field_um, b: 2)}>
                                     <div className="flex items-center gap-1.5 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">
                                         <span className="size-1.5 rounded-full bg-warning" />
                                         <span>Softening</span>
@@ -325,39 +331,4 @@ ui:
         </Html>
     view-stage:
       description: 'Stage: where the sample is, with the frames taken there.'
-      bsx: |
-        <Html>
-        <Resizable direction="row" className="h-full w-full">
-            <ResizablePanel defaultSize={70}>
-                <div className="flex h-full flex-col overflow-hidden bg-muted/30">
-                    <StageView className="flex-1">
-                        <StageScene>
-                            <StageAxis />
-                            <StagePlane />
-                            <FramesLayer />
-                            <ImagesLayer />
-                            <LivesLayer />
-                            <FrameLightPathLayer />
-                            <LightPathLayer />
-                            <StagePositioner />
-                            <RectangleDrawer />
-                        </StageScene>
-                        <ElementPanel />
-                        <ScanRegionPanel />
-                        <ImageMetadataPanel />
-                        <FramePanel />
-                        <SceneOverlay />
-                    </StageView>
-                </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle={true} />
-            <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
-                <ScrollArea className="h-full">
-                    <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
-                        <MoveControl className="locked:opacity-60" />
-                        <DetectorControl className="locked:opacity-60" />
-                    </div>
-                </ScrollArea>
-            </ResizablePanel>
-        </Resizable>
-        </Html>
+      file: ../views/stage.bsx

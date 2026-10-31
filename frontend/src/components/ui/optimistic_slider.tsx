@@ -79,6 +79,7 @@ function OptimisticSlider({
     >
       <SliderPrimitive.Track className="bg-muted relative grow overflow-hidden rounded-full h-1.5 w-full">
         <SliderPrimitive.Range
+          data-slot="slider-range"
           className={cn(
             "bg-primary absolute h-full",
             "opacity-100 brightness-125", // Visual feedback while saving
@@ -86,6 +87,7 @@ function OptimisticSlider({
         />
         {isPending && (
           <SliderPrimitive.Range
+            data-slot="slider-range"
             className={cn(
               "bg-secondary absolute h-full animate-pulse",
               "opacity-60 brightness-125", // Visual feedback while saving
@@ -95,6 +97,7 @@ function OptimisticSlider({
       </SliderPrimitive.Track>
       {internalValue.map((_, index) => (
         <SliderPrimitive.Thumb
+          data-slot="slider-thumb"
           key={index}
           className={cn(
             "border-primary ring-ring/50 block size-4 shrink-0 rounded-full border bg-white shadow-sm focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none",

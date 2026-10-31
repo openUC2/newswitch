@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { entriesOf, useStage } from "@/lib/microscope/values";
 import {
   Crosshair,
@@ -245,6 +246,7 @@ export function AcquisitionControl() {
   const [focus, setFocus] = useState<string | null>(null);
   const [times, setTimes] = useState(1);
   const [every, setEvery] = useState(0);
+  const [refocus, setRefocus] = useState(false);
 
   // A detector whose wire steps what focuses says how far apart the planes are.
   const drivenStep = detectors
@@ -275,7 +277,14 @@ export function AcquisitionControl() {
           order: "SEQUENTIAL",
           m_hooks: [],
           t_hooks: [],
-          p_hooks: [],
+          p_hooks: refocus
+            ? [
+                {
+                  __identifier: "@newswitch/software_autofocus_hook",
+                  steps: 11,
+                },
+              ]
+            : [],
           z_hooks: [],
         },
       },
@@ -338,6 +347,12 @@ export function AcquisitionControl() {
         <div className="text-[11px] text-muted-foreground">
           {t("acquisition.positionsAreDatasets")}
         </div>
+        {stage.focus.length === 1 && (
+          <label className="flex items-center gap-2 text-xs">
+            <Switch checked={refocus} onCheckedChange={setRefocus} />
+            {t("acquisition.refocus")}
+          </label>
+        )}
         {places?.map((place, index) => (
           <div key={index} className="flex items-end gap-2">
             <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">

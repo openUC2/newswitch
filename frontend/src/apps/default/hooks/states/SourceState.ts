@@ -11,6 +11,7 @@ export const LightSourceSchema = z
     emits: z.string(),
     wavelength: z.number(),
     lines: z.array(z.number()),
+    color: z.string(),
     max_power: z.number(),
     power: z.number(),
     lit_power: z.number(),

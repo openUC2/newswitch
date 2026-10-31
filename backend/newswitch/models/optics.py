@@ -25,6 +25,8 @@ class DetectorOptics:
     read_noise_counts: float
     depth_of_field_um: float
     """From its objective's NA."""
+    defocus_um: float = 0.0
+    """How far what focuses it is from where it was last found in focus, or else where it starts."""
     band_nm: Optional[float] = None
     """The mean wavelength arriving, if any arrives."""
     path: LightPath = field(default_factory=lambda: LightPath(detector=""))
@@ -47,6 +49,12 @@ class SourceOptics:
     """How far a sheet stays about that thin."""
     along: Optional[str] = None
     """Which way of the image a sheet travels."""
+    edge_share: Optional[float] = None
+    """How much of a sheet's strength is left at the edge of what is seen."""
+    band_nm: Optional[float] = None
+    """The mean wavelength it makes arrive at a detector, if it makes any arrive."""
+    band_color: Optional[str] = None
+    """The colour of the theme that reads as."""
 
 
 @dataclass

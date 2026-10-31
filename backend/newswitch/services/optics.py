@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
@@ -18,10 +19,11 @@ import numpy as np
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument, influences
 from newswitch.instrument.predict import Answer, state_key
+from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
-from newswitch.services.element_facts import facts_of
+from newswitch.services.element_facts import facts_of, spectrum_color
 from newswitch.models.optics import DetectorOptics, OpticalChannel, SourceOptics
 from newswitch.states.calibration import CalibrationState
 from newswitch.states.detector import DetectorState
@@ -52,6 +54,7 @@ class OpticsManager:
         calibration_state: CalibrationState,
         instrument: Instrument | None = None,
         values: Callable[[], Mapping[str, Any]] | None = None,
+        roles: Roles | None = None,
     ) -> None:
         """A manager of `instrument`'s optics, whose current values `values` gives."""
         self.state = state
@@ -60,7 +63,9 @@ class OpticsManager:
         self.instrument = instrument
         self.values = values or dict
         self.table = None if instrument is None else compile_instrument(instrument)
+        self.roles = roles
         self._influences: dict[str, frozenset[str]] | None = None
+        self._in_focus: dict[str, float] = {}
         self._published: dict[str, str] = {}
         self._refreshing = threading.Lock()
 
@@ -160,6 +165,23 @@ class OpticsManager:
         assert self.instrument is not None
         return tracing.depth_of_field_um(self.instrument, detector, self.values())
 
+    def found_focus(self, detector: str) -> None:
+        """What focuses `detector` is in focus where it is now: defocus counts from there."""
+        assert self.roles is not None
+        values = self.values()
+        for move in self.roles.focuses(detector):
+            self._in_focus[move.name] = float(values[move.name])
+        self.refresh()
+
+    def _defocus(self, name: str, values: Mapping[str, Any]) -> float:
+        """How far what focuses `name` is from where it is in focus."""
+        if self.roles is None:
+            return 0.0
+        return sum(
+            float(values[move.name]) - self._in_focus.get(move.name, float(move.initial))
+            for move in self.roles.focuses(name)
+        )
+
     def _detector(self, name: str, values: Mapping[str, Any]) -> DetectorOptics:
         assert self.table is not None and self.instrument is not None
         answer: Answer = self.table.answer(name, values)
@@ -184,6 +206,7 @@ class OpticsManager:
             read_noise_counts=answer.read_noise_counts,
             band_nm=answer.band_nm,
             depth_of_field_um=tracing.depth_of_field_um(self.instrument, name, values),
+            defocus_um=self._defocus(name, values),
             path=path,
         )
 
@@ -200,20 +223,37 @@ class OpticsManager:
             (entry["coupling"][name] for entry in entries.values() if name in entry["coupling"]),
             {},
         )
+        band = arriving.get("band_mean_nm")
+        found = {
+            "name": name,
+            "side": side,
+            "band_nm": band,
+            "band_color": None if band is None else spectrum_color(band),
+        }
         sheet = arriving.get("sheet")
         if sheet is not None:
             return SourceOptics(
-                name=name,
                 shape="sheet",
-                side=side,
                 field_um=arriving.get("field_um"),
                 thickness_um=2.0 * sheet["waist_um"],
                 reach_um=sheet["rayleigh_um"],
                 along=sheet["along"],
+                edge_share=self._edge_share(sheet, values),
+                **found,
             )
         if "field_um" in arriving:
-            return SourceOptics(name=name, shape="field", side=side, field_um=arriving["field_um"])
-        return SourceOptics(name=name, shape="spot", side=side)
+            return SourceOptics(shape="field", field_um=arriving["field_um"], **found)
+        return SourceOptics(shape="spot", **found)
+
+    def _edge_share(self, sheet: Mapping[str, Any], values: Mapping[str, Any]) -> float | None:
+        """How strong a sheet still is at the edge of what the first detector sees of it."""
+        assert self.table is not None and self.instrument is not None
+        detectors = self.instrument.detectors()
+        if not detectors:
+            return None
+        width, height = self.table.answer(detectors[0], values).field_of_view_um
+        half = (width if sheet["along"] == "x" else height) / 2.0
+        return 1.0 / math.sqrt(1.0 + (half / sheet["rayleigh_um"]) ** 2)
 
     def _publish(self, field: str, value: Any) -> None:  # noqa: ANN401 - any of the state's fields
         """Set a field of the state, if it changed: what clients hold stays what they hold.
@@ -244,6 +284,15 @@ class OpticsManager:
             )
             self._publish(
                 "sources", {name: self._source(name, values) for name in self.instrument.sources()}
+            )
+            self._publish(
+                "elements",
+                {
+                    name: self._element(name, values)
+                    for detector in self.instrument.detectors()
+                    for edge in self.instrument.edges_to(detector)
+                    for name in (edge.source, edge.target)
+                },
             )
             self._publish(
                 "channels",

@@ -280,6 +280,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         calibration_state=calibration_state,
         instrument=instrument,
         values=None if values is None else values.snapshot,
+        roles=None if values is None else values.roles,
     )
     calibration.on_change = optics.refresh
     if values is not None:

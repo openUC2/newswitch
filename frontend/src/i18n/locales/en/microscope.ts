@@ -1,4 +1,7 @@
 export const microscope = {
+  sample: "sample",
+  power: "Power",
+  sourceOff: "Off: the sample is dark and does not bleach.",
   settings: "Settings",
   camera: "Camera",
   illumination: "Illumination",

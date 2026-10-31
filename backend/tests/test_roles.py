@@ -295,7 +295,7 @@ def test_every_variable_is_published_by_what_it_does(values: Values) -> None:
     x = values.move_state.moves["stage"]["x"]
     assert (x.name, x.unit, x.along, x.minimum, x.maximum) == (
         "stage.x",
-        "um",
+        "µm",
         "x",
         -50000.0,
         50000.0,

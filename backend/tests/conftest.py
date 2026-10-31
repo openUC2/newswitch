@@ -33,6 +33,15 @@ from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
 
 
+@pytest.fixture(autouse=True)
+def views_beside_copies(tmp_path: Path) -> None:
+    """A description names its views relative to itself, so copies of one keep them in reach."""
+    for folder in (tmp_path, tmp_path.parent):
+        link = folder / "views"
+        if not link.exists():
+            link.symlink_to(Path(__file__).parent.parent / "instruments" / "views")
+
+
 def run_settings(tmp_path: Path, **changes: Any) -> Settings:  # noqa: ANN401
     """Simulated settings without an instrument, everything written under `tmp_path`."""
     return Settings(

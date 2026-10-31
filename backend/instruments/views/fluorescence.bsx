@@ -1,0 +1,112 @@
+<Html>
+<div className="flex h-full w-full gap-4 overflow-hidden bg-gradient-to-br from-info/5 to-transparent p-4">
+    <ScrollArea className="h-full w-[380px] shrink-0">
+        <div className="flex flex-col gap-3 pb-4 pr-3">
+<div className="flex flex-wrap gap-1.5">
+    <if when={list.contains(value: list.pluck(value: obj.values(value: self.SourceState.sources), key: "on"), item: true)}>
+        <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-info backdrop-blur">
+            <span className="size-1.5 rounded-full bg-info shadow-[0_0_8px_2px] shadow-info/60" />
+            <span>Lit</span>
+        </div>
+    <else>
+        <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur">
+            <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+            <span>Dark</span>
+        </div>
+    </else>
+    </if>
+    <if when={self.DetectorState.is_acquiring}>
+        <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive backdrop-blur">
+            <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
+            <span>Streaming</span>
+        </div>
+    <else>
+        <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur">
+            <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+            <span>Idle</span>
+        </div>
+    </else>
+    </if>
+    <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+        <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-warning backdrop-blur">
+            <span className="size-1.5 rounded-full bg-warning" />
+            <span>Uncalibrated</span>
+        </div>
+    <else>
+        <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-success backdrop-blur">
+            <span className="size-1.5 rounded-full bg-success" />
+            <span>Calibrated</span>
+        </div>
+    </else>
+    </if>
+</div>
+<SourceControl />
+<SwapsControl />
+<div className="flex flex-col gap-3">
+    <foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+            <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Detection</span>
+                    <span className="truncate text-sm font-medium">{camera.name}</span>
+                </div>
+                <div className="ml-auto">
+                    <if when={self.DetectorState.is_acquiring}>
+                        <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
+                            <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
+                            <span>Live</span>
+                        </div>
+                    <else>
+                        <div className="flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+                            <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+                            <span>Idle</span>
+                        </div>
+                    </else>
+                    </if>
+                </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 past:hidden">
+                <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
+                    <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{str.replace(value: list.last(value: str.split(value: tune.name, separator: ".")), search: "_", replacement: " ")}</span>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.value, digits: 1)}</span>
+                            <span className="text-xs text-muted-foreground">{tune.unit}</span>
+                        </div>
+                        <Slider className="min-w-0" step={tune.step} value={tune.value} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
+                    </div>
+                </foreach>
+            </div>
+            <span className="mt-2 block text-[11px] text-muted-foreground">Longer and brighter collects more photons, and bleaches more.</span>
+        </div>
+    </foreach>
+</div>
+        </div>
+    </ScrollArea>
+    <div className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+        <div className="h-full past:opacity-40">
+            <LiveView className="h-full" />
+        </div>
+        <div className="absolute bottom-5 right-4">
+<div className="flex gap-1 rounded-full border border-border/60 bg-card/70 p-1 backdrop-blur past:hidden">
+    <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Live</Button>
+    <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
+</div>
+        </div>
+        <div className="absolute bottom-5 left-1/2 w-[min(26rem,80%)] -translate-x-1/2">
+<if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+    <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
+        <div className="flex min-w-0 flex-1 flex-col">
+            <span className="text-sm font-medium text-warning">Light path not calibrated</span>
+            <span className="text-xs text-muted-foreground">Calibrate once: images then get their pixel size and their place on the stage.</span>
+        </div>
+        <Button icon="wand" size="sm" className="shrink-0 rounded-full bg-warning text-warning-foreground hover:bg-warning/80" onClick={self.calibrate_light_path()}>Calibrate</Button>
+    </div>
+<else>
+    <Button icon="camera" size="lg" fullWidth={true} className="h-12 rounded-full text-base shadow-xl past:hidden" onClick={self.capture_image()}>Acquire</Button>
+</else>
+</if>
+        </div>
+    </div>
+</div>
+</Html>

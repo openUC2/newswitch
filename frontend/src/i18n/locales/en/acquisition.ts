@@ -1,4 +1,5 @@
 export const acquisition = {
+  refocus: "Find focus again on arriving at each",
   dark: "Every source is at 0: this channel will be dark.",
   channels: "Channels",
   add: "Add",

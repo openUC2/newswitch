@@ -1,4 +1,7 @@
 export const microscope = {
+  sample: "Probe",
+  power: "Leistung",
+  sourceOff: "Aus: Die Probe bleibt dunkel und bleicht nicht.",
   settings: "Einstellungen",
   camera: "Kamera",
   illumination: "Beleuchtung",

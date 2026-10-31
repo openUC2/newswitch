@@ -1,6 +1,6 @@
 {
   "name": "newswitch",
-  "version": 5,
+  "version": 6,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
     {
@@ -212,7 +212,7 @@
     },
     {
       "name": "LiveView",
-      "description": "The live camera stream.",
+      "description": "The live stream of a detector.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,
@@ -225,6 +225,12 @@
           "kind": "STRING",
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
+        },
+        {
+          "key": "detector",
+          "kind": "STRING",
+          "required": false,
+          "description": "Which detector to show; without one, a choice of those that are on."
         }
       ]
     },
