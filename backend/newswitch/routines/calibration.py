@@ -101,21 +101,30 @@ def calibrate_light_path(
 
     Returns:
         The calibrated light paths.
+
+    Raises:
+        ValueError: A detector could not be calibrated; the others are, and it says which.
     """
 
     calibrated_light_paths: list[CalibratedLightPath] = []
+    problems: list[str] = []
     for detector in detector_state.detectors:
         if not detector.is_active:
             continue
         light_path = optics_manager.get_light_path_for_detector(detector.name)
         light_path_state = metadata_manager.get_current_state_for_light_path(light_path)
         known = metadata_manager.get_metadata_for_light_path(light_path).affine_matrix
-        affine_matrix = _measure(
-            stage_of(values, detector.name),
-            detector_manager,
-            detector,
-            float(np.hypot(known[0][0], known[1][0])),
-        )
+        try:
+            affine_matrix = _measure(
+                stage_of(values, detector.name),
+                detector_manager,
+                detector,
+                float(np.hypot(known[0][0], known[1][0])),
+            )
+        except ValueError as error:
+            # What one detector cannot see under this light is no reason to lose the others.
+            problems.append(str(error))
+            continue
 
         fov_width, fov_height = field_of_view(
             detector,
@@ -133,4 +142,8 @@ def calibrate_light_path(
         calibration_manager.set_calibrated_state(calibrated_light_path)
         calibrated_light_paths.append(calibrated_light_path)
 
+    if problems:
+        raise ValueError(
+            "; ".join(problems) + f" ({len(calibrated_light_paths)} calibrated all the same)"
+        )
     return calibrated_light_paths

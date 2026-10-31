@@ -1,5 +1,11 @@
 # Optikit ↔ NewSwitch — team discussion summary (Aug/Sep 2026)
 
+> **Status, 2026-10-31.** This is a design record, kept for its reasoning. Where it describes how
+> newswitch works, the code has moved on: an instrument is described as in
+> [`backend/instruments/README.md`](../backend/instruments/README.md), which is the reference. There are
+> no `parts`, no slots and no roles stated in a description: what a variable does is measured, values
+> have one way of changing, and an acquisition is a plan over variables.
+
 Source: Zulip thread (Bene, Ethan, Christian, Johannes). Companion to
 [OPTIKIT-INTEGRATION.md](OPTIKIT-INTEGRATION.md) and
 [contracts/driver-manifest.v1.example.json](contracts/driver-manifest.v1.example.json).

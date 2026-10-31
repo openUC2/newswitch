@@ -1,5 +1,11 @@
 # newswitch × optikit — the runtime integration
 
+> **Status, 2026-10-31.** This is a design record, kept for its reasoning. Where it describes how
+> newswitch works, the code has moved on: an instrument is described as in
+> [`backend/instruments/README.md`](../backend/instruments/README.md), which is the reference. There are
+> no `parts`, no slots and no roles stated in a description: what a variable does is measured, values
+> have one way of changing, and an acquisition is a plan over variables.
+
 *Builds on [CONFIG-MODEL.md](CONFIG-MODEL.md): that document defines the four
 layers, the reference rules and the hashes; this one specifies the seam with
 optikit at runtime — the service, the detector boundary, the wiring UI, the

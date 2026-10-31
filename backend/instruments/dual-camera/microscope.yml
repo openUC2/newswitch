@@ -1,6 +1,6 @@
 # Two cameras, each behind a filter of its own, seeing the sample at once: a splitter sends the
 # emission down two arms. The reflected arm's image comes out mirrored; an acquisition turns it back
-# when it merges the two (`routines.multidimensional_acquisition`).
+# when it merges the two (`routines.acquire`).
 #
 # Run it:      NEWSWITCH_CONFIG=instruments/dual-camera just dev-mikro
 

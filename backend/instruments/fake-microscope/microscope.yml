@@ -114,7 +114,6 @@ detection:
   - {from: splitter, via: reflect, to: tube_b, distance: 40 mm}
   - {from: tube_b, to: camera_b, distance: focus}
 
-# What the server has a control for, in which role, and by which slot. Nothing is inferred from the
 settings:
   simulate: everything
   simulation: gfp-beads

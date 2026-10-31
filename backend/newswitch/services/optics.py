@@ -111,7 +111,10 @@ class OpticsManager:
             {
                 "detector": path.detector,
                 "region": self.detector_state.get(path.detector).current_roi,
-                **{variable: at[variable] for variable in self._influences[path.detector]},
+                **{
+                    variable: self._to_step(variable, at[variable])
+                    for variable in self._influences[path.detector]
+                },
             }
         )
         return LightPathSnapshot(
@@ -129,6 +132,16 @@ class OpticsManager:
             elements=path.elements,
             edges=path.edges,
         )
+
+    def _to_step(self, name: str, value: Any) -> Any:  # noqa: ANN401 - what the variable holds
+        """A value as far as it can tell one calibration from another: to within its step.
+
+        Whether a variable changes a pixel at all was found by moving it a step, so less than that
+        is the same calibration; and a motor that reports 12.000001 has not moved.
+        """
+        assert self.instrument is not None
+        variable = self.instrument.variables[name]
+        return value if variable.verb == "swaps" else round(float(value) / variable.step)
 
     def predicted(
         self, detector: str, values: Mapping[str, Any] | None = None

@@ -7,5 +7,6 @@ camera_rotation_deg:          # the cameras are mounted slightly turned: nominal
   camera_a: 1.5
   camera_b: -0.7
 filter_wedge_px:              # filter 2 has a wedge and shifts the image: the model has no such effect
+  variable: filter_wheel.slot
   slot: 2
   shift: [3.0, -2.0]

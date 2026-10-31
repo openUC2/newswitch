@@ -18,7 +18,6 @@ dependencies = [
     "pint>=0.25.2",
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
-    "pystackreg>=0.2.8",
     "arkitekt==11.6.0",
     "arkitekt-fastapi==3.0.0",
     "arkitekt-runtime==7.3.0",
@@ -27,7 +26,6 @@ dependencies = [
     "pyyaml>=6",
     "scipy>=1.17.0",
     "tifffile>=2026.1.28",
-    "useq-schema>=0.8.1",
     "uvicorn>=0.40.0",
     # uvicorn serves websockets (/ws, /stream) only with a websocket library installed;
     # without one an upgrade is handled as plain HTTP and fails auth with a 401.

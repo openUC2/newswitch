@@ -264,6 +264,9 @@ class Pattern:
 
     beads: Annotated[StrictInt, Field(ge=0)]
     radius: Micrometres
+    extent: Millimetres = 6.0  # how wide all of the slide is
+    resolution: Micrometres = 2.0  # how finely it is rendered
+    darkens: Fraction = 0.6  # how much of what passes straight through a bead takes
 
 
 @dataclass(frozen=True, config=STRICT)

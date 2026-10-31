@@ -24,10 +24,6 @@ from newswitch.instrument.tracing import Errors
 #: The hidden errors, in an instrument's folder.
 TRUTH = "truth.yml"
 
-#: How much of the sample there is, and how finely it is rendered.
-_SAMPLE_HALF_WIDTH_UM = 3000.0
-_SAMPLE_UM_PER_PX = 2.0
-
 
 def load_truth(instrument: Instrument) -> dict[str, Any]:
     """The hidden errors of `instrument`; none when it has no truth file."""
@@ -45,13 +41,13 @@ def optical_errors(instrument: Instrument) -> Errors | None:
 
 def _sample(pattern: Pattern) -> np.ndarray:
     """Random beads: random so that a shift between two images has only one answer."""
-    size = int(2 * _SAMPLE_HALF_WIDTH_UM / _SAMPLE_UM_PER_PX)
+    size = int(pattern.extent * 1000.0 / pattern.resolution)
     field = np.zeros((size, size), dtype=np.float32)
     if pattern.beads == 0:
         return field
     rng = np.random.default_rng(7)
     field[rng.integers(0, size, pattern.beads), rng.integers(0, size, pattern.beads)] = 1.0
-    blurred = ndimage.gaussian_filter(field, pattern.radius / _SAMPLE_UM_PER_PX)
+    blurred = ndimage.gaussian_filter(field, pattern.radius / pattern.resolution)
     return blurred / blurred.max()
 
 
@@ -73,16 +69,6 @@ class Simulator:
         self._table = compile_instrument(instrument, optical_errors(instrument))
         self._sample_images: dict[Pattern, np.ndarray] = {}
         self._noise = np.random.default_rng(11)
-        self._transmitted = {
-            source
-            for source in instrument.sources()
-            if any(
-                route[-1].side == "transmitted"
-                for route in instrument.routes(
-                    instrument.illumination, source, instrument.sample_cube()
-                )
-            )
-        }
 
     def render(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
         """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names."""
@@ -94,9 +80,9 @@ class Simulator:
     def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
         """A color camera's whole sensor: per color, what its band lets through, as uint16."""
         answer = self._answer(detector, state)
-        beads, radius, positions = self._view(detector, state, answer)
+        beads, radius, positions, darkens = self._view(detector, state, answer)
         return {
-            color: self._expose(detector, answer, electrons, beads, radius, positions)
+            color: self._expose(detector, answer, electrons, beads, radius, positions, darkens)
             for color, electrons in answer.electrons_by_color.items()
         }
 
@@ -127,9 +113,10 @@ class Simulator:
 
     def _view(
         self, detector: str, state: Mapping[str, Any], answer: Answer
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """What of the sample lands on each pixel, how far each is from the middle (0 to 1), and
-        where each is from the middle along x and y, in micrometres of the sample."""
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """What of the sample lands on each pixel, how far each is from the middle (0 to 1), where
+        each is from the middle along x and y in micrometres of the sample, and how much a bead takes
+        of what passes through it."""
         pattern = self.instrument.simulation_at(state).pattern
         if pattern not in self._sample_images:
             self._sample_images[pattern] = _sample(pattern)
@@ -139,7 +126,7 @@ class Simulator:
 
         # the filter's wedge shifts the whole image on the sensor
         wedge = self.truth.get("filter_wedge_px")
-        if wedge and state.get("filter_wheel.slot") == wedge["slot"]:
+        if wedge and state.get(wedge["variable"]) == wedge["slot"]:
             columns = columns - wedge["shift"][0]
             rows = rows - wedge["shift"][1]
         centred = np.stack([columns - (width - 1) / 2, rows - (height - 1) / 2])
@@ -153,14 +140,14 @@ class Simulator:
         to_raster = (sample.shape[0] - 1) / 2
         coordinates = np.stack(
             [
-                (sample_y + answer.centre[1]) / _SAMPLE_UM_PER_PX + to_raster,
-                (sample_x + answer.centre[0]) / _SAMPLE_UM_PER_PX + to_raster,
+                (sample_y + answer.centre[1]) / pattern.resolution + to_raster,
+                (sample_x + answer.centre[0]) / pattern.resolution + to_raster,
             ]
         )
         beads = ndimage.map_coordinates(sample, coordinates, order=1, mode="constant")
         radius = np.hypot(centred[0], centred[1]) / np.hypot((width - 1) / 2, (height - 1) / 2)
         scale = np.abs(np.diag(answer.pixel_to_stage))[:, np.newaxis, np.newaxis]
-        return beads, radius, centred * scale
+        return beads, radius, centred * scale, pattern.darkens
 
     def _expose(
         self,
@@ -170,10 +157,11 @@ class Simulator:
         beads: np.ndarray,
         radius: np.ndarray,
         positions: np.ndarray,
+        darkens: float,
     ) -> np.ndarray:
         """The image `electrons_by_source` makes of `beads`, as this detector reads it out."""
         readout = self.instrument.cubes[detector].element.readout
-        electrons = self._electrons(answer, electrons_by_source, beads, radius, positions)
+        electrons = self._electrons(answer, electrons_by_source, beads, radius, positions, darkens)
         collected = self._noise.poisson(np.clip(electrons, 0, None)).clip(max=readout.full_well)
         read = self._noise.normal(0.0, readout.read_noise, electrons.shape)
         counts_per_electron = (
@@ -191,12 +179,15 @@ class Simulator:
         beads: np.ndarray,
         radius: np.ndarray,
         positions: np.ndarray,
+        darkens: float,
     ) -> np.ndarray:
         """The electrons `light_by_source` is expected to make of `beads`, before any noise."""
-        # what emits comes from the beads; what passes through is darkened by them
+        # What is emitted comes from the beads; what only passes is the same everywhere, but for what
+        # they take of it: a mirror renders as a mirror.
         counts = np.zeros(beads.shape)
         for source, amount in light_by_source.items():
-            lit = amount * ((1.0 - 0.6 * beads) if source in self._transmitted else beads)
+            direct = answer.direct_share_by_source.get(source, 0.0)
+            lit = amount * (direct * (1.0 - darkens * beads) + (1.0 - direct) * beads)
             sheet = answer.sheet_by_source.get(source)
             if sheet is not None:
                 # It widens away from its waist: fixed to the microscope, not to the stage.

@@ -65,7 +65,7 @@ reflects: a mirror is predicted right, but drawn dark.
 
 Channels are not declared. A channel is a source whose light gets through the sample to a detector,
 which the optics decide: the cubes, `illumination` and `detection` are the same for every sample, and
-the sample's numbers say what comes out. Light too faint to see (`CHANNEL_LIGHT`) is no channel.
+the sample's numbers say what comes out. Light lost in a detector's read noise is no channel.
 `Compiled.channels` lists them for a state, and
 `newswitch.tools.check_instrument` prints them per simulation.
 

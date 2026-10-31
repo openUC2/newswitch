@@ -268,6 +268,7 @@ def coupling(
         # photons per milliwatt and millisecond: a microjoule's worth, at its wavelength
         photons = 1e-6 * emitter.wavelength * 1e-9 / _HC
         arriving = np.zeros(grid.shape)
+        unchanged = np.zeros(grid.shape)  # of that, what the sample only let through or reflected
         shape: dict[str, Any] = {}
         for edges in instrument.routes(instrument.illumination, source, stage):
             on_sample = photons * spectrum * _route_transmission(instrument, edges, state, grid)
@@ -279,6 +280,7 @@ def coupling(
             )
             emitted = _emitted(sample.fluorophore, sample.absorbed, on_sample, grid)
             arriving = arriving + on_sample * direct + emitted * gathered
+            unchanged = unchanged + on_sample * direct
             if side == "orthogonal":
                 lens = instrument.cubes[edges[-1].source].element_at(state)
                 shape["sheet"] = _sheet(lens, edges[-1].along, emitter.wavelength)
@@ -290,9 +292,19 @@ def coupling(
         for edges in detection:
             through = through + arriving * _route_transmission(instrument, edges, state, grid)
         through = through * element.readout.qe
+        passed = np.zeros(grid.shape)
+        for edges in detection:
+            passed = passed + unchanged * _route_transmission(instrument, edges, state, grid)
         total = float(through.sum())
         mean = float((through * grid).sum() / total) if total > 0.0 else None
-        result[source] = {"electrons_per_mw_ms": total, "band_mean_nm": mean, **shape}
+        result[source] = {
+            "electrons_per_mw_ms": total,
+            "band_mean_nm": mean,
+            "direct_share": float(passed.sum() * element.readout.qe / total)
+            if total > 0.0
+            else 0.0,
+            **shape,
+        }
         if colors:
             result[source]["colors"] = {
                 name: float((through * _gaussian(grid, color.center, color.width)).sum())
@@ -460,9 +472,14 @@ def _scan_imaging(
     ][-1]
     um_per_degree = scan_um_per_degree(instrument, scanner, state, errors)
     magnification = 1.0 / um_per_degree
+    nearest = next(
+        edge.target for edge in route if instrument.cubes[edge.target].element_at(state) is last
+    )
+    # Whichever moves: the sample, or the lens nearest it.
     defocus_um = sum(
         state[variable.name]
-        for variable in instrument.cubes[instrument.sample_cube()].variables.values()
+        for name in (instrument.sample_cube(), nearest)
+        for variable in instrument.cubes[name].variables.values()
         if variable.verb == "moves" and variable.along == "axis"
     )
     return Imaging(
@@ -526,7 +543,8 @@ def imaging(
         distance_since_lens += float(distance)
         if target.kind == "lens":
             if not lenses and object_distance == 0.0 and pending is None:
-                object_distance = distance_since_lens + moved(stage)
+                # Whichever moves: the sample, or the lens nearest it.
+                object_distance = distance_since_lens + moved(stage) + moved(edge.target)
             elif pending is not None:
                 lenses.append(_lens(pending, distance_since_lens + moved(edge.target)))
             if target.prescription is not None:

@@ -35,6 +35,8 @@ class Answer:
     electrons_by_source: Mapping[str, float] = field(default_factory=dict)  # before the readout
     electrons_by_color: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     """A color camera's: per color, the electrons per source."""
+    direct_share_by_source: Mapping[str, float] = field(default_factory=dict)
+    """How much of what each source makes arrive came straight through or back, and was not emitted."""
     sheet_by_source: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     """A light sheet's thickness and reach, for each source that makes one."""
 
@@ -183,6 +185,9 @@ def assemble(
         light_by_source={s: e * counts_per_electron for s, e in electrons_by_source.items()},
         electrons_by_source=electrons_by_source,
         electrons_by_color=electrons_by_color,
+        direct_share_by_source={
+            source: arriving.get("direct_share", 0.0) for source, arriving in coupling.items()
+        },
         sheet_by_source={
             source: arriving["sheet"]
             for source, arriving in coupling.items()
