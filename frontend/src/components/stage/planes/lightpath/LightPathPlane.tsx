@@ -88,14 +88,29 @@ export const LightPathPlane = ({
   );
 };
 
-/** The light path of the first detector, as things are now. */
+/** Every way light can take to any detector, as things are now. */
 export const CurrentLightPathPlane = () => {
   const { data } = useOpticsState({ subscribe: true });
   const currentMode = useModeStore((s) => s.interactionMode);
   const displayMode = useModeStore((s) => s.displayMode);
-  const path = Object.values(data?.detectors ?? {}).at(0)?.path;
+  const path = useMemo(() => {
+    const paths = Object.values(data?.detectors ?? {}).map((d) => d.path);
+    const once = <T,>(items: T[], key: (item: T) => string) => [
+      ...new Map(items.map((item) => [key(item), item])).values(),
+    ];
+    return {
+      elements: once(
+        paths.flatMap((p) => p.elements),
+        (element) => element.name,
+      ),
+      edges: once(
+        paths.flatMap((p) => p.edges),
+        (edge) => `${edge.source}-${edge.target}`,
+      ),
+    };
+  }, [data?.detectors]);
 
-  if (currentMode !== "META" || displayMode !== "3D" || !path) return null;
+  if (currentMode !== "META" || displayMode !== "3D") return null;
   return <LightPathPlane path={path} />;
 };
 

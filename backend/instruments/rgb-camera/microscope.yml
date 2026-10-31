@@ -121,7 +121,7 @@ ui:
                 </div>
             </else>
             </if>
-            <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+            <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
                 <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-warning backdrop-blur">
                     <span className="size-1.5 rounded-full bg-warning" />
                     <span>Uncalibrated</span>
@@ -412,7 +412,7 @@ ui:
         </div>
                 </div>
                 <div className="absolute bottom-5 left-1/2 w-[min(26rem,80%)] -translate-x-1/2">
-        <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+        <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
             <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
                 <div className="flex min-w-0 flex-1 flex-col">
                     <span className="text-sm font-medium text-warning">Light path not calibrated</span>
@@ -469,7 +469,7 @@ ui:
                     <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                         <StageControl className="locked:opacity-60" />
 
-        <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+        <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
             <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
                 <div className="flex min-w-0 flex-1 flex-col">
                     <span className="text-sm font-medium text-warning">Light path not calibrated</span>
@@ -509,7 +509,7 @@ ui:
                     <div className="p-4 past:opacity-70 past:grayscale">
                         <StageControl className="locked:opacity-60" />
 
-        <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+        <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
             <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
                 <div className="flex min-w-0 flex-1 flex-col">
                     <span className="text-sm font-medium text-warning">Light path not calibrated</span>

@@ -294,7 +294,7 @@ ui:
                 <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border/60 bg-card/80 p-1 shadow-xl backdrop-blur past:hidden">
                     <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Live</Button>
                     <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
-                    <if when={val.is_empty(value: self.CalibrationState.calibrated_light_paths)}>
+                    <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
                         <Button icon="wand" size="sm" variant="ghost" className="rounded-full text-warning" onClick={self.calibrate_light_path()}>Calibrate</Button>
                     </if>
                     <Button icon="camera" size="sm" className="rounded-full bg-spectrum-cyan text-background hover:bg-spectrum-cyan/80" onClick={self.capture_image()}>Plane</Button>

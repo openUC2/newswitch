@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from typing import Any
@@ -104,6 +105,7 @@ class OpticsManager:
         self.table = None if instrument is None else compile_instrument(instrument)
         self._influences: dict[str, frozenset[str]] | None = None
         self._published: dict[str, str] = {}
+        self._refreshing = threading.Lock()
 
     def _name(self, detector_slot: int) -> str:
         assert self.instrument is not None
@@ -258,25 +260,30 @@ class OpticsManager:
             setattr(self.state, field, value)
 
     def refresh(self) -> None:
-        """Publish what the optics find under the current values, as far as that changed."""
+        """Publish what the optics find under the current values, as far as that changed.
+
+        One at a time, values read to published: two actions finishing together must not leave what
+        the older one read behind.
+        """
         if self.instrument is None or self.table is None:
             return
-        values = self.values()
-        self._publish(
-            "detectors",
-            {
-                name: self._detector(slot, name, values)
-                for slot, name in enumerate(self.instrument.detectors(), start=1)
-                if any(d.slot == slot for d in self.camera_state.detectors)
-            },
-        )
-        self._publish(
-            "sources", {name: self._source(name, values) for name in self.instrument.sources()}
-        )
-        self._publish(
-            "channels",
-            [
-                OpticalChannel(c.source, c.detector, c.electrons, c.band_nm)
-                for c in self.table.channels(values)
-            ],
-        )
+        with self._refreshing:
+            values = self.values()
+            self._publish(
+                "detectors",
+                {
+                    name: self._detector(slot, name, values)
+                    for slot, name in enumerate(self.instrument.detectors(), start=1)
+                    if any(d.slot == slot for d in self.camera_state.detectors)
+                },
+            )
+            self._publish(
+                "sources", {name: self._source(name, values) for name in self.instrument.sources()}
+            )
+            self._publish(
+                "channels",
+                [
+                    OpticalChannel(c.source, c.detector, c.electrons, c.band_nm)
+                    for c in self.table.channels(values)
+                ],
+            )

@@ -11,7 +11,8 @@ from newswitch.instrument.predict import Answer
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.optics import DetectorOptics
-from newswitch.routines.common import focus_range
+from newswitch.routines.autofocus import autofocus_sweep
+from newswitch.routines.common import focus_range, z_sweep
 from newswitch.settings import Settings
 from tests.conftest import run_settings
 
@@ -156,3 +157,26 @@ def test_how_far_to_sweep_follows_from_the_na(tmp_path: Path) -> None:
     assert focus_range(0.4, 11) == pytest.approx(2.0)
     found = next(iter(built(tmp_path, "dual-camera").optics_state.detectors.values()))
     assert found.depth_of_field_um == pytest.approx(0.525 / 0.25**2, rel=0.1)
+
+
+def test_a_low_na_sweep_reaches_focus_from_where_a_fixed_one_could_not(
+    microscope: Microscope,
+) -> None:
+    """Two depths of field off: what the NA asks for finds it, and 20 um would only walk towards it."""
+    assert microscope.stage is not None and microscope.detector is not None
+    assert microscope.illumination is not None and microscope.objective is not None
+    sources = microscope.illumination_state.illuminations
+    for source in sources:
+        microscope.illumination.turn_off_channel(source.slot)
+    microscope.illumination.turn_on(sources[0].slot, sources[0].max_intensity * 0.5)
+    microscope.objective.switch_objective(microscope.objective_state.mounted_lenses[0].slot)
+    depth = microscope.optics.depth_of_field_um(1)
+
+    microscope.stage.move(z=2.0 * depth, is_absolute=True)
+    sweep = z_sweep(microscope.stage.state.z, focus_range(depth, 11), 11)
+    best, _ = autofocus_sweep(microscope.stage, microscope.detector, sweep)
+    assert abs(best) <= depth / 2.0
+
+    microscope.stage.move(z=2.0 * depth, is_absolute=True)
+    best, _ = autofocus_sweep(microscope.stage, microscope.detector, z_sweep(2.0 * depth, 20.0, 11))
+    assert abs(best) > depth / 2.0
