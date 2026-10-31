@@ -72,7 +72,7 @@ def _optical_element(instrument: Instrument, name: str, state: Mapping[str, Any]
     element = instrument.cubes[name].element_at(state)
     common: dict[str, Any] = {"id": name, "label": name, "ports": in_out()}
     match element:
-        case spec.Source(coherent=True):
+        case spec.Source(emits="laser"):
             return schema.LaserElementInput(nominal_wavelength=f"{element.wavelength} nm", **common)
         case spec.Source():
             return schema.LampElementInput(**common)

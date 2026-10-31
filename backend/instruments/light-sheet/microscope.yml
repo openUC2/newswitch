@@ -11,25 +11,26 @@ name: light-sheet
 
 cubes:
   laser_488:
-    element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
+    element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
       power: {initial: 5 mW, step: 1 mW}   # on from the start: a sheet only shows when lit
 
   sheet_lens:
-    element: {kind: lens, name: sheet NA 0.02, f: 50 mm, na: 0.02}
+    element: {kind: lens, name: sheet NA 0.02, f: 50 mm, na: 0.02, immersion: air}
 
   stage:
     element:
       kind: sample
       simulations:   # what can be on it; settings.simulation says which is
         gfp-beads:
-          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          fluorophore: egfp
+          absorbed: 3.0e-6
           transmit: 0.9   # light going straight through (transmitted light)
-          reflect: 0.001  # light coming back the way it came (epi)
+          reflect: 1.0e-6  # light coming back the way it came (epi)
           pattern: {beads: 3600, radius: 10 um}
         empty-slide:
           transmit: 0.95
-          reflect: 0.001
+          reflect: 1.0e-6
           pattern: {beads: 0, radius: 10 um}
     signals:
       in: [z]   # its z takes a step per pulse
@@ -39,10 +40,10 @@ cubes:
       z: {along: axis, initial: 0 um, step: 5 um, min: -500 um, max: 500 um, speed: 500 um/s}
 
   objective:
-    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
+    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, working_distance: 10 mm}
 
   filter_green:
-    element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
+    element: {kind: filter, name: BP 525/50, curve: bp_525_50}
 
   tube:
     element: {kind: lens, f: 200 mm}
@@ -56,7 +57,7 @@ cubes:
 
 illumination:
   - {from: laser_488, to: sheet_lens}
-  - {from: sheet_lens, to: stage, side: orthogonal, along: x}   # it travels along the image's x
+  - {from: sheet_lens, to: stage, side: orthogonal, along: x, field: 500 um}   # it travels along the image's x
 
 detection:
   - {from: stage, to: objective, distance: focus}

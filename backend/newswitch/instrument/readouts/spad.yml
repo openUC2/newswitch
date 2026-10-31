@@ -1,0 +1,8 @@
+# A single-photon counter: it counts, so it has neither offset nor read noise.
+qe: 0.5
+electrons_per_count: 1.0
+read_noise: 0.0
+offset: 0.0
+full_well: 65535
+bit_depth: 16
+binning: sum

@@ -53,8 +53,13 @@ def edited(tmp_path: Path, change: Callable[[dict[str, Any]], Any]) -> Path:
 
 def fluorophore(data: dict[str, Any]) -> dict[str, Any]:
     """What the description says of the sample's fluorophore."""
-    simulations = data["cubes"]["stage"]["element"]["simulations"]
-    return simulations["gfp-beads"]["fluorophore"]
+    simulation = data["cubes"]["stage"]["element"]["simulations"]["gfp-beads"]
+    if isinstance(simulation["fluorophore"], str):
+        library = spec.Path(spec.__file__).parent / "fluorophores"
+        simulation["fluorophore"] = yaml.safe_load(
+            (library / f"{simulation['fluorophore']}.yml").read_text()
+        )
+    return simulation["fluorophore"]
 
 
 def test_the_detector_delivers_arrival_time(instrument: spec.Instrument) -> None:

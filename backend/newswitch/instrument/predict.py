@@ -29,17 +29,19 @@ class Answer:
     relative_illumination: float  # at the corner, against the middle
     distortion_percent: float
     band_nm: float | None  # the mean wavelength arriving, if any arrives
-    light: float  # expected counts at the middle of the image
+    light: float  # expected counts above the offset, where a bead is
+    read_noise_counts: float = 0.0  # what is lost in below this
     light_by_source: Mapping[str, float] = field(default_factory=dict)  # the same, per source
-    light_by_color: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
-    """A color camera's: per color, the light per source."""
+    electrons_by_source: Mapping[str, float] = field(default_factory=dict)  # before the readout
+    electrons_by_color: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    """A color camera's: per color, the electrons per source."""
     sheet_by_source: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     """A light sheet's thickness and reach, for each source that makes one."""
 
     @property
     def black(self) -> bool:
-        """Whether the detector would see next to nothing."""
-        return self.light < 1.0
+        """Whether what the detector would see is lost in its noise."""
+        return self.light < max(self.read_noise_counts, 1.0)
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,7 @@ class Channel:
 
     source: str
     detector: str
-    light_per_mw: float
+    electrons: float  # at the source's full power, and the detector's exposure
     band_nm: float | None  # the mean wavelength arriving
 
 
@@ -57,14 +59,6 @@ def state_key(instrument: Instrument, state: Mapping[str, Any]) -> str:
     swaps = sorted(v.name for v in instrument.variables.values() if v.verb == "swaps")
     names = [instrument.simulation_key(), *swaps]
     return ",".join(f"{name}={state[name]}" for name in names)
-
-
-#: Counts per milliwatt-millisecond of light arriving: the fake camera's sensitivity.
-COUNTS_PER_LIGHT = 500.0
-#: Light per milliwatt from which a source counts as reaching a detector. A laser's reflection off a
-#: slide, past the dichroic, is about 1e-6 (a few counts at full power, under the read noise); the
-#: faintest fluorescence described is about 1e-2.
-CHANNEL_LIGHT = 1e-4
 
 
 def _in_the_sheet(
@@ -79,6 +73,37 @@ def _in_the_sheet(
         if variable.verb == "moves" and variable.along == "axis"
     )
     return math.exp(-2.0 * (moved / arriving["sheet"]["waist_um"]) ** 2)
+
+
+def _mounted(
+    element: Any,  # noqa: ANN401 - a detector's element
+    pixel_x: float,
+    pixel_y: float,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """A pixel on the sample, as the way a sensor is mounted turns and mirrors it."""
+    pixel_x *= -1.0 if getattr(element, "flip", None) == "x" else 1.0
+    pixel_y *= -1.0 if getattr(element, "flip", None) == "y" else 1.0
+    rotation = getattr(element, "rotation", None)
+    if not rotation:
+        return ((pixel_x, 0.0), (0.0, pixel_y))
+    cos, sin = math.cos(math.radians(rotation)), math.sin(math.radians(rotation))
+    return ((cos * pixel_x, -sin * pixel_y), (sin * pixel_x, cos * pixel_y))
+
+
+def _share(
+    arriving: Mapping[str, Any], area: float, across_x: float, across_y: float, pixels: int
+) -> float:
+    """How much of a source's light a pixel gets to work with, over an exposure.
+
+    A field shares it by area. A sheet concentrates it into a line, shared along its height. A scan
+    gives each pixel all of it, for the pixel's share of the time.
+    """
+    if "sheet" in arriving and "field_um" in arriving:
+        across = across_y if arriving["sheet"]["along"] == "x" else across_x
+        return across / arriving["field_um"]
+    if "field_um" in arriving:
+        return area / (math.pi * (arriving["field_um"] / 2.0) ** 2)
+    return 1.0 / pixels
 
 
 def assemble(
@@ -103,32 +128,41 @@ def assemble(
         if variable.verb == "moves" and variable.along in ("x", "y"):
             centre["xy".index(variable.along)] = float(state[variable.name])
 
-    # Binned pixels are averaged, not summed (`VirtualDetectorManager._read_out`): binning does
-    # not change the counts.
+    readout = instrument.cubes[detector].element.readout
+    # The pixel a sample point falls on, before any binning: what binning does is the readout's.
+    pixel_area = abs(pixel_x * pixel_y) / binning**2
+    pixels = axis_x.size * axis_y.size
+    binned = binning**2 if readout.binning == "sum" else 1.0
     gain = 10.0 ** (float(state.get(f"{detector}.gain", 0.0)) / 20.0)
-    per_mw = state[f"{detector}.exposure"] * COUNTS_PER_LIGHT * gain
-    counts_by_source = {}
+    counts_per_electron = gain / readout.electrons_per_count
+    exposure = float(state[f"{detector}.exposure"])
+
+    def electrons(source: str, arriving: Mapping[str, Any], per_mw_ms: float) -> float:
+        """What a source makes in a pixel, where a bead is."""
+        return (
+            float(state[f"{source}.power"])
+            * per_mw_ms
+            * exposure
+            * _share(arriving, pixel_area, abs(pixel_x) / binning, abs(pixel_y) / binning, pixels)
+            * _in_the_sheet(instrument, state, arriving)
+            * binned
+        )
+
+    electrons_by_source = {}
     weighted = 0.0
     for source, arriving in coupling.items():
-        amount = (
-            float(state[f"{source}.power"])
-            * arriving["light_per_mw"]
-            * _in_the_sheet(instrument, state, arriving)
-        )
-        counts_by_source[source] = amount * per_mw
+        amount = electrons(source, arriving, arriving["electrons_per_mw_ms"])
+        electrons_by_source[source] = amount
         if arriving["band_mean_nm"] is not None:
             weighted += amount * arriving["band_mean_nm"]
-    counts_by_color: dict[str, dict[str, float]] = {}
+    electrons_by_color: dict[str, dict[str, float]] = {}
     for source, arriving in coupling.items():
-        for color, light_per_mw in arriving.get("colors", {}).items():
-            amount = (
-                float(state[f"{source}.power"])
-                * light_per_mw
-                * _in_the_sheet(instrument, state, arriving)
+        for color, per_mw_ms in arriving.get("colors", {}).items():
+            electrons_by_color.setdefault(color, {})[source] = electrons(
+                source, arriving, per_mw_ms
             )
-            counts_by_color.setdefault(color, {})[source] = amount * per_mw
-    total = sum(counts_by_source.values())
-    band = weighted * per_mw / total if total > 1e-9 else None
+    total = sum(electrons_by_source.values())
+    band = weighted / total if total > 1e-9 else None
 
     numerical_aperture = imaging["numerical_aperture"]
     airy_um = 0.61 * (band or 550.0) / 1000.0 / numerical_aperture
@@ -136,7 +170,7 @@ def assemble(
     spot_um = math.hypot(imaging["spot_center_um"], airy_um / 3.0)
     return Answer(
         detector=detector,
-        pixel_to_stage=((pixel_x, 0.0), (0.0, pixel_y)),
+        pixel_to_stage=_mounted(instrument.cubes[detector].element, pixel_x, pixel_y),
         centre=(centre[0], centre[1]),
         size=(width, height),
         field_of_view_um=(abs(pixel_x) * width, abs(pixel_y) * height),
@@ -144,9 +178,11 @@ def assemble(
         relative_illumination=imaging["relative_illumination"],
         distortion_percent=imaging["distortion_percent"],
         band_nm=band,
-        light=total,
-        light_by_source=counts_by_source,
-        light_by_color=counts_by_color,
+        light=total * counts_per_electron,
+        read_noise_counts=readout.read_noise * counts_per_electron,
+        light_by_source={s: e * counts_per_electron for s, e in electrons_by_source.items()},
+        electrons_by_source=electrons_by_source,
+        electrons_by_color=electrons_by_color,
         sheet_by_source={
             source: arriving["sheet"]
             for source, arriving in coupling.items()
@@ -163,13 +199,23 @@ class Compiled:
     states: Mapping[str, Mapping[str, Any]]
 
     def channels(self, state: Mapping[str, Any]) -> list[Channel]:
-        """Which source reaches which detector under `state`, from the table."""
-        return [
-            Channel(source, detector, arriving["light_per_mw"], arriving["band_mean_nm"])
-            for detector, entry in self.states[state_key(self.instrument, state)].items()
-            for source, arriving in entry["coupling"].items()
-            if arriving["light_per_mw"] >= CHANNEL_LIGHT
-        ]
+        """Which source reaches which detector under `state`: more than its noise, at full power."""
+        found = []
+        for detector, entry in self.states[state_key(self.instrument, state)].items():
+            readout = self.instrument.cubes[detector].element.readout
+            for source, arriving in entry["coupling"].items():
+                element = self.instrument.cubes[source].element_at(state)
+                answer = self.answer(detector, {**state, f"{source}.power": element.max_power})
+                if answer.electrons_by_source[source] > max(3.0 * readout.read_noise, 1.0):
+                    found.append(
+                        Channel(
+                            source,
+                            detector,
+                            answer.electrons_by_source[source],
+                            arriving["band_mean_nm"],
+                        )
+                    )
+        return found
 
     def answer(self, detector: str, state: Mapping[str, Any]) -> Answer:
         """What `detector` sees under `state`, from the table: tracing nothing.

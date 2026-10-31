@@ -10,12 +10,12 @@ name: point-scanner
 
 cubes:
   laser_488:
-    element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
+    element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
       power: {initial: 0 mW, step: 1 mW}
 
   dichroic:
-    element: {kind: dichroic, cut: 500 nm}
+    element: {kind: dichroic, curve: lp_500}
 
   galvo:
     component: generic-galvo-512
@@ -27,16 +27,17 @@ cubes:
     element: {kind: lens, f: 200 mm}
 
   objective:
-    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
+    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, working_distance: 10 mm}
 
   stage:
     element:
       kind: sample
       simulations:   # what can be on it; settings.simulation says which is
         gfp-beads:
-          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          fluorophore: egfp
+          absorbed: 1.0e-4
           transmit: 0.9   # light going straight through (transmitted light)
-          reflect: 0.001  # light coming back the way it came (epi)
+          reflect: 1.0e-6  # light coming back the way it came (epi)
           pattern: {beads: 3600, radius: 10 um}
     moves:
       x: {along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
@@ -44,7 +45,7 @@ cubes:
       z: {along: axis, initial: 0 um, step: 100 um, min: -500 um, max: 500 um, speed: 500 um/s}
 
   filter_green:
-    element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
+    element: {kind: filter, name: BP 525/50, curve: bp_525_50}
 
   pinhole:
     element: {kind: pinhole, diameter: 50 um}

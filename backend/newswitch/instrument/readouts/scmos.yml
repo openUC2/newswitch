@@ -1,0 +1,8 @@
+# A typical scientific CMOS camera.
+qe: 0.7
+electrons_per_count: 0.46
+read_noise: 1.5
+offset: 100.0
+full_well: 30000
+bit_depth: 16
+binning: average

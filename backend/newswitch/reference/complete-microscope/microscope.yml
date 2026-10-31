@@ -7,23 +7,24 @@ name: complete-microscope
 
 cubes:
   laser_488:
-    element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
+    element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
       power: {actuator: laser-dac, initial: 20 mW, step: 1 mW}
 
   led_625:
-    element: {kind: source, wavelength: 625 nm, width: 15 nm, max_power: 2 mW}
+    element: {kind: source, emits: led, spectrum: {center: 625 nm, width: 15 nm}, max_power: 50 nW}
     tunes:
-      power: {actuator: led-dac, initial: 0 mW, step: 1 mW}
+      power: {actuator: led-dac, initial: 0 mW, step: 5 nW}
 
   stage:
     element:
       kind: sample
       simulations:   # what can be on it; settings.simulation says which is
         gfp-beads:
-          fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
+          fluorophore: egfp
+          absorbed: 1.0e-4
           transmit: 0.9
-          reflect: 0.001
+          reflect: 1.0e-6
           pattern: {beads: 3600, radius: 10 um}
     moves:
       x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -50000 um, max: 50000 um, speed: 50000 um/s}
@@ -36,11 +37,11 @@ cubes:
         actuator: turret
         initial: 1
         slots:
-          1: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
-          2: {kind: lens, name: f10 NA 0.4, f: 10 mm, na: 0.4, working_distance: 3 mm}
+          1: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, magnification: 10, working_distance: 10 mm}
+          2: {kind: lens, name: f10 NA 0.4, f: 10 mm, na: 0.4, immersion: air, magnification: 20, working_distance: 3 mm}
 
   dichroic:
-    element: {kind: dichroic, cut: 500 nm}
+    element: {kind: dichroic, curve: lp_500}
 
   filter_wheel:
     swaps:
@@ -49,7 +50,7 @@ cubes:
         initial: 1
         slots:
           1: {kind: filter, name: Open}
-          2: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
+          2: {kind: filter, name: BP 525/50, curve: bp_525_50}
 
   tube:
     element: {kind: lens, f: 200 mm}
@@ -58,6 +59,7 @@ cubes:
     element:
       kind: sensor
       axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+      readout: scmos
     tunes:
       exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
       gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
@@ -66,8 +68,8 @@ cubes:
 illumination:
   - {from: laser_488, to: dichroic}
   - {from: dichroic, via: reflect, to: objective}
-  - {from: objective, to: stage, side: epi}
-  - {from: led_625, to: stage, side: transmitted}
+  - {from: objective, to: stage, side: epi, field: 500 um}
+  - {from: led_625, to: stage, side: transmitted, field: 500 um}
 
 detection:
   - {from: stage, to: objective, distance: focus}
@@ -78,7 +80,7 @@ detection:
 
 parts:
   stage: stage
-  objective: {swap: objective.slot, reference_tube: 200 mm}
+  objective: {swap: objective.slot}
   filters: {swap: filter_wheel.slot}
   sources:
     1: {cube: laser_488, full_intensity: 100.0}

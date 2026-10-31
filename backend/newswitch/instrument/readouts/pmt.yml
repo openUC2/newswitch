@@ -1,0 +1,8 @@
+# A photomultiplier behind an amplifier: its counts are what its digitiser makes of it.
+qe: 0.3
+electrons_per_count: 1.0
+read_noise: 2.0
+offset: 100.0
+full_well: 1000000
+bit_depth: 16
+binning: average

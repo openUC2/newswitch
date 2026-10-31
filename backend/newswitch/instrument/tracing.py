@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -23,10 +23,29 @@ from typing import Any
 
 import numpy as np
 
-from newswitch.instrument.spec import Edge, Element, Fluorophore, Instrument, Sensor
+from newswitch.instrument.spec import (
+    BandPass,
+    Curve,
+    Dichroic,
+    Edge,
+    Element,
+    Filter,
+    Fluorophore,
+    Instrument,
+    Lens,
+    LongPass,
+    MultiBand,
+    Neutral,
+    Sensor,
+    ShortPass,
+    Source,
+    Table,
+)
 
-#: The spectrum everything is computed on, in nanometres.
-WAVELENGTHS = np.arange(350.0, 801.0, 1.0)
+#: Planck's constant times the speed of light, in joule metres.
+_HC = 6.62607015e-34 * 299792458.0
+#: How far past the outermost wavelength stated the spectrum goes, in nanometres: tails are small.
+_MARGIN = 150.0
 
 
 @dataclass(frozen=True)
@@ -49,43 +68,133 @@ class Imaging:
     numerical_aperture: float  # on the sensor's side
 
 
-def _gaussian(center: float, width: float) -> np.ndarray:
-    return np.exp(-0.5 * ((WAVELENGTHS - center) / (width / 2.355)) ** 2)
+def _elements(instrument: Instrument) -> Iterator[Element]:
+    """Every element of an instrument, also those only a swap puts in place."""
+    for cube in instrument.cubes.values():
+        if cube.element is not None:
+            yield cube.element
+        for swap in cube.swaps.values():
+            yield from swap.slots.values()
 
 
-def transmission(element: Element, via: str | None) -> np.ndarray:
+def _curve_wavelengths(curve: Curve) -> list[float]:
+    match curve:
+        case BandPass():
+            return [curve.center - curve.width, curve.center + curve.width]
+        case LongPass() | ShortPass():
+            return [curve.cut]
+        case MultiBand():
+            return [band.center for band in curve.bands]
+        case Table():
+            return [point[0] for point in curve.points]
+    return []
+
+
+def wavelengths(instrument: Instrument) -> np.ndarray:
+    """The spectrum everything of `instrument` is computed on, in nanometres."""
+    stated: list[float] = []
+    for element in _elements(instrument):
+        match element:
+            case Source():
+                stated += [line.center for line in element.spectrum]
+            case Filter(curve=curve) if curve is not None:
+                stated += _curve_wavelengths(curve)
+            case Dichroic():
+                stated += _curve_wavelengths(element.curve)
+            case Sensor():
+                stated += [color.center for color in element.colors.values()]
+    for simulation in instrument.sample_holder().simulations.values():
+        if simulation.fluorophore is not None:
+            stated += [simulation.fluorophore.excitation, simulation.fluorophore.emission]
+    low = max(math.floor(min(stated, default=550.0) - _MARGIN), 1)
+    high = math.ceil(max(stated, default=550.0) + _MARGIN)
+    return np.arange(float(low), float(high) + 1.0, 1.0)
+
+
+def _gaussian(grid: np.ndarray, center: float, width: float) -> np.ndarray:
+    return np.exp(-0.5 * ((grid - center) / (width / 2.355)) ** 2)
+
+
+def curve_at(curve: Curve, grid: np.ndarray) -> np.ndarray:
+    """How much of each wavelength a curve lets through."""
+    match curve:
+        case BandPass():
+            passed = 1.0 / (
+                1.0 + np.exp((np.abs(grid - curve.center) - curve.width / 2.0) / curve.edge)
+            )
+        case LongPass():
+            passed = 1.0 / (1.0 + np.exp(-(grid - curve.cut) / curve.edge))
+        case ShortPass():
+            passed = 1.0 / (1.0 + np.exp((grid - curve.cut) / curve.edge))
+        case MultiBand():
+            passed = np.max(
+                [
+                    1.0
+                    / (1.0 + np.exp((np.abs(grid - band.center) - band.width / 2.0) / curve.edge))
+                    for band in curve.bands
+                ],
+                axis=0,
+            )
+        case Neutral():
+            return np.full(grid.shape, curve.transmission)
+        case Table():
+            return np.interp(grid, *zip(*curve.points), left=0.0, right=0.0)
+    passed = curve.peak * passed
+    return passed if curve.od is None else np.maximum(passed, 10.0**-curve.od)
+
+
+def transmission(element: Element, via: str | None, grid: np.ndarray) -> np.ndarray:
     """How much of each wavelength an element lets through, leaving the way `via` says."""
-    if element.kind == "dichroic":
-        passes = 1.0 / (1.0 + np.exp(-(WAVELENGTHS - element.cut) / 2.0))
-        return passes if via == "transmit" else 1.0 - passes
+    match element:
+        case Dichroic():
+            passes = curve_at(element.curve, grid)
+            return passes if via == "transmit" else 1.0 - passes
+        case Filter(curve=curve) if curve is not None:
+            return curve_at(curve, grid)
     if element.kind == "splitter":
-        return np.full(
-            WAVELENGTHS.shape, float(element.reflect if via == "reflect" else element.transmit)
-        )
-    if element.kind == "filter" and element.center is not None:
-        half = element.width / 2.0
-        edge = (np.abs(WAVELENGTHS - element.center) - half) / 2.0
-        return 0.95 / (1.0 + np.exp(edge))
-    return np.ones(WAVELENGTHS.shape)
+        return np.full(grid.shape, float(element.reflect if via == "reflect" else element.transmit))
+    return np.ones(grid.shape)
 
 
 def _route_transmission(
-    instrument: Instrument, route: tuple[Edge, ...], state: Mapping[str, Any]
+    instrument: Instrument, route: tuple[Edge, ...], state: Mapping[str, Any], grid: np.ndarray
 ) -> np.ndarray:
-    curve = np.ones(WAVELENGTHS.shape)
+    curve = np.ones(grid.shape)
     for edge in route:
-        curve = curve * transmission(instrument.cubes[edge.source].element_at(state), edge.via)
+        element = instrument.cubes[edge.source].element_at(state)
+        curve = curve * transmission(element, edge.via, grid)
     return curve
 
 
-def _emitted(fluorophore: Fluorophore | None, on_sample: np.ndarray) -> np.ndarray:
-    """What a sample emits for the light on it."""
-    if fluorophore is None:
-        return np.zeros(WAVELENGTHS.shape)
-    excitation = _gaussian(fluorophore.excitation, fluorophore.excitation_width)
-    emission = _gaussian(fluorophore.emission, fluorophore.emission_width)
+def _objective(
+    instrument: Instrument, routes: list[tuple[Edge, ...]], state: Mapping[str, Any]
+) -> Lens:
+    """The lens nearest the sample on the way to a detector."""
+    for route in routes:
+        for edge in route:
+            element = instrument.cubes[edge.target].element_at(state)
+            if isinstance(element, Lens):
+                return element
+    raise ValueError("no lens on the way from the sample")
+
+
+def collected(lens: Lens) -> float:
+    """The share of what a point emits, in all directions, that a lens gathers."""
+    if lens.na is None:
+        raise ValueError(f"{lens.name or 'a lens'} nearest the sample needs its na")
+    return (1.0 - math.cos(math.asin(lens.na / lens.index))) / 2.0
+
+
+def _emitted(
+    fluorophore: Fluorophore | None, absorbed: float | None, on_sample: np.ndarray, grid: np.ndarray
+) -> np.ndarray:
+    """How many photons a bead emits, in all directions, for the photons on it."""
+    if fluorophore is None or absorbed is None:
+        return np.zeros(grid.shape)
+    excitation = _gaussian(grid, fluorophore.excitation, fluorophore.excitation_width)
+    emission = _gaussian(grid, fluorophore.emission, fluorophore.emission_width)
     emission = emission / emission.sum()
-    return (on_sample * excitation).sum() * fluorophore.quantum_yield * emission
+    return (on_sample * excitation).sum() * absorbed * fluorophore.quantum_yield * emission
 
 
 def _sheet(lens: Element, along: str, wavelength_nm: float) -> dict[str, Any]:
@@ -94,7 +203,7 @@ def _sheet(lens: Element, along: str, wavelength_nm: float) -> dict[str, Any]:
     waist = wavelength_um / (math.pi * lens.na)
     return {
         "waist_um": waist,
-        "rayleigh_um": math.pi * waist**2 / wavelength_um,
+        "rayleigh_um": math.pi * waist**2 * lens.index / wavelength_um,
         "along": along,
     }
 
@@ -102,47 +211,59 @@ def _sheet(lens: Element, along: str, wavelength_nm: float) -> dict[str, Any]:
 def coupling(
     instrument: Instrument, detector: str, state: Mapping[str, Any]
 ) -> dict[str, dict[str, Any]]:
-    """How much of each source reaches `detector` through the sample, per milliwatt.
+    """How many electrons each source makes at `detector`, per milliwatt and millisecond.
 
-    A source on the same side as the detector reaches it by what the sample reflects and by what
-    it emits; one on the other side by what it lets through, and also by what it emits; a sheet,
-    from across, only by what it emits.
+    That is for a bead, if all of the source's light landed on it: how much does depends on the
+    pixel, and `predict.assemble` says. A source on the same side as the detector reaches it by what
+    the sample reflects and by what it emits; one on the other side by what it lets through, and
+    also by what it emits; a sheet, from across, only by what it emits. Of what is emitted, only
+    what the objective gathers goes on; what passes straight through stays in its cone.
     """
+    grid = wavelengths(instrument)
     sample = instrument.simulation_at(state)
     stage = instrument.sample_cube()
     detection = instrument.routes(instrument.detection, stage, detector)
     element = instrument.cubes[detector].element_at(state)
     colors = element.colors if isinstance(element, Sensor) else {}
+    gathered = collected(_objective(instrument, detection, state))
     result: dict[str, dict[str, Any]] = {}
     for source in instrument.sources():
-        element = instrument.cubes[source].element_at(state)
-        spectrum = _gaussian(element.wavelength, element.width)
+        emitter = instrument.cubes[source].element_at(state)
+        spectrum = np.sum(
+            [_gaussian(grid, line.center, line.width) for line in emitter.spectrum], axis=0
+        )
         spectrum = spectrum / spectrum.sum()
-        arriving = np.zeros(WAVELENGTHS.shape)
-        sheet = None
+        # photons per milliwatt and millisecond: a microjoule's worth, at its wavelength
+        photons = 1e-6 * emitter.wavelength * 1e-9 / _HC
+        arriving = np.zeros(grid.shape)
+        shape: dict[str, Any] = {}
         for edges in instrument.routes(instrument.illumination, source, stage):
-            on_sample = spectrum * _route_transmission(instrument, edges, state)
+            on_sample = photons * spectrum * _route_transmission(instrument, edges, state, grid)
             side = edges[-1].side
             direct = (
                 0.0
                 if side == "orthogonal"
                 else (sample.reflect if side == "epi" else sample.transmit)
             )
+            emitted = _emitted(sample.fluorophore, sample.absorbed, on_sample, grid)
+            arriving = arriving + on_sample * direct + emitted * gathered
             if side == "orthogonal":
                 lens = instrument.cubes[edges[-1].source].element_at(state)
-                sheet = _sheet(lens, edges[-1].along, element.wavelength)
-            arriving = arriving + on_sample * direct + _emitted(sample.fluorophore, on_sample)
-        through = np.zeros(WAVELENGTHS.shape)
+                shape["sheet"] = _sheet(lens, edges[-1].along, emitter.wavelength)
+            if edges[-1].field is not None:
+                shape["field_um"] = edges[-1].field * 1000.0
+            else:
+                shape["spot"] = True
+        through = np.zeros(grid.shape)
         for edges in detection:
-            through = through + arriving * _route_transmission(instrument, edges, state)
+            through = through + arriving * _route_transmission(instrument, edges, state, grid)
+        through = through * element.readout.qe
         total = float(through.sum())
-        mean = float((through * WAVELENGTHS).sum() / total) if total > 1e-12 else None
-        result[source] = {"light_per_mw": total, "band_mean_nm": mean}
-        if sheet is not None:
-            result[source]["sheet"] = sheet
+        mean = float((through * grid).sum() / total) if total > 0.0 else None
+        result[source] = {"electrons_per_mw_ms": total, "band_mean_nm": mean, **shape}
         if colors:
             result[source]["colors"] = {
-                name: float((through * _gaussian(color.center, color.width)).sum())
+                name: float((through * _gaussian(grid, color.center, color.width)).sum())
                 for name, color in colors.items()
             }
     return result
@@ -172,15 +293,21 @@ def _trace(
     lenses: tuple[tuple[Any, ...], ...],
     object_distance: float,
     na: float,
+    index: float,
     wavelength_um: float,
     half_diagonal_mm: float,
 ) -> tuple[float, float, float, float, float]:
+    from optiland.materials import IdealMaterial
     from optiland.optic import Optic
+
+    index_of = index
 
     def build(field_mm: float) -> Any:  # noqa: ANN401 - optiland has no stub for this
         optic = Optic()
         index = 0
-        optic.add_surface(index=index, radius=np.inf, thickness=object_distance)
+        optic.add_surface(
+            index=index, radius=np.inf, thickness=object_distance, material=IdealMaterial(index_of)
+        )
         for position, lens in enumerate(lenses):
             kind, *rest = lens
             if kind == "ideal":
@@ -311,8 +438,8 @@ def _scan_imaging(
         reflections=sum(1 for edge in route if edge.via == "reflect"),
         distortion_percent=0.0,
         relative_illumination=1.0,
-        spot_center_um=abs(defocus_um) * last.na * abs(magnification),
-        spot_corner_um=abs(defocus_um) * last.na * abs(magnification),
+        spot_center_um=abs(defocus_um) * last.na / last.index * abs(magnification),
+        spot_corner_um=abs(defocus_um) * last.na / last.index * abs(magnification),
         numerical_aperture=last.na / abs(magnification),
     )
 
@@ -338,6 +465,7 @@ def imaging(
     reflections = sum(1 for edge in route if edge.via == "reflect")
     objective_f: float | None = None
     na: float | None = None
+    immersion: float | None = None
     distance_since_lens = 0.0
     pending: dict[str, Any] | None = None
 
@@ -361,7 +489,8 @@ def imaging(
             focal = lens.f
             if not lenses:
                 focal *= errors.objective_focal_factor
-            distance = focal
+            # In a medium, what is in focus is that much further from the lens.
+            distance = focal * (lens.index if edge.source == stage else 1.0)
         distance_since_lens += float(distance)
         if target.kind == "lens":
             if not lenses and object_distance == 0.0 and pending is None:
@@ -369,10 +498,12 @@ def imaging(
             elif pending is not None:
                 lenses.append(_lens(pending, distance_since_lens + moved(edge.target)))
             if target.prescription is not None:
+                if not lenses and pending is None:
+                    na, immersion = target.na, target.index
                 pending = {
                     "kind": "prescription",
                     "what": str(instrument.folder / target.prescription),
-                    "clear_radius": 11.43 if target.clear_radius is None else target.clear_radius,
+                    "clear_radius": target.clear_radius,
                 }
             else:
                 focal = target.f
@@ -380,9 +511,10 @@ def imaging(
                     focal *= errors.objective_focal_factor
                     objective_f = focal
                     na = target.na
+                    immersion = target.index
                 pending = {"kind": "ideal", "what": focal}
             distance_since_lens = -moved(edge.target) if pending["kind"] == "prescription" else 0.0
-    assert pending is not None and na is not None
+    assert pending is not None and na is not None and immersion is not None
     lenses.append(_lens(pending, distance_since_lens))
 
     axes = instrument.cubes[detector].element_at(state).axes
@@ -391,7 +523,7 @@ def imaging(
         axes["y"].size * axes["y"].pitch / 2000.0,
     )
     magnification, distortion, relative, spot_center, spot_corner = _trace(
-        tuple(lenses), object_distance, na, wavelength_nm / 1000.0, half_diagonal
+        tuple(lenses), object_distance, na, immersion, wavelength_nm / 1000.0, half_diagonal
     )
     return Imaging(
         magnification=magnification,

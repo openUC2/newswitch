@@ -22,7 +22,6 @@ import yaml
 from pydantic import (
     BeforeValidator,
     Field,
-    StrictBool,
     StrictFloat,
     StrictInt,
     TypeAdapter,
@@ -78,26 +77,75 @@ Fraction = Annotated[StrictFloat, Field(ge=0.0, le=1.0)]
 Number = StrictInt | StrictFloat
 
 
+def _from_library(folder: str) -> Callable[[Any], Any]:
+    """Validator of a part that can be named: what the library entry of that name states."""
+
+    def read(value: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+        if not isinstance(value, str):
+            return value
+        library = Path(__file__).parent / folder
+        path = library / f"{value}.yml"
+        if not path.is_file():
+            known = sorted(entry.stem for entry in library.glob("*.yml"))
+            raise ValueError(f"there is no {value!r} in {folder}: there are {known}")
+        return yaml.safe_load(path.read_text())
+
+    return read
+
+
+@dataclass(frozen=True, config=STRICT)
+class Line:
+    """A band of light a source emits."""
+
+    center: Nanometres
+    width: Nanometres
+
+
+def _as_lines(value: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+    return [value] if isinstance(value, Mapping) else value
+
+
 @dataclass(frozen=True, config=STRICT)
 class Source:
-    """Where light starts."""
+    """Where light starts: what it emits, as one line or several."""
 
     kind: Literal["source"]
-    wavelength: Nanometres
-    width: Nanometres
+    emits: Literal["laser", "led", "lamp"]
+    spectrum: Annotated[tuple[Line, ...], Field(min_length=1), BeforeValidator(_as_lines)]
     max_power: Milliwatts
-    coherent: StrictBool = False
     repetition: Hertz | None = None  # a pulsed source's rate
+
+    @property
+    def wavelength(self) -> float:
+        """Where most of its light is, for what shows one number."""
+        return self.spectrum[0].center
+
+
+#: Refractive indices of what an objective can look through, by name.
+_IMMERSIONS = {"air": 1.0, "water": 1.33, "glycerol": 1.47, "oil": 1.515}
+
+
+def _as_index(value: Any) -> Any:  # noqa: ANN401 - raw input of any shape
+    if isinstance(value, str):
+        if value not in _IMMERSIONS:
+            raise ValueError(f"{value!r} is none of {sorted(_IMMERSIONS)}, or an index")
+        return _IMMERSIONS[value]
+    return value
 
 
 @dataclass(frozen=True, config=STRICT)
 class Lens:
-    """A lens: from its prescription, or ideal, with only its focal length known."""
+    """A lens: from its prescription, or ideal, with only its focal length known.
+
+    One that states an NA looks at the sample through something: `immersion` says what.
+    """
 
     kind: Literal["lens"]
     name: str | None = None
     f: Millimetres | None = None
     na: Annotated[StrictFloat, Field(gt=0.0)] | None = None
+    immersion: Annotated[StrictFloat, Field(ge=1.0), BeforeValidator(_as_index)] | None = None
+    magnification: Annotated[StrictFloat, Field(gt=0.0)] | None = None  # as its maker states it
     working_distance: Millimetres | None = None
     prescription: str | None = None
     clear_radius: Millimetres | None = None
@@ -106,7 +154,96 @@ class Lens:
     def _has_optics(self) -> Self:
         if self.f is None and self.prescription is None:
             raise ValueError("a lens needs a focal length (f) or a prescription")
+        if self.prescription is not None and self.clear_radius is None:
+            raise ValueError("a lens from a prescription needs its clear_radius")
+        if self.na is not None:
+            if self.immersion is None:
+                raise ValueError("a lens with an NA needs its immersion: air, water, oil, ...")
+            if self.na >= self.immersion:
+                raise ValueError(f"an NA of {self.na} needs more than an index of {self.immersion}")
         return self
+
+    @property
+    def index(self) -> float:
+        """The refractive index on its object's side."""
+        return self.immersion if self.immersion is not None else 1.0
+
+
+@dataclass(frozen=True, config=STRICT)
+class BandPass:
+    """Lets one band through."""
+
+    type: Literal["bandpass"]
+    center: Nanometres
+    width: Nanometres
+    peak: Fraction
+    edge: Nanometres  # how sharply it falls off
+    od: Annotated[StrictFloat, Field(gt=0.0)] | None = None  # how much it blocks at best
+
+
+@dataclass(frozen=True, config=STRICT)
+class LongPass:
+    """Lets through what is above its cut."""
+
+    type: Literal["longpass"]
+    cut: Nanometres
+    peak: Fraction
+    edge: Nanometres
+    od: Annotated[StrictFloat, Field(gt=0.0)] | None = None
+
+
+@dataclass(frozen=True, config=STRICT)
+class ShortPass:
+    """Lets through what is below its cut."""
+
+    type: Literal["shortpass"]
+    cut: Nanometres
+    peak: Fraction
+    edge: Nanometres
+    od: Annotated[StrictFloat, Field(gt=0.0)] | None = None
+
+
+@dataclass(frozen=True, config=STRICT)
+class Band:
+    """One band of a filter with several."""
+
+    center: Nanometres
+    width: Nanometres
+
+
+@dataclass(frozen=True, config=STRICT)
+class MultiBand:
+    """Lets several bands through, such as a quad-band dichroic."""
+
+    type: Literal["multiband"]
+    bands: Annotated[tuple[Band, ...], Field(min_length=1)]
+    peak: Fraction
+    edge: Nanometres
+    od: Annotated[StrictFloat, Field(gt=0.0)] | None = None
+
+
+@dataclass(frozen=True, config=STRICT)
+class Neutral:
+    """Lets the same share of everything through."""
+
+    type: Literal["neutral"]
+    transmission: Fraction
+
+
+@dataclass(frozen=True, config=STRICT)
+class Table:
+    """A curve as measured: nanometres against transmission."""
+
+    type: Literal["table"]
+    points: Annotated[tuple[tuple[StrictFloat, StrictFloat], ...], Field(min_length=2)]
+
+
+#: What a filter or dichroic lets through, at each wavelength.
+Curve = Annotated[
+    BandPass | LongPass | ShortPass | MultiBand | Neutral | Table,
+    Field(discriminator="type"),
+]
+_Curve = Annotated[Curve, BeforeValidator(_from_library("curves"))]
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -131,12 +268,24 @@ class Pattern:
 
 @dataclass(frozen=True, config=STRICT)
 class Simulation:
-    """One thing that can be on the holder: without a fluorophore, it emits nothing."""
+    """One thing that can be on the holder: without a fluorophore, it emits nothing.
+
+    `absorbed` is the share of the light at its excitation peak that a bead on the path takes up.
+    """
 
     transmit: Fraction  # light going straight through (transmitted light)
     reflect: Fraction  # light coming back the way it came (epi)
     pattern: Pattern
-    fluorophore: Fluorophore | None = None
+    fluorophore: Annotated[Fluorophore, BeforeValidator(_from_library("fluorophores"))] | None = (
+        None
+    )
+    absorbed: Fraction | None = None
+
+    @model_validator(mode="after")
+    def _absorbs_what_it_emits(self) -> Self:
+        if (self.fluorophore is None) != (self.absorbed is None):
+            raise ValueError("a fluorophore and how much it absorbed come together")
+        return self
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -145,6 +294,22 @@ class SampleHolder:
 
     kind: Literal["sample"]
     simulations: Annotated[dict[str, Simulation], Field(min_length=1)]
+
+
+@dataclass(frozen=True, config=STRICT)
+class Readout:
+    """How light on a detector becomes numbers: quantum efficiency, noise and range."""
+
+    qe: Fraction
+    electrons_per_count: Annotated[StrictFloat, Field(gt=0.0)]
+    read_noise: Annotated[StrictFloat, Field(ge=0.0)]  # in electrons
+    offset: Annotated[StrictFloat, Field(ge=0.0)]  # in counts
+    full_well: Annotated[StrictInt, Field(gt=0)]  # in electrons
+    bit_depth: Annotated[StrictInt, Field(ge=1, le=32)]
+    binning: Literal["average", "sum"] = "average"
+
+
+_Readout = Annotated[Readout, BeforeValidator(_from_library("readouts"))]
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -172,7 +337,10 @@ class Sensor:
 
     kind: Literal["sensor"]
     axes: dict[Literal["x", "y"], SensorAxis]
+    readout: _Readout
     colors: dict[str, ColorFilter] = field(default_factory=dict)
+    rotation: Degrees | None = None  # how it is mounted, against the sample's axes
+    flip: Literal["x", "y"] | None = None  # along which of its axes it is mirrored
 
     @model_validator(mode="after")
     def _both_axes(self) -> Self:
@@ -183,27 +351,19 @@ class Sensor:
 
 @dataclass(frozen=True, config=STRICT)
 class Filter:
-    """A band of light let through; with no band, an open position."""
+    """What light it lets through; with no curve, an open position."""
 
     kind: Literal["filter"]
     name: str | None = None
-    center: Nanometres | None = None
-    width: Nanometres | None = None
-    transmission: Fraction = 1.0
-
-    @model_validator(mode="after")
-    def _whole_band(self) -> Self:
-        if (self.center is None) != (self.width is None):
-            raise ValueError("a filter's band needs both its center and its width")
-        return self
+    curve: _Curve | None = None
 
 
 @dataclass(frozen=True, config=STRICT)
 class Dichroic:
-    """Reflects what is below its cut, lets through what is above."""
+    """Lets through what its curve says, and reflects the rest."""
 
     kind: Literal["dichroic"]
-    cut: Nanometres
+    curve: _Curve
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -261,6 +421,7 @@ class PointDetector:
     """Light ends on one point: what is wired to it walks it through an image."""
 
     kind: Literal["point_detector"]
+    readout: _Readout
     axes: dict[Literal["microtime"], MicrotimeAxis] = field(default_factory=dict)
 
 
@@ -520,6 +681,7 @@ class Edge:
     side: Literal["epi", "transmitted", "orthogonal"] | None = None
     distance: Millimetres | Literal["focus"] | None = None  # or the lens's own focal length
     along: Literal["x", "y"] | None = None  # which way of the image a sheet travels
+    field: Millimetres | None = None  # how wide the light lands on the sample; a sheet, how high
 
     @model_validator(mode="after")
     def _a_sheet_travels(self) -> Self:
@@ -564,7 +726,6 @@ class Objective:
     """The swap that changes objectives."""
 
     swap: str  # "objective.slot"
-    reference_tube: Millimetres  # what a lens's magnification is stated against
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -662,6 +823,7 @@ class Instrument:
         problems += _hardware_problems(self)
         problems += _drive_problems(self)
         problems += _sheet_problems(self)
+        problems += _lit_problems(self)
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -858,9 +1020,10 @@ def _parts_problems(instrument: Instrument) -> list[str]:
         variable = instrument.variables.get(swap)
         if variable is not None and variable.verb == "swaps":
             problems += [
-                f"{swap}: an objective needs its f and na, slot {slot} has not"
+                f"{swap}: an objective needs its f, na and magnification, slot {slot} has not"
                 for slot, element in variable.slots.items()
-                if isinstance(element, Lens) and (element.f is None or element.na is None)
+                if isinstance(element, Lens)
+                and (element.f is None or element.na is None or element.magnification is None)
             ]
     if parts.filters is not None:
         problems += _swap_problems(instrument, "filters", parts.filters.swap, Filter)
@@ -984,6 +1147,21 @@ def _microtime_problems(instrument: Instrument) -> list[str]:
             for name, simulation in instrument.sample_holder().simulations.items()
             if simulation.fluorophore is not None and simulation.fluorophore.lifetime is None
         ]
+    return problems
+
+
+def _lit_problems(instrument: Instrument) -> list[str]:
+    """How much of the sample each source lights: it decides how bright a pixel is."""
+    problems = []
+    sample = instrument.sample_cube()
+    for source in instrument.sources():
+        for route in instrument.routes(instrument.illumination, source, sample):
+            scanned = any(isinstance(_element(instrument, e.target), Scanner) for e in route)
+            if not scanned and route[-1].field is None:
+                problems.append(
+                    f"{route[-1].source} -> {route[-1].target}: light lands on the sample here, "
+                    "so it needs its field"
+                )
     return problems
 
 

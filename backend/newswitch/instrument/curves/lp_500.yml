@@ -1,0 +1,5 @@
+# A long-pass dichroic for 488 nm excitation.
+type: longpass
+cut: 500 nm
+peak: 1.0
+edge: 2 nm

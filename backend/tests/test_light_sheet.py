@@ -119,7 +119,11 @@ def test_calibrating_finds_the_predicted_pixel(
         (
             lambda d: (
                 d["cubes"].update(
-                    {"other": {"element": {"kind": "lens", "f": "50 mm", "na": 0.1}}}
+                    {
+                        "other": {
+                            "element": {"kind": "lens", "f": "50 mm", "na": 0.1, "immersion": "air"}
+                        }
+                    }
                 ),
                 d["illumination"].extend(
                     [

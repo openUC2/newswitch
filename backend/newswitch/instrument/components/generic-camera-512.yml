@@ -3,6 +3,7 @@ description: A generic mono camera with a trigger input and frame and exposure o
 element:
   kind: sensor
   axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+  readout: scmos
 signals:
   out:
     frame: {}      # a pulse after each frame

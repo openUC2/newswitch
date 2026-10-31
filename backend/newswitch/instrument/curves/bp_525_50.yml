@@ -1,0 +1,6 @@
+# A band-pass for green emission.
+type: bandpass
+center: 525 nm
+width: 50 nm
+peak: 0.95
+edge: 2 nm

@@ -27,9 +27,6 @@ TRUTH = "truth.yml"
 #: How much of the sample there is, and how finely it is rendered.
 _SAMPLE_HALF_WIDTH_UM = 3000.0
 _SAMPLE_UM_PER_PX = 2.0
-#: The camera's offset and read noise, in counts.
-_OFFSET = 100.0
-_READ_NOISE = 5.0
 
 
 def load_truth(instrument: Instrument) -> dict[str, Any]:
@@ -58,6 +55,14 @@ def _sample(pattern: Pattern) -> np.ndarray:
     return blurred / blurred.max()
 
 
+def _dtype(bit_depth: int) -> np.dtype:
+    """The smallest array type that holds a detector's numbers."""
+    for candidate in (np.uint8, np.uint16, np.uint32):
+        if bit_depth <= np.iinfo(candidate).bits:
+            return np.dtype(candidate)
+    raise ValueError(f"no array type holds {bit_depth} bits")
+
+
 class Simulator:
     """Renders what a detector sees under some state of the instrument."""
 
@@ -82,15 +87,17 @@ class Simulator:
     def render(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
         """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names."""
         answer = self._answer(detector, state)
-        return self._expose(answer, answer.light_by_source, *self._view(detector, state, answer))
+        return self._expose(
+            detector, answer, answer.electrons_by_source, *self._view(detector, state, answer)
+        )
 
     def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
         """A color camera's whole sensor: per color, what its band lets through, as uint16."""
         answer = self._answer(detector, state)
         beads, radius, positions = self._view(detector, state, answer)
         return {
-            color: self._expose(answer, light, beads, radius, positions)
-            for color, light in answer.light_by_color.items()
+            color: self._expose(detector, answer, electrons, beads, radius, positions)
+            for color, electrons in answer.electrons_by_color.items()
         }
 
     def render_microtime(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
@@ -100,7 +107,9 @@ class Simulator:
         arrives with the pulse.
         """
         answer = self._answer(detector, state)
-        counts = self._counts(answer, answer.light_by_source, *self._view(detector, state, answer))
+        counts = self._electrons(
+            answer, answer.electrons_by_source, *self._view(detector, state, answer)
+        )
         bins = next(axis for axis in self.instrument.detector_axes(detector) if axis.name == "m")
         fluorophore = self.instrument.simulation_at(state).fluorophore
         if fluorophore is None:
@@ -155,20 +164,27 @@ class Simulator:
 
     def _expose(
         self,
+        detector: str,
         answer: Answer,
-        light_by_source: Mapping[str, float],
+        electrons_by_source: Mapping[str, float],
         beads: np.ndarray,
         radius: np.ndarray,
         positions: np.ndarray,
     ) -> np.ndarray:
-        """The counts `light_by_source` makes of `beads`, as a sensor reads them."""
-        counts = self._counts(answer, light_by_source, beads, radius, positions)
-        noisy = self._noise.poisson(np.clip(counts, 0, None)) + self._noise.normal(
-            _OFFSET, _READ_NOISE, counts.shape
+        """The image `electrons_by_source` makes of `beads`, as this detector reads it out."""
+        readout = self.instrument.cubes[detector].element.readout
+        electrons = self._electrons(answer, electrons_by_source, beads, radius, positions)
+        collected = self._noise.poisson(np.clip(electrons, 0, None)).clip(max=readout.full_well)
+        read = self._noise.normal(0.0, readout.read_noise, electrons.shape)
+        counts_per_electron = (
+            answer.read_noise_counts / readout.read_noise if readout.read_noise else None
         )
-        return noisy.clip(0, 65535).astype(np.uint16)
+        if counts_per_electron is None:
+            counts_per_electron = 1.0 / readout.electrons_per_count
+        counts = (collected + read) * counts_per_electron + readout.offset
+        return np.rint(counts).clip(0, 2**readout.bit_depth - 1).astype(_dtype(readout.bit_depth))
 
-    def _counts(
+    def _electrons(
         self,
         answer: Answer,
         light_by_source: Mapping[str, float],
@@ -176,7 +192,7 @@ class Simulator:
         radius: np.ndarray,
         positions: np.ndarray,
     ) -> np.ndarray:
-        """The counts `light_by_source` is expected to make of `beads`, before any noise."""
+        """The electrons `light_by_source` is expected to make of `beads`, before any noise."""
         # what emits comes from the beads; what passes through is darkened by them
         counts = np.zeros(beads.shape)
         for source, amount in light_by_source.items():

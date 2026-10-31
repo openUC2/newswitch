@@ -312,10 +312,25 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["cubes"]["stage"]["moves"]["x"].update(initial="99999 um"), "above max"),
         (lambda d: d["cubes"]["stage"]["moves"]["x"].update(along="sideways"), "sideways"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"].update(initial=7), "none of the slots"),
-        (lambda d: d["cubes"]["objective"]["swaps"]["slot"]["slots"][1].pop("na"), "f and na"),
-        (lambda d: d["cubes"]["filter_wheel"]["swaps"]["slot"]["slots"][2].pop("width"), "both"),
+        (
+            lambda d: d["cubes"]["objective"]["swaps"]["slot"]["slots"][1].pop("na"),
+            "its f, na and magnification",
+        ),
+        (
+            lambda d: d["cubes"]["filter_wheel"]["swaps"]["slot"]["slots"][2].update(
+                curve={"type": "bandpass", "center": "525 nm", "peak": 0.95, "edge": "2 nm"}
+            ),
+            "width",
+        ),
+        (
+            lambda d: d["cubes"]["filter_wheel"]["swaps"]["slot"]["slots"][2].update(
+                curve="nothing"
+            ),
+            "no 'nothing' in curves",
+        ),
         (lambda d: _simulation(d).update(transmit=1.5), "transmit"),
-        (lambda d: _simulation(d)["fluorophore"].pop("emission"), "emission"),
+        (lambda d: _simulation(d).update(fluorophore="nothing"), "no 'nothing' in fluorophores"),
+        (lambda d: _simulation(d).pop("absorbed"), "come together"),
         (lambda d: _simulation(d).pop("pattern"), "pattern"),
         (lambda d: _simulation(d)["pattern"].update(beads=-1), "beads"),
         (lambda d: d["detection"][0].update(via="absorb"), "absorb"),
@@ -325,7 +340,6 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["parts"].update(stage="dichroic"), "holds no sample"),
         (lambda d: d["parts"].update(stage="nothing"), "holds no sample"),
         (lambda d: d["parts"].update(colour="red"), "colour"),
-        (lambda d: d["parts"]["objective"].pop("reference_tube"), "reference_tube"),
         (lambda d: d["parts"]["objective"].update(swap="nothing.slot"), "no swap"),
         (lambda d: d["parts"]["objective"].update(swap="filter_wheel.slot"), "is no lens"),
         (lambda d: d["parts"]["filters"].update(swap="objective.slot"), "is no filter"),
@@ -374,7 +388,7 @@ def test_the_loaded_values_are_typed_and_in_their_units() -> None:
     instrument = spec.load(REFERENCE_INSTRUMENT)
     laser = instrument.cubes["laser_488"].element
     assert isinstance(laser, spec.Source)
-    assert (laser.wavelength, laser.max_power, laser.coherent) == (488.0, 50.0, True)
+    assert (laser.wavelength, laser.max_power, laser.emits) == (488.0, 50.0, "laser")
     sensor = instrument.cubes["camera"].element
     assert isinstance(sensor, spec.Sensor)
     assert (sensor.axes["x"].size, sensor.axes["x"].pitch) == (512, 6.5)
@@ -382,8 +396,6 @@ def test_the_loaded_values_are_typed_and_in_their_units() -> None:
     assert instrument.detection[1].distance == 100.0
     fluorophore = instrument.sample_holder().simulations["gfp-beads"].fluorophore
     assert fluorophore is not None and fluorophore.excitation == 488.0
-    assert instrument.parts.objective is not None
-    assert instrument.parts.objective.reference_tube == 200.0
     assert instrument.parts.detectors[1].frame_rate == 30.0
     binning = instrument.cubes["camera"].variables["binning"].initial
     assert binning == 1 and isinstance(binning, int)
@@ -402,16 +414,16 @@ def test_the_instrument_is_itself_validated() -> None:
 
 
 def test_the_constants_are_the_files(tmp_path: Path) -> None:
-    """Intensity range, frame rate and reference tube reach the models as stated."""
+    """Intensity range, frame rate and magnification reach the models as stated."""
 
     def change(data: dict[str, Any]) -> None:
-        data["parts"]["objective"]["reference_tube"] = "180 mm"
+        data["cubes"]["objective"]["swaps"]["slot"]["slots"][1]["magnification"] = 9.0
         data["parts"]["sources"][1]["full_intensity"] = 255.0
         data["parts"]["detectors"][1]["frame_rate"] = "12.5 Hz"
 
     instrument = spec.load(edited(tmp_path, change))
     lenses = parts.objective_lenses(instrument)
-    assert lenses is not None and lenses[0][0].magnification == pytest.approx(180.0 / 20.0)
+    assert lenses is not None and lenses[0][0].magnification == pytest.approx(9.0)
     sources = parts.illuminations(instrument)
     assert sources is not None
     assert sources[0].max_intensity == 255.0

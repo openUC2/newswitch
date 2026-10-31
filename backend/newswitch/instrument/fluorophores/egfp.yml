@@ -1,0 +1,7 @@
+# Enhanced GFP, as a Gaussian on each side.
+excitation: 488 nm
+excitation_width: 20 nm
+emission: 515 nm
+emission_width: 25 nm
+quantum_yield: 0.6
+lifetime: 2.5 ns

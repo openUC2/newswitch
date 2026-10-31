@@ -22,8 +22,8 @@ BASE = {
         "laser": {
             "element": {
                 "kind": "source",
-                "wavelength": "488 nm",
-                "width": "2 nm",
+                "emits": "laser",
+                "spectrum": {"center": "488 nm", "width": "2 nm"},
                 "max_power": "50 mW",
             },
             "signals": {"in": ["power"]},
@@ -34,13 +34,8 @@ BASE = {
                 "kind": "sample",
                 "simulations": {
                     "beads": {
-                        "fluorophore": {
-                            "excitation": "488 nm",
-                            "excitation_width": "20 nm",
-                            "emission": "515 nm",
-                            "emission_width": "25 nm",
-                            "quantum_yield": 0.02,
-                        },
+                        "fluorophore": "egfp",
+                        "absorbed": 1.0e-4,
                         "transmit": 0.9,
                         "reflect": 0.001,
                         "pattern": {"beads": 3600, "radius": "10 um"},
@@ -72,7 +67,7 @@ BASE = {
                 },
             },
         },
-        "objective": {"element": {"kind": "lens", "f": "20 mm", "na": 0.25}},
+        "objective": {"element": {"kind": "lens", "f": "20 mm", "na": 0.25, "immersion": "air"}},
         "tube": {"element": {"kind": "lens", "f": "200 mm"}},
         "camera": {
             "component": "generic-camera-512",
@@ -83,7 +78,7 @@ BASE = {
             },
         },
     },
-    "illumination": [{"from": "laser", "to": "stage", "side": "transmitted"}],
+    "illumination": [{"from": "laser", "to": "stage", "side": "transmitted", "field": "500 um"}],
     "detection": [
         {"from": "stage", "to": "objective", "distance": "focus"},
         {"from": "objective", "to": "tube", "distance": "100 mm"},

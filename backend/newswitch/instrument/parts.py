@@ -8,7 +8,7 @@ from typing import Any
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import CAMERA_PROTOCOLS, Actuator
-from newswitch.instrument.spec import Instrument, Move, Sensor, Swap, Variable
+from newswitch.instrument.spec import Instrument, Move, Sensor, Swap, Tune, Variable
 from newswitch.instrument.tracing import scan_um_per_degree
 from newswitch.models.devices import (
     Detector,
@@ -23,6 +23,13 @@ from newswitch.states.filter_bank import FilterBankState
 from newswitch.states.illumination import IlluminationState
 from newswitch.states.objective import ObjectiveState
 from newswitch.states.stage import StageState
+
+
+_ILLUMINATION_KINDS = {
+    "laser": IlluminationKind.LASER,
+    "led": IlluminationKind.LED,
+    "lamp": IlluminationKind.HALOGEN,
+}
 
 
 def stage_moves(instrument: Instrument) -> dict[str, Move]:
@@ -68,7 +75,7 @@ def illuminations(instrument: Instrument) -> list[Illumination] | None:
         power = cube.variables["power"].initial
         found.append(
             Illumination(
-                kind=IlluminationKind.LASER if element.coherent else IlluminationKind.LED,
+                kind=_ILLUMINATION_KINDS[element.emits],
                 slot=slot,
                 wavelength=element.wavelength,
                 key=part.cube,
@@ -90,14 +97,12 @@ def objective_lenses(instrument: Instrument) -> tuple[list[ObjectiveLens], int] 
     variable = objective_swap(instrument)
     if variable is None:
         return None
-    assert instrument.parts.objective is not None
-    reference_tube = instrument.parts.objective.reference_tube
     return (
         [
             ObjectiveLens(
                 slot=slot,
                 name=element.name or f"f{element.f:g}",
-                magnification=reference_tube / element.f,
+                magnification=element.magnification,
                 numerical_aperture=element.na,
                 working_distance=element.working_distance or 0.0,
             )
@@ -117,14 +122,24 @@ def filters(instrument: Instrument) -> tuple[list[Filter], int] | None:
             Filter(
                 slot=slot,
                 name=element.name or f"Slot {slot}",
-                center_wavelength=element.center or 0.0,
-                bandwidth=element.width or 0.0,
-                transmission=element.transmission,
+                center_wavelength=getattr(element.curve, "center", 0.0),
+                bandwidth=getattr(element.curve, "width", 0.0),
+                transmission=getattr(element.curve, "peak", 1.0),
             )
             for slot, element in variable.slots.items()
         ],
         variable.initial,
     )
+
+
+def _limits(tune: Tune, name: str, per_unit: float) -> dict[str, float]:
+    """The range a tune states, as a model's fields: what it leaves out, the model decides."""
+    limits = {}
+    if tune.min is not None:
+        limits[f"min_{name}"] = tune.min / per_unit
+    if tune.max is not None:
+        limits[f"max_{name}"] = tune.max / per_unit
+    return limits
 
 
 def detectors(instrument: Instrument) -> list[Detector] | None:
@@ -159,8 +174,10 @@ def detectors(instrument: Instrument) -> list[Detector] | None:
                     DetectorAxis(axis.name, axis.size, axis.step, axis.delivered_by)
                     for axis in delivered
                 ],
-                current_exposure_time=cube.variables["exposure"].initial / 1000.0,
-                current_gain=cube.variables["gain"].initial,
+                current_exposure_time=cube.tunes["exposure"].initial / 1000.0,
+                current_gain=cube.tunes["gain"].initial,
+                **_limits(cube.tunes["exposure"], "exposure_time", 1000.0),
+                **_limits(cube.tunes["gain"], "gain", 1.0),
                 current_binning=cube.variables["binning"].initial,
                 current_frame_rate=part.frame_rate,
             )

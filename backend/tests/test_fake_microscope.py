@@ -133,12 +133,16 @@ def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.In
 
 def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrument) -> None:
     """Red light through a green filter: a black image, known before taking it."""
-    from newswitch.instrument.tracing import coupling
-
-    state = {**instrument.initial_state(), "filter_wheel.slot": 2}
-    arriving = coupling(instrument, "camera_a", state)
-    assert arriving["led_625"]["light_per_mw"] < 1e-6
-    assert arriving["laser_488"]["light_per_mw"] > 0.001
+    state = {
+        **instrument.initial_state(),
+        "filter_wheel.slot": 2,
+        "laser_488.power": 0.0,
+        "led_625.power": instrument.cubes["led_625"].element.max_power,
+    }
+    table = compile_instrument(instrument)
+    assert table.answer("camera_a", state).black
+    assert ("led_625", "camera_a") not in {(c.source, c.detector) for c in table.channels(state)}
+    assert ("laser_488", "camera_a") in {(c.source, c.detector) for c in table.channels(state)}
 
 
 def test_the_dichroic_keeps_the_laser_from_the_camera(instrument: spec.Instrument) -> None:
@@ -164,7 +168,7 @@ def test_focus_blurs_but_does_not_rescale(compiled: Compiled) -> None:
 
 def test_moving_the_tube_lens_changes_both_and_only_for_its_own_camera(compiled: Compiled) -> None:
     """Nothing declared this; the size is what makes it useful."""
-    assert set(changes(compiled, "tube_a.dz", "camera_a")) == {"scale", "blur"}
+    assert set(changes(compiled, "tube_a.dz", "camera_a")) == {"scale", "blur", "light"}
     assert changes(compiled, "tube_a.dz", "camera_b") == {}
 
 
