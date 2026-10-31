@@ -89,7 +89,7 @@ def acquire(
     acquire_multidimensional_acquisition(
         config,
         store,
-        m.light_path,
+        m.optics,
         m.detector,
         m.stage,
         m.illumination,

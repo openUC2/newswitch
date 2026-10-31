@@ -18,7 +18,7 @@ import { SceneOverlay } from "@/components/stage/overlays/SceneOverlay";
 import { PanelProvider } from "@/components/stage/PanelProvider";
 import { FramePanel } from "@/components/stage/panels/FramePanel";
 import { ImageMetadataPanel } from "@/components/stage/panels/ImageMetadata";
-import { KubeStatePanel } from "@/components/stage/panels/KubeStatePanel";
+import { ElementPanel } from "@/components/stage/panels/ElementPanel";
 import { ScanRegionPanel } from "@/components/stage/panels/ScanRegionPanel";
 import {
   BlokNodeErrorSurface,
@@ -155,9 +155,9 @@ export const stageBlokComponents: BlokComponentDefinition[] = [
     ImageMetadataPanel,
   ),
   floaterBlok(
-    "KubeStatePanel",
-    "Details of the selected light-path component (kube).",
-    KubeStatePanel,
+    "ElementPanel",
+    "What the selected element on a light path is made of, and set to.",
+    ElementPanel,
   ),
   floaterBlok("FramePanel", "Details of the selected frame.", FramePanel),
   floaterBlok(

@@ -932,6 +932,16 @@ class Instrument:
             ]
         return tuple(found)
 
+    def edges_to(self, detector: str, sources: Iterable[str] | None = None) -> list[Edge]:
+        """Every edge light takes to `detector`: from `sources` to the sample, and on from there."""
+        sample = self.sample_cube()
+        routes = [
+            route
+            for source in (self.sources() if sources is None else sources)
+            for route in self.routes(self.illumination, source, sample)
+        ] + self.routes(self.detection, sample, detector)
+        return list(dict.fromkeys(edge for route in routes for edge in route))
+
     def routes(self, edges: tuple[Edge, ...], start: str, end: str) -> list[tuple[Edge, ...]]:
         """Every way light can go from `start` to `end` along `edges`."""
         found: list[tuple[Edge, ...]] = []

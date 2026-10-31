@@ -15,7 +15,7 @@ from .filter_bank import FilterBankManager
 from .hook_manager import HookContext, HookHandler, HookManager, UnsupportedHook
 from .illumination import IlluminationManager
 from .io import IOManager
-from .light_path import LightPathManager
+from .optics import OpticsManager
 from .metadata import MetadataManager
 from .objective import ObjectiveManager
 from .stage import StageManager
@@ -36,7 +36,7 @@ __all__ = [
     "HookManager",
     "IlluminationManager",
     "IOManager",
-    "LightPathManager",
+    "OpticsManager",
     "Manager",
     "MetadataManager",
     "ObjectiveManager",

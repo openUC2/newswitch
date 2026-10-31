@@ -71,7 +71,7 @@ hardware:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@2
+  catalog: newswitch@3
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'

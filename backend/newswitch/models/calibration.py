@@ -22,7 +22,7 @@ class CalibratedLightPath:
     )
     fov_width: float = model_field(default=10.0, description="Field of view width in micrometers")
     fov_height: float = model_field(default=10.0, description="Field of view height in micrometers")
-    light_path_state_hash: str = model_field(
+    key: str = model_field(
         default="",
-        description="The transformation hash of the light path configuration this affine matrix corresponds to",
+        description="Of what changes where a pixel looks: this matrix holds for as long as it does",
     )

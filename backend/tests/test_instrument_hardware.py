@@ -358,7 +358,7 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         ),
         (lambda d: d.update(ui={"views": ["fluorescence"]}), "views"),
         (lambda d: d.update(ui={"catalog": "newswitch", "bloks": {}}), "catalog"),
-        (lambda d: d.update(ui={"catalog": "newswitch@2", "bloks": {"v": {}}}), "bsx"),
+        (lambda d: d.update(ui={"catalog": "newswitch@3", "bloks": {"v": {}}}), "bsx"),
         (lambda d: d.update(agent_ui={"catalog": "orkestrator@v4", "bloks": {"v": {"x": 1}}}), "v"),
     ],
 )

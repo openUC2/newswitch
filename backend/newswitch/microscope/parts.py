@@ -30,6 +30,7 @@ metadata, the simulated detector) stay empty: no objectives, no filters, no ligh
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Optional
 
 from newswitch import models, protocols, states
@@ -74,7 +75,8 @@ from newswitch.services.expanse import ExpanseManager
 from newswitch.services.hooks.manager import PythonHookManager
 from newswitch.services.hooks.software_autofocus import software_autofocus_hook
 from newswitch.services.io import LocalFileConfig, LocalFileIOManager
-from newswitch.services.light_path import LightPathManager
+from newswitch.services.optics import OpticsManager
+from newswitch.states.optics import OpticsState
 from newswitch.services.metadata import MetadataManager
 from newswitch.states.autofocus import AutofocusState
 from newswitch.states.calibration import CalibrationState
@@ -166,8 +168,8 @@ class Microscope:
     expanse: protocols.ExpanseManager
     calibration_state: CalibrationState
     calibration: protocols.CalibrationManager
-    light_path_state: states.LightPathState
-    light_path: protocols.LightPathManager
+    optics_state: OpticsState
+    optics: protocols.OpticsManager
     metadata: protocols.MetadataManager
     cache: protocols.CacheManager
     autofocus_state: AutofocusState
@@ -249,41 +251,16 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
     calibration_state = CalibrationState()
     calibration = CalibrationManager(calibration_state=calibration_state)
 
-    hook_state = states.HookState()
-    hooks = PythonHookManager(
-        protocols.HookContext(
-            stage_manager=stage,
-            detector_manager=detector,
-            illumination_manager=illumination,
-            objective_manager=objective,
-            io_manager=io,
-        )
-    )
-    if stage is not None and detector is not None:
-        # The software autofocus sweeps the stage and reads the detector.
-        hooks.register_hook(models.SoftwareAutofocusHook, software_autofocus_hook)
-
-    expanse_state = states.ExpanseState()
-    expanse = ExpanseManager(expanse=expanse_state)
-    light_path_state = states.LightPathState()
-    light_path = LightPathManager(
-        light_path_state=light_path_state,
-        objective_state=objective_state,
-        illumination_state=illumination_state,
-        filter_bank_state=filter_bank_state,
-        camera_state=camera_state,
-        has_stage=parts.stage is not None,
-    )
-    metadata = MetadataManager(
-        objective_state=objective_state,
-        stage_state=stage_state,
-        filter_bank_state=filter_bank_state,
-        illumination_state=illumination_state,
+    optics_state = OpticsState()
+    optics = OpticsManager(
+        state=optics_state,
         camera_state=camera_state,
         calibration_state=calibration_state,
-        nominal_scale=None
+        instrument=instrument,
+        values=None
         if instrument is None
-        else instrument_parts.nominal_pixel_scale(
+        else partial(
+            instrument_parts.runtime_state,
             instrument,
             camera_state,
             stage_state,
@@ -292,8 +269,34 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
             filter_bank_state,
         ),
     )
-    # The light paths this microscope's parts allow
-    light_path.calculate_possible_light_paths()
+    calibration.on_change = optics.refresh
+    for part in (stage, illumination, objective, filter_bank, detector):
+        if part is not None:
+            part.on_change = optics.refresh
+    optics.refresh()
+
+    hook_state = states.HookState()
+    hooks = PythonHookManager(
+        protocols.HookContext(
+            stage_manager=stage,
+            detector_manager=detector,
+            illumination_manager=illumination,
+            objective_manager=objective,
+            io_manager=io,
+            optics_manager=optics,
+        )
+    )
+    if stage is not None and detector is not None:
+        # The software autofocus sweeps the stage and reads the detector.
+        hooks.register_hook(models.SoftwareAutofocusHook, software_autofocus_hook)
+
+    expanse_state = states.ExpanseState()
+    expanse = ExpanseManager(expanse=expanse_state)
+    metadata = MetadataManager(
+        stage_state=stage_state,
+        calibration_state=calibration_state,
+        optics=optics,
+    )
     cache = LocalCacheManager(LocalCacheConfig(base_path=str(settings.cache_dir)))
 
     acquisition = (
@@ -301,7 +304,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
             expanse_manager=expanse,
             detector_manager=detector,
             metadata_manager=metadata,
-            light_path_manager=light_path,
+            optics_manager=optics,
             cache_manager=cache,
         )
         if detector is not None
@@ -323,8 +326,8 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         expanse=expanse,
         calibration_state=calibration_state,
         calibration=calibration,
-        light_path_state=light_path_state,
-        light_path=light_path,
+        optics_state=optics_state,
+        optics=optics,
         metadata=metadata,
         cache=cache,
         autofocus_state=AutofocusState(),

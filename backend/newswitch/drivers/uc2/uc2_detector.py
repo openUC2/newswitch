@@ -30,7 +30,7 @@ import json
 import logging
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -173,6 +173,9 @@ class UC2DetectorManager:
     All methods are synchronous and thread-safe; the actions run them in a threadpool,
     `acquire_live` runs in the detector background thread.
     """
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     state: CameraState
 
@@ -485,6 +488,7 @@ class UC2DetectorManager:
         if frame_rate is not None:
             camera.frame_rate_per_sec = frame_rate or None
         _mirror(detector, camera)
+        self.on_change()
         return detector
 
     def get_detector_state(self, slot: int) -> Detector | None:

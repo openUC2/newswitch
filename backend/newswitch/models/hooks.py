@@ -1,13 +1,14 @@
 """Hooks a routine runs at points of an acquisition (autofocus, z calibration)."""
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class SoftwareAutofocusHook:
     """Refocus by software: sweep Z around the current position, move to the sharpest plane."""
 
-    z_range: float = 20.0  # total sweep range (um), centred on the current Z
+    z_range: Optional[float] = None  # total sweep (um) around the current Z; else from the NA
     steps: int = 11  # planes scored in the sweep (>= 3)
 
 

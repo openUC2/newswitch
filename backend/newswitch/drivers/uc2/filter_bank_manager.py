@@ -7,6 +7,7 @@ calibrated per-slot positions — the common openUC2 construction. Transport
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -36,6 +37,9 @@ class UC2FilterBankConfig:
 
 class UC2FilterBankManager:
     """Filter bank manager driving an openUC2 filter wheel via the UC2 bus."""
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     def __init__(
         self,
@@ -67,6 +71,7 @@ class UC2FilterBankManager:
         """Switch to a specific filter slot (protocol method)."""
         unkoil(self.bus.amove_axis, self.config.axis, self._position_for_slot(slot), True)
         self._mark_active(slot)
+        self.on_change()
         return self.filter_bank_state.get_active_filter()
 
     def toggle_filter(self) -> Filter:

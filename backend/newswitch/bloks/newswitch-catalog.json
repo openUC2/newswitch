@@ -1,6 +1,6 @@
 {
   "name": "newswitch",
-  "version": 2,
+  "version": 3,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
     {
@@ -60,6 +60,19 @@
     {
       "name": "DebugOverlay",
       "description": "Debug tools over the scene.",
+      "acceptsChildren": false,
+      "context": "HTML",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageView"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "ElementPanel",
+      "description": "What the selected element on a light path is made of, and set to.",
       "acceptsChildren": false,
       "context": "HTML",
       "childrenContext": null,
@@ -167,19 +180,6 @@
       "inheritsContext": false,
       "downstreamOf": [
         "StageScene"
-      ],
-      "notDownstreamOf": [],
-      "props": []
-    },
-    {
-      "name": "KubeStatePanel",
-      "description": "Details of the selected light-path component (kube).",
-      "acceptsChildren": false,
-      "context": "HTML",
-      "childrenContext": null,
-      "inheritsContext": false,
-      "downstreamOf": [
-        "StageView"
       ],
       "notDownstreamOf": [],
       "props": []

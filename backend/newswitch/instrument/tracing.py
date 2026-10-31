@@ -185,6 +185,14 @@ def collected(lens: Lens) -> float:
     return (1.0 - math.cos(math.asin(lens.na / lens.index))) / 2.0
 
 
+def depth_of_field_um(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> float:
+    """How deep what a detector sees sharply is: wavelength x index / NA^2."""
+    routes = instrument.routes(instrument.detection, instrument.sample_cube(), detector)
+    lens = _objective(instrument, routes, state)
+    wavelength_um = design_wavelength(instrument, detector, state) / 1000.0
+    return wavelength_um * lens.index / lens.na**2
+
+
 def _emitted(
     fluorophore: Fluorophore | None, absorbed: float | None, on_sample: np.ndarray, grid: np.ndarray
 ) -> np.ndarray:

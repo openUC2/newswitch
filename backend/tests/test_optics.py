@@ -1,0 +1,158 @@
+"""What the optics find is published, and a calibration depends on what they find changes a pixel."""
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from newswitch.instrument import spec
+from newswitch.instrument.compiler import difference, influences
+from newswitch.instrument.predict import Answer
+from newswitch.microscope.parts import Microscope, build_microscope
+from newswitch.models.calibration import CalibratedLightPath
+from newswitch.models.optics import DetectorOptics
+from newswitch.routines.common import focus_range
+from newswitch.settings import Settings
+from tests.conftest import run_settings
+
+INSTRUMENTS = Path(__file__).parent.parent / "instruments"
+
+
+def built(tmp_path: Path, name: str) -> Microscope:
+    """A running microscope of the instrument `name`."""
+    settings: Settings = run_settings(tmp_path)
+    return build_microscope(settings, spec.load(INSTRUMENTS / name))
+
+
+def first_detector(microscope: Microscope) -> DetectorOptics:
+    """What is published for its first detector."""
+    return next(iter(microscope.optics_state.detectors.values()))
+
+
+def test_each_detector_has_its_own_facts(tmp_path: Path) -> None:
+    """From the optics in front of each, not from a number written down anywhere."""
+    optics = built(tmp_path, "dual-camera").optics_state
+    assert set(optics.detectors) == {"camera_green", "camera_red"}
+    green = optics.detectors["camera_green"]
+    assert green.calibrated is False
+    assert green.pixel_um > 0.0
+    assert green.field_width_um == pytest.approx(green.pixel_um * 512, rel=0.01)
+    assert {channel.detector for channel in optics.channels} == set(optics.detectors)
+
+
+def test_the_light_paths_are_the_edges_the_description_states(tmp_path: Path) -> None:
+    """What is on the way is what is drawn there: a scanner and a pinhole need no new type."""
+    path = built(tmp_path, "point-scanner").optics_state.detectors["pmt"].path
+    assert {"scanner", "pinhole"} <= {element.kind for element in path.elements}
+    names = {element.name for element in path.elements}
+    assert {cube for edge in path.edges for cube in (edge.source, edge.target)} == names
+
+
+def test_a_sheet_is_not_a_field(tmp_path: Path) -> None:
+    """How a source's light lands is found from its way there."""
+    sheet = next(iter(built(tmp_path, "light-sheet").optics_state.sources.values()))
+    assert (sheet.shape, sheet.side) == ("sheet", "orthogonal")
+    assert sheet.thickness_um is not None and sheet.reach_um is not None
+    assert sheet.along in {"x", "y"}
+    field = next(iter(built(tmp_path, "dual-camera").optics_state.sources.values()))
+    assert field.shape == "field"
+    assert field.field_um is not None
+
+
+def test_a_scanned_source_is_a_spot(tmp_path: Path) -> None:
+    """All of it, on one pixel at a time."""
+    assert (
+        next(iter(built(tmp_path, "point-scanner").optics_state.sources.values())).shape == "spot"
+    )
+
+
+def test_what_changes_is_published_at_once(microscope: Microscope) -> None:
+    """Another objective is another pixel; no one has to ask."""
+    assert microscope.objective is not None
+    before = first_detector(microscope).pixel_um
+    microscope.objective.switch_objective(2)
+    assert first_detector(microscope).pixel_um != pytest.approx(before, rel=0.1)
+
+
+def test_more_power_is_published_as_more_counts(microscope: Microscope) -> None:
+    """Expected counts follow the sources."""
+    assert microscope.illumination is not None
+    microscope.illumination.set_intensity(10.0, channel=1)
+    dim = first_detector(microscope).expected_counts
+    microscope.illumination.set_intensity(80.0, channel=1)
+    assert first_detector(microscope).expected_counts > dim
+
+
+def test_what_did_not_change_is_not_published_again(microscope: Microscope) -> None:
+    """Exposure changes the counts, and leaves the sources and their channels' shape alone."""
+    assert microscope.detector is not None
+    sources = microscope.optics_state.sources
+    detectors = microscope.optics_state.detectors
+    microscope.optics.refresh()
+    assert microscope.optics_state.detectors is detectors
+    microscope.detector.update_detector(1, exposure_time=0.05)
+    assert microscope.optics_state.detectors is not detectors
+    assert microscope.optics_state.sources is sources
+
+
+def test_a_calibration_is_published_over_the_prediction(microscope: Microscope) -> None:
+    """Measured beats predicted, for as long as what it depends on holds."""
+    path = microscope.optics.get_light_path_for_detector(1)
+    microscope.calibration.set_calibrated_state(
+        CalibratedLightPath(
+            key=microscope.optics.snapshot(path).key,
+            affine_matrix=[
+                [0.5, 0.0, 0.0, 0.0],
+                [0.0, 0.5, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        )
+    )
+    found = first_detector(microscope)
+    assert (found.calibrated, found.pixel_um) == (True, 0.5)
+
+
+def test_what_a_calibration_depends_on_is_measured() -> None:
+    """Scale-changing variables are found per detector; moving, filtering and exposing are not."""
+    found = influences(spec.load(INSTRUMENTS / "fake-microscope"))
+    assert {"objective.slot", "tube_a.dz", "camera_a.binning"} <= found["camera_a"]
+    assert "tube_a.dz" not in found["camera_b"]
+    for variable in ("stage.x", "stage.y", "stage.z", "camera_a.exposure", "laser_488.power"):
+        assert variable not in found["camera_a"]
+
+
+def answer(pixel_to_stage: tuple[tuple[float, float], tuple[float, float]]) -> Answer:
+    """An answer with only a map, for what compares maps."""
+    return Answer(
+        detector="d",
+        pixel_to_stage=pixel_to_stage,
+        centre=(0.0, 0.0),
+        size=(512, 512),
+        field_of_view_um=(1.0, 1.0),
+        spot_px=0.0,
+        relative_illumination=1.0,
+        distortion_percent=0.0,
+        band_nm=None,
+        light=0.0,
+    )
+
+
+def test_a_camera_turned_a_quarter_can_be_compared() -> None:
+    """Its map's diagonal is zero, which is no reason to divide by it."""
+    turned = answer(((0.0, -1.0), (1.0, 0.0)))
+    assert difference(turned, turned) == {}
+
+
+def test_a_flip_of_the_image_is_a_change_of_its_map() -> None:
+    """Though every pixel stays the same size."""
+    plain = answer(((1.0, 0.0), (0.0, 1.0)))
+    assert "scale" in difference(plain, replace(plain, pixel_to_stage=((-1.0, 0.0), (0.0, 1.0))))
+
+
+def test_how_far_to_sweep_follows_from_the_na(tmp_path: Path) -> None:
+    """Half a depth of field apart: a low NA sweeps far, a high one barely."""
+    assert focus_range(8.0, 11) == pytest.approx(40.0)
+    assert focus_range(0.4, 11) == pytest.approx(2.0)
+    found = next(iter(built(tmp_path, "dual-camera").optics_state.detectors.values()))
+    assert found.depth_of_field_um == pytest.approx(0.525 / 0.25**2, rel=0.1)

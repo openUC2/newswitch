@@ -184,7 +184,7 @@ def _check_regular(config: MultidimensionalAcquisition) -> list[Position]:
 
 def _pixel_to_world(
     detector: Detector,
-    light_path_manager: protocols.LightPathManager,
+    optics_manager: protocols.OpticsManager,
     metadata_manager: protocols.MetadataManager,
 ) -> np.ndarray:
     """What a pixel step of `detector` is on the sample, in x, y micrometres.
@@ -192,18 +192,18 @@ def _pixel_to_world(
     A calibration says how far the stage moves to shift the image by a pixel, the opposite of which
     point of the sample that pixel sees.
     """
-    path = light_path_manager.get_light_path_for_detector(detector.slot)
+    path = optics_manager.get_light_path_for_detector(detector.slot)
     matrix = metadata_manager.get_metadata_for_light_path(path).affine_matrix
     return -np.array([[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]], dtype=float)
 
 
 def _is_calibrated(
     detector: Detector,
-    light_path_manager: protocols.LightPathManager,
+    optics_manager: protocols.OpticsManager,
     metadata_manager: protocols.MetadataManager,
     calibration_state: CalibrationState,
 ) -> bool:
-    path = light_path_manager.get_light_path_for_detector(detector.slot)
+    path = optics_manager.get_light_path_for_detector(detector.slot)
     snapshot = metadata_manager.get_metadata_for_light_path(path).light_state
     try:
         calibration_state.get_calibrated_path(light_path_state=snapshot)
@@ -222,7 +222,7 @@ def _plan_position(
     times: int,
     detector_manager: protocols.DetectorManager,
     illumination_state: IlluminationState,
-    light_path_manager: protocols.LightPathManager,
+    optics_manager: protocols.OpticsManager,
     metadata_manager: protocols.MetadataManager,
     calibration_state: CalibrationState,
     stage_manager: protocols.StageManager,
@@ -263,7 +263,7 @@ def _plan_position(
                     f"{detector.name} has {sorted(map(str, bins))} arrival-time bins and others "
                     "have not: they cannot share an array"
                 )
-            to_world = _pixel_to_world(detector, light_path_manager, metadata_manager)
+            to_world = _pixel_to_world(detector, optics_manager, metadata_manager)
             flip_x, flip_y = bool(to_world[0, 0] < 0), bool(to_world[1, 1] < 0)
             upright = to_world * np.array([[-1 if flip_x else 1, -1 if flip_y else 1]] * 2)
             if reference is None:
@@ -276,7 +276,7 @@ def _plan_position(
                     f"{np.diag(reference).tolist()}: one dataset has one pixel size"
                 )
             calibrated = calibrated and _is_calibrated(
-                detector, light_path_manager, metadata_manager, calibration_state
+                detector, optics_manager, metadata_manager, calibration_state
             )
             exposures.append(_Exposure(detector, len(channels), flip_x, flip_y))
             channels.extend(
@@ -401,7 +401,7 @@ def _keep(
 def acquire_multidimensional_acquisition(
     config: MultidimensionalAcquisition,
     store: DatasetStore,
-    light_path_manager: protocols.LightPathManager,
+    optics_manager: protocols.OpticsManager,
     detector_manager: protocols.DetectorManager,
     stage_manager: protocols.StageManager,
     illumination_manager: protocols.IlluminationManager,
@@ -433,7 +433,7 @@ def acquire_multidimensional_acquisition(
             len(config.timepoints),
             detector_manager,
             illumination_state,
-            light_path_manager,
+            optics_manager,
             metadata_manager,
             calibration_state,
             stage_manager,

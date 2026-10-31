@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Protocol, Type, runtime_checkable
 
 from newswitch.models.hooks import Hook
+from newswitch.protocols.optics import OpticsManager
 from newswitch.protocols.base import Manager
 from newswitch.protocols.stage import StageManager
 
@@ -32,6 +33,7 @@ class HookContext:
     illumination_manager: Optional[IlluminationManager]
     objective_manager: Optional[ObjectiveManager]
     io_manager: IOManager
+    optics_manager: OpticsManager
 
 
 class UnsupportedHook(Exception):

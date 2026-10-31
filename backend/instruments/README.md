@@ -166,7 +166,7 @@ nothing. Each states the `catalog` it is written against and its `bloks` by name
 
 ```yaml
 ui:
-  catalog: newswitch@2
+  catalog: newswitch@3
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'

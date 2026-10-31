@@ -9,11 +9,20 @@ from newswitch.models.devices import Detector
 from newswitch.models.frames import Frame
 
 
+#: How finely a sweep for focus samples what a lens sees sharply.
+PLANES_PER_DEPTH_OF_FIELD = 2
+
+
 def z_sweep(center: float, z_range: float, steps: int) -> list[float]:
     """`steps` (>= 3) planes over `z_range` micrometres, centred on `center`."""
     if steps < 3:
         raise ValueError("a z sweep needs at least 3 planes")
     return [center - z_range / 2 + index * z_range / (steps - 1) for index in range(steps)]
+
+
+def focus_range(depth_of_field_um: float, steps: int) -> float:
+    """How far to sweep to find focus: `steps` planes, half a depth of field apart."""
+    return depth_of_field_um / PLANES_PER_DEPTH_OF_FIELD * (steps - 1)
 
 
 def field_of_view(

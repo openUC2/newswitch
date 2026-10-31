@@ -11,15 +11,17 @@ import { SceneOverlay } from "./overlays/SceneOverlay";
 import { PanelProvider } from "./PanelProvider";
 import { FramePanel } from "./panels/FramePanel";
 import { ImageMetadataPanel } from "./panels/ImageMetadata";
-import { KubeStatePanel } from "./panels/KubeStatePanel";
+import { ElementPanel } from "./panels/ElementPanel";
 import { ScanRegionPanel } from "./panels/ScanRegionPanel";
 import { FramesPlane } from "./planes/FramesPlane";
 import { ImagesPlane } from "./planes/ImagesPlane";
-import { CurrentFrameLightPathPlane } from "./planes/LightPathStatePlane";
 import { LivesPlane } from "./planes/LivesPlane";
 import { StageAxis } from "./planes/StageAxis";
 import { StagePlane } from "./planes/StagePlane";
-import { CurrentLightPathPlane } from "./planes/lightpath/LightPathPlane";
+import {
+  CurrentFrameLightPathPlane,
+  CurrentLightPathPlane,
+} from "./planes/lightpath/LightPathPlane";
 
 export const SceneWrapper = ({ children }: { children: ReactNode }) => {
   return <Canvas>{children}</Canvas>;
@@ -63,7 +65,7 @@ export const Expanse = () => {
 
         <ScanRegionPanel />
         <ImageMetadataPanel />
-        <KubeStatePanel />
+        <ElementPanel />
 
         <FramePanel />
 

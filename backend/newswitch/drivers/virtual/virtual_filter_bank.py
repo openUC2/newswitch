@@ -5,6 +5,7 @@ A virtual filter bank manager for microscopy simulation.
 Handles filter switching with wavelength-dependent transmission profiles.
 """
 
+from collections.abc import Callable
 import math
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -75,6 +76,9 @@ class VirtualFilterBankManager:
     filter's center wavelength with the bandwidth as FWHM.
     """
 
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
+
     def __init__(
         self,
         filter_bank_state: FilterBankState,
@@ -116,6 +120,7 @@ class VirtualFilterBankManager:
         # Activate the target filter
         target_filter.is_active = True
         self.filter_bank_state.current_slot = slot
+        self.on_change()
 
         return target_filter
 

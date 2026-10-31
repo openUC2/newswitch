@@ -152,7 +152,7 @@ export const SoftwareAutofocusHookSchema = z
     __identifier: z
       .literal('@newswitch/software_autofocus_hook')
       .default('@newswitch/software_autofocus_hook'),
-    z_range: z.number(),
+    z_range: z.number().nullable().optional(),
     steps: z.number(),
   })
   .brand('@newswitch/software_autofocus_hook')

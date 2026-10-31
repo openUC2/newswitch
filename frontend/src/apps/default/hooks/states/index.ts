@@ -7,8 +7,8 @@ import { FilterBankStateDefinition } from './FilterBankState';
 import { HookStateDefinition } from './HookState';
 import { IOStateDefinition } from './IOState';
 import { IlluminationStateDefinition } from './IlluminationState';
-import { LightPathStateDefinition } from './LightPathState';
 import { ObjectiveStateDefinition } from './ObjectiveState';
+import { OpticsStateDefinition } from './OpticsState';
 import { StageStateDefinition } from './StageState';
 import { UC2StateDefinition } from './UC2State';
 
@@ -45,16 +45,6 @@ export type {
   CameraState,
 } from './CameraState';
 export {
-  ObjectiveKubeStateSchema,
-  DetectorKubeStateSchema,
-  FilterKubeStateSchema,
-  IlluminationKubeStateSchema,
-  GenericKubeStateSchema,
-  StageKubeStateSchema,
-  DichroicKubeStateSchema,
-  FilterBankKubeStateSchema,
-  ObjectiveTurretKubeStateSchema,
-  LightEdgeStateSchema,
   LightPathSnapshotSchema,
   MetadataSchema,
   ImageSchema,
@@ -66,26 +56,6 @@ export {
   useExpanseState,
 } from './ExpanseState';
 export type {
-  ObjectiveKubeState,
-  ObjectiveKubeStateOutput,
-  DetectorKubeState,
-  DetectorKubeStateOutput,
-  FilterKubeState,
-  FilterKubeStateOutput,
-  IlluminationKubeState,
-  IlluminationKubeStateOutput,
-  GenericKubeState,
-  GenericKubeStateOutput,
-  StageKubeState,
-  StageKubeStateOutput,
-  DichroicKubeState,
-  DichroicKubeStateOutput,
-  FilterBankKubeState,
-  FilterBankKubeStateOutput,
-  ObjectiveTurretKubeState,
-  ObjectiveTurretKubeStateOutput,
-  LightEdgeState,
-  LightEdgeStateOutput,
   LightPathSnapshot,
   LightPathSnapshotOutput,
   Metadata,
@@ -132,47 +102,6 @@ export type {
   IlluminationState,
 } from './IlluminationState';
 export {
-  ObjectiveKubeSchema,
-  DetectorKubeSchema,
-  FilterKubeSchema,
-  IlluminationKubeSchema,
-  GenericKubeSchema,
-  StageKubeSchema,
-  DichroicKubeSchema,
-  FilterBankKubeSchema,
-  ObjectiveTurretKubeSchema,
-  LightEdgeSchema,
-  LightPathSchema,
-  LightPathStateSchema,
-  LightPathStateDefinition,
-  useLightPathState,
-} from './LightPathState';
-export type {
-  ObjectiveKube,
-  ObjectiveKubeOutput,
-  DetectorKube,
-  DetectorKubeOutput,
-  FilterKube,
-  FilterKubeOutput,
-  IlluminationKube,
-  IlluminationKubeOutput,
-  GenericKube,
-  GenericKubeOutput,
-  StageKube,
-  StageKubeOutput,
-  DichroicKube,
-  DichroicKubeOutput,
-  FilterBankKube,
-  FilterBankKubeOutput,
-  ObjectiveTurretKube,
-  ObjectiveTurretKubeOutput,
-  LightEdge,
-  LightEdgeOutput,
-  LightPath,
-  LightPathOutput,
-  LightPathState,
-} from './LightPathState';
-export {
   ObjectiveLensSchema,
   ObjectiveStateSchema,
   ObjectiveStateDefinition,
@@ -183,6 +112,26 @@ export type {
   ObjectiveLensOutput,
   ObjectiveState,
 } from './ObjectiveState';
+export {
+  LightPathSchema,
+  DetectorOpticsSchema,
+  SourceOpticsSchema,
+  OpticalChannelSchema,
+  OpticsStateSchema,
+  OpticsStateDefinition,
+  useOpticsState,
+} from './OpticsState';
+export type {
+  LightPath,
+  LightPathOutput,
+  DetectorOptics,
+  DetectorOpticsOutput,
+  SourceOptics,
+  SourceOpticsOutput,
+  OpticalChannel,
+  OpticalChannelOutput,
+  OpticsState,
+} from './OpticsState';
 export {
   StageStateSchema,
   StageStateDefinition,
@@ -201,8 +150,8 @@ export const globalStateDefinition = {
   HookState: HookStateDefinition,
   IOState: IOStateDefinition,
   IlluminationState: IlluminationStateDefinition,
-  LightPathState: LightPathStateDefinition,
   ObjectiveState: ObjectiveStateDefinition,
+  OpticsState: OpticsStateDefinition,
   StageState: StageStateDefinition,
   UC2State: UC2StateDefinition,
 } satisfies Record<string, StateDefinition<unknown>>;

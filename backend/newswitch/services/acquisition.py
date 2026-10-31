@@ -10,7 +10,7 @@ from newswitch.protocols import MetadataManager
 from newswitch.protocols.cache import CacheManager
 from newswitch.protocols.detector import DetectorManager
 from newswitch.protocols.expanse import ExpanseManager
-from newswitch.protocols.light_path import LightPathManager
+from newswitch.protocols.optics import OpticsManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,14 @@ class AcquisitionManager:
         expanse_manager: ExpanseManager,
         detector_manager: DetectorManager,
         metadata_manager: MetadataManager,
-        light_path_manager: LightPathManager,
+        optics_manager: OpticsManager,
         cache_manager: CacheManager,
     ) -> None:
         """Initialize the AcquisitionManager with the provided managers."""
         self.expanse_manager = expanse_manager
         self.detector_manager = detector_manager
         self.metadata_manager = metadata_manager
-        self.light_path_manager = light_path_manager
+        self.optics_manager = optics_manager
         self.cache_manager = cache_manager
 
     def acquire(self, slots: Optional[list[int]] = None) -> list[Frame]:
@@ -46,7 +46,7 @@ class AcquisitionManager:
             if detector.is_active:
                 image_data = self.detector_manager.capture_image(slot=detector.slot).data
 
-                light_path = self.light_path_manager.get_light_path_for_detector(
+                light_path = self.optics_manager.get_light_path_for_detector(
                     detector_slot=detector.slot
                 )
 

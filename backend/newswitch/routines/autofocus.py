@@ -15,8 +15,9 @@ from arkitekt import Task
 from scipy import ndimage
 
 from newswitch.protocols.detector import DetectorManager
+from newswitch.protocols.optics import OpticsManager
 from newswitch.protocols.stage import StageManager
-from newswitch.routines.common import z_sweep
+from newswitch.routines.common import focus_range, z_sweep
 from newswitch.states.autofocus import AutofocusState
 
 #: The Gaussian (px) the Laplacian focus metric is taken over, against pixel noise.
@@ -73,8 +74,9 @@ def run_autofocus(
     stage: StageManager,
     detector: DetectorManager,
     autofocus_state: AutofocusState,
+    optics: OpticsManager,
     task: Task,
-    z_range: float = 20.0,
+    z_range: Optional[float] = None,
     steps: int = 11,
     detector_slot: int = 1,
     metric: str = "laplacian_variance",
@@ -82,7 +84,8 @@ def run_autofocus(
     """Autofocus: sweep Z around the current position and move to the sharpest plane.
 
     Args:
-        z_range: Total sweep range in micrometers, centered on the current Z.
+        z_range: Total sweep range in micrometers, centered on the current Z. By default, from
+            how deep the detector's objective sees sharply.
         steps: Number of Z planes to score (>= 3).
         detector_slot: Detector to read frames from.
         metric: "laplacian_variance" (default) or "intensity_variance".
@@ -90,6 +93,8 @@ def run_autofocus(
     Returns:
         The Z position (micrometers) of best focus; the stage is left there.
     """
+    if z_range is None:
+        z_range = focus_range(optics.depth_of_field_um(detector_slot), steps)
     z_positions = z_sweep(stage.state.z, z_range, steps)
 
     autofocus_state.running = True

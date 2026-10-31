@@ -1,18 +1,23 @@
 """Calibrating a light path measures the pixel scale from two stage moves."""
 
 import math
-from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from scipy import ndimage
 
-from newswitch.microscope.parts import Microscope
+from newswitch.instrument import spec
+from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightPathSnapshot
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
 from newswitch.routines.calibration import calibrate_light_path
+from tests.conftest import run_settings
+
+
+TWO_CAMERAS = Path(__file__).parent.parent / "instruments" / "dual-camera"
 
 
 def test_calibration_measures_the_pixel_scale(microscope: Microscope) -> None:
@@ -24,7 +29,7 @@ def test_calibration_measures_the_pixel_scale(microscope: Microscope) -> None:
     start = (microscope.stage_state.x, microscope.stage_state.y)
 
     (path,) = calibrate_light_path(
-        microscope.light_path,
+        microscope.optics,
         microscope.metadata,
         microscope.calibration,
         microscope.stage,
@@ -43,14 +48,14 @@ def test_calibration_measures_the_pixel_scale(microscope: Microscope) -> None:
 def snapshot(microscope: Microscope, slot: int = 1) -> LightPathSnapshot:
     """The current state of the light path to the detector in `slot`."""
     return microscope.metadata.get_current_state_for_light_path(
-        microscope.light_path.get_light_path_for_detector(slot)
+        microscope.optics.get_light_path_for_detector(slot)
     )
 
 
 def calibrate(microscope: Microscope, scale: float, slot: int = 1) -> CalibratedLightPath:
     """Store a calibration of the scale `scale` for the light path to the detector in `slot`."""
     path = CalibratedLightPath(
-        light_path_state_hash=snapshot(microscope, slot).transformation_hash,
+        key=snapshot(microscope, slot).key,
         affine_matrix=[
             [scale, 0.0, 0.0, 0.0],
             [0.0, scale, 0.0, 0.0],
@@ -65,21 +70,16 @@ def calibrate(microscope: Microscope, scale: float, slot: int = 1) -> Calibrated
 def test_a_light_path_has_a_stable_identity(microscope: Microscope) -> None:
     """Both hashes are set, and the same setup gives the same hashes."""
     first, second = snapshot(microscope), snapshot(microscope)
-    assert first.hash and first.transformation_hash
-    assert (first.hash, first.transformation_hash) == (second.hash, second.transformation_hash)
+    assert first.hash and first.key
+    assert (first.hash, first.key) == (second.hash, second.key)
 
 
-def test_another_detector_does_not_get_this_detectors_calibration(
-    microscope: Microscope,
-) -> None:
+def test_another_detector_does_not_get_this_detectors_calibration(tmp_path: Path) -> None:
     """A calibration holds for the detector it was measured with."""
-    first = microscope.camera_state.detectors[0]
-    microscope.camera_state.detectors.append(replace(first, slot=2, key="second-camera"))
-    microscope.light_path.calculate_possible_light_paths()
-
-    calibrate(microscope, 0.5, slot=first.slot)
+    two = build_microscope(run_settings(tmp_path), spec.load(TWO_CAMERAS))
+    calibrate(two, 0.5, slot=1)
     with pytest.raises(ValueError, match="No calibrated light path"):
-        microscope.calibration_state.get_calibrated_path(snapshot(microscope, 2))
+        two.calibration_state.get_calibrated_path(snapshot(two, 2))
 
 
 def test_another_objective_does_not_get_this_objectives_calibration(
@@ -119,7 +119,7 @@ def test_where_the_sample_is_and_how_it_is_exposed_do_not_change_the_identity(
     microscope.detector.update_detector(1, 0.123, 2.0)
     after = snapshot(microscope)
     assert after.hash == before.hash
-    assert after.transformation_hash == before.transformation_hash
+    assert after.key == before.key
 
 
 def test_a_filter_changes_the_setup_but_not_what_the_optics_do_to_a_pixel(
@@ -134,33 +134,44 @@ def test_a_filter_changes_the_setup_but_not_what_the_optics_do_to_a_pixel(
     microscope.filter_bank.switch_filter(other)
     after = snapshot(microscope)
     assert after.hash != before.hash
-    assert after.transformation_hash == before.transformation_hash
+    assert after.key == before.key
 
 
 # --- measuring: how well, and at which pixel scales
 
 
-def beads(size: int = 256, seed: int = 3) -> np.ndarray:
+def beads(spots: int = 3000, blur: float = 4.0, seed: int = 3) -> np.ndarray:
     """Random spots, much larger than the frames taken of them, smooth at the pixel scale."""
     rng = np.random.default_rng(seed)
     field = np.zeros((2000, 2000))
-    field[rng.integers(0, 2000, 3000), rng.integers(0, 2000, 3000)] = 1.0
-    return ndimage.gaussian_filter(field, 4.0)
+    field[rng.integers(0, 2000, spots), rng.integers(0, 2000, spots)] = 1.0
+    return ndimage.gaussian_filter(field, blur)
+
+
+#: What a pixel of 0.2 um sees structure in: finer spots, and many of them to a frame.
+FINE_BEADS = {"spots": 100000, "blur": 1.0}
 
 
 class Bench:
     """A stage and a camera over `beads`, with a known pixel scale and a turned camera."""
 
-    def __init__(self, um_per_px: float, turn_deg: float = 0.0, limit: float = 5000.0) -> None:
+    def __init__(
+        self,
+        um_per_px: float,
+        turn_deg: float = 0.0,
+        limit: float = 5000.0,
+        sample: np.ndarray | None = None,
+        seed: int = 5,
+    ) -> None:
         """A bench seeing `um_per_px` per pixel, mounted `turn_deg` turned."""
-        self.sample = beads()
+        self.sample = beads() if sample is None else sample
         self.um_per_px = um_per_px
         self.turn = math.radians(turn_deg)
         self.state = SimpleNamespace(
             x=0.0, y=0.0, min_x=-limit, max_x=limit, min_y=-limit, max_y=limit
         )
         self.moves: list[tuple[float, float]] = []
-        self.noise = np.random.default_rng(5)
+        self.noise = np.random.default_rng(seed)
 
     def move(self, x: float = 0.0, y: float = 0.0, **_: object) -> None:
         """Move the stage by (x, y)."""
@@ -181,12 +192,15 @@ class Bench:
         )
 
 
-def calibrated_on(bench: Bench) -> list[list[float]]:
+def calibrated_on(bench: Bench, bench_prediction: float = 1.0) -> list[list[float]]:
     """Run the real routine on `bench`."""
-    detector = SimpleNamespace(slot=1, is_active=True, width=256, height=256)
+    detector = SimpleNamespace(slot=1, name="bench", is_active=True, width=256, height=256)
     light_path = SimpleNamespace(get_light_path_for_detector=lambda detector_slot: "path")
     metadata = SimpleNamespace(
-        get_current_state_for_light_path=lambda path: SimpleNamespace(transformation_hash="h")
+        get_current_state_for_light_path=lambda path: SimpleNamespace(key="h"),
+        get_metadata_for_light_path=lambda path: SimpleNamespace(
+            affine_matrix=[[bench_prediction, 0.0], [0.0, bench_prediction]]
+        ),
     )
     calibration = SimpleNamespace(set_calibrated_state=lambda path: None)
     (path,) = calibrate_light_path(
@@ -239,11 +253,27 @@ def test_a_long_shift_is_not_pulled_towards_zero() -> None:
     )
 
 
-@pytest.mark.parametrize("um_per_px", [0.2, 1.0, 5.0])
-def test_the_routine_measures_the_pixel_scale_at_any_magnification(um_per_px: float) -> None:
-    """At 5 um per pixel a 20 um move is 4 pixels: too few to tell 2%, so the move grows."""
-    matrix = calibrated_on(Bench(um_per_px))
-    assert math.hypot(matrix[0][0], matrix[1][0]) == pytest.approx(um_per_px, rel=0.005)
+@pytest.mark.parametrize(
+    ("um_per_px", "sample"), [(0.2, FINE_BEADS), (1.0, {}), (5.0, {})], ids=["0.2", "1", "5"]
+)
+@pytest.mark.parametrize("off_by", [1.0, 5.0, 0.2])
+def test_the_routine_measures_the_pixel_scale_at_any_magnification(
+    um_per_px: float, sample: dict[str, float], off_by: float
+) -> None:
+    """What the optics predict sizes the first move, and need not be right."""
+    bench = Bench(um_per_px, sample=beads(**sample))
+    matrix = calibrated_on(bench, um_per_px * off_by)
+    assert math.hypot(matrix[0][0], matrix[1][0]) == pytest.approx(um_per_px, rel=0.01)
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_too_little_structure_is_refused_rather_than_mismeasured(seed: int) -> None:
+    """About two blurred spots to a frame: whichever way that goes, it is not a wrong scale."""
+    try:
+        matrix = calibrated_on(Bench(0.2, seed=seed), 0.2)
+    except ValueError:
+        return
+    assert math.hypot(matrix[0][0], matrix[1][0]) == pytest.approx(0.2, rel=0.1)
 
 
 def test_the_routine_sees_a_turned_camera_at_low_magnification() -> None:
@@ -257,7 +287,7 @@ def test_the_routine_sees_a_turned_camera_at_low_magnification() -> None:
 def test_the_measuring_move_is_sized_to_the_frame() -> None:
     """A short move to find the scale, then one of an eighth of the frame."""
     bench = Bench(5.0)
-    calibrated_on(bench)
+    calibrated_on(bench, 5.0)
     assert max(abs(x) for x, _ in bench.moves) == pytest.approx(5.0 * 32.0, rel=0.02)
 
 

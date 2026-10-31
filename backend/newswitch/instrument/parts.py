@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import CAMERA_PROTOCOLS, Actuator
 from newswitch.instrument.spec import Instrument, Move, Sensor, Swap, Tune, Variable
@@ -357,42 +355,3 @@ def runtime_state(
         state[f"{name}.gain"] = detector.current_gain
         state[f"{name}.binning"] = detector.current_binning
     return state
-
-
-def nominal_pixel_scale(
-    instrument: Instrument,
-    camera_state: CameraState,
-    stage_state: StageState,
-    objective_state: ObjectiveState,
-    illumination_state: IlluminationState,
-    filter_bank_state: FilterBankState,
-) -> Callable[[int], tuple[float, float, float, float]]:
-    """What the design predicts a detector's pixels are, for images no calibration covers.
-
-    The server's objective has one magnification, but what is magnified depends on each detector's
-    own tube lens, which only the instrument knows. The result takes a detector's slot, and gives
-    its micrometres per pixel in x and y, and its field of view. Those are in the terms of a
-    calibration, how far the stage moves to shift the image by a pixel, with the opposite sign of
-    `predict.Answer.pixel_to_stage`, which sample point a pixel sees: an image must not flip when
-    it gets calibrated.
-    """
-    table = compile_instrument(instrument)
-
-    def scale(detector_slot: int) -> tuple[float, float, float, float]:
-        state = runtime_state(
-            instrument,
-            camera_state,
-            stage_state,
-            objective_state,
-            illumination_state,
-            filter_bank_state,
-        )
-        answer = table.answer(instrument.detectors()[detector_slot - 1], state)
-        return (
-            -answer.pixel_to_stage[0][0],
-            -answer.pixel_to_stage[1][1],
-            answer.field_of_view_um[0],
-            answer.field_of_view_um[1],
-        )
-
-    return scale

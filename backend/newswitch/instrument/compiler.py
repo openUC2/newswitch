@@ -8,6 +8,7 @@ size, and nothing declares it; only `newswitch.tools.check_instrument` asks that
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
@@ -76,10 +77,20 @@ def difference(before: Answer, after: Answer) -> dict[str, float]:
     many columns the image gained or lost.
     """
     half_width = before.size[0] / 2.0
-    pixel = abs(before.pixel_to_stage[0][0])
+    pixel = math.hypot(before.pixel_to_stage[0][0], before.pixel_to_stage[1][0])
     # Binning makes other pixels, exactly: that is no change of what the optics do.
     regridded = before.size != after.size
-    scale = 0.0 if regridded else abs(abs(after.pixel_to_stage[0][0]) / pixel - 1.0)
+    # A turn or a flip of the image changes a pixel's direction, not its size: that counts too.
+    scale = (
+        0.0
+        if regridded
+        else max(
+            abs(new - old)
+            for was, now in zip(before.pixel_to_stage, after.pixel_to_stage)
+            for old, new in zip(was, now)
+        )
+        / pixel
+    )
     changes = {
         "pixels": float(abs(before.size[0] - after.size[0])),
         "position": max(
@@ -119,6 +130,34 @@ def impacts(instrument: Instrument, state: Mapping[str, Any]) -> list[dict[str, 
                     }
                 )
     return rows
+
+
+def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
+    """What a calibration of each detector depends on: the variables found to change its pixels.
+
+    A pixel's size or direction, or how many pixels there are, measured under every combination of
+    swaps. Where the image lands too, for a swap: a move shifts the image by what it is for, while
+    a swap that shifts it puts the same pixel somewhere else.
+    """
+    found: dict[str, set[str]] = {detector: set() for detector in instrument.detectors()}
+    key = instrument.simulation_key()
+    states = [s for s in instrument.swap_states() if s[key] == instrument.settings.simulation]
+    for state in states:
+        for detector in instrument.detectors():
+            before = traced_answer(instrument, detector, state)
+            for name, variable in instrument.variables.items():
+                if variable.verb == "swaps":
+                    nudges = [slot for slot in variable.slots if slot > state[name]]
+                    matter = {"scale", "pixels", "position"}
+                else:
+                    assert variable.step is not None
+                    nudges = [state[name] + variable.step]
+                    matter = {"scale", "pixels"}
+                for nudge in nudges:
+                    after = traced_answer(instrument, detector, {**state, name: nudge})
+                    if matter & set(difference(before, after)):
+                        found[detector].add(name)
+    return {detector: frozenset(names) for detector, names in found.items()}
 
 
 def compile_instrument(instrument: Instrument, errors: tracing.Errors | None = None) -> Compiled:

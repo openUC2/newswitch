@@ -30,7 +30,7 @@ CORE_STATES = {
     "HookState",
     "ExpanseState",
     "CalibrationState",
-    "LightPathState",
+    "OpticsState",
 }
 
 
@@ -129,8 +129,8 @@ def test_a_camera_alone_acquires(settings: Settings) -> None:
 
     built = build_microscope(settings, spec.load(CAM_TEST))
     assert built.detector is not None and built.acquisition is not None
-    assert [[k.kube_id for k in p.kubes] for p in built.light_path.state.light_paths] == [
-        ["detector_1"]
+    assert [[e.name for e in p.path.elements] for p in built.optics.state.detectors.values()] == [
+        ["sample", "lens_a", "lens_b", "sim_cam"]
     ]
 
     frames = capture_image(built.detector, built.acquisition)

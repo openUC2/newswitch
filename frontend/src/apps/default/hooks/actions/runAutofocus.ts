@@ -5,10 +5,13 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const RunAutofocusArgsSchema = z.object({
-  /** Total sweep range in micrometers, centered on the current Z. */
+  /** Total sweep range in micrometers, centered on the current Z. By default, from
+how deep the detector's objective sees sharply. */
   z_range: z
     .number()
-    .describe('Total sweep range in micrometers, centered on the current Z.')
+    .describe(
+      "Total sweep range in micrometers, centered on the current Z. By default, from\nhow deep the detector's objective sees sharply.",
+    )
     .nullable()
     .optional(),
   /** Number of Z planes to score (>= 3). */

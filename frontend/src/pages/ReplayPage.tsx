@@ -5,7 +5,7 @@ import { SceneWrapper } from "@/components/stage/Expanse";
 import { SceneOverlay } from "@/components/stage/overlays/SceneOverlay";
 import { PanelProvider } from "@/components/stage/PanelProvider";
 import { FramePanel } from "@/components/stage/panels/FramePanel";
-import { KubeStatePanel } from "@/components/stage/panels/KubeStatePanel";
+import { ElementPanel } from "@/components/stage/panels/ElementPanel";
 import { CurrentLightPathPlane } from "@/components/stage/planes/lightpath/LightPathPlane";
 
 export function ReplayPage() {
@@ -26,7 +26,7 @@ export function ReplayPage() {
           <CameraController />
         </SceneWrapper>
 
-        <KubeStatePanel />
+        <ElementPanel />
 
         <FramePanel />
 

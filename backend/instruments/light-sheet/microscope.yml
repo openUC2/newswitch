@@ -85,7 +85,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@2
+  catalog: newswitch@3
   bloks:
     view-sheet:
       description: 'Sheet: the sheet through the sample, the live plane, and where z is.'
@@ -341,9 +341,11 @@ ui:
                             <ImagesLayer />
                             <LivesLayer />
                             <FrameLightPathLayer />
+                            <LightPathLayer />
                             <StagePositioner />
                             <RectangleDrawer />
                         </StageScene>
+                        <ElementPanel />
                         <ScanRegionPanel />
                         <ImageMetadataPanel />
                         <FramePanel />

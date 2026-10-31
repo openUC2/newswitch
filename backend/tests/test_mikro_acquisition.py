@@ -124,7 +124,7 @@ def run(
             file_name=f"test {uuid.uuid4().hex[:8]}",
         ),
         MikroDatasetStore(mikro, described, m),
-        m.light_path,
+        m.optics,
         m.detector,
         m.stage,
         m.illumination,

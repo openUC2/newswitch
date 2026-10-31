@@ -5,6 +5,7 @@ A virtual stage/positioner manager for microscopy simulation.
 Handles X, Y, Z, and A (angle) positioning.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
 
@@ -52,6 +53,9 @@ class VirtualStageManager:
     PSF computation for defocus simulation.
     Implements the StageManager protocol.
     """
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     state: StageState
 
@@ -149,6 +153,7 @@ class VirtualStageManager:
             if task is not None:
                 task.progress(int((step + 1) / num_steps * 100))
 
+        self.on_change()
         return None
 
     def move_home(self) -> None:

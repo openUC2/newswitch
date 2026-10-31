@@ -5,6 +5,7 @@ A virtual illumination manager for microscopy simulation.
 Supports multiple channels with independent intensity and wavelength control.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -50,6 +51,9 @@ class VirtualLEDManager:
     Provides multi-channel intensity control with wavelength settings.
     Implements the IlluminationManager protocol.
     """
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     def __init__(
         self,
@@ -98,6 +102,7 @@ class VirtualLEDManager:
 
         clamped_intensity = max(source.min_intensity, min(intensity, source.max_intensity))
         source.intensity = clamped_intensity
+        self.on_change()
         return clamped_intensity
 
     def turn_on(self, channel: int = 1, intensity: Optional[float] = None) -> str:
@@ -120,6 +125,7 @@ class VirtualLEDManager:
             clamped_intensity = max(source.min_intensity, min(intensity, source.max_intensity))
             source.intensity = clamped_intensity
 
+        self.on_change()
         return f"Channel {channel} turned on at intensity {source.intensity}."
 
     def turn_off_channel(self, channel: int) -> str:
@@ -137,6 +143,7 @@ class VirtualLEDManager:
             raise ValueError(f"Unknown channel: {channel}")
 
         source.is_active = False
+        self.on_change()
         return f"Channel {channel} turned off."
 
     def background(self) -> None:

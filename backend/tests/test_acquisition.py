@@ -27,11 +27,11 @@ def calibrated(microscope: Microscope) -> Microscope:
         if detector.slot != 1:
             microscope.detector.deactivate_detector(detector.slot)
     path = microscope.metadata.get_current_state_for_light_path(
-        microscope.light_path.get_light_path_for_detector(1)
+        microscope.optics.get_light_path_for_detector(1)
     )
     microscope.calibration.set_calibrated_state(
         CalibratedLightPath(
-            light_path_state_hash=path.transformation_hash,
+            key=path.key,
             affine_matrix=[
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -85,7 +85,7 @@ def run(built: Microscope, config: MultidimensionalAcquisition, store: Store | N
         config=config,
         store=store or Store(),
         task=Task.local(),
-        light_path_manager=built.light_path,
+        optics_manager=built.optics,
         detector_manager=built.detector,
         stage_manager=built.stage,
         illumination_manager=built.illumination,

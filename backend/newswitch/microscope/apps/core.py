@@ -15,13 +15,13 @@ from newswitch.protocols.dataset_store import DatasetStore
 from newswitch.protocols.expanse import ExpanseManager
 from newswitch.protocols.hook_manager import HookManager
 from newswitch.protocols.io import IOManager
-from newswitch.protocols.light_path import LightPathManager
+from newswitch.protocols.optics import OpticsManager
 from newswitch.protocols.metadata import MetadataManager
 from newswitch.states.calibration import CalibrationState
 from newswitch.states.expanse import ExpanseState
 from newswitch.states.hooks import HookState
 from newswitch.states.io import IOState
-from newswitch.states.light_path import LightPathState
+from newswitch.states.optics import OpticsState
 
 app = App("newswitch", app_context=Run)
 app.registry.merge(models.app.registry)
@@ -30,12 +30,12 @@ app.register_state(IOState, required_locks=[locks.IO])
 app.register_state(HookState, required_locks=[locks.HOOKS])
 app.register_state(ExpanseState, required_locks=[locks.EXPANSE])
 app.register_state(CalibrationState)
-app.register_state(LightPathState)
+app.register_state(OpticsState)
 app.register_context(IOManager, locks=[locks.IO])
 app.register_context(HookManager, locks=[locks.HOOKS])
 app.register_context(ExpanseManager, locks=[locks.EXPANSE])
 app.register_context(CalibrationManager)
-app.register_context(LightPathManager)
+app.register_context(OpticsManager)
 app.register_context(MetadataManager)
 app.register_context(CacheManager, locks=[locks.CACHE])
 app.register_context(FrameSink)  # provided by the entrypoint
@@ -53,8 +53,8 @@ async def provide_core(
     ExpanseManager,
     CalibrationState,
     CalibrationManager,
-    LightPathState,
-    LightPathManager,
+    OpticsState,
+    OpticsManager,
     MetadataManager,
     CacheManager,
 ]:
@@ -69,8 +69,8 @@ async def provide_core(
         m.expanse,
         m.calibration_state,
         m.calibration,
-        m.light_path_state,
-        m.light_path,
+        m.optics_state,
+        m.optics,
         m.metadata,
         m.cache,
     )

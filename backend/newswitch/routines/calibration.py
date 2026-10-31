@@ -9,13 +9,14 @@ from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import AffineMatrix
 from newswitch.routines.common import field_of_view
 
-#: How far (um) the stage first moves in x and in y to find out the pixel scale.
-CALIBRATION_STEP_UM = 20.0
 #: How much of the frame the measuring move should shift the image by: long enough for a
 #: fraction of a pixel to be a small error, short enough to keep most of the image in common.
 SHIFT_OF_FRAME = 1 / 8
-#: How many times to try a four times longer move when the first ones do not shift the image.
-LONGER_MOVES = 3
+#: How long to try a first move, against the one that would shift the image by `SHIFT_OF_FRAME` as
+#: predicted. Short ones first: too short shifts nothing and says so, too long reads noise as a shift.
+TRIES = (1 / 4, 1 / 16, 1.0, 1 / 64, 4.0, 16.0)
+#: How far apart, as a share of a pixel's size, two measurements of it may be and still be believed.
+AGREEMENT = 0.05
 
 
 def _moves_and_frames(
@@ -45,40 +46,45 @@ def _measure(
     stage_manager: protocols.StageManager,
     detector_manager: protocols.DetectorManager,
     detector: Detector,
+    predicted_um_per_px: float,
 ) -> AffineMatrix:
     """The pixel-to-stage affine of `detector`, from moves sized to its pixel scale.
 
-    How long a move has to be depends on the pixel scale, which is what is being measured: a
-    first short move finds it out, and a second one, sized to the frame, measures it.
+    How long a move has to be depends on the pixel scale, which is what is being measured: a first
+    move, sized by what the optics predict, finds it out, and a second one, sized to the frame,
+    measures it. Only if the two agree is that believed, as a sample with too little structure can
+    shift the wrong way by any amount.
 
     Raises:
         ValueError: No move shifted the image in a way that tells the pixel scale.
     """
     stage = stage_manager.state
 
-    def measured(step: float) -> AffineMatrix:
+    def measured(step: float) -> np.ndarray:
         step_x = _within_travel(stage.x, stage.min_x, stage.max_x, step)
         step_y = _within_travel(stage.y, stage.min_y, stage.max_y, step)
         frames = _moves_and_frames(stage_manager, detector_manager, detector.slot, step_x, step_y)
-        return calibrate_pixel_to_stage(*frames, step_x, step_y)
+        return np.array(calibrate_pixel_to_stage(*frames, step_x, step_y))
 
-    step = CALIBRATION_STEP_UM
-    for attempt in range(LONGER_MOVES + 1):
+    def sized(um_per_px: float) -> float:
+        return SHIFT_OF_FRAME * min(detector.width, detector.height) * um_per_px
+
+    problem = "the moves did not agree on it"
+    for share in TRIES:
         try:
-            first = measured(step)
-            break
-        except ValueError:
-            if attempt == LONGER_MOVES:
-                raise
-            step *= 4.0
-    um_per_px = float(np.hypot(first[0][0], first[1][0]))
-    wanted = SHIFT_OF_FRAME * min(detector.width, detector.height) * um_per_px
-    # Too short, and a fraction of a pixel is a large error. Too long, and little is left in common.
-    return first if 0.5 * wanted <= step <= 2.0 * wanted else measured(wanted)
+            first = measured(sized(predicted_um_per_px) * share)
+            um_per_px = float(np.hypot(first[0][0], first[1][0]))
+            second = measured(sized(um_per_px))
+        except ValueError as error:
+            problem = str(error)
+            continue
+        if np.abs(second - first).max() <= AGREEMENT * um_per_px:
+            return second.tolist()
+    raise ValueError(f"The pixel scale of {detector.name} cannot be determined: {problem}")
 
 
 def calibrate_light_path(
-    light_path_manager: protocols.LightPathManager,
+    optics_manager: protocols.OpticsManager,
     metadata_manager: protocols.MetadataManager,
     calibration_manager: protocols.CalibrationManager,
     stage_manager: protocols.StageManager,
@@ -99,10 +105,12 @@ def calibrate_light_path(
     for detector in detector_state.detectors:
         if not detector.is_active:
             continue
-        affine_matrix = _measure(stage_manager, detector_manager, detector)
-
-        light_path = light_path_manager.get_light_path_for_detector(detector_slot=detector.slot)
+        light_path = optics_manager.get_light_path_for_detector(detector_slot=detector.slot)
         light_path_state = metadata_manager.get_current_state_for_light_path(light_path)
+        known = metadata_manager.get_metadata_for_light_path(light_path).affine_matrix
+        affine_matrix = _measure(
+            stage_manager, detector_manager, detector, float(np.hypot(known[0][0], known[1][0]))
+        )
 
         fov_width, fov_height = field_of_view(
             detector,
@@ -112,7 +120,7 @@ def calibrate_light_path(
 
         # Store the calculated affine matrix in the calibration manager's state
         calibrated_light_path = CalibratedLightPath(
-            light_path_state_hash=light_path_state.transformation_hash,
+            key=light_path_state.key,
             affine_matrix=affine_matrix,
             fov_width=fov_width,
             fov_height=fov_height,

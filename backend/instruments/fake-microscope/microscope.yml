@@ -140,7 +140,7 @@ settings:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@2
+  catalog: newswitch@3
   bloks:
     view-fluorescence:
       description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
@@ -425,10 +425,12 @@ ui:
                     <div className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-3 py-2">
                         <span className="size-2 rounded-full bg-success shadow-[0_0_10px_2px] shadow-success/60" />
                         <span className="text-sm font-medium">{filter.name}</span>
-                        <span className="ml-auto text-xs tabular-nums text-muted-foreground">{filter.center_wavelength}/{filter.bandwidth} nm</span>
+                        <if when={filter.center_wavelength > 0}>
+                            <span className="ml-auto text-xs tabular-nums text-muted-foreground">{filter.center_wavelength}/{filter.bandwidth} nm</span>
+                        </if>
                     </div>
                 <else>
-                    <Button variant="ghost" fullWidth={true} className="justify-start rounded-xl" onClick={self.switch_filter(slot: filter.slot)}>{filter.name} · {filter.center_wavelength}/{filter.bandwidth} nm</Button>
+                    <Button variant="ghost" fullWidth={true} className="justify-start rounded-xl" onClick={self.switch_filter(slot: filter.slot)}>{filter.name}</Button>
                 </else>
                 </if>
             </foreach>
@@ -526,9 +528,11 @@ ui:
                             <ImagesLayer />
                             <LivesLayer />
                             <FrameLightPathLayer />
+                            <LightPathLayer />
                             <StagePositioner />
                             <RectangleDrawer />
                         </StageScene>
+                        <ElementPanel />
                         <ScanRegionPanel />
                         <ImageMetadataPanel />
                         <FramePanel />

@@ -8,11 +8,13 @@ import { RectangleDrawer } from "@/components/stage/interactions/RectangleDrawer
 import { StagePositioner } from "@/components/stage/interactions/StagePositioner";
 import { FramesPlane } from "@/components/stage/planes/FramesPlane";
 import { ImagesPlane } from "@/components/stage/planes/ImagesPlane";
-import { CurrentFrameLightPathPlane } from "@/components/stage/planes/LightPathStatePlane";
 import { LivesPlane } from "@/components/stage/planes/LivesPlane";
 import { StageAxis } from "@/components/stage/planes/StageAxis";
 import { StagePlane } from "@/components/stage/planes/StagePlane";
-import { CurrentLightPathPlane } from "@/components/stage/planes/lightpath/LightPathPlane";
+import {
+  CurrentFrameLightPathPlane,
+  CurrentLightPathPlane,
+} from "@/components/stage/planes/lightpath/LightPathPlane";
 import {
   createBlokComponent,
   type BlokComponentDefinition,

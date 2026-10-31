@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def scan_region(
-    light_path_manager: protocols.LightPathManager,
+    optics_manager: protocols.OpticsManager,
     acquisition_manager: protocols.AcquisitionManager,
     metadata_manager: protocols.MetadataManager,
     detector_manager: protocols.DetectorManager,
@@ -61,7 +61,7 @@ def scan_region(
             raise ValueError("No active detectors found.")
         current_detector = active_detectors[0]
 
-    current_light_path = light_path_manager.get_light_path_for_detector(
+    current_light_path = optics_manager.get_light_path_for_detector(
         detector_slot=current_detector.slot
     )
     metadata = metadata_manager.get_metadata_for_light_path(current_light_path)

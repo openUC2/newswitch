@@ -10,6 +10,7 @@ flows back into ``StageState`` via the UC2 event dispatcher (see
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -35,6 +36,9 @@ class UC2StageConfig:
 
 class UC2StageManager:
     """Stage manager driving openUC2 motors through the UC2 bus."""
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     state: StageState
 
@@ -71,6 +75,7 @@ class UC2StageManager:
         the affected axes on the hardware.
         """
         unkoil(self._amove, x, y, z, a, is_absolute)
+        self.on_change()
 
     async def _amove(
         self,

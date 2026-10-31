@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { createSelectionStore, SelectionStoreContext } from "./imageStore";
-import { createKubeStateStore, KubeStateStoreContext } from "./kubeStateStore";
-import { createKubeStore, KubeStoreContext } from "./kubeStore";
+import { createElementStore, ElementStoreContext } from "./elementStore";
 import { createModeStore, ModeStoreContext } from "./modeStore";
 import { createScansStore, ScansStoreContext } from "./scansStore";
 import { createTimeStore, TimeStoreContext } from "./timeStore";
@@ -14,8 +13,7 @@ export interface LocalStoreBundle {
   viewStore: ReturnType<typeof createViewStore>;
   viewerStore: ReturnType<typeof createViewerStore>;
   scansStore: ReturnType<typeof createScansStore>;
-  kubeStore: ReturnType<typeof createKubeStore>;
-  kubeStateStore: ReturnType<typeof createKubeStateStore>;
+  elementStore: ReturnType<typeof createElementStore>;
   selectionStore: ReturnType<typeof createSelectionStore>;
   timeStore: ReturnType<typeof createTimeStore>;
 }
@@ -25,8 +23,7 @@ const createLocalStoreBundle = (): LocalStoreBundle => ({
   viewStore: createViewStore(),
   viewerStore: createViewerStore(),
   scansStore: createScansStore(),
-  kubeStore: createKubeStore(),
-  kubeStateStore: createKubeStateStore(),
+  elementStore: createElementStore(),
   selectionStore: createSelectionStore(),
   timeStore: createTimeStore(),
 });
@@ -61,15 +58,13 @@ export function LocalStoreProvider({
       <ViewStoreContext.Provider value={stores.viewStore}>
         <ViewerStoreContext.Provider value={stores.viewerStore}>
           <ScansStoreContext.Provider value={stores.scansStore}>
-            <KubeStoreContext.Provider value={stores.kubeStore}>
-              <KubeStateStoreContext.Provider value={stores.kubeStateStore}>
-                <SelectionStoreContext.Provider value={stores.selectionStore}>
-                  <TimeStoreContext.Provider value={stores.timeStore}>
-                    {children}
-                  </TimeStoreContext.Provider>
-                </SelectionStoreContext.Provider>
-              </KubeStateStoreContext.Provider>
-            </KubeStoreContext.Provider>
+            <ElementStoreContext.Provider value={stores.elementStore}>
+              <SelectionStoreContext.Provider value={stores.selectionStore}>
+                <TimeStoreContext.Provider value={stores.timeStore}>
+                  {children}
+                </TimeStoreContext.Provider>
+              </SelectionStoreContext.Provider>
+            </ElementStoreContext.Provider>
           </ScansStoreContext.Provider>
         </ViewerStoreContext.Provider>
       </ViewStoreContext.Provider>

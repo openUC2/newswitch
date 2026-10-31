@@ -7,6 +7,7 @@ bus (CANopen or serial).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -33,6 +34,9 @@ class UC2IlluminationConfig:
 
 class UC2IlluminationManager:
     """Illumination manager driving openUC2 laser/LED channels via the UC2 bus."""
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     def __init__(
         self,
@@ -68,6 +72,7 @@ class UC2IlluminationManager:
         unkoil(self.bus.aset_laser, channel, self._to_pwm(source, intensity))
         source.intensity = intensity
         source.is_active = intensity > source.min_intensity
+        self.on_change()
         return intensity
 
     def turn_on(self, channel: int = 1, intensity: Optional[float] = None) -> str:
@@ -87,6 +92,7 @@ class UC2IlluminationManager:
         unkoil(self.bus.aset_laser, channel, 0)
         source.is_active = False
         source.intensity = source.min_intensity
+        self.on_change()
         return f"Channel {channel} off"
 
     # -- LED matrix convenience (not part of the protocol yet) -------------------

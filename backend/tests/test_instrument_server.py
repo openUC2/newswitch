@@ -302,7 +302,7 @@ def test_the_real_calibration_finds_what_the_description_does_not_say(
     assert microscope.stage is not None and microscope.detector is not None
     laser_only(microscope)
     paths = calibrate_light_path(
-        microscope.light_path,
+        microscope.optics,
         microscope.metadata,
         microscope.calibration,
         microscope.stage,
@@ -320,13 +320,13 @@ def test_calibrating_does_not_flip_an_image(microscope: Microscope) -> None:
     laser_only(microscope)
 
     def scales(slot: int) -> np.ndarray:
-        path = microscope.light_path.get_light_path_for_detector(slot)
+        path = microscope.optics.get_light_path_for_detector(slot)
         matrix = microscope.metadata.get_metadata_for_light_path(path).affine_matrix
         return np.array([matrix[0][0], matrix[1][1]])
 
     predicted = {slot: scales(slot) for slot in (1, 2)}
     calibrate_light_path(
-        microscope.light_path,
+        microscope.optics,
         microscope.metadata,
         microscope.calibration,
         microscope.stage,
@@ -343,7 +343,7 @@ def test_an_uncalibrated_image_is_placed_by_what_the_design_predicts(
     """Each camera by its own tube lens: the objective alone cannot say."""
     a, b = (
         microscope.metadata.get_metadata_for_light_path(
-            microscope.light_path.get_light_path_for_detector(slot)
+            microscope.optics.get_light_path_for_detector(slot)
         )
         for slot in (1, 2)
     )

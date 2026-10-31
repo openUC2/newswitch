@@ -5,6 +5,7 @@ A virtual objective lens manager for microscopy simulation.
 Handles objective switching with magnification and binning simulation.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -63,6 +64,9 @@ class VirtualObjectiveManager:
     Implements the ObjectiveManager protocol.
     """
 
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
+
     def __init__(
         self,
         objective_state: ObjectiveState,
@@ -93,6 +97,7 @@ class VirtualObjectiveManager:
         self.objective_state.slot = obj.slot
         self.objective_state.magnification = obj.magnification
         self.objective_state.name = obj.name
+        self.on_change()
 
         return obj
 

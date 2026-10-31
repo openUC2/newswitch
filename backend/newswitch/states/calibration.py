@@ -15,8 +15,6 @@ class CalibrationState:
     def get_calibrated_path(self, light_path_state: LightPathSnapshot) -> CalibratedLightPath:
         """Get the calibrated light path for a given light path configuration."""
         for calibrated_light_path in self.calibrated_light_paths:
-            if calibrated_light_path.light_path_state_hash == light_path_state.transformation_hash:
+            if calibrated_light_path.key == light_path_state.key:
                 return calibrated_light_path
-        raise ValueError(
-            f"No calibrated light path found for light path {light_path_state.transformation_hash}"
-        )
+        raise ValueError(f"No calibrated light path found for light path {light_path_state.key}")

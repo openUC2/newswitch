@@ -8,7 +8,7 @@ from .filter_bank import FilterBankState
 from .hooks import HookState
 from .illumination import IlluminationState
 from .io import IOState
-from .light_path import LightPathState
+from .optics import OpticsState
 from .objective import ObjectiveState
 from .stage import StageState
 from .uc2 import UC2State
@@ -22,7 +22,7 @@ __all__ = [
     "HookState",
     "IOState",
     "IlluminationState",
-    "LightPathState",
+    "OpticsState",
     "ObjectiveState",
     "StageState",
     "UC2State",

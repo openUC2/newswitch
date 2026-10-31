@@ -97,7 +97,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@2
+  catalog: newswitch@3
   bloks:
     view-flim:
       description: 'FLIM: the photons per pixel, summed over arrival time, and the stage.'

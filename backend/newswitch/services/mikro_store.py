@@ -101,13 +101,8 @@ def light_graph(
     instrument: Instrument, channel: AcquiredChannel, state: Mapping[str, Any]
 ) -> LightpathGraphInput:
     """The way light took to `channel`: its sources to the sample, the sample to its detector."""
-    sample = instrument.sample_cube()
-    routes = [
-        route
-        for source in channel.sources
-        for route in instrument.routes(instrument.illumination, source, sample)
-    ] + instrument.routes(instrument.detection, sample, channel.detector)
-    hops = list(dict.fromkeys((edge.source, edge.target) for route in routes for edge in route))
+    edges = instrument.edges_to(channel.detector, channel.sources)
+    hops = list(dict.fromkeys((edge.source, edge.target) for edge in edges))
     names = list(dict.fromkeys(name for hop in hops for name in hop))
     return LightpathGraphInput(
         elements=[_optical_element(instrument, name, state) for name in names],

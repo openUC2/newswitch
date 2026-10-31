@@ -8,6 +8,7 @@ between calibrated slot positions. Both are hidden behind
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -46,6 +47,9 @@ class UC2ObjectiveConfig:
 class UC2ObjectiveManager:
     """Objective manager driving the openUC2 objective changer via the UC2 bus."""
 
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
+
     def __init__(
         self,
         objective_state: ObjectiveState,
@@ -76,6 +80,7 @@ class UC2ObjectiveManager:
             raise ValueError(f"Objective slot {slot} not configured (have {slots})")
         unkoil(self.bus.aobjective_move, slot)
         self._apply_slot(slot)
+        self.on_change()
 
     def toggle_objective(self) -> None:
         """Toggle to the next mounted objective (protocol method)."""

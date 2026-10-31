@@ -12,7 +12,7 @@ of it) numbers its images.
 
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -164,6 +164,9 @@ class VirtualDetectorManager:
     - Optional PSF convolution for defocus simulation
     - Realistic noise models (Poisson + read noise)
     """
+
+    #: Called once a value of this part has changed.
+    on_change: Callable[[], None] = staticmethod(lambda: None)
 
     state: CameraState
 
@@ -794,6 +797,7 @@ class VirtualDetectorManager:
                     None if frame_rate == 0 else self._clamp(frame_rate, *FRAME_RATE_RANGE)
                 )
 
+        self.on_change()
         return detector
 
     def get_detector_state(self, slot: int) -> Optional[Detector]:

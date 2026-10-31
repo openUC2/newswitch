@@ -114,7 +114,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@2
+  catalog: newswitch@3
   bloks:
     view-fluorescence:
       description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
@@ -479,9 +479,11 @@ ui:
                             <ImagesLayer />
                             <LivesLayer />
                             <FrameLightPathLayer />
+                            <LightPathLayer />
                             <StagePositioner />
                             <RectangleDrawer />
                         </StageScene>
+                        <ElementPanel />
                         <ScanRegionPanel />
                         <ImageMetadataPanel />
                         <FramePanel />
