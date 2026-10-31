@@ -130,7 +130,7 @@ class Simulator:
 
         # the filter's wedge shifts the whole image on the sensor
         wedge = self.truth.get("filter_wedge_px")
-        if wedge and state.get("filter-wheel.slot") == wedge["slot"]:
+        if wedge and state.get("filter_wheel.slot") == wedge["slot"]:
             columns = columns - wedge["shift"][0]
             rows = rows - wedge["shift"][1]
         centred = np.stack([columns - (width - 1) / 2, rows - (height - 1) / 2])

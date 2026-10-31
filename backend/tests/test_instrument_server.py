@@ -99,7 +99,7 @@ def test_it_has_the_parts_its_elements_say() -> None:
 def test_the_models_come_from_the_description(microscope: Microscope) -> None:
     """Sensor sizes off the axes, objectives and filters by their slots, sources by power."""
     first, second = microscope.camera_state.detectors
-    assert (first.name, second.name) == ("camera-a", "camera-b")
+    assert (first.name, second.name) == ("camera_a", "camera_b")
     assert (first.width, first.height, first.sensor_width) == (512, 512, 512)
     assert first.current_exposure_time == pytest.approx(0.1)
     assert [lens.name for lens in microscope.objective_state.mounted_lenses] == [

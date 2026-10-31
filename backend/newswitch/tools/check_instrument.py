@@ -79,9 +79,9 @@ def main(argv: list[str] | None = None) -> None:
     print("\n=== What impacts what: calculated, nothing declared this")
     for row in impacts(instrument, instrument.initial_state()):
         if (
-            "camera-a" in instrument.detectors()
-            and row["detector"] != "camera-a"
-            and row["variable"] not in ("camera-b.exposure", "tube-a.dz")
+            "camera_a" in instrument.detectors()
+            and row["detector"] != "camera_a"
+            and row["variable"] not in ("camera_b.exposure", "tube_a.dz")
         ):
             continue
         changes = ", ".join(f"{k} {v:.3g}" for k, v in row["changes"].items()) or "nothing"
@@ -107,12 +107,12 @@ def main(argv: list[str] | None = None) -> None:
                 f"{channel.light_per_mw:.4g} per mW at {channel.band_nm:.0f} nm"
             )
 
-    if "camera-a" not in instrument.detectors():
+    if "camera_a" not in instrument.detectors():
         return  # what follows compares the fake microscope's parts with its hidden errors
 
     print("\n=== What each detector will see, from the table")
     for slot in (1, 2):
-        current = {**state, "filter-wheel.slot": slot}
+        current = {**state, "filter_wheel.slot": slot}
         for detector in instrument.detectors():
             answer = compiled.answer(detector, current)
             pixel = abs(answer.pixel_to_stage[0][0])
@@ -130,13 +130,13 @@ def main(argv: list[str] | None = None) -> None:
             d: {s: round(c["light_per_mw"], 4) for s, c in entry[d]["coupling"].items()}
             for d in entry
         }
-        print(f"  {key}: {row['camera-a']}")
+        print(f"  {key}: {row['camera_a']}")
 
     microscope = SimulatedMicroscope(instrument)
     print("\n=== Measure the fake images with newswitch's own calibration code")
     print(f"  {'':22} {'predicted':>10} {'measured':>10}")
     for detector in instrument.detectors():
-        microscope.set({"filter-wheel.slot": 1})
+        microscope.set({"filter_wheel.slot": 1})
         predicted = abs(compiled.answer(detector, microscope.state).pixel_to_stage[0][0])
         size, turn = measure(microscope, detector)
         mismatch = (size / predicted - 1.0) * 100.0
@@ -152,9 +152,9 @@ def main(argv: list[str] | None = None) -> None:
 
     print("\n=== Swap the filter: the design says the image cannot move")
     for detector in instrument.detectors():
-        microscope.set({"filter-wheel.slot": 1})
+        microscope.set({"filter_wheel.slot": 1})
         before = microscope.image(detector)
-        microscope.set({"filter-wheel.slot": 2})
+        microscope.set({"filter_wheel.slot": 2})
         after = microscope.image(detector)
         save(out, f"{detector}-filter2", after)
         shift = pixel_shift(before, after)
@@ -164,16 +164,16 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     print("\n=== A black image, predicted before taking it: the LED through the green filter")
-    microscope.set({"filter-wheel.slot": 2, "laser-488.power": 0.0, "led-625.power": 2.0})
-    answer = compiled.answer("camera-a", microscope.state)
-    frame = microscope.image("camera-a")
+    microscope.set({"filter_wheel.slot": 2, "laser_488.power": 0.0, "led_625.power": 2.0})
+    answer = compiled.answer("camera_a", microscope.state)
+    frame = microscope.image("camera_a")
     print(
         f"  predicted {answer.light:.1f} counts, black: {answer.black}; "
         f"image mean {frame.mean() - 100:.1f} above the offset"
     )
-    microscope.set({"filter-wheel.slot": 1})
-    answer = compiled.answer("camera-a", microscope.state)
-    save(out, "camera-a-transmitted", microscope.image("camera-a"))
+    microscope.set({"filter_wheel.slot": 1})
+    answer = compiled.answer("camera_a", microscope.state)
+    save(out, "camera-a-transmitted", microscope.image("camera_a"))
     print(f"  filter open: predicted {answer.light:.0f} counts, black: {answer.black}")
 
     print("\n=== The truth, now that everyone has answered")

@@ -184,7 +184,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
    uv run python -c "from newswitch.instrument import spec; print(spec.load('instruments/cam-test').detectors())"
    ```
 
-   It should print `['sim-cam']`.
+   It should print `['sim_cam']`.
 2. Run the automated camera tests. They use the same simulated camera and never open a window:
 
    ```bash
@@ -204,7 +204,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 5. Optional: run `just dev-frontend`. After login, the live view shows the same camera in the
    browser, next to the debug window. Capturing works too: the light path holds only the parts
    the microscope has (here just the detector).
-6. Optional: record to disk. Set `store_image_data: true` for `sim-cam` in
+6. Optional: record to disk. Set `store_image_data: true` for `sim_cam` in
    `instruments/cam-test/microscope.yml` and restart. Each acquisition session is written as a `.uc2rb`
    file plus a `.json` sidecar to `backend/data/recordings/`. Because the debug window keeps
    the camera running, this records continuously, about 12 MB/s here.

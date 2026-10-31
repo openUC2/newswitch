@@ -8,12 +8,12 @@ spec: newswitch/instrument/v0
 name: dual-camera
 
 cubes:
-  laser-488:
+  laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
       power: {actuator: laser-dac, initial: 0.0, step: 1.0, units: mW}
 
-  led-625:
+  led_625:
     element: {kind: source, wavelength: 625 nm, width: 15 nm, max_power: 2 mW}
     tunes:
       power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
@@ -45,13 +45,13 @@ cubes:
   splitter:
     element: {kind: splitter, reflect: 0.5, transmit: 0.5}
 
-  filter-green:
+  filter_green:
     element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
 
-  tube-green:
+  tube_green:
     element: {kind: lens, f: 200 mm}
 
-  camera-green:
+  camera_green:
     element:
       kind: sensor
       axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
@@ -60,13 +60,13 @@ cubes:
       gain: {initial: 0.0, step: 1.0, units: dB}
       binning: {initial: 1, step: 1}
 
-  filter-red:
+  filter_red:
     element: {kind: filter, name: BP 625/50, center: 625 nm, width: 50 nm}
 
-  tube-red:
+  tube_red:
     element: {kind: lens, f: 200 mm}
 
-  camera-red:
+  camera_red:
     element:
       kind: sensor
       axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
@@ -76,30 +76,30 @@ cubes:
       binning: {initial: 1, step: 1}
 
 illumination:
-  - {from: laser-488, to: dichroic}
+  - {from: laser_488, to: dichroic}
   - {from: dichroic, via: reflect, to: objective}
   - {from: objective, to: stage, side: epi}
-  - {from: led-625, to: stage, side: transmitted}
+  - {from: led_625, to: stage, side: transmitted}
 
 detection:
   - {from: stage, to: objective, distance: focus}
   - {from: objective, to: dichroic, distance: 100 mm}
   - {from: dichroic, via: transmit, to: splitter, distance: 30 mm}
-  - {from: splitter, via: transmit, to: filter-green, distance: 30 mm}
-  - {from: filter-green, to: tube-green, distance: 30 mm}
-  - {from: tube-green, to: camera-green, distance: focus}
-  - {from: splitter, via: reflect, to: filter-red, distance: 30 mm}
-  - {from: filter-red, to: tube-red, distance: 30 mm}
-  - {from: tube-red, to: camera-red, distance: focus}
+  - {from: splitter, via: transmit, to: filter_green, distance: 30 mm}
+  - {from: filter_green, to: tube_green, distance: 30 mm}
+  - {from: tube_green, to: camera_green, distance: focus}
+  - {from: splitter, via: reflect, to: filter_red, distance: 30 mm}
+  - {from: filter_red, to: tube_red, distance: 30 mm}
+  - {from: tube_red, to: camera_red, distance: focus}
 
 parts:
   stage: stage
   sources:
-    1: {cube: laser-488, full_intensity: 100.0}
-    2: {cube: led-625, full_intensity: 100.0}
+    1: {cube: laser_488, full_intensity: 100.0}
+    2: {cube: led_625, full_intensity: 100.0}
   detectors:
-    1: {cube: camera-green, frame_rate: 30 Hz}
-    2: {cube: camera-red, frame_rate: 30 Hz}
+    1: {cube: camera_green, frame_rate: 30 Hz}
+    2: {cube: camera_red, frame_rate: 30 Hz}
 
 settings:
   use_virtual_microscope: true

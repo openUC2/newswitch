@@ -10,12 +10,12 @@ spec: newswitch/instrument/v0
 name: fake-microscope
 
 cubes:
-  laser-488:
+  laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
       power: {actuator: laser-dac, initial: 20.0, step: 1.0, units: mW}
 
-  led-625:
+  led_625:
     element: {kind: source, wavelength: 625 nm, width: 15 nm, max_power: 2 mW}
     tunes:
       power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
@@ -50,7 +50,7 @@ cubes:
   dichroic:
     element: {kind: dichroic, cut: 500 nm}
 
-  filter-wheel:
+  filter_wheel:
     swaps:
       slot:
         actuator: wheel
@@ -62,13 +62,13 @@ cubes:
   splitter:
     element: {kind: splitter, reflect: 0.5, transmit: 0.5}
 
-  tube-a:
+  tube_a:
     # A real achromat, from its prescription; it can be focused.
     element: {kind: lens, prescription: lenses/AC254-100-A.optiland, clear_radius: 6 mm}
     moves:
       dz: {actuator: tube-focus, along: axis, initial: 0.0, step: 1000.0, units: um}
 
-  camera-a:
+  camera_a:
     element:
       kind: sensor
       axes: {x: {size: 512, pitch: 10 um}, y: {size: 512, pitch: 10 um}}
@@ -77,11 +77,11 @@ cubes:
       gain: {initial: 0.0, step: 1.0, units: dB}
       binning: {initial: 1, step: 1}
 
-  tube-b:
+  tube_b:
     # No prescription for this one: an ideal lens, so only its focal length is known.
     element: {kind: lens, f: 200 mm}
 
-  camera-b:
+  camera_b:
     element:
       kind: sensor
       axes: {x: {size: 512, pitch: 10 um}, y: {size: 512, pitch: 10 um}}
@@ -94,33 +94,33 @@ cubes:
 # walking these, so another detector is another few edges. `via` is how light leaves an element
 # with more than one way out; a distance of `focus` means the lens's own focal length.
 illumination:
-  - {from: laser-488, to: dichroic}
+  - {from: laser_488, to: dichroic}
   - {from: dichroic, via: reflect, to: objective}
   - {from: objective, to: stage, side: epi}
-  - {from: led-625, to: stage, side: transmitted}
+  - {from: led_625, to: stage, side: transmitted}
 
 detection:
   - {from: stage, to: objective, distance: focus}
   - {from: objective, to: dichroic, distance: 100 mm}
-  - {from: dichroic, via: transmit, to: filter-wheel, distance: 30 mm}
-  - {from: filter-wheel, to: splitter, distance: 30 mm}
-  - {from: splitter, via: transmit, to: tube-a, distance: 40 mm}
-  - {from: tube-a, to: camera-a, distance: 97.068 mm}
-  - {from: splitter, via: reflect, to: tube-b, distance: 40 mm}
-  - {from: tube-b, to: camera-b, distance: focus}
+  - {from: dichroic, via: transmit, to: filter_wheel, distance: 30 mm}
+  - {from: filter_wheel, to: splitter, distance: 30 mm}
+  - {from: splitter, via: transmit, to: tube_a, distance: 40 mm}
+  - {from: tube_a, to: camera_a, distance: 97.068 mm}
+  - {from: splitter, via: reflect, to: tube_b, distance: 40 mm}
+  - {from: tube_b, to: camera_b, distance: focus}
 
 # What the server has a control for, in which role, and by which slot. Nothing is inferred from the
 # optics: a sensor or source without a slot here is an error, and a swap with no role has no control.
 parts:
   stage: stage
   objective: {swap: objective.slot, reference_tube: 200 mm}
-  filters: {swap: filter-wheel.slot}
+  filters: {swap: filter_wheel.slot}
   sources:
-    1: {cube: laser-488, full_intensity: 100.0}
-    2: {cube: led-625, full_intensity: 100.0}
+    1: {cube: laser_488, full_intensity: 100.0}
+    2: {cube: led_625, full_intensity: 100.0}
   detectors:
-    1: {cube: camera-a, frame_rate: 30 Hz}
-    2: {cube: camera-b, frame_rate: 30 Hz}
+    1: {cube: camera_a, frame_rate: 30 Hz}
+    2: {cube: camera_b, frame_rate: 30 Hz}
 
 # How it runs. Relative folders are taken relative to backend/; db_path to the working directory.
 settings:

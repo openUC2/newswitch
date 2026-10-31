@@ -45,7 +45,7 @@ def test_its_thickness_and_reach_come_from_the_lens(
     instrument: spec.Instrument, table: Compiled
 ) -> None:
     """A Gaussian beam: nothing states them."""
-    sheet = table.answer("camera", instrument.initial_state()).sheet_by_source["laser-488"]
+    sheet = table.answer("camera", instrument.initial_state()).sheet_by_source["laser_488"]
     waist = 0.488 / (math.pi * 0.02)
     assert sheet["waist_um"] == pytest.approx(waist)
     assert sheet["rayleigh_um"] == pytest.approx(math.pi * waist**2 / 0.488)
@@ -56,7 +56,7 @@ def test_its_only_channel_is_fluorescence(instrument: spec.Instrument, table: Co
     """Across the camera's view no light reaches it directly, however much the sample lets through."""
     state = instrument.initial_state()
     channel = table.channels(state)[0]
-    assert (channel.source, channel.detector) == ("laser-488", "camera")
+    assert (channel.source, channel.detector) == ("laser_488", "camera")
     assert channel.band_nm == pytest.approx(517.0, abs=2.0)
     assert table.channels({**state, "stage.simulation": "empty-slide"}) == []
 
@@ -84,7 +84,7 @@ def test_the_image_fades_along_the_sheet_not_across_it(instrument: spec.Instrume
     """On an even slide: the two edges are equally far from the middle, so only the sheet differs."""
     answer = compile_instrument(instrument).answer("camera", instrument.initial_state())
     half = answer.field_of_view_um[0] / 2.0
-    rayleigh = answer.sheet_by_source["laser-488"]["rayleigh_um"]
+    rayleigh = answer.sheet_by_source["laser_488"]["rayleigh_um"]
     expected = 1.0 / math.sqrt(1.0 + (half / rayleigh) ** 2)
     assert expected < 0.95  # it has to be visible for this to mean anything
 
@@ -115,13 +115,13 @@ def test_calibrating_finds_the_predicted_pixel(
         (lambda d: d["illumination"][1].pop("along"), "a sheet has side: orthogonal"),
         (lambda d: d["illumination"][1].pop("side"), "a sheet has side: orthogonal"),
         (lambda d: d["illumination"][1].update(along="z"), "along"),
-        (lambda d: d["cubes"]["sheet-lens"]["element"].pop("na"), "a sheet comes from a lens"),
+        (lambda d: d["cubes"]["sheet_lens"]["element"].pop("na"), "a sheet comes from a lens"),
         (
             lambda d: (
                 d["cubes"].update({"other": {"element": {"kind": "lens", "f": 50.0, "na": 0.1}}}),
                 d["illumination"].extend(
                     [
-                        {"from": "laser-488", "to": "other"},
+                        {"from": "laser_488", "to": "other"},
                         {"from": "other", "to": "stage", "side": "orthogonal", "along": "y"},
                     ]
                 ),
@@ -141,7 +141,7 @@ def test_a_sheet_that_cannot_work_is_refused_when_parsed(
 def test_a_sheet_is_in_the_table_only_where_there_is_one(instrument: spec.Instrument) -> None:
     """Every other instrument's table stays as it was."""
     arriving = coupling(instrument, "camera", instrument.initial_state())
-    assert "sheet" in arriving["laser-488"]
+    assert "sheet" in arriving["laser_488"]
     other = spec.load(INSTRUMENT.parent / "dual-camera")
-    arriving = coupling(other, "camera-green", other.initial_state())
+    arriving = coupling(other, "camera_green", other.initial_state())
     assert all("sheet" not in entry for entry in arriving.values())

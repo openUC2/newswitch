@@ -18,7 +18,7 @@ compiler looks at::
         turret: {board: uc2, positions: {1: 0, 2: 20000}}
         laser-dac: {board: uc2, channel: 1, pwm_max: 1023}
       cameras:                   # by the cube of the sensor
-        camera-a: {protocol: usb3-vision, vendor: HikRobot, serial_number: "00F1"}
+        camera_a: {protocol: usb3-vision, vendor: HikRobot, serial_number: "00F1"}
 """
 
 from __future__ import annotations

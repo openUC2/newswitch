@@ -38,7 +38,7 @@ def stream() -> Streams:
     """The laser for the detector."""
     return Streams(
         detectors=["spad"],
-        illuminations=[StreamIllumination(source="laser-488", wavelength=488.0, intensity=1.0)],
+        illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
     )
 
 
@@ -67,7 +67,7 @@ def test_the_detector_delivers_arrival_time(instrument: spec.Instrument) -> None
 def test_the_stated_lifetime_can_be_fitted_back(instrument: spec.Instrument) -> None:
     """From the simulated histogram alone."""
     simulated = SimulatedMicroscope(instrument)
-    simulated.set({"laser-488.power": 5.0})
+    simulated.set({"laser_488.power": 5.0})
     histogram = simulated.simulator.render_microtime("spad", simulated.state)
     assert histogram.shape == (64, 512, 512)
     decay = histogram.sum(axis=(1, 2)).astype(float)
@@ -86,14 +86,14 @@ def test_a_counting_detector_has_no_offset(instrument: spec.Instrument) -> None:
     "change, finding",
     [
         (lambda d: d["drives"].pop(1), "need one wire to its sync, not 0"),
-        (lambda d: d["cubes"]["laser-488"]["element"].pop("repetition"), "needs a repetition"),
+        (lambda d: d["cubes"]["laser_488"]["element"].pop("repetition"), "needs a repetition"),
         (
-            lambda d: d["cubes"]["laser-488"]["element"].update(repetition="100 MHz"),
+            lambda d: d["cubes"]["laser_488"]["element"].update(repetition="100 MHz"),
             "does not fit in a pulse period of 10000 ps",
         ),
         (lambda d: fluorophore(d).pop("lifetime"), "needs its fluorophore's lifetime"),
         (lambda d: fluorophore(d).update(lifetime="3 mm"), "lifetime"),
-        (lambda d: d["cubes"]["laser-488"]["signals"].pop("out"), "sends no signal 'sync'"),
+        (lambda d: d["cubes"]["laser_488"]["signals"].pop("out"), "sends no signal 'sync'"),
     ],
 )
 def test_flim_that_cannot_work_is_refused_when_parsed(
@@ -143,8 +143,8 @@ def test_other_datasets_keep_their_axes(tmp_path: Path) -> None:
     m = build_microscope(run_settings(tmp_path), instrument)
     streams = [
         Streams(
-            detectors=["camera-green"],
-            illuminations=[StreamIllumination(source="laser-488", wavelength=488.0, intensity=1.0)],
+            detectors=["camera_green"],
+            illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
         )
     ]
     acquired = acquire(m, plan(streams)).published[0]
@@ -176,7 +176,7 @@ def test_detectors_with_and_without_arrival_times_cannot_share_a_dataset(tmp_pat
     moved_from = (m.stage_state.x, m.stage_state.y, m.stage_state.z)
     both = Streams(
         detectors=["spad", "pmt"],
-        illuminations=[StreamIllumination(source="laser-488", wavelength=488.0, intensity=1.0)],
+        illuminations=[StreamIllumination(source="laser_488", wavelength=488.0, intensity=1.0)],
     )
     with pytest.raises(ValueError, match="arrival-time bins"):
         acquire(m, plan([both]))

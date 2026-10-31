@@ -49,8 +49,8 @@ from newswitch.services.mikro_store import MikroDatasetStore  # noqa: E402
 from tests.conftest import collect_until_completed, run_settings  # noqa: E402
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
-LASER = StreamIllumination("laser-488", 488.0, 0.8)
-LED = StreamIllumination("led-625", 625.0, 0.5)
+LASER = StreamIllumination("laser_488", 488.0, 0.8)
+LED = StreamIllumination("led_625", 625.0, 0.5)
 Quantity = pint.UnitRegistry().Quantity
 
 pytestmark = pytest.mark.skipif(
@@ -157,7 +157,7 @@ def test_two_detectors_merge_into_one_dataset(mikro: Mikro, tmp_path: Path) -> N
         "dual-camera",
         [
             Streams(
-                detectors=["camera-green", "camera-red"], mapping="all", illuminations=[LASER, LED]
+                detectors=["camera_green", "camera_red"], mapping="all", illuminations=[LASER, LED]
             )
         ],
         planes=[-2.0, 0.0, 2.0],
@@ -179,7 +179,7 @@ def test_every_channel_and_plane_has_its_anchor(mikro: Mikro, tmp_path: Path) ->
         mikro,
         tmp_path,
         "dual-camera",
-        [Streams(detectors=["camera-green", "camera-red"], mapping="gfp", illuminations=[LASER])],
+        [Streams(detectors=["camera_green", "camera_red"], mapping="gfp", illuminations=[LASER])],
         planes=[-1.0, 1.0],
     )
     anchors = anchors_of(made.id)
@@ -187,7 +187,7 @@ def test_every_channel_and_plane_has_its_anchor(mikro: Mikro, tmp_path: Path) ->
     labels = {
         coordinates_of(a)["c"]: a["channelLabel"]["label"] for a in anchors if a["channelLabel"]
     }
-    assert labels == {0: "gfp camera-green", 1: "gfp camera-red"}
+    assert labels == {0: "gfp camera_green", 1: "gfp camera_red"}
     assert all(a["lightGraph"] for a in anchors if a["channelLabel"])
 
     planes = [a for a in anchors if a["microscope"]]
@@ -208,7 +208,7 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
         mikro,
         tmp_path,
         "dual-camera",
-        [Streams(detectors=["camera-green"], mapping="gfp", illuminations=[LASER])],
+        [Streams(detectors=["camera_green"], mapping="gfp", illuminations=[LASER])],
         places=((0.0, 0.0), (60.0, 40.0)),
     )
     world = space_3d(mikro, "stage", reference="stage-dual-camera")
@@ -270,11 +270,11 @@ async def test_a_served_agent_acquires_into_mikro(tmp_path: Path) -> None:
                                 "z_hooks": [],
                                 "channels": [
                                     {
-                                        "detectors": ["camera-green", "camera-red"],
+                                        "detectors": ["camera_green", "camera_red"],
                                         "mapping": "gfp",
                                         "illuminations": [
                                             {
-                                                "source": "laser-488",
+                                                "source": "laser_488",
                                                 "wavelength": 488.0,
                                                 "intensity": 0.8,
                                             }

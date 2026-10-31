@@ -78,7 +78,7 @@ def test_simulated_it_renders_from_the_optics(
     """Simulated, a wired camera is not opened: newswitch renders what it would see."""
     manager = _build(_settings(tmp_path, virtual=True), camera_instrument)
     assert isinstance(manager, OpticsDetectorManager)
-    assert [detector.name for detector in manager.state.detectors] == ["sim-cam"]
+    assert [detector.name for detector in manager.state.detectors] == ["sim_cam"]
 
 
 def test_missing_camera_library_falls_back(
@@ -111,7 +111,7 @@ def test_real_hardware_opens_the_cameras(
         (detector,) = manager.state.detectors
         assert (detector.slot, detector.name, detector.width, detector.height) == (
             1,
-            "sim-cam",
+            "sim_cam",
             640,
             480,
         )

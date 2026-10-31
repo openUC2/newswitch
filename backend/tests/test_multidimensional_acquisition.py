@@ -28,8 +28,8 @@ from newswitch.services.dataset_store import NoDatasetStore
 from tests.conftest import run_settings
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
-LASER = StreamIllumination(source="laser-488", wavelength=488.0, intensity=0.8)
-LED = StreamIllumination(source="led-625", wavelength=625.0, intensity=0.5)
+LASER = StreamIllumination(source="laser_488", wavelength=488.0, intensity=0.8)
+LED = StreamIllumination(source="led_625", wavelength=625.0, intensity=0.5)
 
 
 @dataclass
@@ -125,7 +125,7 @@ def test_two_detectors_of_a_stream_become_two_channels(tmp_path: Path) -> None:
         plan(
             [
                 Streams(
-                    detectors=["camera-green", "camera-red"],
+                    detectors=["camera_green", "camera_red"],
                     mapping="all",
                     illuminations=[LASER, LED],
                 )
@@ -136,8 +136,8 @@ def test_two_detectors_of_a_stream_become_two_channels(tmp_path: Path) -> None:
     )
     (acquired,) = store.published
     assert acquired.data.shape == (2, 2, 3, 512, 512)
-    assert [c.label for c in acquired.channels] == ["all camera-green", "all camera-red"]
-    assert {c.detector for c in acquired.channels} == {"camera-green", "camera-red"}
+    assert [c.label for c in acquired.channels] == ["all camera_green", "all camera_red"]
+    assert {c.detector for c in acquired.channels} == {"camera_green", "camera_red"}
     assert len(acquired.planes) == 2 * 2 * 3
     assert {(p.t, p.c, p.z) for p in acquired.planes} == {
         (t, c, z) for t in range(2) for c in range(2) for z in range(3)
@@ -163,8 +163,8 @@ def test_the_mirrored_arm_is_turned_back(tmp_path: Path) -> None:
         m,
         plan(
             [
-                Streams(detectors=["camera-green"], mapping="gfp", illuminations=[LASER]),
-                Streams(detectors=["camera-red"], mapping="led", illuminations=[LED]),
+                Streams(detectors=["camera_green"], mapping="gfp", illuminations=[LASER]),
+                Streams(detectors=["camera_red"], mapping="led", illuminations=[LED]),
             ]
         ),
     )
@@ -185,7 +185,7 @@ def test_positions_become_datasets_placed_in_stage_space(tmp_path: Path) -> None
     store = acquire(
         m,
         plan(
-            [Streams(detectors=["camera-green"], mapping="gfp", illuminations=[LASER])],
+            [Streams(detectors=["camera_green"], mapping="gfp", illuminations=[LASER])],
             places=((0.0, 0.0), (60.0, 40.0)),
         ),
     )

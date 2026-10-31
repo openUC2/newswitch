@@ -20,7 +20,7 @@ class PositionOrder(str, Enum):
 class StreamIllumination:
     """Represents an illumination channel to acquire."""
 
-    source: str  # The source by its name in the instrument (e.g., "laser-488"), or its slot
+    source: str  # The source by its name in the instrument (e.g., "laser_488"), or its slot
     wavelength: float  # Wavelength of the illumination in nm
     intensity: float  # Intensity of the illumination (0-1)
 

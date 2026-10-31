@@ -123,7 +123,7 @@ def test_the_agent_publishes_the_detectors(tmp_path: Path) -> None:
     current = Run.of(run_settings(tmp_path, instrument=CAM_TEST))
     sink, streams = asyncio.run(provide_lovekit_sink(current))
     assert isinstance(sink, LovekitSink) and isinstance(streams, CameraStreams)
-    assert [(c.slot, c.key) for c in sink.cameras] == [(1, "sim-cam")]
+    assert [(c.slot, c.key) for c in sink.cameras] == [(1, "sim_cam")]
     app = create_arkitekt_registry(spec.load(CAM_TEST))
     assert "CameraStreams" in app.registry.snapshot().states
 
@@ -176,4 +176,4 @@ def test_the_agent_reads_the_instrument_once(
 
     monkeypatch.setattr(spec, "load", nothing_reads)
     sink, _ = asyncio.run(provide_lovekit_sink(current))
-    assert isinstance(sink, LovekitSink) and [c.key for c in sink.cameras] == ["sim-cam"]
+    assert isinstance(sink, LovekitSink) and [c.key for c in sink.cameras] == ["sim_cam"]

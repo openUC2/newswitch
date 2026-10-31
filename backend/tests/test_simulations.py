@@ -38,8 +38,8 @@ def under(instrument: spec.Instrument, simulation: str) -> spec.Instrument:
 def test_the_channels_are_found_from_the_optics(instrument: spec.Instrument) -> None:
     """The fluorescence and the transmitted light each reach the camera whose filter passes them."""
     assert channels(compile_instrument(instrument), "gfp-beads") == {
-        ("laser-488", "camera-green"),
-        ("led-625", "camera-red"),
+        ("laser_488", "camera_green"),
+        ("led_625", "camera_red"),
     }
 
 
@@ -47,15 +47,15 @@ def test_without_a_fluorophore_there_is_no_fluorescence_channel(
     instrument: spec.Instrument,
 ) -> None:
     """Only what passes through the slide is left."""
-    assert channels(compile_instrument(instrument), "empty-slide") == {("led-625", "camera-red")}
+    assert channels(compile_instrument(instrument), "empty-slide") == {("led_625", "camera_red")}
 
 
 def test_a_reflection_too_faint_to_see_is_no_channel() -> None:
     """With the filter open, a slide's reflection of the laser arrives, under the read noise."""
     compiled = compile_instrument(spec.load(INSTRUMENT.parent / "fake-microscope"))
     assert channels(compiled, "empty-slide") == {
-        ("led-625", "camera-a"),
-        ("led-625", "camera-b"),
+        ("led_625", "camera_a"),
+        ("led_625", "camera_b"),
     }
 
 
@@ -73,7 +73,7 @@ def test_a_sample_letting_nothing_through_has_no_transmitted_channel(tmp_path: P
         detector: {"coupling": coupling(opaque, detector, state)} for detector in opaque.detectors()
     }
     compiled = Compiled(opaque, {state_key(opaque, state): entry})
-    assert channels(compiled, "gfp-beads") == {("laser-488", "camera-green")}
+    assert channels(compiled, "gfp-beads") == {("laser_488", "camera_green")}
 
 
 def test_impacts_are_those_of_the_simulation_picked(instrument: spec.Instrument) -> None:
@@ -83,7 +83,7 @@ def test_impacts_are_those_of_the_simulation_picked(instrument: spec.Instrument)
         return "light" in next(
             row["changes"]
             for row in impacts(picked, picked.initial_state())
-            if row["variable"] == "laser-488.power" and row["detector"] == "camera-green"
+            if row["variable"] == "laser_488.power" and row["detector"] == "camera_green"
         )
 
     assert light_changes(instrument)
@@ -93,7 +93,7 @@ def test_impacts_are_those_of_the_simulation_picked(instrument: spec.Instrument)
 def test_a_simulation_decides_what_is_drawn(instrument: spec.Instrument) -> None:
     """Beads light up where they are; on an empty slide there is only the camera's offset."""
     microscope = SimulatedMicroscope(instrument)
-    microscope.set({"laser-488.power": 50.0})
-    assert microscope.image("camera-green").max() > 1000
+    microscope.set({"laser_488.power": 50.0})
+    assert microscope.image("camera_green").max() > 1000
     microscope.set({"stage.simulation": "empty-slide"})
-    assert microscope.image("camera-green").max() < 200
+    assert microscope.image("camera_green").max() < 200

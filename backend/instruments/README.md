@@ -28,11 +28,11 @@ control and stays at its `initial`.
 parts:
   stage: stage                       # the cube holding the sample; left out: nothing moves it
   objective: {swap: objective.slot, reference_tube: 200 mm}  # what magnification is stated against
-  filters: {swap: filter-wheel.slot}
+  filters: {swap: filter_wheel.slot}
   sources:                           # by slot, counting from 1
-    1: {cube: laser-488, full_intensity: 100.0}  # its intensity runs from 0 to this
+    1: {cube: laser_488, full_intensity: 100.0}  # its intensity runs from 0 to this
   detectors:
-    1: {cube: camera-a, frame_rate: 30 Hz}       # how often it streams
+    1: {cube: camera_a, frame_rate: 30 Hz}       # how often it streams
 ```
 
 A source's `power` and a sensor's `exposure`, `gain` and `binning` are tunes every such cube must have.
@@ -91,9 +91,9 @@ parsed: an unknown component, a signal a part does not have, or a wire that cann
 ```yaml
 drives:
   - {from: galvo.pixel, to: pmt.sample}             # the scan makes the detector's image
-  - {from: laser-488.sync, to: spad.sync}           # arrival times are measured from the pulse
+  - {from: laser_488.sync, to: spad.sync}           # arrival times are measured from the pulse
   - {from: camera.frame, to: stage.z, by: 0.5 um}   # each frame steps the stage
-  - {from: camera.exposing, to: laser-488.power}    # declared only: nothing executes this yet
+  - {from: camera.exposing, to: laser_488.power}    # declared only: nothing executes this yet
 ```
 
 This is not the `hardware` section: `hardware` says how a name reaches a board, and `drives` what the
@@ -269,7 +269,7 @@ hardware:
     stg-x: {board: uc2, axis: X}
     stg-y: {board: uc2, axis: Y}
     stg-z: {board: uc2, axis: Z}
-    laser-488: {board: uc2, channel: 1, pwm_max: 1023}
+    laser_488: {board: uc2, channel: 1, pwm_max: 1023}
     laser-635: {board: uc2, channel: 2, pwm_max: 1023}
     led: {board: uc2, channel: 3, pwm_max: 1023}
 ```
@@ -312,7 +312,7 @@ hardware:
     stg-x: {board: uc2, axis: X}
     stg-y: {board: uc2, axis: Y}
     stg-z: {board: uc2, axis: Z}
-    laser-488: {board: uc2, channel: 0, pwm_max: 1023}
+    laser_488: {board: uc2, channel: 0, pwm_max: 1023}
     laser-635: {board: uc2, channel: 1, pwm_max: 1023}
     led: {board: uc2, channel: 2, pwm_max: 1023}
 ```

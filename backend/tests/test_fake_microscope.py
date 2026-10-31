@@ -28,7 +28,7 @@ def compiled(instrument: spec.Instrument) -> Compiled:
     return compile_instrument(instrument)
 
 
-def changes(compiled: Compiled, variable: str, detector: str = "camera-a") -> dict[str, float]:
+def changes(compiled: Compiled, variable: str, detector: str = "camera_a") -> dict[str, float]:
     """What nudging `variable` changes for `detector`, as the compiler calculated."""
     return next(
         row["changes"]
@@ -42,14 +42,14 @@ def changes(compiled: Compiled, variable: str, detector: str = "camera-a") -> di
 
 def test_routes_are_found_by_walking_the_edges(instrument: spec.Instrument) -> None:
     """Each detector has its own way from the sample; no route is declared anywhere."""
-    routes = instrument.routes(instrument.detection, "stage", "camera-b")
+    routes = instrument.routes(instrument.detection, "stage", "camera_b")
     assert len(routes) == 1
-    assert [edge.target for edge in routes[0]][-2:] == ["tube-b", "camera-b"]
+    assert [edge.target for edge in routes[0]][-2:] == ["tube_b", "camera_b"]
 
 
 def test_an_edge_to_nothing_is_refused(tmp_path: Path) -> None:
     """Everything an edge names has to exist."""
-    text = (INSTRUMENT / spec.DESCRIPTION).read_text().replace("to: tube-b", "to: nothing")
+    text = (INSTRUMENT / spec.DESCRIPTION).read_text().replace("to: tube_b", "to: nothing")
     bad = tmp_path / "bad.yml"
     bad.write_text(text)
     with pytest.raises(spec.SpecError, match="no cube 'nothing'"):
@@ -58,7 +58,7 @@ def test_an_edge_to_nothing_is_refused(tmp_path: Path) -> None:
 
 def test_a_sensors_size_lives_on_its_axes_and_nowhere_else(instrument: spec.Instrument) -> None:
     """There is no width or height to disagree with the axes."""
-    sensor = instrument.cubes["camera-a"].element
+    sensor = instrument.cubes["camera_a"].element
     assert sensor is not None
     assert sensor.axes["x"].size == 512
     assert not {"width", "height", "sensor_width", "sensor_height"} & set(vars(sensor))
@@ -101,14 +101,14 @@ def test_magnification_comes_from_the_pair_of_lenses(instrument: spec.Instrument
     from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
-    assert imaging(instrument, "camera-a", state, 525.0).magnification == pytest.approx(
+    assert imaging(instrument, "camera_a", state, 525.0).magnification == pytest.approx(
         -2.0, abs=0.01
     )
-    assert imaging(instrument, "camera-b", state, 525.0).magnification == pytest.approx(
+    assert imaging(instrument, "camera_b", state, 525.0).magnification == pytest.approx(
         -4.0, abs=1e-6
     )
     swapped = {**state, "objective.slot": 2}
-    assert imaging(instrument, "camera-b", swapped, 525.0).magnification == pytest.approx(
+    assert imaging(instrument, "camera_b", swapped, 525.0).magnification == pytest.approx(
         -8.0, abs=1e-6
     )
 
@@ -118,8 +118,8 @@ def test_a_reflection_is_counted_along_the_route(instrument: spec.Instrument) ->
     from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
-    assert imaging(instrument, "camera-a", state, 525.0).reflections == 0
-    assert imaging(instrument, "camera-b", state, 525.0).reflections == 1
+    assert imaging(instrument, "camera_a", state, 525.0).reflections == 0
+    assert imaging(instrument, "camera_b", state, 525.0).reflections == 1
 
 
 def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.Instrument) -> None:
@@ -127,26 +127,26 @@ def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.In
     from newswitch.instrument.tracing import imaging
 
     state = instrument.initial_state()
-    assert imaging(instrument, "camera-a", state, 525.0).relative_illumination < 0.95
-    assert imaging(instrument, "camera-b", state, 525.0).relative_illumination == pytest.approx(1.0)
+    assert imaging(instrument, "camera_a", state, 525.0).relative_illumination < 0.95
+    assert imaging(instrument, "camera_b", state, 525.0).relative_illumination == pytest.approx(1.0)
 
 
 def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrument) -> None:
     """Red light through a green filter: a black image, known before taking it."""
     from newswitch.instrument.tracing import coupling
 
-    state = {**instrument.initial_state(), "filter-wheel.slot": 2}
-    arriving = coupling(instrument, "camera-a", state)
-    assert arriving["led-625"]["light_per_mw"] < 1e-6
-    assert arriving["laser-488"]["light_per_mw"] > 0.001
+    state = {**instrument.initial_state(), "filter_wheel.slot": 2}
+    arriving = coupling(instrument, "camera_a", state)
+    assert arriving["led_625"]["light_per_mw"] < 1e-6
+    assert arriving["laser_488"]["light_per_mw"] > 0.001
 
 
 def test_the_dichroic_keeps_the_laser_from_the_camera(instrument: spec.Instrument) -> None:
     """What arrives from the laser is the sample's emission, not the laser."""
     from newswitch.instrument.tracing import coupling
 
-    arriving = coupling(instrument, "camera-a", instrument.initial_state())
-    assert arriving["laser-488"]["band_mean_nm"] == pytest.approx(515.0, abs=5.0)
+    arriving = coupling(instrument, "camera_a", instrument.initial_state())
+    assert arriving["laser_488"]["band_mean_nm"] == pytest.approx(515.0, abs=5.0)
 
 
 # --- what impacts what: calculated
@@ -164,8 +164,8 @@ def test_focus_blurs_but_does_not_rescale(compiled: Compiled) -> None:
 
 def test_moving_the_tube_lens_changes_both_and_only_for_its_own_camera(compiled: Compiled) -> None:
     """Nothing declared this; the size is what makes it useful."""
-    assert set(changes(compiled, "tube-a.dz", "camera-a")) == {"scale", "blur"}
-    assert changes(compiled, "tube-a.dz", "camera-b") == {}
+    assert set(changes(compiled, "tube_a.dz", "camera_a")) == {"scale", "blur"}
+    assert changes(compiled, "tube_a.dz", "camera_b") == {}
 
 
 def test_swapping_the_objective_changes_the_scale(compiled: Compiled) -> None:
@@ -175,22 +175,22 @@ def test_swapping_the_objective_changes_the_scale(compiled: Compiled) -> None:
 
 def test_swapping_the_filter_changes_the_light_and_not_the_geometry(compiled: Compiled) -> None:
     """As far as the model knows: it has no notion of a wedge, which the hardware has."""
-    found = changes(compiled, "filter-wheel.slot")
+    found = changes(compiled, "filter_wheel.slot")
     assert "light" in found
     assert not {"scale", "position", "blur"} & set(found)
 
 
 def test_binning_makes_other_pixels_and_nothing_else_about_the_optics(compiled: Compiled) -> None:
     """It needs no calibration of its own."""
-    found = changes(compiled, "camera-a.binning")
+    found = changes(compiled, "camera_a.binning")
     assert "pixels" in found
     assert "scale" not in found
 
 
 def test_tuning_one_camera_leaves_the_other_alone(compiled: Compiled) -> None:
     """Exposure is a matter of one detector."""
-    assert "light" in changes(compiled, "camera-a.exposure", "camera-a")
-    assert changes(compiled, "camera-a.exposure", "camera-b") == {}
+    assert "light" in changes(compiled, "camera_a.exposure", "camera_a")
+    assert changes(compiled, "camera_a.exposure", "camera_b") == {}
 
 
 def test_the_table_answers_what_a_trace_would(
@@ -199,7 +199,7 @@ def test_the_table_answers_what_a_trace_would(
     """What the microscope reads is what the tracer found."""
     from newswitch.instrument.compiler import traced_answer
 
-    state = {**instrument.initial_state(), "objective.slot": 2, "filter-wheel.slot": 2}
+    state = {**instrument.initial_state(), "objective.slot": 2, "filter_wheel.slot": 2}
     for detector in instrument.detectors():
         assert np.allclose(
             compiled.answer(detector, state).pixel_to_stage,
@@ -213,9 +213,9 @@ def test_the_table_follows_a_move_along_the_axis(
     """Scale and blur through the sensitivities, close to tracing it."""
     from newswitch.instrument.compiler import traced_answer
 
-    state = {**instrument.initial_state(), "tube-a.dz": 500.0}
-    table = compiled.answer("camera-a", state)
-    traced = traced_answer(instrument, "camera-a", state)
+    state = {**instrument.initial_state(), "tube_a.dz": 500.0}
+    table = compiled.answer("camera_a", state)
+    traced = traced_answer(instrument, "camera_a", state)
     assert table.pixel_to_stage[0][0] == pytest.approx(traced.pixel_to_stage[0][0], rel=1e-3)
     assert table.spot_px == pytest.approx(traced.spot_px, rel=0.1)
 
@@ -232,7 +232,7 @@ def microscope(instrument: spec.Instrument):  # noqa: ANN201
 
 
 @pytest.mark.parametrize(
-    ("detector", "nominal", "turn"), [("camera-a", 4.9978, 1.5), ("camera-b", 2.5, -0.7)]
+    ("detector", "nominal", "turn"), [("camera_a", 4.9978, 1.5), ("camera_b", 2.5, -0.7)]
 )
 def test_the_images_reveal_what_the_description_does_not_say(
     microscope,  # noqa: ANN001
@@ -243,7 +243,7 @@ def test_the_images_reveal_what_the_description_does_not_say(
     """A 2% scale error and a turned camera, found from the images alone."""
     from newswitch.tools.check_instrument import measure
 
-    microscope.set({"filter-wheel.slot": 1})
+    microscope.set({"filter_wheel.slot": 1})
     size, measured_turn = measure(microscope, detector)
     assert size == pytest.approx(nominal * 1.02, rel=0.01)
     assert measured_turn == pytest.approx(turn, abs=0.1)
@@ -253,21 +253,21 @@ def test_the_filter_wedge_is_an_effect_the_model_has_no_notion_of(microscope, co
     """The design says nothing moves, and the images say otherwise: it can tell the two apart."""
     from newswitch.routines.affine_matrix import pixel_shift
 
-    assert "position" not in changes(compiled, "filter-wheel.slot")
-    microscope.set({"filter-wheel.slot": 1})
-    before = microscope.image("camera-a")
-    microscope.set({"filter-wheel.slot": 2})
-    after = microscope.image("camera-a")
-    microscope.set({"filter-wheel.slot": 1})
+    assert "position" not in changes(compiled, "filter_wheel.slot")
+    microscope.set({"filter_wheel.slot": 1})
+    before = microscope.image("camera_a")
+    microscope.set({"filter_wheel.slot": 2})
+    after = microscope.image("camera_a")
+    microscope.set({"filter_wheel.slot": 1})
     assert pixel_shift(before, after) == pytest.approx((3.0, -2.0), abs=0.2)
 
 
 def test_a_predicted_black_image_is_black(microscope, compiled) -> None:  # noqa: ANN001
     """Red light through a green filter, on both sides of the wall."""
-    microscope.set({"filter-wheel.slot": 2, "laser-488.power": 0.0, "led-625.power": 2.0})
-    assert compiled.answer("camera-a", microscope.state).black
-    assert np.mean(microscope.image("camera-a")) < 101.0
-    microscope.set({"filter-wheel.slot": 1, "laser-488.power": 20.0, "led-625.power": 0.0})
+    microscope.set({"filter_wheel.slot": 2, "laser_488.power": 0.0, "led_625.power": 2.0})
+    assert compiled.answer("camera_a", microscope.state).black
+    assert np.mean(microscope.image("camera_a")) < 101.0
+    microscope.set({"filter_wheel.slot": 1, "laser_488.power": 20.0, "led_625.power": 0.0})
 
 
 def test_compiling_writes_nothing(tmp_path: Path) -> None:
@@ -284,8 +284,8 @@ def test_a_changed_description_only_takes_loading_it_again(tmp_path: Path) -> No
     copy = tmp_path / "instrument"
     shutil.copytree(INSTRUMENT, copy)
     state = spec.load(copy).initial_state()
-    before = compile_instrument(spec.load(copy)).answer("camera-b", state).pixel_to_stage[0][0]
+    before = compile_instrument(spec.load(copy)).answer("camera_b", state).pixel_to_stage[0][0]
     description = copy / spec.DESCRIPTION
     description.write_text(description.read_text().replace("f: 200 mm", "f: 100 mm"))
-    after = compile_instrument(spec.load(copy)).answer("camera-b", state).pixel_to_stage[0][0]
+    after = compile_instrument(spec.load(copy)).answer("camera_b", state).pixel_to_stage[0][0]
     assert abs(after) > abs(before)

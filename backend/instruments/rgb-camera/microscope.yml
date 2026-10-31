@@ -8,12 +8,12 @@ spec: newswitch/instrument/v0
 name: rgb-camera
 
 cubes:
-  laser-488:
+  laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
       power: {actuator: laser-dac, initial: 0.0, step: 1.0, units: mW}
 
-  led-625:
+  led_625:
     element: {kind: source, wavelength: 625 nm, width: 15 nm, max_power: 2 mW}
     tunes:
       power: {actuator: led-dac, initial: 0.0, step: 1.0, units: mW}
@@ -55,10 +55,10 @@ cubes:
       binning: {initial: 1, step: 1}
 
 illumination:
-  - {from: laser-488, to: dichroic}
+  - {from: laser_488, to: dichroic}
   - {from: dichroic, via: reflect, to: objective}
   - {from: objective, to: stage, side: epi}
-  - {from: led-625, to: stage, side: transmitted}
+  - {from: led_625, to: stage, side: transmitted}
 
 detection:
   - {from: stage, to: objective, distance: focus}
@@ -69,8 +69,8 @@ detection:
 parts:
   stage: stage
   sources:
-    1: {cube: laser-488, full_intensity: 100.0}
-    2: {cube: led-625, full_intensity: 100.0}
+    1: {cube: laser_488, full_intensity: 100.0}
+    2: {cube: led_625, full_intensity: 100.0}
   detectors:
     1: {cube: camera, frame_rate: 30 Hz}
 

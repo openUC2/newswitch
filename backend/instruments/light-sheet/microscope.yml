@@ -10,12 +10,12 @@ spec: newswitch/instrument/v0
 name: light-sheet
 
 cubes:
-  laser-488:
+  laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
       power: {initial: 5.0, step: 1.0, units: mW}   # on from the start: a sheet only shows when lit
 
-  sheet-lens:
+  sheet_lens:
     element: {kind: lens, name: sheet NA 0.02, f: 50 mm, na: 0.02}
 
   stage:
@@ -41,7 +41,7 @@ cubes:
   objective:
     element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, working_distance: 10 mm}
 
-  filter-green:
+  filter_green:
     element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
 
   tube:
@@ -55,13 +55,13 @@ cubes:
       binning: {initial: 1, step: 1}
 
 illumination:
-  - {from: laser-488, to: sheet-lens}
-  - {from: sheet-lens, to: stage, side: orthogonal, along: x}   # it travels along the image's x
+  - {from: laser_488, to: sheet_lens}
+  - {from: sheet_lens, to: stage, side: orthogonal, along: x}   # it travels along the image's x
 
 detection:
   - {from: stage, to: objective, distance: focus}
-  - {from: objective, to: filter-green, distance: 100 mm}
-  - {from: filter-green, to: tube, distance: 30 mm}
+  - {from: objective, to: filter_green, distance: 100 mm}
+  - {from: filter_green, to: tube, distance: 30 mm}
   - {from: tube, to: camera, distance: focus}
 
 drives:
@@ -70,7 +70,7 @@ drives:
 parts:
   stage: stage
   sources:
-    1: {cube: laser-488, full_intensity: 100.0}
+    1: {cube: laser_488, full_intensity: 100.0}
   detectors:
     1: {cube: camera, frame_rate: 30 Hz}
 

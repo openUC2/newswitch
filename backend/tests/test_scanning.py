@@ -29,7 +29,7 @@ def instrument() -> spec.Instrument:
 
 def lit(instrument: spec.Instrument) -> dict[str, float]:
     """Its state with the laser on."""
-    return {**instrument.initial_state(), "laser-488.power": 1.0}
+    return {**instrument.initial_state(), "laser_488.power": 1.0}
 
 
 def test_the_scan_is_what_the_lenses_make_of_an_angle(instrument: spec.Instrument) -> None:
@@ -81,7 +81,7 @@ def test_the_channels_are_found_through_the_scan_and_the_pinhole(
 ) -> None:
     """Neither of them is in the way of the light."""
     channels = compile_instrument(instrument).channels(instrument.initial_state())
-    assert [(channel.source, channel.detector) for channel in channels] == [("laser-488", "pmt")]
+    assert [(channel.source, channel.detector) for channel in channels] == [("laser_488", "pmt")]
 
 
 def test_calibrating_on_scanned_images_finds_the_predicted_pixel(
@@ -89,7 +89,7 @@ def test_calibrating_on_scanned_images_finds_the_predicted_pixel(
 ) -> None:
     """newswitch's own calibration arithmetic works on a scan like on a camera's image."""
     microscope = SimulatedMicroscope(instrument)
-    microscope.set({"laser-488.power": 1.0})
+    microscope.set({"laser_488.power": 1.0})
     measured, turned = measure(microscope, "pmt")
     predicted = abs(
         compile_instrument(instrument).answer("pmt", microscope.state).pixel_to_stage[0][0]
@@ -140,7 +140,7 @@ def edited(tmp_path: Path, change) -> Path:  # noqa: ANN001
             "needs one scan wired to it",
         ),
         (
-            lambda d: d["drives"].__setitem__(0, {"from": "galvo.pixel", "to": "laser-488.power"}),
+            lambda d: d["drives"].__setitem__(0, {"from": "galvo.pixel", "to": "laser_488.power"}),
             "can only walk a point detector",
         ),
         (lambda d: d["cubes"]["pmt"].pop("tunes"), "must tune"),

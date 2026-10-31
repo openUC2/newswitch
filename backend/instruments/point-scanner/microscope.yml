@@ -9,7 +9,7 @@ spec: newswitch/instrument/v0
 name: point-scanner
 
 cubes:
-  laser-488:
+  laser_488:
     element: {kind: source, wavelength: 488 nm, width: 2 nm, max_power: 50 mW, coherent: true}
     tunes:
       power: {initial: 0.0, step: 1.0, units: mW}
@@ -20,7 +20,7 @@ cubes:
   galvo:
     component: generic-galvo-512
 
-  scan-lens:
+  scan_lens:
     element: {kind: lens, f: 50 mm}
 
   tube:
@@ -43,7 +43,7 @@ cubes:
       y: {along: y, initial: 0.0, step: 10.0, min: -5000.0, max: 5000.0, speed: 5000.0, units: um}
       z: {along: axis, initial: 0.0, step: 100.0, min: -500.0, max: 500.0, speed: 500.0, units: um}
 
-  filter-green:
+  filter_green:
     element: {kind: filter, name: BP 525/50, center: 525 nm, width: 50 nm}
 
   pinhole:
@@ -57,21 +57,21 @@ cubes:
       binning: {initial: 1, step: 1}
 
 illumination:
-  - {from: laser-488, to: dichroic}
+  - {from: laser_488, to: dichroic}
   - {from: dichroic, via: reflect, to: galvo}
-  - {from: galvo, to: scan-lens, distance: focus}
-  - {from: scan-lens, to: tube, distance: 250 mm}
+  - {from: galvo, to: scan_lens, distance: focus}
+  - {from: scan_lens, to: tube, distance: 250 mm}
   - {from: tube, to: objective, distance: 220 mm}
   - {from: objective, to: stage, side: epi, distance: focus}
 
 detection:
   - {from: stage, to: objective}
   - {from: objective, to: tube}
-  - {from: tube, to: scan-lens}
-  - {from: scan-lens, to: galvo}
+  - {from: tube, to: scan_lens}
+  - {from: scan_lens, to: galvo}
   - {from: galvo, to: dichroic}
-  - {from: dichroic, via: transmit, to: filter-green}
-  - {from: filter-green, to: pinhole}
+  - {from: dichroic, via: transmit, to: filter_green}
+  - {from: filter_green, to: pinhole}
   - {from: pinhole, to: pmt}
 
 drives:
@@ -80,7 +80,7 @@ drives:
 parts:
   stage: stage
   sources:
-    1: {cube: laser-488, full_intensity: 100.0}
+    1: {cube: laser_488, full_intensity: 100.0}
   detectors:
     1: {cube: pmt, frame_rate: 10 Hz}
 

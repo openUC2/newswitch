@@ -307,7 +307,7 @@ class Move:
 class Tune:
     """A value of the instrument: an actuator tunes its cube's element."""
 
-    name: str  # "laser-488.power"; its cube says it
+    name: str  # "laser_488.power"; its cube says it
     cube: str
     verb: Literal["tunes"] = "tunes"
     initial: Number
@@ -383,7 +383,8 @@ _NEEDS_TUNES = {
 class Cube:
     """Housing around an optical element, and what its actuators do to it."""
 
-    name: str  # its key in the description
+    # Its key in the description: an identifier, so that a view can bind what it holds.
+    name: Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
     component: str | None = None  # the library entry its element and signals came from
     element: Element | None = None
     signals: Signals = field(default_factory=Signals)
@@ -495,7 +496,7 @@ class Objective:
 class Filters:
     """The swap that changes filters."""
 
-    swap: str  # "filter-wheel.slot"
+    swap: str  # "filter_wheel.slot"
 
 
 @dataclass(frozen=True, config=STRICT)

@@ -161,7 +161,7 @@ def test_every_control_must_be_wired(tmp_path: Path, real: Settings) -> None:
     )
     with pytest.raises(spec.SpecError) as info:
         build_microscope(real, instrument)
-    for finding in ("stage.x", "laser-488.power", "the sensor camera"):
+    for finding in ("stage.x", "laser_488.power", "the sensor camera"):
         assert finding in str(info.value)
 
 
@@ -300,10 +300,10 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["settings"].pop("simulation"), "simulation"),
         (lambda d: d["settings"].update(simulation="moon"), "'moon' is none of the simulations"),
         (lambda d: d["cubes"]["stage"].update(tilts={}), "cubes.stage.tilts"),
-        (lambda d: d["cubes"]["laser-488"]["element"].update(wavelength="488 mW"), "wavelength"),
-        (lambda d: d["cubes"]["laser-488"]["element"].update(kind="plasma"), "plasma"),
-        (lambda d: d["cubes"]["laser-488"]["element"].update(wavelenght="488 nm"), "wavelenght"),
-        (lambda d: d["cubes"]["laser-488"].pop("tunes"), "must tune"),
+        (lambda d: d["cubes"]["laser_488"]["element"].update(wavelength="488 mW"), "wavelength"),
+        (lambda d: d["cubes"]["laser_488"]["element"].update(kind="plasma"), "plasma"),
+        (lambda d: d["cubes"]["laser_488"]["element"].update(wavelenght="488 nm"), "wavelenght"),
+        (lambda d: d["cubes"]["laser_488"].pop("tunes"), "must tune"),
         (lambda d: d["cubes"]["camera"].pop("tunes"), "must tune"),
         (lambda d: d["cubes"]["dichroic"].pop("element"), "exactly one"),
         (lambda d: d["cubes"]["tube"]["element"].pop("f"), "focal length"),
@@ -313,7 +313,7 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["cubes"]["stage"]["moves"]["x"].update(along="sideways"), "sideways"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"].update(initial=7), "none of the slots"),
         (lambda d: d["cubes"]["objective"]["swaps"]["slot"]["slots"][1].pop("na"), "f and na"),
-        (lambda d: d["cubes"]["filter-wheel"]["swaps"]["slot"]["slots"][2].pop("width"), "both"),
+        (lambda d: d["cubes"]["filter_wheel"]["swaps"]["slot"]["slots"][2].pop("width"), "both"),
         (lambda d: _simulation(d).update(transmit=1.5), "transmit"),
         (lambda d: _simulation(d)["fluorophore"].pop("emission"), "emission"),
         (lambda d: _simulation(d).pop("pattern"), "pattern"),
@@ -327,12 +327,12 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["parts"].update(colour="red"), "colour"),
         (lambda d: d["parts"]["objective"].pop("reference_tube"), "reference_tube"),
         (lambda d: d["parts"]["objective"].update(swap="nothing.slot"), "no swap"),
-        (lambda d: d["parts"]["objective"].update(swap="filter-wheel.slot"), "is no lens"),
+        (lambda d: d["parts"]["objective"].update(swap="filter_wheel.slot"), "is no lens"),
         (lambda d: d["parts"]["filters"].update(swap="objective.slot"), "is no filter"),
         (lambda d: d["parts"]["objective"].update(swap="stage.x"), "no swap"),
-        (lambda d: d["parts"]["sources"].pop(2), "'led-625' has no slot"),
+        (lambda d: d["parts"]["sources"].pop(2), "'led_625' has no slot"),
         (lambda d: d["parts"]["sources"][2].update(cube="dichroic"), "holds no source"),
-        (lambda d: d["parts"]["sources"][2].update(cube="laser-488"), "two slots"),
+        (lambda d: d["parts"]["sources"][2].update(cube="laser_488"), "two slots"),
         (lambda d: d["parts"]["sources"][1].pop("full_intensity"), "full_intensity"),
         (lambda d: d["parts"]["sources"].update({5: d["parts"]["sources"].pop(2)}), "count from 1"),
         (lambda d: d["parts"]["detectors"].pop(1), "'camera' has no slot"),
@@ -360,19 +360,19 @@ def test_every_problem_is_listed_at_once(tmp_path: Path) -> None:
     """So that fixing a file takes one round."""
 
     def change(data: dict[str, Any]) -> None:
-        data["cubes"]["laser-488"]["element"]["wavelength"] = "488 mW"
+        data["cubes"]["laser_488"]["element"]["wavelength"] = "488 mW"
         _simulation(data)["transmit"] = 1.5
 
     with pytest.raises(spec.SpecError) as info:
         spec.load(edited(tmp_path, change))
-    assert "cubes.laser-488.element.source.wavelength" in str(info.value)
+    assert "cubes.laser_488.element.source.wavelength" in str(info.value)
     assert "cubes.stage.element.sample.simulations.gfp-beads.transmit" in str(info.value)
 
 
 def test_the_loaded_values_are_typed_and_in_their_units() -> None:
     """A quantity in the file is a number in the unit newswitch keeps it in."""
     instrument = spec.load(REFERENCE_INSTRUMENT)
-    laser = instrument.cubes["laser-488"].element
+    laser = instrument.cubes["laser_488"].element
     assert isinstance(laser, spec.Source)
     assert (laser.wavelength, laser.max_power, laser.coherent) == (488.0, 50.0, True)
     sensor = instrument.cubes["camera"].element
@@ -428,7 +428,7 @@ def test_slots_are_the_files_not_the_order_of_its_cubes(tmp_path: Path) -> None:
         sources[1], sources[2] = sources[2], sources[1]
 
     instrument = spec.load(edited(tmp_path, change))
-    assert instrument.sources() == ["led-625", "laser-488"]
+    assert instrument.sources() == ["led_625", "laser_488"]
     found = parts.illuminations(instrument)
     assert found is not None
     assert [(s.slot, s.wavelength) for s in found] == [(1, 625.0), (2, 488.0)]

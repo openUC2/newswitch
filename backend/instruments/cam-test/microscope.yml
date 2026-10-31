@@ -19,13 +19,13 @@ cubes:
           pattern: {beads: 3600, radius: 10 um}
 
   # Nothing can be imaged without lenses: two alike, so a pixel on the sample is a pixel on the sensor.
-  lens-a:
+  lens_a:
     element: {kind: lens, f: 50 mm, na: 0.1}
 
-  lens-b:
+  lens_b:
     element: {kind: lens, f: 50 mm}
 
-  sim-cam:
+  sim_cam:
     element:
       kind: sensor
       axes: {x: {size: 640, pitch: 5.86 um}, y: {size: 480, pitch: 5.86 um}}
@@ -37,13 +37,13 @@ cubes:
 illumination: []
 
 detection:
-  - {from: sample, to: lens-a, distance: focus}
-  - {from: lens-a, to: lens-b, distance: 100 mm}
-  - {from: lens-b, to: sim-cam, distance: focus}
+  - {from: sample, to: lens_a, distance: focus}
+  - {from: lens_a, to: lens_b, distance: 100 mm}
+  - {from: lens_b, to: sim_cam, distance: focus}
 
 parts:
   detectors:
-    1: {cube: sim-cam, frame_rate: 20 Hz}
+    1: {cube: sim_cam, frame_rate: 20 Hz}
 
 # A camera only runs on real hardware; set it true to see what the optics render instead.
 settings:
@@ -57,7 +57,7 @@ settings:
 
 hardware:
   cameras:
-    sim-cam:
+    sim_cam:
       protocol: usb3-vision
       vendor: Simulated   # uc2_cam_py simulates it: a Gaussian spot walking over the sensor
       buffer_size: 8
