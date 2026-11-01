@@ -115,9 +115,12 @@ class Values:
         for name, value in wanted.items():
             driver = self.drivers[name]
             groups[type(driver)].append((driver, value, self.reporter(name)))
-        for driver_type, group in groups.items():
-            driver_type.set_together(group, task)
-        self.on_change()
+        try:
+            for driver_type, group in groups.items():
+                driver_type.set_together(group, task)
+        finally:
+            # What did move has moved, whichever failed.
+            self.on_change()
 
     def _target(self, name: str, value: Any, relative: bool) -> Any:  # noqa: ANN401
         variable = self._known(name)

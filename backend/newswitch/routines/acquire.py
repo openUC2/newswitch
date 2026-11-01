@@ -348,6 +348,17 @@ def _keep(
         merge.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))
 
 
+def _lights_off(values: Values) -> None:
+    """Turn off every source that can be, and is on."""
+    values.set(
+        {
+            source.power_variable: 0.0
+            for source in values.source_state.sources.values()
+            if source.on and source.power_variable is not None
+        }
+    )
+
+
 def _sweep_to(merge: _Merge, base: float, offset: float, values: Values, task: Task) -> None:
     if merge.sweep is not None:
         values.set({merge.sweep.name: base + offset}, task=task)
@@ -410,71 +421,69 @@ def acquire(
     task.progress(0, message=f"Starting acquisition: {total} exposures of all detectors")
 
     started_at = time.monotonic()
-    for time_index in range(plan.times):
-        due = started_at + time_index * plan.every_s
-        if time.monotonic() < due:
-            time.sleep(due - time.monotonic())
+    try:
+        for time_index in range(plan.times):
+            due = started_at + time_index * plan.every_s
+            if time.monotonic() < due:
+                time.sleep(due - time.monotonic())
 
-        hook_manager.execute_all(plan.t_hooks or [])
+            hook_manager.execute_all(plan.t_hooks or [])
 
-        order = list(range(len(plan.positions)))
-        if plan.order == PositionOrder.RANDOM:
-            random.shuffle(order)
+            order = list(range(len(plan.positions)))
+            if plan.order == PositionOrder.RANDOM:
+                random.shuffle(order)
 
-        for position_index in order:
-            merge = merges[position_index]
-            values.set(merge.position.set_to, task=task)
-            # Position hooks run there (an autofocus may refocus); the stacks are centred on where
-            # it is afterwards.
-            hook_manager.execute_all(plan.p_hooks or [])
-            base = 0.0 if merge.sweep is None else float(values[merge.sweep.name])
-            if merge.first_z is None:
-                merge.x, merge.y, merge.first_z = where(values, first)
+            for position_index in order:
+                merge = merges[position_index]
+                values.set(merge.position.set_to, task=task)
+                # Position hooks run there (an autofocus may refocus); the stacks are centred on where
+                # it is afterwards.
+                hook_manager.execute_all(plan.p_hooks or [])
+                base = 0.0 if merge.sweep is None else float(values[merge.sweep.name])
+                if merge.first_z is None:
+                    merge.x, merge.y, merge.first_z = where(values, first)
 
-            if merge.swept:
-                # The detector steps what sweeps: the routine only brings it to the first plane.
-                for lighting in merge.lightings:
-                    task.pausepoint()
-                    _sweep_to(merge, base, merge.offsets[0], values, task)
-                    values.set(lighting.targets)
-                    exposure = lighting.exposures[0]
-                    _activate(exposure, detector_manager)
-                    begun = datetime.now(timezone.utc)
-                    for z_index, images in enumerate(
-                        detector_manager.capture_stack(exposure.detector.name, len(merge.offsets))
-                    ):
-                        _keep(merge, exposure, images, time_index, z_index, begun, store)
+                if merge.swept:
+                    # The detector steps what sweeps: the routine only brings it to the first plane.
+                    for lighting in merge.lightings:
+                        task.pausepoint()
+                        _sweep_to(merge, base, merge.offsets[0], values, task)
+                        values.set(lighting.targets)
+                        exposure = lighting.exposures[0]
+                        _activate(exposure, detector_manager)
                         begun = datetime.now(timezone.utc)
+                        for z_index, images in enumerate(
+                            detector_manager.capture_stack(
+                                exposure.detector.name, len(merge.offsets)
+                            )
+                        ):
+                            _keep(merge, exposure, images, time_index, z_index, begun, store)
+                            begun = datetime.now(timezone.utc)
+                            done += 1
+                            task.progress(
+                                int(done / total * 90),
+                                f"T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}: "
+                                f"{lighting.channel.name or 'channel'} ({done}/{total})",
+                            )
+                    continue
+
+                for z_index, offset in enumerate(merge.offsets):
+                    _sweep_to(merge, base, offset, values, task)
+                    hook_manager.execute_all(plan.z_hooks or [])
+
+                    for lighting in merge.lightings:
+                        task.pausepoint()
+                        values.set(lighting.targets)
+                        _expose(merge, lighting, time_index, z_index, store, detector_manager)
                         done += 1
                         task.progress(
                             int(done / total * 90),
                             f"T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}: "
                             f"{lighting.channel.name or 'channel'} ({done}/{total})",
                         )
-                continue
-
-            for z_index, offset in enumerate(merge.offsets):
-                _sweep_to(merge, base, offset, values, task)
-                hook_manager.execute_all(plan.z_hooks or [])
-
-                for lighting in merge.lightings:
-                    task.pausepoint()
-                    values.set(lighting.targets)
-                    _expose(merge, lighting, time_index, z_index, store, detector_manager)
-                    done += 1
-                    task.progress(
-                        int(done / total * 90),
-                        f"T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}: "
-                        f"{lighting.channel.name or 'channel'} ({done}/{total})",
-                    )
-
-    values.set(
-        {
-            source.power_variable: 0.0
-            for source in values.source_state.sources.values()
-            if source.on and source.power_variable is not None
-        }
-    )
+    finally:
+        # However it ended: a failure leaves no sample lit for as long as nobody looks.
+        _lights_off(values)
 
     datasets = []
     for merge in merges:

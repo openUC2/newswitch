@@ -81,7 +81,10 @@ has each driver report where it got to. Each report is published, and when all a
 A variable reaches the world through a **driver** (`newswitch/drivers/base.py`, a registry with
 `register_driver`). `build_drivers` (`newswitch/microscope/parts.py`) picks one per variable: a
 detector's own tunes go through its manager (`DetectorTune`), a wired actuator gets the driver its
-`driver:` names, and the rest, or all the rest with `simulate: everything`, is simulated.
+`driver:` names, and the rest, or all the rest with `simulate: everything`, is simulated. An actuator
+a variable names has to be declared in `hardware.actuators`. When a driver fails, `Values.set` raises
+and the optics still hear of what did move; nothing retries. `backend/instruments/expected-failures/`
+holds descriptions that must be refused, and motors that misbehave, each tested.
 
 What is published is keyed by cube, then by variable: `MoveState.moves`, `SwapState.swaps`,
 `TuneState.tunes`, and `SourceState.sources` by source, so a blok binds

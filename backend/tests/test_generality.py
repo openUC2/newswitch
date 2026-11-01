@@ -187,6 +187,7 @@ def objective_focuses(data: dict[str, Any]) -> None:
     del data["cubes"]["stage"]["moves"]["z"]
     data["cubes"]["objective"]["moves"] = {
         "z": {
+            "actuator": "stg-z",
             "along": "axis",
             "initial": "0 um",
             "step": "100 um",

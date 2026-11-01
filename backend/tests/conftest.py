@@ -42,6 +42,16 @@ def views_beside_copies(tmp_path: Path) -> None:
             link.symlink_to(Path(__file__).parent.parent / "instruments" / "views")
 
 
+def wired_only(data: dict[str, Any], actuators: dict[str, Any], **hardware: Any) -> None:  # noqa: ANN401
+    """Wire a description with `actuators` alone: what names another then names none, and is unwired."""
+    data["hardware"] = {"actuators": actuators, **hardware}
+    for cube in data["cubes"].values():
+        for verb in ("moves", "swaps", "tunes"):
+            for variable in cube.get(verb, {}).values():
+                if variable.get("actuator") not in actuators:
+                    variable.pop("actuator", None)
+
+
 def run_settings(tmp_path: Path, **changes: Any) -> Settings:  # noqa: ANN401
     """Simulated settings without an instrument, everything written under `tmp_path`."""
     return Settings(

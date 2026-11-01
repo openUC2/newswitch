@@ -75,9 +75,9 @@ def test_it_loads_as_the_devices_of_a_server(settings: Settings) -> None:
 
 
 def test_real_hardware_needs_it_wired(settings: Settings) -> None:
-    """The fake microscope does not say how its actuators reach hardware: it says so at startup."""
+    """The fake microscope's tube lens has no axis left on the board: it says so at start."""
     real = settings.model_copy(update={"simulate": "nothing"})
-    with pytest.raises(spec.SpecError, match="no wired actuator"):
+    with pytest.raises(spec.SpecError, match="tube_a.dz has no wired actuator"):
         build_microscope(real, spec.load(INSTRUMENT))
 
 
@@ -88,7 +88,8 @@ def test_it_has_the_parts_its_elements_say() -> None:
     """Which controls exist follows from the description."""
     states, _ = registry_names(spec.load(INSTRUMENT))
     assert {"MoveState", "SwapState", "TuneState", "SourceState", "DetectorState"} <= states
-    assert "UC2State" not in states
+    assert "UC2State" in states  # it describes a board, and simulated that is a virtual one
+    assert "UC2State" not in registry_names(spec.load(INSTRUMENT.parent / "cam-test"))[0]
 
 
 def test_the_models_come_from_the_description(microscope: Microscope) -> None:

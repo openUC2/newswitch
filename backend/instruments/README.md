@@ -191,6 +191,17 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `light-sheet` | A sheet from the side and a camera above, whose frames step the stage. |
 | `flim` | The point scanner, timing each photon against a pulsed laser. |
 
+All of these simulate everything. Only `cam-test` states hardware that exists; the others' `hardware`
+sections are example wiring with made-up boards, axes and `steps_per_um`, and say so, for a real rig
+to replace. `fake-microscope` has no actuator on its tube lens, as a board's X, Y, Z and A are taken.
+
+`expected-failures/` holds what must not work, and is tested:
+
+| Folder | What is in it |
+| --- | --- |
+| `refused/` | A description with one mistake, each with `# expected:` lines saying what must be said about it (`tests/test_expected_failures.py`). A new way of being refused is one more file. |
+| `motors/` | A working description whose motor misbehaves: it loses commands, stalls, ends short or drifts. `test.faulty` is a driver only `tests/test_motor_faults.py` registers, so these cannot be run on a server. |
+
 A color camera states its bands on its sensor, by name:
 
 ```yaml
@@ -247,7 +258,9 @@ the free memory is refused too, and stopping one part way keeps nothing.
 | `unwired` | What the section wires is real, the rest simulated: a real camera beside a simulated stage. Detectors are all real or all simulated, and without `uc2_cam_py` the optics stand in, with a warning. |
 | `nothing` | What the section does not wire stops the start, and every such thing is listed. So does a wired camera without `uc2_cam_py`: nothing here shows a rendered image in its place. |
 
-The cubes name their actuators; `hardware` says which driver reaches each, and with what.
+The cubes name their actuators; `hardware` says which driver reaches each, and with what. An actuator
+a cube names has to be declared there, or the description is refused; a variable can also name none,
+which `simulate: nothing` refuses.
 
 | Key | Means |
 | --- | --- |

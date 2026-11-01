@@ -11,12 +11,12 @@ cubes:
   laser_488:
     element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
-      power: {actuator: laser-dac, initial: 0 mW, step: 1 mW}
+      power: {actuator: laser-dac, initial: 0 mW, step: 1 mW, max: 50 mW}
 
   led_625:
     element: {kind: source, emits: led, spectrum: {center: 625 nm, width: 15 nm}, max_power: 50 nW}
     tunes:
-      power: {actuator: led-dac, initial: 0 mW, step: 5 nW}
+      power: {actuator: led-dac, initial: 0 mW, step: 5 nW, max: 50 nW}
 
   stage:
     element:
@@ -31,7 +31,7 @@ cubes:
     moves:
       x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
       y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
-      z: {actuator: stg-z, along: axis, initial: 0 um, step: 100 um, min: -500 um, max: 500 um, speed: 500 um/s}
+      z: {actuator: stg-z, along: axis, initial: 0 um, step: 1 um, min: -500 um, max: 500 um, speed: 500 um/s}
 
   objective:
     element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, working_distance: 10 mm}
@@ -68,6 +68,18 @@ detection:
   - {from: objective, to: dichroic, distance: 100 mm}
   - {from: dichroic, via: transmit, to: tube, distance: 30 mm}
   - {from: tube, to: camera, distance: focus}
+
+# Example wiring: no rig stands behind this file, and the board, axes and steps_per_um are made up.
+# `simulate: everything` below never builds it; for a real rig, state what is really there.
+hardware:
+  boards:
+    uc2: {transport: canopen, interface: socketcan, channel: can0}
+  actuators:
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+    led-dac: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
 
 settings:
   simulate: everything

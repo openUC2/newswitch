@@ -13,18 +13,18 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from newswitch.drivers.base import SimulatedMove
+from newswitch.drivers.base import Simulated, SimulatedMove
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.drivers.uc2.actuators import Laser, Stepper, Turret, Wheel
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument import hardware, parts, spec
-from newswitch.microscope.parts import build_microscope, build_uc2_bus, bus_options
+from newswitch.microscope.parts import build_drivers, build_microscope, build_uc2_bus, bus_options
 from newswitch.settings import Settings
 from newswitch.states.uc2 import UC2State
 from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
-from tests.conftest import registry_names, run_settings
+from tests.conftest import registry_names, run_settings, wired_only
 
 README = Path(__file__).parent.parent / "instruments" / "README.md"
 
@@ -52,6 +52,7 @@ def rewired(tmp_path: Path, **changes: Any) -> spec.Instrument:  # noqa: ANN401
             data["hardware"].pop(key)
         else:
             data["hardware"][key] = value
+    wired_only(data, **{"actuators": {}, **data["hardware"]})
     path.write_text(yaml.safe_dump(data))
     return spec.load(copy)
 
@@ -158,6 +159,18 @@ def test_simulated_a_board_is_a_virtual_bus(tmp_path: Path) -> None:
 
 
 # --- real hardware
+
+
+def test_an_actuator_that_is_named_must_be_declared(tmp_path: Path) -> None:
+    """A mistyped name would otherwise go unnoticed until a real run, or for good if simulated."""
+    data = yaml.safe_load((REFERENCE_INSTRUMENT / spec.DESCRIPTION).read_text())
+    data["cubes"]["stage"]["moves"]["z"]["actuator"] = "stg-zz"
+    del data["hardware"]["actuators"]["stg-z"]
+    copy = tmp_path / "instrument"
+    shutil.copytree(REFERENCE_INSTRUMENT, copy)
+    (copy / spec.DESCRIPTION).write_text(yaml.safe_dump(data))
+    with pytest.raises(spec.SpecError, match="stage.z: hardware.actuators has no 'stg-zz'"):
+        spec.load(copy)
 
 
 def test_every_control_must_be_wired(tmp_path: Path, real: Settings) -> None:
@@ -521,7 +534,22 @@ def test_real_and_simulated_detectors_are_refused_together(tmp_path: Path) -> No
     )
     data.pop("ui", None)
     data.pop("agent_ui", None)
-    data["hardware"] = {"cameras": {"camera_green": {"protocol": "usb3-vision"}}}
+    wired_only(data, {}, cameras={"camera_green": {"protocol": "usb3-vision"}})
     (tmp_path / spec.DESCRIPTION).write_text(yaml.safe_dump(data))
     with pytest.raises(spec.SpecError, match="camera_red has no camera beside those that do"):
         build_microscope(run_settings(tmp_path, simulate="unwired"), spec.load(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["rgb-camera", "dual-camera", "fake-microscope", "flim", "light-sheet", "point-scanner"],
+)
+def test_the_example_wiring_can_be_built(name: str, tmp_path: Path) -> None:
+    """They all simulate everything, so nothing else would notice a wrong option."""
+    instrument = spec.load(Path(__file__).parent.parent / "instruments" / name)
+    settings = run_settings(tmp_path, simulate="unwired")
+    bus = build_uc2_bus(settings, instrument, UC2State())
+    drivers = build_drivers(settings, instrument, bus, None)
+    wired = [v.name for v in instrument.variables.values() if v.actuator is not None]
+    assert wired and all(variable in drivers for variable in wired)
+    assert all(not isinstance(drivers[variable], Simulated) for variable in wired)

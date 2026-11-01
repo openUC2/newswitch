@@ -12,7 +12,7 @@ cubes:
   laser_488:
     element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
-      power: {initial: 0 mW, step: 1 mW}
+      power: {actuator: laser-dac, initial: 0 mW, step: 1 mW, max: 50 mW}
 
   dichroic:
     element: {kind: dichroic, curve: lp_500}
@@ -40,9 +40,9 @@ cubes:
           reflect: 1.0e-6  # light coming back the way it came (epi)
           pattern: {beads: 3600, radius: 10 um}
     moves:
-      x: {along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
-      y: {along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
-      z: {along: axis, initial: 0 um, step: 100 um, min: -500 um, max: 500 um, speed: 500 um/s}
+      x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      z: {actuator: stg-z, along: axis, initial: 0 um, step: 100 um, min: -500 um, max: 500 um, speed: 500 um/s}
 
   filter_green:
     element: {kind: filter, name: BP 525/50, curve: bp_525_50}
@@ -77,6 +77,17 @@ detection:
 
 drives:
   - {from: galvo.pixel, to: pmt.sample}
+
+# Example wiring: no rig stands behind this file, and the board, axes and steps_per_um are made up.
+# `simulate: everything` below never builds it; for a real rig, state what is really there.
+hardware:
+  boards:
+    uc2: {transport: canopen, interface: socketcan, channel: can0}
+  actuators:
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
 
 settings:
   simulate: everything

@@ -1,8 +1,9 @@
 """How an instrument's optics reach real hardware: the ``hardware`` section of its description.
 
 The cubes say what the microscope is and name their actuators; this section says which driver reaches
-each, and with what. An actuator's other keys are its driver's to check. It is no part of what the
-compiler looks at, and what it does not wire is simulated or refused, as ``settings.simulate`` says::
+each, and with what, so an actuator a cube names has to be here. An actuator's other keys are its
+driver's to check. It is no part of what the compiler looks at, and a variable that names no actuator
+is simulated or refused, as ``settings.simulate`` says::
 
     hardware:
       boards:

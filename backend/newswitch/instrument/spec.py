@@ -945,6 +945,11 @@ def _hardware_problems(instrument: Instrument) -> list[str]:
         if name not in named
     ]
     problems += [
+        f"{variable.name}: hardware.actuators has no {variable.actuator!r}"
+        for variable in instrument.variables.values()
+        if variable.actuator is not None and variable.actuator not in instrument.hardware.actuators
+    ]
+    problems += [
         f"hardware: there is no sensor {name!r} for a camera"
         for name in instrument.hardware.cameras
         if not isinstance(_element(instrument, name), Sensor)

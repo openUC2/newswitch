@@ -21,7 +21,7 @@ from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.routines.autofocus import run_autofocus
 from newswitch.services.stage import stage_of, where
 from newswitch.services.values import Values
-from tests.conftest import run_settings
+from tests.conftest import run_settings, wired_only
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 FAKE = INSTRUMENTS / "fake-microscope"
@@ -259,7 +259,12 @@ def test_lit_power_of_a_source_that_starts_off_is_its_maximum(values: Values) ->
 
 def test_a_source_with_nothing_to_tune_it_is_at_its_maximum(tmp_path: Path) -> None:
     """Whatever anyone asks: there is no variable to ask, and no ``parts`` said there has to be."""
-    instrument = edited_fake(tmp_path, lambda d: d["cubes"]["laser_488"].pop("tunes"))
+
+    def tuneless(data: dict[str, Any]) -> None:
+        del data["cubes"]["laser_488"]["tunes"]
+        del data["hardware"]["actuators"]["laser-dac"]
+
+    instrument = edited_fake(tmp_path, tuneless)
     m = build_microscope(run_settings(tmp_path), instrument)
     assert m.values is not None and m.detector is not None
     laser = m.source_state.sources["laser_488"]
@@ -371,7 +376,7 @@ def test_a_driver_of_someone_elses_needs_no_board(tmp_path: Path) -> None:
     data = yaml.safe_load((FAKE / "microscope.yml").read_text())
     data.pop("ui", None)
     data["cubes"]["stage"]["moves"]["z"]["actuator"] = "focus-drive"
-    data["hardware"] = {"actuators": {"focus-drive": {"driver": "someone.else", "gear": 3}}}
+    wired_only(data, {"focus-drive": {"driver": "someone.else", "gear": 3}})
     data["settings"]["simulate"] = "unwired"
     folder = tmp_path / "instrument"
     shutil.copytree(FAKE, folder)
@@ -388,9 +393,7 @@ def test_a_driver_that_needs_a_board_says_so(tmp_path: Path) -> None:
     data = yaml.safe_load((FAKE / "microscope.yml").read_text())
     data.pop("ui", None)
     data["cubes"]["stage"]["moves"]["z"]["actuator"] = "focus-drive"
-    data["hardware"] = {
-        "actuators": {"focus-drive": {"driver": "uc2.stepper", "axis": "Z", "steps_per_um": 3.2}}
-    }
+    wired_only(data, {"focus-drive": {"driver": "uc2.stepper", "axis": "Z", "steps_per_um": 3.2}})
     folder = tmp_path / "instrument"
     shutil.copytree(FAKE, folder)
     (folder / "microscope.yml").write_text(yaml.safe_dump(data))

@@ -13,12 +13,12 @@ cubes:
   laser_488:
     element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
     tunes:
-      power: {actuator: laser-dac, initial: 20 mW, step: 1 mW}
+      power: {actuator: laser-dac, initial: 20 mW, step: 1 mW, max: 50 mW}
 
   led_625:
     element: {kind: source, emits: led, spectrum: {center: 625 nm, width: 15 nm}, max_power: 50 nW}
     tunes:
-      power: {actuator: led-dac, initial: 0 mW, step: 5 nW}
+      power: {actuator: led-dac, initial: 0 mW, step: 5 nW, max: 50 nW}
 
   stage:
     element:
@@ -67,7 +67,8 @@ cubes:
     # A real achromat, from its prescription; it can be focused.
     element: {kind: lens, prescription: lenses/AC254-100-A.optiland, clear_radius: 6 mm}
     moves:
-      dz: {actuator: tube-focus, along: axis, initial: 0 um, step: 1000 um}
+      # No actuator: a board has X, Y, Z and A, and those are taken.
+      dz: {along: axis, initial: 0 um, step: 1000 um}
 
   camera_a:
     element:
@@ -113,6 +114,20 @@ detection:
   - {from: tube_a, to: camera_a, distance: 97.068 mm}
   - {from: splitter, via: reflect, to: tube_b, distance: 40 mm}
   - {from: tube_b, to: camera_b, distance: focus}
+
+# Example wiring: no rig stands behind this file, and the board, axes and steps_per_um are made up.
+# `simulate: everything` below never builds it; for a real rig, state what is really there.
+hardware:
+  boards:
+    uc2: {transport: canopen, interface: socketcan, channel: can0}
+  actuators:
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    turret: {driver: uc2.turret, board: uc2, positions: {1: 0, 2: 20000}}
+    wheel: {driver: uc2.wheel, board: uc2, axis: A, positions: {1: 0.0, 2: 120.0}}
+    laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+    led-dac: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
 
 settings:
   simulate: everything
