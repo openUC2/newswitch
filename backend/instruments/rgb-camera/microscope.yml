@@ -27,7 +27,7 @@ cubes:
           absorbed: 1.0e-4
           transmit: 0.9   # light going straight through (transmitted light)
           reflect: 1.0e-6  # light coming back the way it came (epi)
-          pattern: {beads: 3600, radius: 10 um, depth: 4 um}
+          pattern: {beads: 3600, radius: 2 um, depth: 4 um}
     moves:
       x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
       y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
@@ -93,9 +93,12 @@ settings:
 ui:
   catalog: newswitch@6
   bloks:
+    view-color:
+      description: 'Color: the three bands of one camera, and where it is focused.'
+      default: true
+      file: view.bsx
     view-fluorescence:
       description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
-      default: true
       file: ../views/fluorescence.bsx
     view-acquire:
       description: 'Acquire: time, positions, z planes and detectors, stored in mikro.'

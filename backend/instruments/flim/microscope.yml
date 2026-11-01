@@ -104,19 +104,12 @@ ui:
   catalog: newswitch@6
   bloks:
     view-flim:
-      description: 'FLIM: the photons per pixel, summed over arrival time, and the stage.'
+      description: 'FLIM: the lifetime axis the SPAD delivers, the beam and the focus.'
       default: true
-      bsx: |
-        <Html>
-        <div className="flex h-full flex-col gap-3 p-4">
-            <div className="flex gap-2 past:hidden">
-                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
-                <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
-                <LiveView className="h-full" />
-            </div>
-            <SourceControl />
-            <MoveControl className="locked:opacity-60" />
-        </div>
-        </Html>
+      file: view.bsx
+    view-acquire:
+      description: 'Acquire: time, positions, z planes and detectors, stored in mikro.'
+      file: ../views/acquire.bsx
+    view-stage:
+      description: 'Stage: the sample on the stage, with the images taken there.'
+      file: ../views/stage.bsx

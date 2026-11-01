@@ -11,7 +11,7 @@ import yaml
 
 from arkitekt import Task
 
-from newswitch.drivers.simulator import SimulatedMicroscope, _beads
+from newswitch.drivers.simulator import SimulatedMicroscope, _add_blurred, _beads
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.predict import Compiled
@@ -280,9 +280,25 @@ def test_far_out_of_focus_a_bead_is_drawn_as_it_would_be_near(tmp_path: Path) ->
             )
         )
     )
-    assert sigma > 8.0
     assert field.sum() == pytest.approx(expected.sum(), rel=0.05)
     assert np.abs(field - expected).max() < 0.1 * expected.max()
+
+
+def test_blurring_beads_together_changes_nothing_a_focus_metric_can_see(tmp_path: Path) -> None:
+    """Width by width the image changes smoothly, or the steps would look like focus."""
+    columns, rows = np.full(3, 256.0), np.full(3, 256.0)
+    brightness = np.ones(3)
+
+    def peak(sigma: float) -> float:
+        field = np.zeros((512, 512))
+        _add_blurred(field, columns[:1], rows[:1], np.array([sigma]), brightness[:1])
+        return float(field.max())
+
+    widths = np.linspace(20.0, 40.0, 81)
+    peaks = np.array([peak(float(width)) for width in widths])
+    # A peak of one is what a bead of that brightness has, whichever groups it fell between.
+    assert np.abs(peaks - 1.0).max() < 0.05
+    assert np.abs(np.diff(peaks)).max() < 0.01
 
 
 def test_the_frames_step_the_sheet_and_leave_the_stage(tmp_path: Path) -> None:

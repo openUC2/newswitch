@@ -83,11 +83,25 @@ def acquire(
     return store
 
 
-def brightest_bead(image: np.ndarray) -> tuple[int, int]:
-    """Where the most light of `image` is, as (row, column); smoothed against noise."""
+def bead_pixels(image: np.ndarray) -> np.ndarray:
+    """Where each bead of `image` is, as (row, column); smoothed against noise."""
     smooth = ndimage.gaussian_filter(image.astype(float), 2.0)
-    row, column = np.unravel_index(np.argmax(smooth), smooth.shape)
-    return int(row), int(column)
+    labels, count = ndimage.label(smooth > smooth.min() + (smooth.max() - smooth.min()) / 2.0)
+    return np.array(ndimage.center_of_mass(smooth, labels, range(1, count + 1)))
+
+
+def assert_same_beads(first: np.ndarray, second: np.ndarray, tolerance: float = 2.0) -> None:
+    """Every bead of `first` well inside what `second` saw too has one of `second` just there.
+
+    Both as (y, x) in the same stage micrometres.
+    """
+    margin = 15.0
+    inside = np.all(
+        (first > second.min(axis=0) + margin) & (first < second.max(axis=0) - margin), axis=1
+    )
+    assert inside.any(), "the two images share no bead to compare"
+    for bead in first[inside]:
+        assert np.linalg.norm(second - bead, axis=1).min() < tolerance
 
 
 def stage_of(acquired: AcquiredPosition, z: int, y: float, x: float) -> np.ndarray:
@@ -179,11 +193,15 @@ def test_positions_become_datasets_placed_in_stage_space(tmp_path: Path) -> None
     assert (first.name, second.name) == ("run P1", "run P2")
     assert first.data.shape == (1, 1, 1, 512, 512)
 
-    row, column = brightest_bead(first.data[0, 0, 0])
-    expected = stage_of(first, 0, row, column)
-    other_row, other_column = brightest_bead(second.data[0, 0, 0])
-    found = stage_of(second, 0, other_row, other_column)
-    assert found[1:] == pytest.approx(expected[1:], abs=2.0)
+    def in_stage(acquired: AcquiredPosition) -> np.ndarray:
+        return np.array(
+            [
+                stage_of(acquired, 0, row, column)[1:]
+                for row, column in bead_pixels(acquired.data[0, 0, 0])
+            ]
+        )
+
+    assert_same_beads(in_stage(first), in_stage(second))
 
 
 def test_placement_has_the_pixel_size_and_the_middle_at_the_stage(tmp_path: Path) -> None:

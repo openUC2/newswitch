@@ -25,7 +25,8 @@ def bloks_of(app: App) -> dict[str, list]:
 def test_the_bloks_are_the_ones_its_description_holds() -> None:
     """They pass the catalog; the frontend shows the one marked default first."""
     assert bloks_of(create_fastapi_registry(spec.load(FAKE))) == {
-        "view-fluorescence": [CATALOG_NAME, True],
+        "view-bench": [CATALOG_NAME, True],
+        "view-fluorescence": [CATALOG_NAME, False],
         "view-stage": [CATALOG_NAME, False],
         "view-minimal": [CATALOG_NAME, False],
     }

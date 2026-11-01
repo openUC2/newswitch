@@ -45,6 +45,7 @@ def stream() -> AcquisitionChannel:
 def edited(tmp_path: Path, change: Callable[[dict[str, Any]], Any]) -> Path:
     """The FLIM description with `change` made to it."""
     data = yaml.safe_load((INSTRUMENT / spec.DESCRIPTION).read_text())
+    data.pop("ui", None)
     change(data)
     path = tmp_path / spec.DESCRIPTION
     path.write_text(yaml.safe_dump(data))

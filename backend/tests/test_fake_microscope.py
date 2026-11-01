@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
@@ -49,7 +50,12 @@ def test_routes_are_found_by_walking_the_edges(instrument: spec.Instrument) -> N
 
 def test_an_edge_to_nothing_is_refused(tmp_path: Path) -> None:
     """Everything an edge names has to exist."""
-    text = (INSTRUMENT / spec.DESCRIPTION).read_text().replace("to: tube_b", "to: nothing")
+    data = yaml.safe_load((INSTRUMENT / spec.DESCRIPTION).read_text())
+    data.pop("ui", None)
+    data.pop("agent_ui", None)
+    edge = next(edge for edge in data["detection"] if edge["to"] == "tube_b")
+    edge["to"] = "nothing"
+    text = yaml.safe_dump(data)
     bad = tmp_path / "bad.yml"
     bad.write_text(text)
     with pytest.raises(spec.SpecError, match="no cube 'nothing'"):

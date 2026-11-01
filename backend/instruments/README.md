@@ -192,6 +192,9 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `light-sheet` | A sheet from the side, whose positioner the camera's frames step, and a stage for x, y and z. |
 | `flim` | A point scanner on a thin section, timing each photon against a pulsed laser. |
 
+Each has a view of its own, as its first: `view.bsx` beside its description where it is not written
+inside it, named by `file:` as the shared ones in `views/` are.
+
 All of these simulate everything. Only `cam-test` states hardware that exists; the others' `hardware`
 sections are example wiring with made-up boards, axes and `steps_per_um`, and say so, for a real rig
 to replace. `fake-microscope` has no actuator on its tube lens, as a board's X, Y, Z and A are taken.

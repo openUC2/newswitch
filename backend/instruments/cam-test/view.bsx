@@ -1,0 +1,78 @@
+<Html>
+<div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-info/10 via-transparent to-transparent p-3">
+<ScrollArea className="h-full w-[400px] shrink-0">
+<div className="flex flex-col gap-3 pb-3 pr-3">
+<div className="flex flex-col px-1 pt-1">
+    <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-info">A camera and nothing else</span>
+    <span className="text-xl font-semibold tracking-tight">Camera test</span>
+</div>
+<div className="flex flex-wrap gap-1.5"><if when={self.DetectorState.is_acquiring}>
+    <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive">
+        <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
+        <span>Live</span>
+    </div>
+<else>
+    <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+        <span>Idle</span>
+    </div>
+</else>
+</if></div>
+<div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">The sensor</span>
+    <div className="mt-2">
+<div className="grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
+<div className="flex min-w-0 flex-col px-3 py-2">
+    <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.sim_cam.pixel_um, digits: 2)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+</div>
+<div className="flex min-w-0 flex-col px-3 py-2">
+    <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Field</span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.sim_cam.field_width_um, digits: 0)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+</div>
+<div className="flex min-w-0 flex-col px-3 py-2">
+    <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Depth</span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.sim_cam.depth_of_field_um, digits: 1)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+</div>
+</div>
+    </div>
+</div>
+<foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
+    <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{camera.name}</span>
+        <div className="mt-3 grid grid-cols-2 gap-3 past:hidden">
+            <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
+                <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{str.replace(value: tune.name, search: str.concat(values: [camera.name, "."]), replacement: "")}</span>
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.value, digits: 1)}</span>
+                        <span className="text-xs text-muted-foreground">{tune.unit}</span>
+                    </div>
+                    <Slider className="min-w-0" step={tune.step} value={tune.value} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
+                </div>
+            </foreach>
+        </div>
+        <span className="mt-2 block text-[11px] text-muted-foreground">What this camera really does comes from uc2_cam_py when it is installed; without it the optics stand in.</span>
+    </div>
+</foreach>
+</div>
+</ScrollArea>
+<div className="relative flex min-w-0 flex-1 gap-3">
+<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+    <div className="h-full past:opacity-40">
+        <LiveView className="h-full" />
+    </div>
+    <div className="pointer-events-none absolute right-3 top-12 flex flex-col items-end gap-1 rounded-xl border border-border/60 bg-card/80 px-3 py-1.5 backdrop-blur">
+        <span className="text-sm font-medium">sim_cam</span>
+    </div>
+</div>
+<div className="absolute bottom-4 right-4 z-10">
+<div className="flex gap-1 rounded-full border border-border/60 bg-card/80 p-1 backdrop-blur past:hidden">
+    <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Live</Button>
+    <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
+    <Button icon="camera" size="sm" variant="ghost" className="rounded-full" onClick={self.capture_image()}>Snap</Button>
+</div>
+</div>
+</div>
+</div>
+</Html>

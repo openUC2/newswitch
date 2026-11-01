@@ -70,24 +70,10 @@ ui:
   catalog: newswitch@6
   bloks:
     view-camera:
-      description: 'Camera: the live image of the camera, and acquiring it.'
+      description: 'Camera: the live image of the camera, its sensor and its settings.'
       default: true
-      bsx: |
-        <Html>
-        <div className="flex h-full flex-col gap-3 p-4">
-            <div className="flex gap-2 past:hidden">
-                <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
-                <Button icon="square" variant="outline" onClick={self.stop_live_view()}>Stop</Button>
-                <Button icon="camera" onClick={self.capture_image()}>Acquire</Button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden rounded-lg past:opacity-40">
-                <LiveView className="h-full" />
-            </div>
-        </div>
-        </Html>
+      file: view.bsx
 
-# What Orkestrator shows in agent mode (just agent): bloks drawn with the spec's catalogs and
-# Orkestrator's module, the cameras as lovekit streams.
 agent_ui:
   catalog: orkestrator@v4.2.1
   bloks:

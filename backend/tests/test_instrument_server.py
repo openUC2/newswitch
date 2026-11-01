@@ -156,9 +156,9 @@ def test_the_ui_is_the_bloks_it_holds() -> None:
     assert {"move", "calibrate_light_path", "swap", "tune"} <= {
         impl.interface or impl.definition.name for impl in registry.snapshot().get_implementations()
     }
-    assert len(registry.registered_bloks) == 3
+    assert len(registry.registered_bloks) == 4
     assert [name for name, blok in registry.get_declared_bloks().items() if blok.default] == [
-        "view-fluorescence"
+        "view-bench"
     ]
 
 

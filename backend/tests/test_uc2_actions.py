@@ -79,7 +79,7 @@ async def test_run_autofocus_action(virtual_microscope_app: FastAPI) -> None:
         returned = [e.get_returns() for e in events if e.get_returns()]
         assert returned, "run_autofocus returned no focus position"
         best_z = next(iter(returned[-1].values()))
-        assert abs(best_z) <= 2.0  # anywhere in the 4 um of the section is sharp
+        assert abs(best_z) <= 1.0
 
         moves = (await client.get("/states/MoveState")).json()["state"]["moves"]
         assert moves["stage"]["z"]["value"] == pytest.approx(best_z)

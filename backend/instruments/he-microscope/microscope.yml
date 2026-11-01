@@ -104,9 +104,12 @@ settings:
 ui:
   catalog: newswitch@6
   bloks:
+    view-slide:
+      description: 'Slide: the section, its stains, the objectives and the focus.'
+      default: true
+      file: view.bsx
     view-minimal:
       description: 'Minimal: the live image and the stage, nothing else.'
-      default: true
       file: ../views/minimal.bsx
     view-acquire:
       description: 'Acquire: time, positions, z planes and detectors, stored in mikro.'

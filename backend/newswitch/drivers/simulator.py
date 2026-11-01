@@ -52,11 +52,11 @@ def _beads(pattern: Pattern) -> np.ndarray:
 #: How far a bead's light is drawn, in widths of it; how dim one may be before it is not.
 _REACH_SIGMAS = 4.0
 _FAINTEST = 1e-3
-#: A bead this wide or wider is blurred with others of about its width, so that a frame far out of
-#: focus, where each would paint all of it, costs no more than one in focus.
-_DRAWN_SIGMA = 8.0
+#: How many pixels of a frame are worth drawing bead by bead, narrowest first. The rest are blurred
+#: together, so that a frame far out of focus, where each would paint all of it, costs no more.
+_DRAWN_PIXELS = 4_000_000
 #: How much wider each such group is than the last, and how finely it is computed, in its width.
-_GROUP_RATIO = 1.08
+_GROUP_RATIO = 1.25
 _CELLS_PER_SIGMA = 3.0
 
 
@@ -67,23 +67,38 @@ def _add_blurred(
     spread: np.ndarray,
     brightness: np.ndarray,
 ) -> None:
-    """Add wide beads to `field`, computed on a grid as coarse as they are wide."""
+    """Add wide beads to `field`, on a grid as coarse as they are wide.
+
+    Each goes to the two groups around its width, in proportion, keeping its light: a bead changing
+    width changes the image smoothly, or a focus metric would see the steps and not the focus.
+    """
     if not len(spread):
         return
     height, width = field.shape
-    groups = np.floor(np.log(spread / _DRAWN_SIGMA) / np.log(_GROUP_RATIO)).astype(int)
-    for group in np.unique(groups):
-        chosen = groups == group
-        sigma = _DRAWN_SIGMA * _GROUP_RATIO ** (group + 0.5)
+    place = np.log(spread) / np.log(_GROUP_RATIO)
+    lower = np.floor(place).astype(int)
+    upper_share = place - lower
+    for group in range(int(lower.min()), int(lower.max()) + 2):
+        sigma = _GROUP_RATIO**group
+        share = np.where(lower == group, 1.0 - upper_share, 0.0) + np.where(
+            lower + 1 == group, upper_share, 0.0
+        )
+        chosen = share > 0.0
+        if not chosen.any():
+            continue
         cell = max(sigma / _CELLS_PER_SIGMA, 1.0)
         margin = _REACH_SIGMAS * sigma * _GROUP_RATIO
         size = (int((height + 2 * margin) / cell) + 3, int((width + 2 * margin) / cell) + 3)
         coarse = np.zeros(size)
         at_row = (rows[chosen] + margin) / cell
         at_column = (columns[chosen] + margin) / cell
-        # Each keeps its light, for having been given the width of its group.
         weight = (
-            brightness[chosen] * (spread[chosen] / sigma) ** 2 * 2.0 * np.pi * (sigma / cell) ** 2
+            share[chosen]
+            * brightness[chosen]
+            * (spread[chosen] / sigma) ** 2
+            * 2.0
+            * np.pi
+            * (sigma / cell) ** 2
         )
         row, column = np.floor(at_row).astype(int), np.floor(at_column).astype(int)
         inside = (row >= 0) & (row < size[0] - 1) & (column >= 0) & (column < size[1] - 1)
@@ -265,7 +280,15 @@ class Simulator:
             spread[seen],
             brightness[seen],
         )
-        near = spread < _DRAWN_SIGMA
+        order = np.argsort(spread)
+        columns, rows, spread, brightness = (
+            columns[order],
+            rows[order],
+            spread[order],
+            brightness[order],
+        )
+        painted = np.minimum((2.0 * _REACH_SIGMAS * spread + 2.0) ** 2, float(width * height))
+        near = np.cumsum(painted) <= _DRAWN_PIXELS
         for column, row, sigma, bright in zip(
             columns[near], rows[near], spread[near], brightness[near]
         ):

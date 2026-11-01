@@ -26,7 +26,6 @@ from arkitekt_fastapi.testing import AsyncAgentTestClient
 pytest.importorskip("mikro")
 
 from mikro import Mikro, space_3d  # noqa: E402
-from scipy import ndimage  # noqa: E402
 
 from main_fastapi import create_app  # noqa: E402
 from newswitch.accounts.auth import AllowAllAuthenticator  # noqa: E402
@@ -36,6 +35,7 @@ from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel  # 
 from newswitch.routines.acquire import acquire  # noqa: E402
 from newswitch.services.mikro_connection import MikroConnection  # noqa: E402
 from newswitch.services.mikro_store import MikroDatasetStore  # noqa: E402
+from tests.test_acquire import assert_same_beads, bead_pixels
 from tests.conftest import acquisition, collect_until_completed, run_settings  # noqa: E402
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
@@ -187,17 +187,16 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
     )
     world = space_3d(mikro, "stage", reference="stage-dual-camera")
 
-    def bead_in_stage(made: AcquiredDataset) -> np.ndarray:
+    def beads_in_stage(made: AcquiredDataset) -> np.ndarray:
         dataset = mikro.get_array_dataset(made.id)
-        image = ndimage.gaussian_filter(np.asarray(dataset.data)[0, 0, 0].astype(float), 2.0)
-        row, column = np.unravel_index(np.argmax(image), image.shape)
+        pixels = bead_pixels(np.asarray(dataset.data)[0, 0, 0])
         return np.asarray(
             dataset.intrinsic_system.transform_points_to(
-                world, [[0, 0, 0, row, column]], axes=("z", "y", "x")
+                world, [[0, 0, 0, row, column] for row, column in pixels], axes=("z", "y", "x")
             )
-        )[0]
+        )[:, 1:]
 
-    assert bead_in_stage(first)[1:] == pytest.approx(bead_in_stage(second)[1:], abs=2.0)
+    assert_same_beads(beads_in_stage(first), beads_in_stage(second))
 
 
 def test_an_rgb_camera_is_three_labelled_channels(mikro: Mikro, tmp_path: Path) -> None:
