@@ -282,7 +282,7 @@ def test_a_change_reaches_what_the_optics_publish(microscope: Microscope, values
 
 
 def test_what_is_published_is_a_new_copy(values: Values) -> None:
-    """A change inside a ``dict[str, model]`` cannot be described: its whole field is replaced."""
+    """What was published is left as it was: a change replaces the whole field."""
     moves, sources = values.move_state.moves, values.source_state.sources
     values.set({"stage.x": 5.0})
     assert values.move_state.moves is not moves

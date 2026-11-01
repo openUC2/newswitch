@@ -18,9 +18,9 @@ dependencies = [
     "pint>=0.25.2",
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
-    "arkitekt==11.6.0",
+    "arkitekt==11.6.1",
     "arkitekt-fastapi==3.0.0",
-    "arkitekt-runtime==7.3.0",
+    "arkitekt-runtime==8.0.1",
     "arkitekt-spec==6.3.1",
     "koil>=3.3.7",
     "pyyaml>=6",
@@ -54,7 +54,7 @@ uc2 = [
 # server through rekuest, the cameras streamed through lovekit (newswitch.serving), its images
 # and their metadata in the mikro that server provides.
 agent = [
-    "arkitekt[rekuest,lovekit]==11.6.0",
+    "arkitekt[rekuest,lovekit]==11.6.1",
     "mikro==12.2.0",
 ]
 # Talking to a mikro in FastAPI mode (`newswitch.services.mikro_connection`), where nothing

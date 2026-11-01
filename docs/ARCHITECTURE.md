@@ -1,7 +1,7 @@
 # newswitch Architecture & Developer Guide
 
 *How the backend, the arkitekt stack, and the frontend fit together. Written
-against `arkitekt` 11.6.0, `arkitekt-runtime` 7.3.0, `arkitekt-spec` 6.3.1 and
+against `arkitekt` 11.6.1, `arkitekt-runtime` 8.0.1, `arkitekt-spec` 6.3.1 and
 `arkitekt-fastapi` 3.0.0, as locked in `backend/uv.lock` (2026-10).
 File references are relative to the repo root.*
 
@@ -85,8 +85,8 @@ detector's own tunes go through its manager (`DetectorTune`), a wired actuator g
 
 What is published is keyed by cube, then by variable: `MoveState.moves`, `SwapState.swaps`,
 `TuneState.tunes`, and `SourceState.sources` by source, so a blok binds
-`self.MoveState.moves.stage.z.value`. A change replaces the whole field, because arkitekt 11.6
-cannot publish a change inside a `dict[str, model]`. `DetectorState.detectors` stays a list, whose
+`self.MoveState.moves.stage.z.value`. A change replaces the whole field, and `Values` keeps plain
+copies, because arkitekt takes over the class of what is published. `DetectorState.detectors` stays a list, whose
 entries do publish.
 
 **Roles** (`newswitch/instrument/roles.py`) say what a variable was found to do. `Roles.found`
@@ -515,9 +515,9 @@ sequenceDiagram
   `{op: replace, path: /is_acquiring, value: true, rev: n}` to the agent, which fans it
   out to `/ws` subscribers; each frontend zustand store applies patches in
   revision order. Thread safety of the write is the state's own RLock. A change inside a
-  `dict[str, model]` cannot be published, so such a field is replaced whole
-  (`self.move_state.moves = _copied(self._moves)`); the entries of a list, like
-  `DetectorState.detectors`, do publish.
+  `dict[str, model]` can be published since `arkitekt-runtime` 8.0.1, but `Values` still
+  replaces such a field whole (`self.move_state.moves = _copied(self._moves)`); the entries of
+  a list, like `DetectorState.detectors`, are changed in place.
 - **Locks are action locks, nothing else.** An action's locks are its
   explicit `locks=` or are inferred from the contexts/states it takes (a
   state's `required_locks`, a context's `locks`). They do two things: an

@@ -174,7 +174,7 @@ wheels = [
 
 [[package]]
 name = "arkitekt"
-version = "11.6.0"
+version = "11.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -191,9 +191,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/ca/ad62ce702aad60006568898cdda8b3cd91d9b0839c46c83a3b226e5377ca/arkitekt-11.6.0.tar.gz", hash = "sha256:36fdb218e33a1bf99f4bad5650d0bd1b978d8dca39e6c94ed1e1e58c37a179a6", size = 201539, upload-time = "2026-10-30T20:23:35.596Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/8e/f7047d3537f0cd9ab858fc857cd0fb67670f2a1634714489b793a8b6ae34/arkitekt-11.6.1.tar.gz", hash = "sha256:c4f3f388eea2868f4fafeef0d642d09c16a4952e3ffd9eaa572d53bd520b16a6", size = 201370, upload-time = "2026-10-30T21:29:02.072Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/1e/fcd9ab72e949e6ff94cd21ee34a8c330f1b842aa6241165dc694f2675c64/arkitekt-11.6.0-py3-none-any.whl", hash = "sha256:80053ed616fefd8e035e8a62a4ddac5d8cd85ce71fa11b4325b3f087402110d0", size = 249305, upload-time = "2026-10-30T20:23:33.983Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/ae/845ec339dbea293d90610408e9f74962a4e3f16d1f0080ba74a004ef5fef/arkitekt-11.6.1-py3-none-any.whl", hash = "sha256:efb4995a95af5c3473e1cd2a64655808c0371c377cdc964d989b96489c482f14", size = 249166, upload-time = "2026-10-30T21:29:00.717Z" },
 ]
 
 [package.optional-dependencies]
@@ -226,7 +226,7 @@ wheels = [
 
 [[package]]
 name = "arkitekt-runtime"
-version = "7.3.0"
+version = "8.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "arkitekt-spec" },
@@ -235,9 +235,9 @@ dependencies = [
     { name = "koil" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/47/9fc8c4802178a71182b16c65bd35474a16d93a48efd7741c884b6cf48f68/arkitekt_runtime-7.3.0.tar.gz", hash = "sha256:4dbcc41b7ccc5fe53de28bbb662a21c42bd4c7f5c389e7e946aebb77203771a9", size = 130224, upload-time = "2026-10-30T20:15:06.843Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/82/d6cc9cbc32f450542d0fda5f32bafc189b8d33477fe5cb6b8d565030de96/arkitekt_runtime-8.0.1.tar.gz", hash = "sha256:b6d87cfc8451b461d734ebda358aa0e22d5cef080d707422df967e62397a546d", size = 129782, upload-time = "2026-11-01T08:38:29.34Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/3a/f3be818be19eb3bca36d71e317e103671213d56235be502c24dd14dc4512/arkitekt_runtime-7.3.0-py3-none-any.whl", hash = "sha256:23369a418be2ec32818bb8956b62dd2adb7386a47f19a18505edfe6d473fb00f", size = 160480, upload-time = "2026-10-30T20:15:05.704Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/69/2da3f64305d04434e74bc98828ede4c401489563052fb84aa9de4ddb96df/arkitekt_runtime-8.0.1-py3-none-any.whl", hash = "sha256:8c0092857fcfa4331e445bd72cc543402450dfb385005a0df1258f408593178f", size = 160106, upload-time = "2026-11-01T08:38:28.074Z" },
 ]
 
 [[package]]
@@ -1279,10 +1279,10 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "annotated-types", marker = "extra == 'types'", specifier = ">=0.5.0" },
     { name = "argon2-cffi", specifier = ">=25.1.0" },
-    { name = "arkitekt", specifier = "==11.6.0" },
-    { name = "arkitekt", extras = ["rekuest", "lovekit"], marker = "extra == 'agent'", specifier = "==11.6.0" },
+    { name = "arkitekt", specifier = "==11.6.1" },
+    { name = "arkitekt", extras = ["rekuest", "lovekit"], marker = "extra == 'agent'", specifier = "==11.6.1" },
     { name = "arkitekt-fastapi", specifier = "==3.0.0" },
-    { name = "arkitekt-runtime", specifier = "==7.3.0" },
+    { name = "arkitekt-runtime", specifier = "==8.0.1" },
     { name = "arkitekt-spec", specifier = "==6.3.1" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "kaffine", specifier = "==1.1.0" },
@@ -2059,7 +2059,7 @@ wheels = [
 
 [[package]]
 name = "rekuest"
-version = "12.2.0"
+version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "arkitekt-runtime" },
@@ -2071,9 +2071,9 @@ dependencies = [
     { name = "rath" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/7b/5854a1131458d28b78901506f6df2368e0e4afe552b0a66b3ef18cf9663e/rekuest-12.2.0.tar.gz", hash = "sha256:43c303411cfb4a7f696f604b5a9574e8f38ab5e8fee69fc4b03cc97561802fd7", size = 195396, upload-time = "2026-10-30T19:10:49.452Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/07/7d/2c1f335f815104a683834ac15ede8ee63d06be64c821a3fc8f61d301d47a/rekuest-12.2.1.tar.gz", hash = "sha256:922b3b7a52d618751201d726b8c58f8202aef6c0097363f39c3774dbcf204c93", size = 195188, upload-time = "2026-10-30T21:18:53.095Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/88/b773f6cb9f4e6c489fc62e4a0677fd3385de21cefead5cd563ee94bf2b00/rekuest-12.2.0-py3-none-any.whl", hash = "sha256:eb6d6fe42cfed5cb116f972f7de15ed5fdeb1851d05dec3fe9a29a7bde0062ae", size = 207783, upload-time = "2026-10-30T19:10:47.906Z" },
+    { url = "https://files.pythonhosted.org/packages/03/94/e00c7acef3ff7689b1cf08f06b0e4db8525802103e644b5618de52905af2/rekuest-12.2.1-py3-none-any.whl", hash = "sha256:b5e9147fb7bffe698243fb12a3fcf78bd84a108e99c31741ab768e525f313ff5", size = 207531, upload-time = "2026-10-30T21:18:51.887Z" },
 ]
 
 [[package]]

@@ -5,7 +5,7 @@ what that became, and has the optics find out what it means. That is why there i
 and why nothing can change a value and leave what is published behind.
 
 A published entry is replaced along with its whole field rather than changed where it is: arkitekt
-cannot describe a change inside a ``dict[str, model]`` as a patch.
+takes over the class of what is published, so the plain values are kept here and copies go out.
 """
 
 from __future__ import annotations
