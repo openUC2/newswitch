@@ -11,7 +11,7 @@ import yaml
 
 from arkitekt import Task
 
-from newswitch.drivers.simulator import SimulatedMicroscope
+from newswitch.drivers.simulator import SimulatedMicroscope, _beads
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.predict import Compiled
@@ -247,6 +247,42 @@ def test_out_of_focus_a_bead_spreads_its_light_and_keeps_it(tmp_path: Path) -> N
     spread = lit_at(microscope, 20.0, 20.0)
     assert spread.max() < focused.max() / 4.0
     assert spread.sum() == pytest.approx(focused.sum(), rel=0.1)
+
+
+def test_far_out_of_focus_a_bead_is_drawn_as_it_would_be_near(tmp_path: Path) -> None:
+    """Blurred with others of about its width, it keeps its light and its place."""
+    instrument = single_bead(tmp_path)
+    simulator = SimulatedMicroscope(instrument).simulator
+    state = {**instrument.initial_state(), "laser_488.power": 5.0, "stage.z": 100.0}
+    state["sheet_lens.z"] = 100.0
+    answer = simulator._answer("camera", state)
+    pattern = instrument.simulation_at(state).pattern
+    field = simulator._slice("camera", state, answer, pattern)
+
+    y, x, depth = _beads(pattern)
+    to_sample = np.array(answer.pixel_to_stage)
+    columns, rows = np.linalg.inv(to_sample) @ np.stack(
+        [x - answer.centre[0], y - answer.centre[1]]
+    )
+    pixel_um = abs(to_sample[0, 0])
+    grown = pattern.radius / pixel_um
+    sigma = float(np.hypot(grown, answer.blur_px_per_um * (depth[0] + 100.0)))
+    lit = math.exp(-2.0 * (depth[0] / answer.sheet_by_source["laser_488"]["waist_um"]) ** 2)
+    across, down = np.meshgrid(np.arange(512.0), np.arange(512.0))
+    expected = (
+        lit
+        * (grown / sigma) ** 2
+        * np.exp(
+            -0.5
+            * (
+                ((across - columns[0] - 255.5) / sigma) ** 2
+                + ((down - rows[0] - 255.5) / sigma) ** 2
+            )
+        )
+    )
+    assert sigma > 8.0
+    assert field.sum() == pytest.approx(expected.sum(), rel=0.05)
+    assert np.abs(field - expected).max() < 0.1 * expected.max()
 
 
 def test_the_frames_step_the_sheet_and_leave_the_stage(tmp_path: Path) -> None:

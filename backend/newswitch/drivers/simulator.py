@@ -18,7 +18,7 @@ from scipy import ndimage
 
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.predict import Answer, state_key
-from newswitch.instrument.spec import Instrument, Pattern
+from newswitch.instrument.spec import Instrument, Pattern, Stain
 from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
 
 #: The hidden errors, in an instrument's folder.
@@ -52,6 +52,52 @@ def _beads(pattern: Pattern) -> np.ndarray:
 #: How far a bead's light is drawn, in widths of it; how dim one may be before it is not.
 _REACH_SIGMAS = 4.0
 _FAINTEST = 1e-3
+#: A bead this wide or wider is blurred with others of about its width, so that a frame far out of
+#: focus, where each would paint all of it, costs no more than one in focus.
+_DRAWN_SIGMA = 8.0
+#: How much wider each such group is than the last, and how finely it is computed, in its width.
+_GROUP_RATIO = 1.08
+_CELLS_PER_SIGMA = 3.0
+
+
+def _add_blurred(
+    field: np.ndarray,
+    columns: np.ndarray,
+    rows: np.ndarray,
+    spread: np.ndarray,
+    brightness: np.ndarray,
+) -> None:
+    """Add wide beads to `field`, computed on a grid as coarse as they are wide."""
+    if not len(spread):
+        return
+    height, width = field.shape
+    groups = np.floor(np.log(spread / _DRAWN_SIGMA) / np.log(_GROUP_RATIO)).astype(int)
+    for group in np.unique(groups):
+        chosen = groups == group
+        sigma = _DRAWN_SIGMA * _GROUP_RATIO ** (group + 0.5)
+        cell = max(sigma / _CELLS_PER_SIGMA, 1.0)
+        margin = _REACH_SIGMAS * sigma * _GROUP_RATIO
+        size = (int((height + 2 * margin) / cell) + 3, int((width + 2 * margin) / cell) + 3)
+        coarse = np.zeros(size)
+        at_row = (rows[chosen] + margin) / cell
+        at_column = (columns[chosen] + margin) / cell
+        # Each keeps its light, for having been given the width of its group.
+        weight = (
+            brightness[chosen] * (spread[chosen] / sigma) ** 2 * 2.0 * np.pi * (sigma / cell) ** 2
+        )
+        row, column = np.floor(at_row).astype(int), np.floor(at_column).astype(int)
+        inside = (row >= 0) & (row < size[0] - 1) & (column >= 0) & (column < size[1] - 1)
+        row, column, weight = row[inside], column[inside], weight[inside]
+        down, across = (at_row[inside] - row), (at_column[inside] - column)
+        np.add.at(coarse, (row, column), weight * (1 - down) * (1 - across))
+        np.add.at(coarse, (row, column + 1), weight * (1 - down) * across)
+        np.add.at(coarse, (row + 1, column), weight * down * (1 - across))
+        np.add.at(coarse, (row + 1, column + 1), weight * down * across)
+        blurred = ndimage.gaussian_filter(coarse, sigma / cell, mode="constant")
+        pixels = np.meshgrid(
+            (np.arange(height) + margin) / cell, (np.arange(width) + margin) / cell, indexing="ij"
+        )
+        field += ndimage.map_coordinates(blurred, pixels, order=1, mode="nearest")
 
 
 def _dtype(bit_depth: int) -> np.dtype:
@@ -81,7 +127,7 @@ class Simulator:
             answer,
             answer.electrons_by_source,
             *self._view(detector, state, answer),
-            self._stained(detector, state, answer, answer.band_nm or 550.0),
+            self._through(self._stains(detector, state, answer), answer.band_nm or 550.0),
         )
 
     def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
@@ -89,13 +135,14 @@ class Simulator:
         answer = self._answer(detector, state)
         view = self._view(detector, state, answer)
         colors = self.instrument.cubes[detector].element_at(state).colors
+        stains = self._stains(detector, state, answer)
         return {
             color: self._expose(
                 detector,
                 answer,
                 electrons,
                 *view,
-                self._stained(detector, state, answer, colors[color].center),
+                self._through(stains, colors[color].center),
             )
             for color, electrons in answer.electrons_by_color.items()
         }
@@ -140,14 +187,23 @@ class Simulator:
         scale = np.abs(np.diag(answer.pixel_to_stage))[:, np.newaxis, np.newaxis]
         return beads, radius, centred * scale, pattern.darkens
 
-    def _stained(
-        self, detector: str, state: Mapping[str, Any], answer: Answer, wavelength_nm: float
+    def _stains(
+        self, detector: str, state: Mapping[str, Any], answer: Answer
+    ) -> list[tuple[Stain, np.ndarray]]:
+        """Each stain, with how much of it lands on each pixel."""
+        return [
+            (stain, np.minimum(self._slice(detector, state, answer, stain.pattern), 1.0))
+            for stain in self.instrument.simulation_at(state).stains.values()
+        ]
+
+    @staticmethod
+    def _through(
+        stains: list[tuple[Stain, np.ndarray]], wavelength_nm: float
     ) -> np.ndarray | float:
-        """What the stains let through to each pixel, of light of `wavelength_nm`."""
+        """What `stains` let through to each pixel, of light of `wavelength_nm`."""
         through: np.ndarray | float = 1.0
-        for stain in self.instrument.simulation_at(state).stains.values():
+        for stain, there in stains:
             amount = float(_gaussian(np.array(wavelength_nm), stain.center, stain.width))
-            there = np.minimum(self._slice(detector, state, answer, stain.pattern), 1.0)
             through = through * (1.0 - stain.darkens * amount * there)
         return through
 
@@ -203,14 +259,23 @@ class Simulator:
             & (rows > -reach)
             & (rows < height + reach)
         )
-        for column, row, sigma, far, bright in zip(
-            columns[seen], rows[seen], spread[seen], reach[seen], brightness[seen]
+        columns, rows, spread, brightness = (
+            columns[seen],
+            rows[seen],
+            spread[seen],
+            brightness[seen],
+        )
+        near = spread < _DRAWN_SIGMA
+        for column, row, sigma, bright in zip(
+            columns[near], rows[near], spread[near], brightness[near]
         ):
+            far = _REACH_SIGMAS * sigma
             left, right = max(int(column - far), 0), min(int(column + far) + 2, width)
             top, bottom = max(int(row - far), 0), min(int(row + far) + 2, height)
             across = np.exp(-0.5 * ((np.arange(left, right) - column) / sigma) ** 2)
             down = np.exp(-0.5 * ((np.arange(top, bottom) - row) / sigma) ** 2)
             field[top:bottom, left:right] += bright * np.outer(down, across)
+        _add_blurred(field, columns[~near], rows[~near], spread[~near], brightness[~near])
         return field
 
     def _expose(

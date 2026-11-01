@@ -27,8 +27,8 @@ cubes:
           stains:
             eosin:   # around the nuclei; takes up green, so what is left looks pink
               center: 525 nm
-              width: 70 nm
-              darkens: 0.75
+              width: 100 nm
+              darkens: 0.55
               pattern: {beads: 40000, radius: 14 um, depth: 4 um}
             hematoxylin:   # the nuclei; takes up red and green, so what is left looks blue-purple
               center: 590 nm
