@@ -2,6 +2,7 @@ import {
   useMoveState,
   type MoveValue,
 } from "@/apps/default/hooks/states/MoveState";
+import { useOpticsState } from "@/apps/default/hooks/states/OpticsState";
 
 /** Every entry of a state keyed by cube, then by variable. */
 export const entriesOf = <T>(byCube?: Record<string, Record<string, T>>): T[] =>
@@ -37,7 +38,10 @@ export const useStage = (): Stage => {
 /** Where the view is: the sum of whatever moves it along each way. */
 export const useStagePosition = () => {
   const stage = useStage();
+  const { data: optics } = useOpticsState({ subscribe: true });
   const sum = (moves: MoveValue[]) =>
     moves.reduce((total, move) => total + move.value, 0);
-  return { x: sum(stage.x), y: sum(stage.y), z: sum(stage.focus) };
+  // Along the axis, the server says: which plane is seen depends on the sample and the light.
+  const plane = Object.values(optics?.detectors ?? {})[0]?.plane_um;
+  return { x: sum(stage.x), y: sum(stage.y), z: plane ?? sum(stage.focus) };
 };

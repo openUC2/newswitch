@@ -261,7 +261,7 @@ async def test_a_served_agent_acquires_into_mikro(tmp_path: Path) -> None:
 
 
 def test_a_stack_the_camera_sweeps_reaches_the_server(mikro: Mikro, tmp_path: Path) -> None:
-    """The light sheet: one sweep, each plane anchored where the stage really was."""
+    """The light sheet: one sweep of the sheet, each plane anchored where the sheet really was."""
     (made,) = run(
         mikro,
         tmp_path,
@@ -273,12 +273,18 @@ def test_a_stack_the_camera_sweeps_reaches_the_server(mikro: Mikro, tmp_path: Pa
     assert tuple(dataset.axis_names) == ("t", "c", "z", "y", "x")
     assert tuple(dataset.shape) == (1, 1, 5, 512, 512)
     assert np.asarray(dataset.data).max() > 200
-    stage_z = sorted(
-        Quantity(anchor["microscope"]["state"]["stage"]["z"]).to("um").magnitude
-        for anchor in anchors_of(made.id)
-        if anchor["microscope"] is not None
+    anchored = [
+        anchor["microscope"]["state"] for anchor in anchors_of(made.id) if anchor["microscope"]
+    ]
+    sheet_z = sorted(
+        float(setting["number"])
+        for state in anchored
+        for device in state["devices"]
+        if device["label"] == "sheet_lens"
+        for setting in device["settings"]
     )
-    assert stage_z == pytest.approx([-1.0, -0.5, 0.0, 0.5, 1.0])
+    assert sheet_z == pytest.approx([-1.0, -0.5, 0.0, 0.5, 1.0])
+    assert {Quantity(state["stage"]["z"]).to("um").magnitude for state in anchored} == {0.0}
 
 
 def test_a_flim_dataset_has_a_microtime_axis_on_the_server(mikro: Mikro, tmp_path: Path) -> None:

@@ -44,6 +44,29 @@ def _trace(
     return asdict(tracing.imaging(instrument, detector, state, wavelength, errors)), coupling
 
 
+#: How far from focus a detector's blur per micrometre is measured.
+_FOCUS_NUDGE_UM = 100.0
+
+
+def _focus_response(
+    instrument: Instrument,
+    detector: str,
+    state: Mapping[str, Any],
+    errors: tracing.Errors,
+) -> dict[str, Any]:
+    """How sharp what is in focus is, and how blur grows with the distance from there."""
+    wavelength = tracing.design_wavelength(instrument, detector, state)
+    sharp = tracing.imaging(instrument, detector, state, wavelength, errors, 0.0).spot_center_um
+    away = tracing.imaging(
+        instrument, detector, state, wavelength, errors, _FOCUS_NUDGE_UM
+    ).spot_center_um
+    return {
+        "in_focus_um": sharp,
+        "blur_um_per_um": max(away**2 - sharp**2, 0.0) ** 0.5 / _FOCUS_NUDGE_UM,
+        "moves": tracing.focus_moves(instrument, detector, state),
+    }
+
+
 def _axial(
     instrument: Instrument,
     detector: str,
@@ -186,6 +209,7 @@ def compile_instrument(instrument: Instrument, errors: tracing.Errors | None = N
                 "imaging": imaging,
                 "coupling": coupling,
                 "axial": _axial(instrument, detector, state, imaging, applied),
+                "focus": _focus_response(instrument, detector, state, applied),
             }
         states[state_key(instrument, state)] = entry
     return Compiled(instrument, states)

@@ -1,0 +1,74 @@
+# Nothing has no depth either: `depth: 0` is not how to say thin.
+# expected: pattern.depth
+
+spec: newswitch/instrument/v0
+name: no-depth-at-all
+
+cubes:
+  laser_488:
+    element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
+    tunes:
+      power: {actuator: laser-dac, initial: 0 mW, step: 1 mW, max: 50 mW}
+
+  stage:
+    element:
+      kind: sample
+      simulations:
+        gfp-beads:
+          fluorophore: egfp
+          absorbed: 1.0e-4
+          transmit: 0.9
+          reflect: 1.0e-6
+          pattern: {beads: 3600, radius: 10 um, depth: 0 um}
+    moves:
+      x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -500 um, max: 500 um, speed: 500 um/s}
+      y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -500 um, max: 500 um, speed: 500 um/s}
+      z: {actuator: stg-z, along: axis, initial: 0 um, step: 10 um, min: -500 um, max: 500 um, speed: 500 um/s}
+
+  objective:
+    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, working_distance: 10 mm}
+
+  dichroic:
+    element: {kind: dichroic, curve: lp_500}
+
+  tube:
+    element: {kind: lens, f: 200 mm}
+
+  camera:
+    element:
+      kind: sensor
+      axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+      readout: scmos
+    tunes:
+      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
+
+illumination:
+  - {from: laser_488, to: dichroic}
+  - {from: dichroic, via: reflect, to: objective}
+  - {from: objective, to: stage, side: epi, field: 500 um}
+
+detection:
+  - {from: stage, to: objective, distance: focus}
+  - {from: objective, to: dichroic, distance: 100 mm}
+  - {from: dichroic, via: transmit, to: tube, distance: 30 mm}
+  - {from: tube, to: camera, distance: focus}
+
+hardware:
+  boards:
+    uc2: {transport: canopen, interface: socketcan, channel: can0}
+  actuators:
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+
+settings:
+  simulate: everything
+  simulation: gfp-beads
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: false

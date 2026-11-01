@@ -27,6 +27,8 @@ class DetectorOptics:
     """From its objective's NA."""
     defocus_um: float = 0.0
     """How far what focuses it is from where it was last found in focus, or else where it starts."""
+    plane_um: float = 0.0
+    """Where along the axis what it sees is, in the sample."""
     band_nm: Optional[float] = None
     """The mean wavelength arriving, if any arrives."""
     path: LightPath = field(default_factory=lambda: LightPath(detector=""))

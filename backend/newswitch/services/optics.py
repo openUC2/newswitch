@@ -214,6 +214,7 @@ class OpticsManager:
             band_nm=answer.band_nm,
             depth_of_field_um=tracing.depth_of_field_um(self.instrument, name, values),
             defocus_um=self._defocus(name, values),
+            plane_um=0.0 if self.roles is None else self.roles.plane_um(name, values),
             path=path,
         )
 

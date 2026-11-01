@@ -81,6 +81,7 @@ class _Merge:
     x: float = 0.0
     y: float = 0.0
     first_z: float | None = None
+    light_moves: tuple[Move, ...] = ()
 
 
 def _z_step(detector: Detector) -> float | None:
@@ -102,7 +103,13 @@ def _check_sweep(
     """
     detectors = [exposure.detector for lighting in lightings for exposure in lighting.exposures]
     steps = {detector.name: _z_step(detector) for detector in detectors}
-    if all(step is None for step in steps.values()):
+    wired = [values.instrument.z_drive(name) for name in steps]
+    if all(step is None for step in steps.values()) or (
+        sweep is not None
+        and plan.stack.variable is not None
+        and all(drive is not None and drive.target != sweep.name for drive in wired)
+    ):
+        # Nothing here steps itself, or what was named is another: moved plane by plane.
         return False
     if any(step is None for step in steps.values()) or any(
         len(lighting.exposures) > 1 for lighting in lightings
@@ -113,7 +120,8 @@ def _check_sweep(
         )
     for name, step in steps.items():
         if not np.allclose(np.diff(offsets), step):
-            raise ValueError(f"{name} steps the stage by {step} um, not as in {offsets}")
+            target = values.instrument.z_drive(name).target
+            raise ValueError(f"{name} steps {target} by {step} um, not as in {offsets}")
         drive = values.instrument.z_drive(name)
         if sweep is None or drive is None or drive.target != sweep.name:
             raise ValueError(f"{name} steps {drive and drive.target}, so it sweeps only that")
@@ -143,10 +151,24 @@ def _offsets_of(plan: AcquisitionPlan) -> list[float]:
 def _sweep_of(
     plan: AcquisitionPlan, offsets: list[float], detector: str, values: Values
 ) -> Move | None:
-    """What sweeps a stack: none for one plane where it is, unless one is named."""
-    if plan.stack.variable is None and offsets == [0.0]:
+    """What sweeps a stack: none for one plane where it is, unless one is named.
+
+    What a detector's own wire steps, or what is named among what moves through the sample or
+    focuses; otherwise the one thing that does either.
+    """
+    named = plan.stack.variable
+    if named is None and offsets == [0.0]:
         return None
-    return values.roles.focus(detector, plan.stack.variable)
+    instrument = values.instrument
+    wired = instrument.z_drive(detector)
+    if wired is not None and named in (None, wired.target):
+        return instrument.variables[wired.target]
+    through = instrument.sample_moves()
+    if named in (move.name for move in through):
+        return instrument.variables[named]
+    if values.roles.focuses(detector):
+        return values.roles.focus(detector, named)
+    return values.roles.one(f"what moves through the sample of {detector}", through, named)
 
 
 def _lights_of(channel: AcquisitionChannel, values: Values) -> dict[str, float]:
@@ -269,6 +291,7 @@ def _plan_position(
         planes=[],
         pixel_to_world=reference,
         calibrated=calibrated,
+        light_moves=tuple(values.instrument.sheet_moves()),
         swept=_check_sweep(plan, offsets, lightings, sweep, values),
     )
 
@@ -290,9 +313,11 @@ def _to_stage(merge: _Merge) -> tuple[tuple[float, float, float, float], ...]:
     height, width = merge.data.shape[-2:]
     middle_x, middle_y = (width - 1) / 2, (height - 1) / 2
     (xx, xy), (yx, yy) = merge.pixel_to_world
-    dz = merge.offsets[1] - merge.offsets[0] if len(merge.offsets) > 1 else 1.0
+    # Moving the light is moving the sample the other way.
+    direction = -1.0 if merge.sweep in merge.light_moves else 1.0
+    dz = direction * (merge.offsets[1] - merge.offsets[0]) if len(merge.offsets) > 1 else 1.0
     return (
-        (float(dz), 0.0, 0.0, float(merge.first_z + merge.offsets[0])),
+        (float(dz), 0.0, 0.0, float(merge.first_z + direction * merge.offsets[0])),
         (0.0, float(yy), float(yx), float(merge.y - yy * middle_y - yx * middle_x)),
         (0.0, float(xy), float(xx), float(merge.x - xy * middle_y - xx * middle_x)),
     )

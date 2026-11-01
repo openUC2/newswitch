@@ -11,6 +11,8 @@ than silently changing which motor it drives. A call can name the one it means.
 
 from __future__ import annotations
 
+from typing import Any
+
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cached_property
@@ -68,6 +70,18 @@ class Roles:
             if "blur" in self.found[detector][move.name]
             and "scale" not in self.found[detector][move.name]
         ]
+
+    def plane_um(self, detector: str, values: Mapping[str, Any]) -> float:
+        """Where along the axis what `detector` sees is, in the sample.
+
+        What moves the sample and what focuses it, less what moves a light sheet: moving the light
+        is moving the sample the other way, so a plane has one z whichever went there.
+        """
+        sheets = {move.name for move in self.instrument.sheet_moves()}
+        along = {move.name for move in (*self.instrument.sample_moves(), *self.focuses(detector))}
+        return sum(float(values[name]) for name in along - sheets) - sum(
+            float(values[name]) for name in sheets
+        )
 
     def one(self, what: str, candidates: list[Move], named: str | None = None) -> Move:
         """The one of `candidates`, or the one `named`.

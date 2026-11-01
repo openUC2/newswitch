@@ -19,7 +19,7 @@ cubes:
           absorbed: 1.0e-4
           transmit: 0.9
           reflect: 1.0e-6
-          pattern: {beads: 3600, radius: 10 um}
+          pattern: {beads: 3600, radius: 10 um, depth: 4 um}
     moves:
       x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -500 um, max: 500 um, speed: 500 um/s}
       y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -500 um, max: 500 um, speed: 500 um/s}

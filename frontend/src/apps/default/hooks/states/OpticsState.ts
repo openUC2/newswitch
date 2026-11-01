@@ -73,6 +73,7 @@ export const DetectorOpticsSchema = z
     read_noise_counts: z.number(),
     depth_of_field_um: z.number(),
     defocus_um: z.number(),
+    plane_um: z.number(),
     band_nm: z.number().nullable().optional(),
     /** Every way light can take to one detector, as the description's edges say. */
     path: LightPathSchema.describe(

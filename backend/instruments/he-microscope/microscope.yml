@@ -1,0 +1,116 @@
+# A standard H&E microscope: white light through a stained section, onto a color camera. Nothing
+# fluoresces: what the image shows is what the stains take out of the light, of each color its own
+# share. Hematoxylin leaves nuclei blue-purple, eosin leaves what is around them pink.
+#
+# Run it:      NEWSWITCH_CONFIG=instruments/he-microscope just dev-mikro
+
+spec: newswitch/instrument/v0
+name: he-microscope
+
+cubes:
+  white_led:
+    element: {kind: source, emits: led, spectrum: {center: 540 nm, width: 500 nm}, max_power: 5 mW}
+    tunes:
+      power: {actuator: led-dac, initial: 10 uW, step: 1 uW, max: 5 mW}
+
+  condenser:
+    element: {kind: lens, f: 20 mm, na: 0.4, immersion: air}
+
+  stage:
+    element:
+      kind: sample
+      simulations:   # what can be on it; settings.simulation says which is
+        he-section:
+          transmit: 0.9
+          reflect: 1.0e-6
+          pattern: {beads: 0, radius: 5 um, depth: 4 um}   # a section is thin; all it shows is stains
+          stains:
+            eosin:   # around the nuclei; takes up green, so what is left looks pink
+              center: 525 nm
+              width: 70 nm
+              darkens: 0.75
+              pattern: {beads: 40000, radius: 14 um, depth: 4 um}
+            hematoxylin:   # the nuclei; takes up red and green, so what is left looks blue-purple
+              center: 590 nm
+              width: 220 nm
+              darkens: 0.9
+              pattern: {beads: 50000, radius: 4 um, depth: 4 um}
+        empty-slide:
+          transmit: 0.9
+          reflect: 1.0e-6
+          pattern: {beads: 0, radius: 5 um, depth: 4 um}
+    moves:
+      x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      z: {actuator: stg-z, along: axis, initial: 0 um, step: 1 um, min: -500 um, max: 500 um, speed: 500 um/s}
+
+  objective:
+    swaps:
+      slot:
+        actuator: turret
+        initial: 1
+        slots:
+          1: {kind: lens, name: 20x NA 0.4, f: 10 mm, na: 0.4, immersion: air, magnification: 20, working_distance: 1 mm}
+          2: {kind: lens, name: 40x NA 0.75, f: 5 mm, na: 0.75, immersion: air, magnification: 40, working_distance: 0.5 mm}
+
+  tube:
+    element: {kind: lens, f: 200 mm}
+
+  camera:
+    element:
+      kind: sensor
+      axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+      readout: scmos
+      colors:
+        r: {center: 620 nm, width: 70 nm}
+        g: {center: 530 nm, width: 70 nm}
+        b: {center: 460 nm, width: 70 nm}
+    tunes:
+      frame_rate: {initial: 30 Hz, min: 1 Hz, max: 100 Hz, step: 1 Hz}
+      exposure: {initial: 20 ms, step: 1 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
+
+illumination:
+  - {from: white_led, to: condenser}
+  - {from: condenser, to: stage, side: transmitted, field: 2 mm}
+
+detection:
+  - {from: stage, to: objective, distance: focus}
+  - {from: objective, to: tube, distance: 100 mm}
+  - {from: tube, to: camera, distance: focus}
+
+# Example wiring: no rig stands behind this file, and the board, axes and steps_per_um are made up.
+# `simulate: everything` below never builds it; for a real rig, state what is really there.
+hardware:
+  boards:
+    uc2: {transport: canopen, interface: socketcan, channel: can0}
+  actuators:
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    turret: {driver: uc2.turret, board: uc2, positions: {1: 0, 2: 20000}}
+    led-dac: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
+
+settings:
+  simulate: everything
+  simulation: he-section
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: false
+
+ui:
+  catalog: newswitch@6
+  bloks:
+    view-minimal:
+      description: 'Minimal: the live image and the stage, nothing else.'
+      default: true
+      file: ../views/minimal.bsx
+    view-acquire:
+      description: 'Acquire: time, positions, z planes and detectors, stored in mikro.'
+      file: ../views/acquire.bsx
+    view-stage:
+      description: 'Stage: the sample on the stage, with the images taken there.'
+      file: ../views/stage.bsx

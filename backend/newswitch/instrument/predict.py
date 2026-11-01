@@ -39,6 +39,8 @@ class Answer:
     """How much of what each source makes arrive came straight through or back, and was not emitted."""
     sheet_by_source: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     """A light sheet's thickness and reach, for each source that makes one."""
+    in_focus_px: float = 0.0  # rms blur of what is in focus, on the sensor
+    blur_px_per_um: float = 0.0  # what adds to it with the distance from focus
 
     @property
     def black(self) -> bool:
@@ -66,15 +68,13 @@ def state_key(instrument: Instrument, state: Mapping[str, Any]) -> str:
 def _in_the_sheet(
     instrument: Instrument, state: Mapping[str, Any], arriving: Mapping[str, Any]
 ) -> float:
-    """How much of a source's light a flat sample still gets, having moved along the axis."""
+    """How much of a source's light reaches the sample: its nearest part, if the sheet missed it."""
     if "sheet" not in arriving:
         return 1.0
-    moved = sum(
-        float(state[variable.name]) - float(variable.initial)
-        for variable in instrument.cubes[instrument.sample_cube()].variables.values()
-        if variable.verb == "moves" and variable.along == "axis"
+    plane = sum(float(state[move.name]) for move in instrument.sheet_moves())
+    return math.exp(
+        -2.0 * ((instrument.lit_um(state) - plane) / arriving["sheet"]["waist_um"]) ** 2
     )
-    return math.exp(-2.0 * (moved / arriving["sheet"]["waist_um"]) ** 2)
 
 
 def _mounted(
@@ -170,6 +170,7 @@ def assemble(
     airy_um = 0.61 * (band or 550.0) / 1000.0 / numerical_aperture
     # An Airy disc's rms is about a third of its radius; the geometric spot adds to it.
     spot_um = math.hypot(imaging["spot_center_um"], airy_um / 3.0)
+    in_focus_um = math.hypot(imaging.get("in_focus_um", imaging["spot_center_um"]), airy_um / 3.0)
     return Answer(
         detector=detector,
         pixel_to_stage=_mounted(instrument.cubes[detector].element, pixel_x, pixel_y),
@@ -177,6 +178,8 @@ def assemble(
         size=(width, height),
         field_of_view_um=(abs(pixel_x) * width, abs(pixel_y) * height),
         spot_px=spot_um / (axis_x.step * binning),
+        in_focus_px=in_focus_um / (axis_x.step * binning),
+        blur_px_per_um=imaging.get("blur_um_per_um", 0.0) / (axis_x.step * binning),
         relative_illumination=imaging["relative_illumination"],
         distortion_percent=imaging["distortion_percent"],
         band_nm=band,
@@ -230,10 +233,19 @@ class Compiled:
         """
         entry = self.states[state_key(self.instrument, state)][detector]
         imaging = dict(entry["imaging"])
-        blur_squared = imaging["spot_center_um"] ** 2
+        focus = entry["focus"]
+        blur_squared = focus["in_focus_um"] ** 2
         for name, sensitivity in entry["axial"].items():
             moved = float(state[name]) - float(self.instrument.variables[name].initial)
             imaging["magnification"] += sensitivity["magnification_per_um"] * moved
-            blur_squared += (sensitivity["blur_um_per_um"] * moved) ** 2
-        imaging["spot_center_um"] = float(np.sqrt(blur_squared))
+            if name not in focus["moves"]:
+                blur_squared += (sensitivity["blur_um_per_um"] * moved) ** 2
+        sample = {move.name for move in self.instrument.sample_moves()}
+        lens_um = sum(float(state[name]) for name in focus["moves"] if name not in sample)
+        defocus_um = self.instrument.lit_um(state, lens_um) + lens_um
+        imaging["in_focus_um"] = float(np.sqrt(blur_squared))
+        imaging["blur_um_per_um"] = focus["blur_um_per_um"]
+        imaging["spot_center_um"] = float(
+            np.sqrt(blur_squared + (focus["blur_um_per_um"] * defocus_um) ** 2)
+        )
         return assemble(self.instrument, detector, state, imaging, entry["coupling"])

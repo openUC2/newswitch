@@ -542,7 +542,15 @@ def test_real_and_simulated_detectors_are_refused_together(tmp_path: Path) -> No
 
 @pytest.mark.parametrize(
     "name",
-    ["rgb-camera", "dual-camera", "fake-microscope", "flim", "light-sheet", "point-scanner"],
+    [
+        "rgb-camera",
+        "dual-camera",
+        "fake-microscope",
+        "flim",
+        "light-sheet",
+        "point-scanner",
+        "he-microscope",
+    ],
 )
 def test_the_example_wiring_can_be_built(name: str, tmp_path: Path) -> None:
     """They all simulate everything, so nothing else would notice a wrong option."""

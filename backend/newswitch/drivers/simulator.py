@@ -17,9 +17,9 @@ import yaml
 from scipy import ndimage
 
 from newswitch.instrument.compiler import compile_instrument
-from newswitch.instrument.predict import Answer
+from newswitch.instrument.predict import Answer, state_key
 from newswitch.instrument.spec import Instrument, Pattern
-from newswitch.instrument.tracing import Errors
+from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
 
 #: The hidden errors, in an instrument's folder.
 TRUTH = "truth.yml"
@@ -39,16 +39,19 @@ def optical_errors(instrument: Instrument) -> Errors | None:
     return Errors(objective_focal_factor=truth.get("objective_focal_error", 1.0))
 
 
-def _sample(pattern: Pattern) -> np.ndarray:
-    """Random beads: random so that a shift between two images has only one answer."""
-    size = int(pattern.extent * 1000.0 / pattern.resolution)
-    field = np.zeros((size, size), dtype=np.float32)
-    if pattern.beads == 0:
-        return field
+def _beads(pattern: Pattern) -> np.ndarray:
+    """Random beads, as ``(y, x, depth)`` in micrometres: random so that a shift has only one answer."""
     rng = np.random.default_rng(7)
-    field[rng.integers(0, size, pattern.beads), rng.integers(0, size, pattern.beads)] = 1.0
-    blurred = ndimage.gaussian_filter(field, pattern.radius / pattern.resolution)
-    return blurred / blurred.max()
+    size = int(pattern.extent * 1000.0 / pattern.resolution)
+    y, x = (
+        (rng.integers(0, size, pattern.beads) - (size - 1) / 2) * pattern.resolution for _ in "yx"
+    )
+    return np.stack([y, x, rng.uniform(-0.5, 0.5, pattern.beads) * pattern.depth])
+
+
+#: How far a bead's light is drawn, in widths of it; how dim one may be before it is not.
+_REACH_SIGMAS = 4.0
+_FAINTEST = 1e-3
 
 
 def _dtype(bit_depth: int) -> np.dtype:
@@ -67,22 +70,33 @@ class Simulator:
         self.instrument = instrument
         self.truth = load_truth(instrument)
         self._table = compile_instrument(instrument, optical_errors(instrument))
-        self._sample_images: dict[Pattern, np.ndarray] = {}
+        self._bead_positions: dict[Pattern, np.ndarray] = {}
         self._noise = np.random.default_rng(11)
 
     def render(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
         """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names."""
         answer = self._answer(detector, state)
         return self._expose(
-            detector, answer, answer.electrons_by_source, *self._view(detector, state, answer)
+            detector,
+            answer,
+            answer.electrons_by_source,
+            *self._view(detector, state, answer),
+            self._stained(detector, state, answer, answer.band_nm or 550.0),
         )
 
     def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
         """A color camera's whole sensor: per color, what its band lets through, as uint16."""
         answer = self._answer(detector, state)
-        beads, radius, positions, darkens = self._view(detector, state, answer)
+        view = self._view(detector, state, answer)
+        colors = self.instrument.cubes[detector].element_at(state).colors
         return {
-            color: self._expose(detector, answer, electrons, beads, radius, positions, darkens)
+            color: self._expose(
+                detector,
+                answer,
+                electrons,
+                *view,
+                self._stained(detector, state, answer, colors[color].center),
+            )
             for color, electrons in answer.electrons_by_color.items()
         }
 
@@ -118,36 +132,86 @@ class Simulator:
         each is from the middle along x and y in micrometres of the sample, and how much a bead takes
         of what passes through it."""
         pattern = self.instrument.simulation_at(state).pattern
-        if pattern not in self._sample_images:
-            self._sample_images[pattern] = _sample(pattern)
-        sample = self._sample_images[pattern]
         width, height = answer.size
         columns, rows = np.meshgrid(np.arange(width, dtype=float), np.arange(height, dtype=float))
-
-        # the filter's wedge shifts the whole image on the sensor
-        wedge = self.truth.get("filter_wedge_px")
-        if wedge and state.get(wedge["variable"]) == wedge["slot"]:
-            columns = columns - wedge["shift"][0]
-            rows = rows - wedge["shift"][1]
         centred = np.stack([columns - (width - 1) / 2, rows - (height - 1) / 2])
+        beads = self._slice(detector, state, answer, pattern)
+        radius = np.hypot(centred[0], centred[1]) / np.hypot((width - 1) / 2, (height - 1) / 2)
+        scale = np.abs(np.diag(answer.pixel_to_stage))[:, np.newaxis, np.newaxis]
+        return beads, radius, centred * scale, pattern.darkens
 
+    def _stained(
+        self, detector: str, state: Mapping[str, Any], answer: Answer, wavelength_nm: float
+    ) -> np.ndarray | float:
+        """What the stains let through to each pixel, of light of `wavelength_nm`."""
+        through: np.ndarray | float = 1.0
+        for stain in self.instrument.simulation_at(state).stains.values():
+            amount = float(_gaussian(np.array(wavelength_nm), stain.center, stain.width))
+            there = np.minimum(self._slice(detector, state, answer, stain.pattern), 1.0)
+            through = through * (1.0 - stain.darkens * amount * there)
+        return through
+
+    def _slice(
+        self, detector: str, state: Mapping[str, Any], answer: Answer, pattern: Pattern
+    ) -> np.ndarray:
+        """What of the sample lands on each pixel: each bead lit as far as it is, spread as far as
+        it is out of focus, and with its light conserved."""
         # the camera is mounted slightly turned
         angle = math.radians(self.truth.get("camera_rotation_deg", {}).get(detector, 0.0))
         turn = np.array([[math.cos(angle), -math.sin(angle)], [math.sin(angle), math.cos(angle)]])
         to_sample = turn @ np.array(answer.pixel_to_stage)
-        sample_x, sample_y = np.tensordot(to_sample, centred, axes=1)
-
-        to_raster = (sample.shape[0] - 1) / 2
-        coordinates = np.stack(
-            [
-                (sample_y + answer.centre[1]) / pattern.resolution + to_raster,
-                (sample_x + answer.centre[0]) / pattern.resolution + to_raster,
-            ]
+        # the filter's wedge shifts the whole image on the sensor
+        wedge = self.truth.get("filter_wedge_px")
+        shift = (
+            wedge["shift"]
+            if wedge and state.get(wedge["variable"]) == wedge["slot"]
+            else (0.0, 0.0)
         )
-        beads = ndimage.map_coordinates(sample, coordinates, order=1, mode="constant")
-        radius = np.hypot(centred[0], centred[1]) / np.hypot((width - 1) / 2, (height - 1) / 2)
-        scale = np.abs(np.diag(answer.pixel_to_stage))[:, np.newaxis, np.newaxis]
-        return beads, radius, centred * scale, pattern.darkens
+        width, height = answer.size
+        field = np.zeros((height, width))
+        if pattern not in self._bead_positions:
+            self._bead_positions[pattern] = _beads(pattern)
+        y, x, depth = self._bead_positions[pattern]
+
+        moves = self._table.states[state_key(self.instrument, state)][detector]["focus"]["moves"]
+        sample_moves = {move.name for move in self.instrument.sample_moves()}
+        sample_um = sum(float(state[name]) for name in moves if name in sample_moves)
+        lens_um = sum(float(state[name]) for name in moves if name not in sample_moves)
+        lit = np.ones(depth.shape)
+        for sheet in answer.sheet_by_source.values():
+            plane = sum(float(state[move.name]) for move in self.instrument.sheet_moves())
+            lit = lit * np.exp(-2.0 * ((depth + sample_um - plane) / sheet["waist_um"]) ** 2)
+        if self.instrument.scanner_of(detector) is not None:
+            # A focused spot and what it passes back section the sample: nothing else is lit.
+            section = depth_of_field_um(self.instrument, detector, state)
+            lit = lit * np.exp(-2.0 * ((depth + sample_um + lens_um) / section) ** 2)
+
+        pixel_um = math.hypot(to_sample[0, 0], to_sample[1, 0])
+        grown = pattern.radius / pixel_um
+        spread = np.hypot(grown, answer.blur_px_per_um * (depth + sample_um + lens_um))
+        brightness = lit * (grown / spread) ** 2
+        columns, rows = np.linalg.inv(to_sample) @ np.stack(
+            [x - answer.centre[0], y - answer.centre[1]]
+        )
+        columns = columns + (width - 1) / 2 + shift[0]
+        rows = rows + (height - 1) / 2 + shift[1]
+        reach = _REACH_SIGMAS * spread
+        seen = (
+            (brightness > _FAINTEST)
+            & (columns > -reach)
+            & (columns < width + reach)
+            & (rows > -reach)
+            & (rows < height + reach)
+        )
+        for column, row, sigma, far, bright in zip(
+            columns[seen], rows[seen], spread[seen], reach[seen], brightness[seen]
+        ):
+            left, right = max(int(column - far), 0), min(int(column + far) + 2, width)
+            top, bottom = max(int(row - far), 0), min(int(row + far) + 2, height)
+            across = np.exp(-0.5 * ((np.arange(left, right) - column) / sigma) ** 2)
+            down = np.exp(-0.5 * ((np.arange(top, bottom) - row) / sigma) ** 2)
+            field[top:bottom, left:right] += bright * np.outer(down, across)
+        return field
 
     def _expose(
         self,
@@ -158,10 +222,13 @@ class Simulator:
         radius: np.ndarray,
         positions: np.ndarray,
         darkens: float,
+        stained: np.ndarray | float = 1.0,
     ) -> np.ndarray:
         """The image `electrons_by_source` makes of `beads`, as this detector reads it out."""
         readout = self.instrument.cubes[detector].element.readout
-        electrons = self._electrons(answer, electrons_by_source, beads, radius, positions, darkens)
+        electrons = self._electrons(
+            answer, electrons_by_source, beads, radius, positions, darkens, stained
+        )
         collected = self._noise.poisson(np.clip(electrons, 0, None)).clip(max=readout.full_well)
         read = self._noise.normal(0.0, readout.read_noise, electrons.shape)
         counts_per_electron = (
@@ -180,6 +247,7 @@ class Simulator:
         radius: np.ndarray,
         positions: np.ndarray,
         darkens: float,
+        stained: np.ndarray | float = 1.0,
     ) -> np.ndarray:
         """The electrons `light_by_source` is expected to make of `beads`, before any noise."""
         # What is emitted comes from the beads; what only passes is the same everywhere, but for what
@@ -187,14 +255,15 @@ class Simulator:
         counts = np.zeros(beads.shape)
         for source, amount in light_by_source.items():
             direct = answer.direct_share_by_source.get(source, 0.0)
-            lit = amount * (direct * (1.0 - darkens * beads) + (1.0 - direct) * beads)
+            taken = darkens * np.minimum(beads, 1.0)
+            lit = amount * (direct * (1.0 - taken) * stained + (1.0 - direct) * beads)
             sheet = answer.sheet_by_source.get(source)
             if sheet is not None:
                 # It widens away from its waist: fixed to the microscope, not to the stage.
                 along = positions["xy".index(sheet["along"])]
                 lit = lit / np.sqrt(1.0 + (along / sheet["rayleigh_um"]) ** 2)
             counts = counts + lit
-        counts = ndimage.gaussian_filter(counts, answer.spot_px)
+        counts = ndimage.gaussian_filter(counts, answer.in_focus_px)
         return counts * (1.0 - (1.0 - answer.relative_illumination) * radius**2)
 
 

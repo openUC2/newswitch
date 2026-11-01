@@ -86,6 +86,12 @@ a variable names has to be declared in `hardware.actuators`. When a driver fails
 and the optics still hear of what did move; nothing retries. `backend/instruments/expected-failures/`
 holds descriptions that must be refused, and motors that misbehave, each tested.
 
+A sample always has depth. `Instrument.lit_um` says where the part of it that is seen is: the part
+nearest the plane the light makes, a sheet's or the objective's focus. The tracer's defocus comes
+from it, so what `Roles` finds follows from what the sample is: in a thin section the stage focuses,
+under a sheet in a volume the sheet does. `Simulator._slice` draws the beads in view one by one, each
+lit and spread by its own depth, so no volume is stored.
+
 What is published is keyed by cube, then by variable: `MoveState.moves`, `SwapState.swaps`,
 `TuneState.tunes`, and `SourceState.sources` by source, so a blok binds
 `self.MoveState.moves.stage.z.value`. A change replaces the whole field, and `Values` keeps plain

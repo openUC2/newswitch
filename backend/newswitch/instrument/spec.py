@@ -264,9 +264,20 @@ class Pattern:
 
     beads: Annotated[StrictInt, Field(ge=0)]
     radius: Micrometres
+    depth: Annotated[Micrometres, Field(gt=0.0)]  # a section is thin, a volume is not: none is flat
     extent: Millimetres = 6.0  # how wide all of the slide is
     resolution: Micrometres = 2.0  # how finely it is rendered
     darkens: Fraction = 0.6  # how much of what passes straight through a bead takes
+
+
+@dataclass(frozen=True, config=STRICT)
+class Stain:
+    """What takes up light passing through it, of some colors more than others, and where it is."""
+
+    center: Nanometres  # what it takes up most of
+    width: Nanometres
+    darkens: Fraction  # how much of that, where there is most of it
+    pattern: Pattern
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -283,6 +294,7 @@ class Simulation:
         None
     )
     absorbed: Fraction | None = None
+    stains: dict[str, Stain] = field(default_factory=dict)
 
     @model_validator(mode="after")
     def _absorbs_what_it_emits(self) -> Self:
@@ -857,6 +869,48 @@ class Instrument:
     def simulation_key(self) -> str:
         """Where a state says what is on the holder: ``"stage.simulation"``. No variable changes it."""
         return f"{self.sample_cube()}.simulation"
+
+    def sheet_moves(self) -> list[Move]:
+        """What moves a light sheet: a move along the axis, of anything on the way to the sample."""
+        cubes = {
+            name
+            for source in self.sources()
+            for route in self.routes(self.illumination, source, self.sample_cube())
+            if route[-1].side == "orthogonal"
+            for name in (source, *(edge.source for edge in route))
+        }
+        return [
+            variable
+            for name in sorted(cubes)
+            for variable in self.cubes[name].variables.values()
+            if variable.verb == "moves" and variable.along == "axis"
+        ]
+
+    def sample_moves(self) -> list[Move]:
+        """What moves the sample along the axis."""
+        return [
+            variable
+            for variable in self.cubes[self.sample_cube()].variables.values()
+            if variable.verb == "moves" and variable.along == "axis"
+        ]
+
+    def lit_um(self, state: Mapping[str, Any], lens_um: float = 0.0) -> float:
+        """Where the part of the sample that is seen is along the axis.
+
+        The part nearest the plane the light makes of it: a sheet's, or else where the lens nearest
+        the sample focuses, `lens_um` having moved. So in a thin section it is where the section is
+        and in a volume where the plane is, and no sample is treated differently for being either.
+        """
+        half = self.simulation_at(state).pattern.depth / 2.0
+        sample = sum(float(state[move.name]) for move in self.sample_moves())
+        sheets = self.sheet_moves()
+        has_sheet = any(
+            route[-1].side == "orthogonal"
+            for source in self.sources()
+            for route in self.routes(self.illumination, source, self.sample_cube())
+        )
+        plane = sum(float(state[move.name]) for move in sheets) if has_sheet else -lens_um
+        return min(max(plane, sample - half), sample + half)
 
     def simulation_at(self, state: Mapping[str, Any]) -> Simulation:
         """What is on the holder under `state`."""

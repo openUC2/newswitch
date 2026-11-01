@@ -134,5 +134,5 @@ def where(values: Values, detector: str) -> tuple[float, float, float]:
     return (
         sum(float(values[move.name]) for move in roles.sideways(detector, "x")),
         sum(float(values[move.name]) for move in roles.sideways(detector, "y")),
-        sum(float(values[move.name]) for move in roles.focuses(detector)),
+        roles.plane_um(detector, values),
     )

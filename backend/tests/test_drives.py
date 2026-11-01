@@ -39,7 +39,7 @@ BASE = {
                         "absorbed": 1.0e-4,
                         "transmit": 0.9,
                         "reflect": 0.001,
-                        "pattern": {"beads": 3600, "radius": "10 um"},
+                        "pattern": {"beads": 3600, "radius": "10 um", "depth": "4 um"},
                     }
                 },
             },
@@ -304,7 +304,7 @@ def test_a_swept_stack_is_the_stack_software_would_take(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "planes, finding",
     [
-        ([0.0, 3.0, 6.0], "steps the stage by 2.0 um"),
+        ([0.0, 3.0, 6.0], "steps stage.z by 2.0 um"),
         ([40.0, 42.0, 44.0, 46.0, 48.0, 50.0, 52.0], "stage.z goes from"),
     ],
 )

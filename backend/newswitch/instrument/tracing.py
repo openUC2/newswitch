@@ -456,8 +456,42 @@ def scan_um_per_degree(
     return height * 1000.0 * math.pi / 180.0
 
 
+def focus_moves(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> list[str]:
+    """What moves a detector's focus: the sample, and the lens nearest it, along the axis."""
+    scanner = instrument.scanner_of(detector)
+    if scanner is not None:
+        route = _scan_route(instrument, scanner)
+        last = [
+            element
+            for edge in route
+            if (element := instrument.cubes[edge.target].element_at(state)).kind == "lens"
+        ][-1]
+        nearest = next(
+            edge.target for edge in route if instrument.cubes[edge.target].element_at(state) is last
+        )
+    else:
+        route = instrument.routes(instrument.detection, instrument.sample_cube(), detector)[0]
+        nearest = next(
+            edge.target
+            for edge in route
+            if instrument.cubes[edge.target].element_at(state).kind == "lens"
+        )
+    return [
+        *(move.name for move in instrument.sample_moves()),
+        *(
+            variable.name
+            for variable in instrument.cubes[nearest].variables.values()
+            if variable.verb == "moves" and variable.along == "axis"
+        ),
+    ]
+
+
 def _scan_imaging(
-    instrument: Instrument, scanner: str, state: Mapping[str, Any], errors: Errors
+    instrument: Instrument,
+    scanner: str,
+    state: Mapping[str, Any],
+    errors: Errors,
+    defocused_um: float | None = None,
 ) -> Imaging:
     """A scan as a sensor measured in angle: a step for a pitch, degrees for micrometres.
 
@@ -476,11 +510,13 @@ def _scan_imaging(
         edge.target for edge in route if instrument.cubes[edge.target].element_at(state) is last
     )
     # Whichever moves: the sample, or the lens nearest it.
-    defocus_um = sum(
+    lens_um = sum(
         state[variable.name]
-        for name in (instrument.sample_cube(), nearest)
-        for variable in instrument.cubes[name].variables.values()
+        for variable in instrument.cubes[nearest].variables.values()
         if variable.verb == "moves" and variable.along == "axis"
+    )
+    defocus_um = (
+        instrument.lit_um(state, lens_um) + lens_um if defocused_um is None else defocused_um
     )
     return Imaging(
         magnification=magnification,
@@ -499,11 +535,15 @@ def imaging(
     state: Mapping[str, Any],
     wavelength_nm: float,
     errors: Errors = Errors(),
+    defocused_um: float | None = None,
 ) -> Imaging:
-    """Trace the route from the sample to `detector` under `state`."""
+    """Trace the route from the sample to `detector` under `state`.
+
+    How far what is seen is from focus follows from `state`, or is `defocused_um`.
+    """
     scanner = instrument.scanner_of(detector)
     if scanner is not None:
-        return _scan_imaging(instrument, scanner, state, errors)
+        return _scan_imaging(instrument, scanner, state, errors, defocused_um)
     stage = instrument.sample_cube()
     routes = instrument.routes(instrument.detection, stage, detector)
     if len(routes) != 1:
@@ -544,7 +584,13 @@ def imaging(
         if target.kind == "lens":
             if not lenses and object_distance == 0.0 and pending is None:
                 # Whichever moves: the sample, or the lens nearest it.
-                object_distance = distance_since_lens + moved(stage) + moved(edge.target)
+                lens_um = moved(edge.target) * 1000.0
+                defocus_um = (
+                    instrument.lit_um(state, lens_um) + lens_um
+                    if defocused_um is None
+                    else defocused_um
+                )
+                object_distance = distance_since_lens + defocus_um / 1000.0
             elif pending is not None:
                 lenses.append(_lens(pending, distance_since_lens + moved(edge.target)))
             if target.prescription is not None:

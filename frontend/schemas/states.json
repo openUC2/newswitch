@@ -1711,6 +1711,22 @@
                     "provides": null
                   },
                   {
+                    "key": "plane_um",
+                    "label": null,
+                    "kind": "FLOAT",
+                    "description": null,
+                    "identifier": null,
+                    "nullable": false,
+                    "effects": [],
+                    "choices": null,
+                    "referenceUnit": null,
+                    "proposedUnits": null,
+                    "dimension": null,
+                    "children": null,
+                    "widget": null,
+                    "provides": null
+                  },
+                  {
                     "key": "band_nm",
                     "label": null,
                     "kind": "FLOAT",

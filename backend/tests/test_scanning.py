@@ -10,13 +10,21 @@ import numpy as np
 import pytest
 import yaml
 
+from arkitekt import Task
+
 from newswitch.drivers.simulator import SimulatedMicroscope
+from newswitch.instrument.roles import Roles
+from newswitch.microscope.parts import build_microscope
+from newswitch.models.acquisition import AcquisitionChannel
+from newswitch.routines.acquire import acquire as run_plan
+from newswitch.routines.autofocus import run_autofocus
+from newswitch.states.autofocus import AutofocusState
+from tests.conftest import acquisition, run_settings
+from tests.test_acquire import RecordingStore
 from newswitch.instrument import parts, spec
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.tracing import scan_um_per_degree
-from newswitch.microscope.parts import build_microscope
 from newswitch.tools.check_instrument import measure
-from tests.conftest import run_settings
 
 INSTRUMENT = Path(__file__).parent.parent / "instruments" / "point-scanner"
 
@@ -98,14 +106,63 @@ def test_calibrating_on_scanned_images_finds_the_predicted_pixel(
     assert abs(turned) < 1.0
 
 
-def test_defocus_blurs_a_scan(instrument: spec.Instrument) -> None:
-    """Geometrically, by the objective's NA: nothing rejects it, as the sample is flat."""
+def test_a_thin_section_out_of_focus_blurs(instrument: spec.Instrument) -> None:
+    """Geometrically, by the objective's NA, from its nearest part: FLIM scans such a section."""
+    section = spec.load(Path(__file__).parent.parent / "instruments" / "flim")
+    table = compile_instrument(section)
+    state = {**section.initial_state(), "laser_488.power": 1.0}
+    focused = table.answer("spad", state)
+    moved = table.answer("spad", {**state, "stage.z": 100.0})
+    pixel = abs(focused.pixel_to_stage[0][0])
+    assert moved.spot_px == pytest.approx(
+        math.hypot(focused.spot_px, 98.0 * 0.25 / pixel), rel=1e-3
+    )
+    assert moved.light == focused.light
+
+
+def test_in_a_volume_the_stage_moves_through_it(instrument: spec.Instrument) -> None:
+    """The spot sections it: a move is another plane, just as sharp, and so no focus."""
+    assert sorted(Roles(instrument).found["pmt"]["stage.z"]) == []
+    assert Roles(instrument).focuses("pmt") == []
     table = compile_instrument(instrument)
     focused = table.answer("pmt", lit(instrument))
-    moved = table.answer("pmt", {**lit(instrument), "stage.z": 100.0})
-    pixel = abs(focused.pixel_to_stage[0][0])
-    assert moved.spot_px == pytest.approx(math.hypot(focused.spot_px, 100.0 * 0.25 / pixel))
-    assert moved.light == focused.light
+    moved = table.answer("pmt", {**lit(instrument), "stage.z": 50.0})
+    assert moved.spot_px == pytest.approx(focused.spot_px)
+    simulator = SimulatedMicroscope(instrument)
+    simulator.set({"laser_488.power": 10.0})
+    here = simulator.image("pmt").astype(float)
+    simulator.set({"stage.z": 50.0})
+    there = simulator.image("pmt").astype(float)
+    assert np.corrcoef(here.ravel(), there.ravel())[0, 1] < 0.3
+
+
+def test_autofocus_says_a_volume_has_nothing_to_focus_with(
+    tmp_path: Path, instrument: spec.Instrument
+) -> None:
+    """Rather than sweep the stage for a sharpness that does not change."""
+    m = build_microscope(run_settings(tmp_path), instrument)
+    with pytest.raises(ValueError, match="Nothing here focuses pmt"):
+        run_autofocus(
+            m.values, m.detector, AutofocusState(), m.optics, Task.local(), detector_name="pmt"
+        )
+
+
+def test_a_stack_of_a_volume_sweeps_the_stage(tmp_path: Path, instrument: spec.Instrument) -> None:
+    """With no focus to go by, it is the one thing that moves through the sample."""
+    m = build_microscope(run_settings(tmp_path), instrument)
+    channel = AcquisitionChannel(detectors=["pmt"], name="gfp", set_to={"laser_488.power": 10.0})
+    store = RecordingStore()
+    run_plan(
+        acquisition([channel], planes=[0.0, 20.0]),
+        store,
+        m.optics,
+        m.detector,
+        m.values,
+        m.hooks,
+        Task.local(),
+    )
+    data = store.published[0].data
+    assert data.shape[2] == 2 and not np.array_equal(data[0, 0, 0], data[0, 0, 1])
 
 
 def test_the_server_takes_images_of_the_scans_size(tmp_path: Path, instrument) -> None:  # noqa: ANN001

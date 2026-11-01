@@ -52,11 +52,11 @@ stage:
         fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
         transmit: 0.9   # light going straight through (transmitted light)
         reflect: 0.001  # light coming back the way it came (epi)
-        pattern: {beads: 3600, radius: 10 um}   # what is drawn: random beads
+        pattern: {beads: 3600, radius: 10 um, depth: 4 um}   # what is drawn: random beads
       empty-slide:      # no fluorophore: it emits nothing
         transmit: 0.95
         reflect: 0.001
-        pattern: {beads: 0, radius: 10 um}
+        pattern: {beads: 0, radius: 10 um, depth: 4 um}
 ```
 
 The compiler covers every simulation when a server starts. Calibration needs something to correlate: on an empty slide its arithmetic gives a meaningless
@@ -187,9 +187,10 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `dual-camera` | Two cameras, each behind a filter of its own (BP 525/50, BP 625/50), seeing the sample at once. |
 | `rgb-camera` | One color camera: every exposure gives an image per color. |
 | `cam-test` | One simulated uc2_cam_py camera and nothing else. Without that library, the optics stand in, with a warning. |
-| `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image. |
-| `light-sheet` | A sheet from the side and a camera above, whose frames step the stage. |
-| `flim` | The point scanner, timing each photon against a pulsed laser. |
+| `he-microscope` | White light through an H&E-stained section, onto a color camera, with two objectives. |
+| `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image, of one plane of a volume. |
+| `light-sheet` | A sheet from the side, whose positioner the camera's frames step, and a stage for x, y and z. |
+| `flim` | A point scanner on a thin section, timing each photon against a pulsed laser. |
 
 All of these simulate everything. Only `cam-test` states hardware that exists; the others' `hardware`
 sections are example wiring with made-up boards, axes and `steps_per_um`, and say so, for a real rig
@@ -201,6 +202,41 @@ to replace. `fake-microscope` has no actuator on its tube lens, as a board's X, 
 | --- | --- |
 | `refused/` | A description with one mistake, each with `# expected:` lines saying what must be said about it (`tests/test_expected_failures.py`). A new way of being refused is one more file. |
 | `motors/` | A working description whose motor misbehaves: it loses commands, stalls, ends short or drifts. `test.faulty` is a driver only `tests/test_motor_faults.py` registers, so these cannot be run on a server. |
+
+A sample is never flat: its `pattern` states its `depth`, and it is the one law for all of them. What
+is seen is the part of the sample nearest the plane the light makes of it: where a sheet is, or else
+where the objective focuses. So a thin section, like an H&E slide, leaves focus when the stage moves.
+In a volume, the stage carries another plane there, just as sharp: under a sheet, it is the sheet's
+distance from focus that says how sharp a plane is, so that is found to be what focuses. A scan
+sections a volume by itself, so nothing focuses it, autofocus says so, and a stack sweeps the stage.
+
+| Instrument | Sample | Stage z | What focuses | A stack sweeps |
+| --- | --- | --- | --- | --- |
+| Widefield, `flim`, `he-microscope` | A thin section | Leaves focus | The stage | The stage |
+| `light-sheet` | A volume | Another plane, as sharp | The sheet | The sheet, stepped by the camera; or the stage, named |
+| `point-scanner` | A volume | Another plane, as sharp | Nothing | The stage |
+
+Whichever swept, a plane's z in a dataset is where it is in the sample: a sheet sweep has a negative
+step, so that a bead has one z. A sheet sweep stays sharp only near the objective's focus, as the
+objective stays still; beyond that it takes sweeping the stage, or something following the sheet.
+
+`stains` are what takes up light, of some colors more than others (`center`, `width`, `darkens`), with
+a `pattern` of their own:
+
+```yaml
+he-section:
+  transmit: 0.9
+  reflect: 1.0e-6
+  pattern: {beads: 0, radius: 5 um, depth: 4 um}
+  stains:
+    hematoxylin:
+      center: 590 nm
+      width: 220 nm
+      darkens: 0.9
+      pattern: {beads: 50000, radius: 4 um, depth: 4 um}
+```
+
+The live view shows the mean of a color camera's bands; an acquisition keeps each as a channel.
 
 A color camera states its bands on its sensor, by name:
 
