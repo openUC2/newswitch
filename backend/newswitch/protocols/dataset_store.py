@@ -51,8 +51,9 @@ class AcquiredRecord:
     `registration` says so."""
     axes: tuple[Axis, ...]
     """``t``, ``c``, the detector's own axes but space (``m``), the plane ``z``, its space (``y``,
-    ``x``): ``(t, c, z, y, x)`` of a camera, ``(t, c, m, z, y, x)`` timing photons, ``(t, c, z)`` of a
-    thermometer, whose ``z`` is the plane it was read at (an INDEX)."""
+    ``x``): ``(t, c, z, y, x)`` of a camera, ``(t, c, m, z, y, x)`` timing photons; a thermometer's
+    ``(t, c, plane, z, y, x)``, the plane it was read at an INDEX, and one position along each of
+    ``z, y, x``, its point."""
     channels: tuple[AcquiredChannel, ...]
     planes: tuple[AcquiredPlane, ...]
     registration: tuple[DimensionPart, ...]
@@ -77,6 +78,12 @@ class AcquiredRecord:
     def dims(self) -> tuple[str, ...]:
         """The names of its axes, in order."""
         return tuple(axis.name for axis in self.axes)
+
+    @property
+    def stack(self) -> str:
+        """Along which axis its planes (`AcquiredPlane.z`) are: ``plane`` where they are only where
+        it was read, ``z`` where they are where it looked."""
+        return "plane" if "plane" in self.dims else "z"
 
 
 @runtime_checkable

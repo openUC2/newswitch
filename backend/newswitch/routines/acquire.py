@@ -4,9 +4,11 @@ What it takes is kept rather than saved image by image: each detector, at each p
 record in the `DatasetStore`, along its own axes (`Detector.axes`), with nothing in the local cache.
 Its axes are ``t``, ``c`` (the channels that name it, each of its colors), what else it delivers
 but space (``m``, when a photon arrived), the plane ``z``, and its space (``y``, ``x``); a
-thermometer, which measures at a point, has ``(t, c, z)``. Each record is placed on the sample by
+thermometer, which measures at a point, has ``(t, c, plane, z, y, x)``, one position along each of
+``z, y, x``. Each record is placed on the sample by
 its own detector's route through the coordinate graph (`SpaceManager.record_map`), as a BY_DIMENSION
-that names only what has a place.
+that names only what has a place. A thermometer is placed as mikro places what has no extent: its
+``z, y, x`` have one position each, at its point; the plane it was read at is an index of its own.
 
 A plan is regular by what it is, so what is left to refuse, before anything moves, is what cannot
 be one record: uneven planes, or a detector whose image size or placement changes between the
@@ -225,19 +227,30 @@ def _channel_label(channel: AcquisitionChannel, detector: Detector, color: str |
     return " ".join(part for part in (channel.name, detector.name, color, unit) if part)
 
 
+#: Along which axis a record of a detector that measures at a point has the planes of the stack:
+#: they are where it was read, not where it is.
+PLANE = "plane"
+
+
 def _axes_of(detector: Detector) -> tuple[Axis, ...]:
     """A record's axes: time, its channels, what it delivers but space, the plane, its space.
 
-    A detector that measures at a point has a plane index (INDEX: the plane it was read at), and
-    no place along it.
+    A detector that measures at a point is, as mikro has a dataset of no extent, one position along
+    each of ``z, y, x``, at its point; the plane it was read at is an index of its own (`PLANE`).
     """
-    images = detector.delivers_images()
+    if not detector.delivers_images():
+        return (
+            Axis("t", "TIME"),
+            Axis("c", "CHANNEL"),
+            Axis(PLANE, "INDEX"),
+            *(Axis(name, "SPACE") for name in ("z", "y", "x")),
+        )
     own = [axis for axis in detector.axes if axis.name not in ("c", "z")]
     return (
         Axis("t", "TIME"),
         Axis("c", "CHANNEL"),
         *(Axis(a.name, AXIS_TYPES[a.domain]) for a in own if a.domain != "space"),
-        Axis("z", "SPACE" if images else "INDEX"),
+        Axis("z", "SPACE"),
         *(Axis(a.name, "SPACE") for a in own if a.domain == "space"),
     )
 
@@ -335,6 +348,8 @@ def _plan_position(
         sizes = {"t": plan.times, "c": len(record.channels), "z": len(offsets), "m": microtime}
         if record.shape is not None:
             sizes["y"], sizes["x"] = record.shape
+        else:  # at a point: read at every plane, there at one place
+            sizes.update({PLANE: len(offsets), "z": 1, "y": 1, "x": 1})
         record.data = np.empty(
             tuple(int(sizes[name] or 0) for name in record.dims), dtype=detector.data_type
         )
@@ -417,7 +432,8 @@ def _keep(
         images = images[np.newaxis]  # one color: what it delivers is its only one
     for offset, image in enumerate(images):
         channel = exposure.first_channel + offset
-        at = {"t": time_index, "c": channel, "z": z_index}
+        stack = PLANE if PLANE in record.dims else "z"
+        at = {"t": time_index, "c": channel, stack: z_index}
         place: tuple[Any, ...] = tuple(at.get(name, slice(None)) for name in record.dims)
         record.data[place] = image
         record.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))

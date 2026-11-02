@@ -148,7 +148,8 @@ def run(
 
 def test_an_acquisition_keeps_a_record_of_it_beside_the_camera(tmp_path: Path) -> None:
     """Each by what it measures: the camera's images along (t, c, z, y, x), placed by its pixels,
-    and the thermometer's readings along (t, c, z), placed at its point, 3 cm from the section."""
+    and the thermometer's readings along (t, c, plane), one position along z, y and x: its point,
+    3 cm from the section."""
     m = he(tmp_path, {"air_temperature_c": 37.0})
     channel = AcquisitionChannel(name="air", detectors=["camera", "thermometer"])
     camera, thermometer = run(
@@ -160,8 +161,17 @@ def test_an_acquisition_keeps_a_record_of_it_beside_the_camera(tmp_path: Path) -
     middle = sample_of(camera, z=1.0, y=255.5, x=255.5)
     assert (middle["x"], middle["y"]) == pytest.approx((500.0, 0.0), abs=1e-6)
 
-    assert thermometer.dims == ("t", "c", "z") and thermometer.data.shape == (2, 1, 3)
-    assert [axis.type for axis in thermometer.axes] == ["TIME", "CHANNEL", "INDEX"]
+    assert thermometer.dims == ("t", "c", "plane", "z", "y", "x")
+    assert thermometer.data.shape == (2, 1, 3, 1, 1, 1)
+    assert [axis.type for axis in thermometer.axes] == [
+        "TIME",
+        "CHANNEL",
+        "INDEX",
+        "SPACE",
+        "SPACE",
+        "SPACE",
+    ]
+    assert thermometer.stack == "plane" and camera.stack == "z"
     assert (thermometer.quantity, thermometer.unit) == ("temperature", "degC")
     assert camera.calibrated is False  # nothing calibrated yet: inferred from the optics
     assert thermometer.calibrated is False  # where it reads is described, never measured
@@ -170,8 +180,15 @@ def test_an_acquisition_keeps_a_record_of_it_beside_the_camera(tmp_path: Path) -
     assert [c.label for c in thermometer.channels] == ["air thermometer (degC)"]
     assert not thermometer.channels[0].light and thermometer.channels[0].sources == ()
     (part,) = thermometer.registration
-    assert (part.kind, part.input_axes, part.output_axes) == ("AFFINE", [], ["z", "y", "x"])
-    assert np.ravel(part.affine) == pytest.approx([0.0, 0.0, 30_000.0])
+    assert (part.kind, part.input_axes, part.output_axes) == (
+        "AFFINE",
+        ["z", "y", "x"],
+        ["z", "y", "x"],
+    )
+    # Its one position along each, index 0, is its point; nothing reads the plane it was read at.
+    assert sample_of(thermometer, z=0, y=0, x=0) == pytest.approx(
+        {"z": 0.0, "y": 0.0, "x": 30_000.0}
+    )
 
 
 def test_a_thermometer_alone_is_read_where_the_stage_is_set(tmp_path: Path) -> None:
@@ -179,7 +196,7 @@ def test_a_thermometer_alone_is_read_where_the_stage_is_set(tmp_path: Path) -> N
     m = he(tmp_path)
     channel = AcquisitionChannel(name="air", detectors=["thermometer"])
     (record,) = run(m, acquisition([channel], times=3)).published
-    assert record.data.shape == (3, 1, 1)
+    assert record.data.shape == (3, 1, 1, 1, 1, 1)
     with pytest.raises(ValueError, match="give its positions by what to set"):
         run(
             m,
@@ -196,7 +213,7 @@ def test_a_thermometer_alone_is_read_where_the_stage_is_set(tmp_path: Path) -> N
             channels=[channel], stack=AcquisitionStack(offsets=[0.0, 1.0], variable="stage.z")
         ),
     ).published[0]
-    assert swept.data.shape == (1, 1, 2)
+    assert swept.data.shape == (1, 1, 2, 1, 1, 1)
 
 
 def test_looking_goes_by_an_imaging_detector(m: Microscope) -> None:

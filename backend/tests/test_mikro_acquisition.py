@@ -225,6 +225,35 @@ def test_an_rgb_camera_is_three_labelled_channels(mikro: Mikro, tmp_path: Path) 
     assert labels == {0: "gfp camera r", 1: "gfp camera g", 2: "gfp camera b"}
 
 
+def test_a_thermometer_is_a_scalar_dataset_at_its_point(mikro: Mikro, tmp_path: Path) -> None:
+    """Beside the camera's images, its readings: one position along z, y and x, which mikro's own
+    transforms put 3 cm from the section, in the sample space the camera's images are in."""
+    camera, thermometer = run(
+        mikro,
+        tmp_path,
+        "he-microscope",
+        [AcquisitionChannel(detectors=["camera", "thermometer"], name="air")],
+        planes=[0.0, 1.0],
+    )
+    assert (camera.detector, thermometer.detector) == ("camera", "thermometer")
+    dataset = mikro.get_array_dataset(thermometer.id)
+    assert tuple(dataset.axis_names) == ("t", "c", "plane", "z", "y", "x")
+    assert tuple(dataset.shape) == (1, 1, 2, 1, 1, 1)
+    readings = np.asarray(dataset.data)
+    assert np.all(np.abs(readings - 22.0) < 0.5)
+    world = space_3d(
+        mikro, "sample", reference=f"sample-he-microscope-{BUILT[-1].space_state.mount_id}"
+    )
+    (point,) = np.asarray(
+        dataset.intrinsic_system.transform_points_to(
+            world, [[0, 0, 1, 0, 0, 0]], axes=("z", "y", "x")
+        )
+    )
+    assert point == pytest.approx([0.0, 0.0, 30_000.0])
+    labels = [a["channelLabel"]["label"] for a in anchors_of(thermometer.id) if a["channelLabel"]]
+    assert labels == ["air thermometer (degC)"]
+
+
 @pytest.mark.asyncio
 async def test_a_served_agent_acquires_into_mikro(tmp_path: Path) -> None:
     """The action through a real agent: the client lives on the loop, the action on its thread."""

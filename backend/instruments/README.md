@@ -81,8 +81,8 @@ coordinates, so it moves with the stage and the sample. The coordinate graph pla
 BY_DIMENSION part from no axes onto x, y and z, and `SpaceState.points` says where that is on the
 sample. A simulated one reads the air beside the sample, 22 °C unless `truth.yml` says otherwise
 (`air_temperature_c`), within its `noise`; it is read once a second while live, and published as
-its `reading`. An acquisition that names it keeps its readings as a record of its own, `(t, c, z)`,
-placed at its point; no driver reads a real one yet.
+its `reading`. An acquisition that names it keeps its readings as a record of its own,
+`(t, c, plane, z, y, x)`, one position along `z, y, x` at its point; no driver reads a real one yet.
 
 ```yaml
   thermometer:
@@ -315,13 +315,17 @@ per mounting, with the mount from this microscope's stage space beside it):
 
 - **Axes**: `t`, then `c`, then what it delivers beside space (`m`, the arrival time), then the plane
   `z`, then its space (`y`, `x`). A camera is `(t, c, z, y, x)`, a FLIM detector `(t, c, m, z, y, x)`,
-  a thermometer `(t, c, z)`, its `z` the plane it was read at (an INDEX).
+  a thermometer `(t, c, plane, z, y, x)`: the plane it was read at is an INDEX, and it has one
+  position along each of `z, y, x`, its point (what mikro calls a SCALAR dataset).
 - **`c`**: each channel of the plan that names the detector, and a color camera one per color.
 - **Anchors**: `c` has its label (with the unit, for what is not counted light) and, if light reached
-  it, its light path; each `t, c, z` has every variable and when it was taken.
+  it, its light path; each `t, c, z` (a thermometer's `t, c, plane`) has every variable and when it
+  was taken.
 - **Placement**: its detector's route through the coordinate graph, as a BY_DIMENSION that names only
   what has a place: a camera's `(z, y, x)` onto the sample's, the middle of the image where the stage
-  was; a thermometer's point, from no axes at all; time, channels and arrival times nowhere. What a
+  was; a thermometer's one position along `z, y, x` onto its point, so that every row reads an axis
+  (mikro refuses a row that sends every input to one value); time, channels, arrival times and the
+  plane a thermometer was read at nowhere. What a
   camera takes is kept as it took it: a splitter's mirrored arm is mirrored in its placement, not in
   its data. It counts as validated once the detector's light path is calibrated, and as inferred from
   the optics until then.

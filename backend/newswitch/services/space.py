@@ -372,8 +372,10 @@ class SpaceManager:
 
         A detector that takes images has its plane index placed by the stack: the plane it looks
         at now, then `offsets` (moving the light is moving the sample the other way). What
-        measures at a point is where it is at every plane: its plane index is placed nowhere. Time,
-        channels and arrival times are placed nowhere either.
+        measures at a point has one position along each of its record's ``z, y, x``, and that one
+        is its point: as mikro wants it, every row reads its own axis (a row that reads none would
+        send every input to one value). Where it was read along the stack, time, channels and
+        arrival times are placed nowhere.
         """
         route = self.graph(values).axis_map(detector_system(detector), SAMPLE)
         images = self.detector_state.get(detector).delivers_images()
@@ -388,6 +390,9 @@ class SpaceManager:
                 if factor != 0.0 and name in dims and not (images and name == "z"):
                     row[dims.index(name)] = factor
             rows[axis] = row
+        if not images:
+            for axis, row in rows.items():
+                row[dims.index(axis)] = 1.0
         if images and "z" in rows:
             direction = -1.0 if light_sweep else 1.0
             step = offsets[1] - offsets[0] if len(offsets) > 1 else 1.0

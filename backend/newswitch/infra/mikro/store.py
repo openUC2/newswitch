@@ -2,7 +2,8 @@
 
 =================== =================================================================
 dataset             one detector at one position, along its own axes, each typed:
-                    ``(t, c, z, y, x)`` of a camera, ``(t, c, z)`` of a thermometer
+                    ``(t, c, z, y, x)`` of a camera; ``(t, c, plane, z, y, x)`` of a
+                    thermometer, one position along ``z, y, x``: mikro's SCALAR
 channel anchor      ``c``: its label, and the light path it was seen through (if light)
 plane anchor        ``t, c, z``: the microscope's state, and when it was taken
 registration edge   a BY_DIMENSION onto the sample's space, the record's parts as they are
@@ -180,12 +181,14 @@ def anchors_of_channels(
     ]
 
 
-def _anchor_of_plane(instrument: Instrument, plane: AcquiredPlane) -> CoordinateAnchorInput:
+def _anchor_of_plane(
+    instrument: Instrument, plane: AcquiredPlane, stack: str = "z"
+) -> CoordinateAnchorInput:
     return CoordinateAnchorInput(
         axis_anchors=[
             AxisAnchorInput(axis="t", value=plane.t),
             AxisAnchorInput(axis="c", value=plane.c),
-            AxisAnchorInput(axis="z", value=plane.z),
+            AxisAnchorInput(axis=stack, value=plane.z),
         ],
         microscope=microscope_state(instrument, plane.state),
         acquisition_window=AcquisitionWindowInput(start=plane.started, end=plane.ended),
@@ -231,7 +234,10 @@ class MikroDatasetStore:
             axes=axes,
             anchors=[
                 *anchors_of_channels(self.instrument, acquired),
-                *(_anchor_of_plane(self.instrument, plane) for plane in acquired.planes),
+                *(
+                    _anchor_of_plane(self.instrument, plane, acquired.stack)
+                    for plane in acquired.planes
+                ),
             ],
         )
         sample = space_3d(
