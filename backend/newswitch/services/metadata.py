@@ -36,6 +36,7 @@ class MetadataManager:
             fov_height=float(np.hypot(*placement[:2, 1])) * height,
             light_state=snapshot,
             acquisition_time=datetime.now().isoformat(),
+            sample=self._space.sample_of(light_path.detector),
         )
 
     def get_current_state_for_light_path(self, light_path: LightPath) -> LightPathSnapshot:

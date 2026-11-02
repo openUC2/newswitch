@@ -77,8 +77,11 @@ class Roles:
         What moves the sample and what focuses it, less what moves a light sheet: moving the light
         is moving the sample the other way, so a plane has one z whichever went there.
         """
-        sheets = {move.name for move in self.instrument.sheet_moves()}
-        along = {move.name for move in (*self.instrument.sample_moves(), *self.focuses(detector))}
+        sample = self.instrument.sample_of(detector)
+        sheets = {move.name for move in self.instrument.sheet_moves(sample)}
+        along = {
+            move.name for move in (*self.instrument.sample_moves(sample), *self.focuses(detector))
+        }
         return sum(float(values[name]) for name in along - sheets) - sum(
             float(values[name]) for name in sheets
         )

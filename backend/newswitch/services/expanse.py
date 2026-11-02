@@ -25,3 +25,13 @@ class ExpanseManager:
         """Reset the expanse state, clearing all current images."""
         self.state.current_images = []
         self.state.current_frames = []
+
+    def forget_sample(self, sample: str) -> None:
+        """Clear what was taken of `sample`: a new mounting of it starts without its images, and
+        the other samples keep theirs."""
+        self.state.current_images = [
+            image for image in self.state.current_images if image.metadata.sample != sample
+        ]
+        self.state.current_frames = [
+            frame for frame in self.state.current_frames if frame.metadata.sample != sample
+        ]

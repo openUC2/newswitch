@@ -1,14 +1,20 @@
 """Where things are: coordinate systems as nodes, transformations as edges, as mikro has them.
 
-The hub is the ``sample``: the frame of what is mounted, in micrometres, with its origin where the
-holder has its own. Everything that has a place is placed in it, by a route through the graph:
+Each sample is a hub of its own: ``sample:<cube>``, the frame of what is mounted on that sample's
+holder, in micrometres, with its origin where the holder has its own. An instrument has as many as
+it has samples (`Instrument.samples`), each on a stage of its own. Everything that has a place is
+placed in its sample's hub, by a route through the graph:
 
-- ``stage``: where the stage is, the sum of what moves sideways (`newswitch.services.stage.where`);
-  the mount, ``stage -> sample``, says where the holder sits on it. What sits on the stage insert
-  (a thermometer) is placed on the stage;
-- ``detector:<name>``: what a detector delivers, an axis for each of its axes, as it is now;
+- ``stage:<cube>``: where that sample's stage is, the sum of what moves it sideways
+  (`newswitch.services.stage.where`); the mount, ``stage:<cube> -> sample:<cube>``, says where the
+  holder sits on it. What sits on the stage insert (a thermometer) is placed on the stage;
+- ``detector:<name>``: what a detector delivers, an axis for each of its axes, as it is now; it
+  goes to the stage of the sample it sees;
 - ``image:<id>``: a detector as it was when it took an image;
-- a holder's places (``well:B3``), from its geometry.
+- a holder's places (``well:<cube>:B3``), from its geometry.
+
+The bare names ``sample``, ``stage`` and ``well:B3`` are short for the ones of a sample understood
+from what looks (`newswitch.services.space.SpaceManager.resolve`).
 
 A system has named, typed axes (`Axis`); an edge is one of mikro's kinds (`Transformation`). A
 BY_DIMENSION is parts side by side over named axes, and says nothing about an axis no part names: a
@@ -43,6 +49,9 @@ __all__ = [
     "affine_part",
     "by_dimension",
     "detector_system",
+    "place_system",
+    "sample_system",
+    "stage_system",
     "holder_to_stage",
     "image_system",
     "places_of",
@@ -56,10 +65,29 @@ __all__ = [
     "zyx_rows",
 ]
 
-#: The hub: the frame of what is mounted.
+#: A sample's hub, short: the frame of what is mounted on it (``sample:<cube>`` in the graph).
 SAMPLE = "sample"
-#: Where the stage is.
+#: Where a sample's stage is, short (``stage:<cube>`` in the graph).
 STAGE = "stage"
+#: A holder's place, short: ``well:B3`` (``well:<cube>:B3`` in the graph).
+PLACE = "well"
+
+
+def sample_system(sample: str) -> str:
+    """The hub of the sample on the cube `sample`: ``"sample:stage_a"``."""
+    return f"{SAMPLE}:{sample}"
+
+
+def stage_system(sample: str) -> str:
+    """Where the stage of the sample on the cube `sample` is: ``"stage:stage_a"``."""
+    return f"{STAGE}:{sample}"
+
+
+def place_system(sample: str, place: str) -> str:
+    """A place of what `sample` is mounted on: ``"well:stage_a:B3"``."""
+    return f"{PLACE}:{sample}:{place}"
+
+
 #: The axes of a frame in space, in the order a 4x4 has them.
 SPATIAL = ("x", "y", "z")
 
@@ -445,9 +473,7 @@ def holder_to_stage(mount: Mount, offset_um: tuple[float, float] = (0.0, 0.0)) -
 
 
 def places_of(holder: Holder) -> dict[str, tuple[float, float]]:
-    """A holder's named places (a plate's wells), by their system's name, in sample micrometres."""
+    """A holder's named places (a plate's wells, ``B3``), in its sample's micrometres."""
     if holder.plate is None:
         return {}
-    return {
-        f"well:{name}": (x * 1000.0, y * 1000.0) for name, (x, y) in holder.plate.wells().items()
-    }
+    return {name: (x * 1000.0, y * 1000.0) for name, (x, y) in holder.plate.wells().items()}

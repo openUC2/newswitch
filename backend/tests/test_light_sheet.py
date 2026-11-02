@@ -214,7 +214,7 @@ def test_in_a_thin_section_the_stage_focuses(tmp_path: Path) -> None:
     """The same law: the sheet can only miss it, and it is the section that leaves focus."""
 
     def change(data: dict[str, Any]) -> None:
-        data["settings"]["simulation"] = "gfp-section"
+        data["cubes"]["stage"]["element"]["simulation"] = "gfp-section"
 
     roles = Roles(spec.load(edited(tmp_path, change)))
     assert {"blur", "light"} <= set(roles.found["camera"]["stage.z"])
@@ -256,7 +256,7 @@ def test_far_out_of_focus_a_bead_is_drawn_as_it_would_be_near(tmp_path: Path) ->
     state = {**instrument.initial_state(), "laser_488.power": 5.0, "stage.z": 100.0}
     state["sheet_lens.z"] = 100.0
     answer = simulator._answer("camera", state)
-    pattern = instrument.simulation_at(state).pattern
+    pattern = instrument.simulation_at(state, "stage").pattern
     field = simulator._slice("camera", state, answer, pattern)
 
     y, x, depth = _beads(pattern)

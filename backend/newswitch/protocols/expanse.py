@@ -24,3 +24,7 @@ class ExpanseManager(Manager, Protocol):
     def reset_expanse(self) -> None:
         """Reset the expanse state, clearing all current images."""
         ...
+
+    def forget_sample(self, sample: str) -> None:
+        """Clear what was taken of `sample`, keeping what the other samples have."""
+        ...

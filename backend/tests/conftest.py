@@ -57,7 +57,6 @@ def run_settings(tmp_path: Path, **changes: Any) -> Settings:  # noqa: ANN401
     return Settings(
         **{
             "simulate": "everything",
-            "simulation": "gfp-beads",
             "db_path": str(tmp_path / "agent.db"),
             "image_dir": tmp_path / "images",
             "cache_dir": tmp_path / "cache",

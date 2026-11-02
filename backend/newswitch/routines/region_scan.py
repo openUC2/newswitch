@@ -69,6 +69,11 @@ def scan_region(
         ]
         if not active_detectors:
             raise ValueError("No active detector that takes images.")
+        seen = sorted({space.sample_of(d.name) for d in active_detectors})
+        if len(seen) > 1:
+            raise ValueError(
+                f"Cameras of the samples {seen} are on: name the detector whose sample to scan"
+            )
         current_detector = active_detectors[0]
 
     current_light_path = optics_manager.get_light_path_for_detector(current_detector.name)
@@ -128,13 +133,22 @@ def scan_region(
 
     logger.info("%d cols x %d rows: %d tiles", cols, rows, len(path_points))
 
+    # Only the cameras of the sample scanned: another sample's stage did not move.
+    sample = space.sample_of(current_detector.name)
+    names = [
+        d.name
+        for d in detector_manager.state.get_active_detectors()
+        if d.delivers_images() and space.sample_of(d.name) == sample
+    ]
     acquired_images: list[Frame] = []
     total = len(path_points)
     for i, (tgt_x, tgt_y) in enumerate(path_points):
         where = Position(system, {"x": tgt_x, "y": tgt_y})
         values.set(space.targets(where, current_detector.name), task=task)
         acquired_images.extend(
-            acquire_step(acquisition_manager, task, i + 1, total, f"Acquired tile {i + 1}/{total}")
+            acquire_step(
+                acquisition_manager, task, i + 1, total, f"Acquired tile {i + 1}/{total}", names
+            )
         )
 
     return acquired_images

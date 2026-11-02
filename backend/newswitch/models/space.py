@@ -112,8 +112,26 @@ class HolderShape:
 
 
 @dataclass
+class SampleSpace:
+    """One sample, on a stage of its own: where what it is mounted on sits, and what that is."""
+
+    sample: str
+    """The cube holding it; its hub is ``sample:<cube>``, its stage ``stage:<cube>``."""
+    mount: AffineMatrix = field(default_factory=lambda: [list(row) for row in IDENTITY])
+    """Stage micrometres to sample micrometres: where what is mounted sits."""
+    mount_id: str = "0"
+    """Which mounting this is: a new one is a new sample, whose images are its own."""
+    holder: Optional[str] = None
+    """What is mounted, by the name the description gives it; None: the sample's frame is its stage's."""
+    holders: list[str] = field(default_factory=list)
+    """What can be mounted."""
+    shape: Optional[HolderShape] = None
+    """What is mounted, for a view to draw."""
+
+
+@dataclass
 class DetectorPlacement:
-    """Where an imaging detector's pixels are on the sample now: column, row and plane to micrometres."""
+    """Where an imaging detector's pixels are on its sample now: column, row and plane to micrometres."""
 
     detector: str
     to_sample: AffineMatrix
@@ -122,13 +140,18 @@ class DetectorPlacement:
     """How far apart on the sample two neighbouring pixels are, along x and along y."""
     calibrated: bool = False
     """Whether its pixel scale was measured, rather than predicted from the optics."""
+    sample: str = ""
+    """The sample it sees: what `to_sample` goes to."""
 
 
 @dataclass
 class MeasuredPoint:
-    """Where a detector that measures at one point (a thermometer) measures, in sample micrometres."""
+    """Where a detector that measures at one point (a thermometer) measures, in its sample's
+    micrometres."""
 
     detector: str
     x: float
     y: float
     z: float
+    sample: str = ""
+    """The sample it sits beside."""

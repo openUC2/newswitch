@@ -1,5 +1,5 @@
-# settings.simulation names something that is not on the holder.
-# expected: settings.simulation
+# A sample's simulation names something that is not on its holder.
+# expected: simulation
 # expected: 'bead-soup'
 
 spec: newswitch/instrument/v0
@@ -14,6 +14,7 @@ cubes:
   stage:
     element:
       kind: sample
+      simulation: bead-soup
       simulations:
         gfp-beads:
           fluorophore: egfp
@@ -67,7 +68,6 @@ hardware:
 
 settings:
   simulate: everything
-  simulation: bead-soup
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache

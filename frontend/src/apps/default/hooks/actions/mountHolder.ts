@@ -5,10 +5,18 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const MountHolderArgsSchema = z.object({
-  /** One of the holders the description names for its sample. */
+  /** One of the holders the description names for the sample. */
   holder: z
     .string()
-    .describe('One of the holders the description names for its sample.'),
+    .describe('One of the holders the description names for the sample.'),
+  /** Which sample, by the cube holding it; may be left out when there is one. */
+  sample: z
+    .string()
+    .describe(
+      'Which sample, by the cube holding it; may be left out when there is one.',
+    )
+    .nullable()
+    .optional(),
 });
 export const MountHolderReturnSchema = z.object({});
 
@@ -26,7 +34,7 @@ export const MountHolderDefinition: ActionDefinition<
   name: 'mount_holder',
   appKey: 'default',
   description:
-    'Mount another holder: a new sample, where the description says it sits.\n\nThe images taken were of what was mounted before: the expanse starts empty.',
+    "Mount another holder: a new sample, where the description says it sits.\n\nThe images taken were of what was mounted before: that sample's leave the expanse.",
   argsSchema: MountHolderArgsSchema,
   returnSchema: MountHolderReturnSchema,
   lockKeys: ['expanse_state', 'motion'],
@@ -35,7 +43,7 @@ export const MountHolderDefinition: ActionDefinition<
 /**
  * Mount another holder: a new sample, where the description says it sits.
 
-The images taken were of what was mounted before: the expanse starts empty.
+The images taken were of what was mounted before: that sample's leave the expanse.
  */
 export const useMountHolder = () => {
   return useAction(MountHolderDefinition);

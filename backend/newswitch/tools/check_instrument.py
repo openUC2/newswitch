@@ -96,17 +96,24 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  wire: {drive.source} -> {drive.target}")
 
     print("\n=== The channels each simulation has: calculated, nothing declared these")
-    for simulation in instrument.sample_holder().simulations:
-        current = {**state, instrument.simulation_key(): simulation}
-        for channel in compiled.channels(current):
-            print(
-                f"  {simulation}: {channel.source} -> {channel.detector}, "
-                f"{channel.electrons:.4g} electrons at full power, at {channel.band_nm:.0f} nm"
-            )
+    for sample in instrument.samples():
+        for simulation in instrument.sample_holder(sample).simulations:
+            current = {**state, instrument.simulation_key(sample): simulation}
+            for channel in compiled.channels(current):
+                if instrument.sample_of(channel.detector) != sample:
+                    continue
+                print(
+                    f"  {sample}: {simulation}: {channel.source} -> {channel.detector}, "
+                    f"{channel.electrons:.4g} electrons at full power, at {channel.band_nm:.0f} nm"
+                )
 
     print("\n=== What each detector will see, for each combination of swaps")
     for current in instrument.swap_states():
-        if current[instrument.simulation_key()] != instrument.settings.simulation:
+        if any(
+            current[instrument.simulation_key(sample)]
+            != instrument.sample_holder(sample).simulation
+            for sample in instrument.samples()
+        ):
             continue
         swaps = {
             v.name: current[v.name] for v in instrument.variables.values() if v.verb == "swaps"

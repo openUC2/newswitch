@@ -5,10 +5,12 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const SetSampleOriginHereArgsSchema = z.object({
-  /** Whose image's middle; by default the first that is on. */
+  /** Whose image's middle; by default the first that is on, of the only sample. */
   detector: z
     .string()
-    .describe("Whose image's middle; by default the first that is on.")
+    .describe(
+      "Whose image's middle; by default the first that is on, of the only sample.",
+    )
     .nullable()
     .optional(),
 });
@@ -31,14 +33,14 @@ export const SetSampleOriginHereDefinition: ActionDefinition<
 > = {
   name: 'set_sample_origin_here',
   appKey: 'default',
-  description: "Make where a detector looks now the sample's x and y 0.",
+  description: "Make where a detector looks now its sample's x and y 0.",
   argsSchema: SetSampleOriginHereArgsSchema,
   returnSchema: SetSampleOriginHereReturnSchema,
   lockKeys: [],
 };
 
 /**
- * Make where a detector looks now the sample's x and y 0.
+ * Make where a detector looks now its sample's x and y 0.
  */
 export const useSetSampleOriginHere = () => {
   return useAction(SetSampleOriginHereDefinition);

@@ -20,11 +20,12 @@ how deep the detector's objective sees sharply. */
     .describe('Number of Z planes to score (>= 3).')
     .nullable()
     .optional(),
-  /** The detector to read frames from; by default, the first that is on. */
+  /** The detector to read frames from; by default, the first camera that is on,
+when the cameras that are on see one sample. */
   detector_name: z
     .string()
     .describe(
-      'The detector to read frames from; by default, the first that is on.',
+      'The detector to read frames from; by default, the first camera that is on,\nwhen the cameras that are on see one sample.',
     )
     .nullable()
     .optional(),

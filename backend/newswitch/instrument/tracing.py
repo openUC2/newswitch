@@ -103,7 +103,11 @@ def wavelengths(instrument: Instrument) -> np.ndarray:
                 stated += _curve_wavelengths(element.curve)
             case Sensor():
                 stated += [color.center for color in element.colors.values()]
-    for simulation in instrument.sample_holder().simulations.values():
+    for simulation in (
+        simulation
+        for sample in instrument.samples()
+        for simulation in instrument.sample_holder(sample).simulations.values()
+    ):
         if simulation.fluorophore is not None:
             stated += [simulation.fluorophore.excitation, simulation.fluorophore.emission]
     low = max(math.floor(min(stated, default=550.0) - _MARGIN), 1)
@@ -187,7 +191,7 @@ def collected(lens: Lens) -> float:
 
 def depth_of_field_um(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> float:
     """How deep what a detector sees sharply is: wavelength x index / NA^2."""
-    routes = instrument.routes(instrument.detection, instrument.sample_cube(), detector)
+    routes = instrument.routes(instrument.detection, instrument.sample_of(detector), detector)
     lens = _objective(instrument, routes, state)
     wavelength_um = design_wavelength(instrument, detector, state) / 1000.0
     return wavelength_um * lens.index / lens.na**2
@@ -209,10 +213,11 @@ def design_wavelength(instrument: Instrument, detector: str, state: Mapping[str,
     """The wavelength a route is traced at: what its filters pass, whatever is on the sample.
 
     So that what the optics predict for an instrument does not depend on a simulated sample. With
-    no filter to say, it is what the first source emits; with no source, the middle of the spectrum.
+    no filter to say, it is what the first source lighting its sample emits; with none, the middle
+    of the spectrum.
     """
     grid = wavelengths(instrument)
-    stage = instrument.sample_cube()
+    stage = instrument.sample_of(detector)
     for route in instrument.routes(instrument.detection, stage, detector):
         filters = [
             element
@@ -223,7 +228,7 @@ def design_wavelength(instrument: Instrument, detector: str, state: Mapping[str,
         if filters:
             passed = np.prod([curve_at(element.curve, grid) for element in filters], axis=0)
             return float((passed * grid).sum() / passed.sum())
-    sources = instrument.sources()
+    sources = [s for s in instrument.sources() if stage in instrument.samples_lit_by(s)]
     if sources:
         return instrument.cubes[sources[0]].element_at(state).wavelength
     return float(grid[len(grid) // 2])
@@ -252,8 +257,8 @@ def coupling(
     what the objective gathers goes on; what passes straight through stays in its cone.
     """
     grid = wavelengths(instrument)
-    sample = instrument.simulation_at(state)
-    stage = instrument.sample_cube()
+    stage = instrument.sample_of(detector)
+    sample = instrument.simulation_at(state, stage)
     detection = instrument.routes(instrument.detection, stage, detector)
     element = instrument.cubes[detector].element_at(state)
     colors = element.colors if isinstance(element, Sensor) else {}
@@ -423,8 +428,17 @@ def _lens(pending: Mapping[str, Any], after: float) -> tuple[Any, ...]:
     return ("ideal", pending["what"], after)
 
 
+def _scan_sample(instrument: Instrument, scanner: str) -> str:
+    """The sample a scanner walks the light over."""
+    return next(
+        sample
+        for sample in instrument.samples()
+        if instrument.routes(instrument.illumination, scanner, sample)
+    )
+
+
 def _scan_route(instrument: Instrument, scanner: str) -> tuple[Edge, ...]:
-    return instrument.routes(instrument.illumination, scanner, instrument.sample_cube())[0]
+    return instrument.routes(instrument.illumination, scanner, _scan_sample(instrument, scanner))[0]
 
 
 def scan_um_per_degree(
@@ -470,14 +484,14 @@ def focus_moves(instrument: Instrument, detector: str, state: Mapping[str, Any])
             edge.target for edge in route if instrument.cubes[edge.target].element_at(state) is last
         )
     else:
-        route = instrument.routes(instrument.detection, instrument.sample_cube(), detector)[0]
+        route = instrument.routes(instrument.detection, instrument.sample_of(detector), detector)[0]
         nearest = next(
             edge.target
             for edge in route
             if instrument.cubes[edge.target].element_at(state).kind == "lens"
         )
     return [
-        *(move.name for move in instrument.sample_moves()),
+        *(move.name for move in instrument.sample_moves(instrument.sample_of(detector))),
         *(
             variable.name
             for variable in instrument.cubes[nearest].variables.values()
@@ -515,8 +529,11 @@ def _scan_imaging(
         for variable in instrument.cubes[nearest].variables.values()
         if variable.verb == "moves" and variable.along == "axis"
     )
+    sample = _scan_sample(instrument, scanner)
     defocus_um = (
-        instrument.lit_um(state, lens_um) + lens_um if defocused_um is None else defocused_um
+        instrument.lit_um(state, lens_um, sample=sample) + lens_um
+        if defocused_um is None
+        else defocused_um
     )
     return Imaging(
         magnification=magnification,
@@ -544,7 +561,7 @@ def imaging(
     scanner = instrument.scanner_of(detector)
     if scanner is not None:
         return _scan_imaging(instrument, scanner, state, errors, defocused_um)
-    stage = instrument.sample_cube()
+    stage = instrument.sample_of(detector)
     routes = instrument.routes(instrument.detection, stage, detector)
     if len(routes) != 1:
         raise ValueError(f"{detector}: {len(routes)} routes from the sample; one is handled")
@@ -586,7 +603,7 @@ def imaging(
                 # Whichever moves: the sample, or the lens nearest it.
                 lens_um = moved(edge.target) * 1000.0
                 defocus_um = (
-                    instrument.lit_um(state, lens_um) + lens_um
+                    instrument.lit_um(state, lens_um, sample=stage) + lens_um
                     if defocused_um is None
                     else defocused_um
                 )

@@ -24,14 +24,18 @@ def instrument() -> spec.Instrument:
 def channels(compiled: Compiled, simulation: str) -> set[tuple[str, str]]:
     """Which source reaches which detector under `simulation`."""
     instrument = compiled.instrument
-    state = {**instrument.initial_state(), instrument.simulation_key(): simulation}
+    (sample,) = instrument.samples()
+    state = {**instrument.initial_state(), instrument.simulation_key(sample): simulation}
     return {(channel.source, channel.detector) for channel in compiled.channels(state)}
 
 
 def under(instrument: spec.Instrument, simulation: str) -> spec.Instrument:
-    """`instrument` with `simulation` picked in its settings."""
-    picked = instrument.settings.model_copy(update={"simulation": simulation})
-    return dataclasses.replace(instrument, settings=picked)
+    """`instrument` with `simulation` on its sample's holder."""
+    (sample,) = instrument.samples()
+    cube = instrument.cubes[sample]
+    holder = dataclasses.replace(instrument.sample_holder(sample), simulation=simulation)
+    cubes = {**instrument.cubes, sample: dataclasses.replace(cube, element=holder)}
+    return dataclasses.replace(instrument, cubes=cubes)
 
 
 def test_the_channels_are_found_from_the_optics(instrument: spec.Instrument) -> None:

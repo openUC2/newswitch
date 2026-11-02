@@ -9,6 +9,14 @@ export const RegisterMountArgsSchema = z.object({
   matrix: z
     .array(z.array(z.number()))
     .describe('4x4, stage micrometres to sample micrometres.'),
+  /** Which sample, by the cube holding it; may be left out when there is one. */
+  sample: z
+    .string()
+    .describe(
+      'Which sample, by the cube holding it; may be left out when there is one.',
+    )
+    .nullable()
+    .optional(),
 });
 export const RegisterMountReturnSchema = z.object({});
 
@@ -25,14 +33,14 @@ export const RegisterMountDefinition: ActionDefinition<
 > = {
   name: 'register_mount',
   appKey: 'default',
-  description: 'Say where what is mounted sits on the stage.',
+  description: 'Say where what a sample is mounted on sits on its stage.',
   argsSchema: RegisterMountArgsSchema,
   returnSchema: RegisterMountReturnSchema,
   lockKeys: [],
 };
 
 /**
- * Say where what is mounted sits on the stage.
+ * Say where what a sample is mounted on sits on its stage.
  */
 export const useRegisterMount = () => {
   return useAction(RegisterMountDefinition);

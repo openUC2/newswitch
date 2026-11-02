@@ -366,8 +366,11 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         ),
         (lambda d: d["cubes"]["stage"]["element"].pop("simulations"), "simulations"),
         (lambda d: d["cubes"]["stage"]["element"].update(simulations={}), "simulations"),
-        (lambda d: d["settings"].pop("simulation"), "simulation"),
-        (lambda d: d["settings"].update(simulation="moon"), "'moon' is none of the simulations"),
+        (lambda d: d["cubes"]["stage"]["element"].pop("simulation"), "simulation"),
+        (
+            lambda d: d["cubes"]["stage"]["element"].update(simulation="moon"),
+            "'moon' is none of the simulations",
+        ),
         (lambda d: d["cubes"]["stage"].update(tilts={}), "cubes.stage.tilts"),
         (lambda d: d["cubes"]["laser_488"]["element"].update(wavelength="488 mW"), "wavelength"),
         (lambda d: d["cubes"]["laser_488"]["element"].update(kind="plasma"), "plasma"),
@@ -478,7 +481,7 @@ def test_the_loaded_values_are_typed_and_in_their_units() -> None:
     assert (sensor.axes["x"].size, sensor.axes["x"].pitch) == (512, 6.5)
     assert instrument.detection[-1].distance == "focus"
     assert instrument.detection[1].distance == 100.0
-    fluorophore = instrument.sample_holder().simulations["gfp-beads"].fluorophore
+    fluorophore = instrument.sample_holder("stage").simulations["gfp-beads"].fluorophore
     assert fluorophore is not None and fluorophore.excitation == 488.0
     assert instrument.cubes["camera"].tunes["frame_rate"].initial == 30.0
     binning = instrument.cubes["camera"].variables["binning"].initial

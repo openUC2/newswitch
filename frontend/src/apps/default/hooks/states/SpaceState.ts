@@ -119,6 +119,30 @@ export const HolderShapeSchema = z
 export type HolderShape = z.input<typeof HolderShapeSchema>;
 export type HolderShapeOutput = z.infer<typeof HolderShapeSchema>;
 
+export const SampleSpaceSchema = z
+  .object({
+    __identifier: z
+      .literal('@newswitch/sample_space')
+      .default('@newswitch/sample_space'),
+    sample: z.string(),
+    mount: z.array(z.array(z.number())),
+    mount_id: z.string(),
+    holder: z.string().nullable().optional(),
+    holders: z.array(z.string()),
+    /** What is mounted, in sample micrometres from its top left corner: for a view to draw. */
+    shape: HolderShapeSchema.describe(
+      'What is mounted, in sample micrometres from its top left corner: for a view to draw.',
+    )
+      .nullable()
+      .optional(),
+  })
+  .brand('@newswitch/sample_space')
+  .describe(
+    'One sample, on a stage of its own: where what it is mounted on sits, and what that is.',
+  );
+export type SampleSpace = z.input<typeof SampleSpaceSchema>;
+export type SampleSpaceOutput = z.infer<typeof SampleSpaceSchema>;
+
 export const DetectorPlacementSchema = z
   .object({
     __identifier: z
@@ -128,10 +152,11 @@ export const DetectorPlacementSchema = z
     to_sample: z.array(z.array(z.number())),
     pixel_um: z.array(z.number()),
     calibrated: z.boolean(),
+    sample: z.string(),
   })
   .brand('@newswitch/detector_placement')
   .describe(
-    "Where an imaging detector's pixels are on the sample now: column, row and plane to micrometres.",
+    "Where an imaging detector's pixels are on its sample now: column, row and plane to micrometres.",
   );
 export type DetectorPlacement = z.input<typeof DetectorPlacementSchema>;
 export type DetectorPlacementOutput = z.infer<typeof DetectorPlacementSchema>;
@@ -145,10 +170,11 @@ export const MeasuredPointSchema = z
     x: z.number(),
     y: z.number(),
     z: z.number(),
+    sample: z.string(),
   })
   .brand('@newswitch/measured_point')
   .describe(
-    'Where a detector that measures at one point (a thermometer) measures, in sample micrometres.',
+    "Where a detector that measures at one point (a thermometer) measures, in its sample's\n    micrometres.",
   );
 export type MeasuredPoint = z.input<typeof MeasuredPointSchema>;
 export type MeasuredPointOutput = z.infer<typeof MeasuredPointSchema>;
@@ -165,25 +191,22 @@ export const SpaceStateSchema = z.object({
       "An edge of the graph, from `input` to `output`, of one of mikro's kinds.",
     ),
   ),
-  mount: z.array(z.array(z.number())),
-  mount_id: z.string(),
-  holder: z.string().nullable().optional(),
-  holders: z.array(z.string()),
-  shape: HolderShapeSchema.describe(
-    'What is mounted, in sample micrometres from its top left corner: for a view to draw.',
-  )
-    .nullable()
-    .optional(),
+  samples: z.record(
+    z.string(),
+    SampleSpaceSchema.describe(
+      'One sample, on a stage of its own: where what it is mounted on sits, and what that is.',
+    ),
+  ),
   detectors: z.record(
     z.string(),
     DetectorPlacementSchema.describe(
-      "Where an imaging detector's pixels are on the sample now: column, row and plane to micrometres.",
+      "Where an imaging detector's pixels are on its sample now: column, row and plane to micrometres.",
     ),
   ),
   points: z.record(
     z.string(),
     MeasuredPointSchema.describe(
-      'Where a detector that measures at one point (a thermometer) measures, in sample micrometres.',
+      "Where a detector that measures at one point (a thermometer) measures, in its sample's\n    micrometres.",
     ),
   ),
 });

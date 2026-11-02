@@ -15,6 +15,7 @@ from newswitch.models.space import (
     HolderShape,
     MeasuredPoint,
     Position,
+    SampleSpace,
     Transformation,
     WellShape,
 )
@@ -33,6 +34,7 @@ for model in (
     Transformation,
     DetectorPlacement,
     MeasuredPoint,
+    SampleSpace,
     WellShape,
     HolderShape,
     models.LightEdge,

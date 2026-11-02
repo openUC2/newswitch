@@ -36,7 +36,10 @@ def colors(microscope: SimulatedMicroscope) -> dict[str, np.ndarray]:
 
 def test_it_is_a_thin_section_the_stage_focuses(microscope: SimulatedMicroscope) -> None:
     """Thin, so that it leaves focus as a whole."""
-    assert microscope.simulator.instrument.simulation_at(microscope.state).pattern.depth == 4.0
+    assert (
+        microscope.simulator.instrument.simulation_at(microscope.state, "stage").pattern.depth
+        == 4.0
+    )
     roles = Roles(microscope.simulator.instrument)
     assert [move.name for move in roles.focuses("camera")] == ["stage.z"]
 

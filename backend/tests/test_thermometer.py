@@ -62,7 +62,7 @@ def test_its_system_is_a_point_placed_on_the_stage(m: Microscope) -> None:
     system = next(s for s in m.space_state.systems if s.name == "detector:thermometer")
     assert system.axes == []
     (edge,) = [t for t in m.space_state.transformations if t.input == "detector:thermometer"]
-    assert (edge.output, edge.kind) == ("stage", "BY_DIMENSION")
+    assert (edge.output, edge.kind) == ("stage:stage", "BY_DIMENSION")
     (part,) = edge.parts
     assert (part.kind, part.input_axes, part.output_axes) == ("AFFINE", [], ["x", "y", "z"])
     assert m.space.transform(THERMOMETER, "stage") == pytest.approx(ON_STAGE)

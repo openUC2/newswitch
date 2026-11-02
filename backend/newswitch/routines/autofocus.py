@@ -71,6 +71,21 @@ def autofocus_sweep(
     return best_z, metrics
 
 
+def _first_camera(detector: DetectorManager, values: Values) -> str:
+    """The first camera that is on, when those that are on see one sample.
+
+    Raises:
+        ValueError: None is on; or they see several samples, and which to focus is not said.
+    """
+    cameras = [d.name for d in detector.list_active_detectors() if d.delivers_images()]
+    if not cameras:
+        raise ValueError("No camera is on to focus with")
+    seen = sorted({values.instrument.sample_of(name) for name in cameras})
+    if len(seen) > 1:
+        raise ValueError(f"The cameras on see the samples {seen}: name the detector to focus with")
+    return cameras[0]
+
+
 def run_autofocus(
     values: Values,
     detector: DetectorManager,
@@ -89,14 +104,15 @@ def run_autofocus(
         z_range: Total sweep range in micrometers, centered on the current Z. By default, from
             how deep the detector's objective sees sharply.
         steps: Number of Z planes to score (>= 3).
-        detector_name: The detector to read frames from; by default, the first that is on.
+        detector_name: The detector to read frames from; by default, the first camera that is on,
+            when the cameras that are on see one sample.
         focus: What to focus with, if several things do.
         metric: "laplacian_variance" (default) or "intensity_variance".
 
     Returns:
         The Z position (micrometers) of best focus; the stage is left there.
     """
-    name = detector_name or detector.list_active_detectors()[0].name
+    name = detector_name or _first_camera(detector, values)
     stage = stage_of(values, name, focus)
     if stage.z_move is None:
         raise ValueError(f"Nothing here focuses {name}")

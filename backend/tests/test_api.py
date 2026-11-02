@@ -34,7 +34,7 @@ async def test_assign_and_get_result(virtual_microscope_app: FastAPI) -> None:
         activate_result = await client.assign("activate_detector", {"name": "camera"})
         events = await collect_until_completed(client, activate_result.task_id)
         assert len(events) >= 1
-        assert events[-1].event_type == "COMPLETED"
+        assert events[-1].event_type == "COMPLETED", events[-1]
 
         # Now update the detector exposure
         assign_result = await client.assign("tune", {"name": "camera.exposure", "to": 500.0})
@@ -45,4 +45,4 @@ async def test_assign_and_get_result(virtual_microscope_app: FastAPI) -> None:
 
         # Should have received events including COMPLETED
         assert len(events) >= 1
-        assert events[-1].event_type == "COMPLETED"
+        assert events[-1].event_type == "COMPLETED", events[-1]

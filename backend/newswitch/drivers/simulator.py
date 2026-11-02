@@ -134,10 +134,12 @@ class Simulator:
         self.instrument = instrument
         self.truth = load_truth(instrument)
         self._table = compile_instrument(instrument, optical_errors(instrument))
-        self._bead_positions: dict[tuple[Pattern, str | None], np.ndarray] = {}
+        self._bead_positions: dict[tuple[Pattern, str, str | None], np.ndarray] = {}
         self._noise = np.random.default_rng(11)
-        self.mounted: Callable[[], str | None] = lambda: self.instrument.sample_holder().mounted
-        """Which holder is mounted: the space says (`newswitch.services.space`)."""
+        self.mounted: Callable[[str], str | None] = lambda sample: (
+            self.instrument.sample_holder(sample).mounted
+        )
+        """Which holder each sample is mounted on: the space says (`newswitch.services.space`)."""
 
     def temperature(self, thermometer: str) -> float:
         """What `thermometer` reads: the air beside the sample (``air_temperature_c`` in the truth,
@@ -147,18 +149,19 @@ class Simulator:
         air = float(self.truth.get("air_temperature_c", AIR_TEMPERATURE_C))
         return air + float(self._noise.normal(0.0, element.noise)) if element.noise else air
 
-    def beads_in_sample(self, pattern: Pattern) -> np.ndarray:
-        """Where `pattern`'s beads are on what is mounted, as ``(y, x, depth)`` in sample micrometres.
+    def beads_in_sample(self, pattern: Pattern, sample: str) -> np.ndarray:
+        """Where `pattern`'s beads are on what `sample` is mounted on, as ``(y, x, depth)`` in its
+        sample micrometres.
 
         On a slide or a dish centred on it, on a plate in every well; with nothing mounted, centred
-        on the stage's 0.
+        on its stage's 0.
         """
-        holder_name = self.mounted()
-        key = (pattern, holder_name)
+        holder_name = self.mounted(sample)
+        key = (pattern, sample, holder_name)
         if key not in self._bead_positions:
             beads = _beads(pattern)
             if holder_name is not None:
-                holder = self.instrument.sample_holder().holders[holder_name].holder
+                holder = self.instrument.sample_holder(sample).holders[holder_name].holder
                 if holder.plate is None:
                     middle = (holder.extent.y * 500.0, holder.extent.x * 500.0, 0.0)
                     beads = beads + np.array(middle)[:, np.newaxis]
@@ -175,15 +178,18 @@ class Simulator:
             self._bead_positions[key] = beads
         return self._bead_positions[key]
 
-    def beads_on_stage(self, pattern: Pattern) -> np.ndarray:
-        """`beads_in_sample` where they really are on the stage: through the mount as it truly is,
-        the one described shifted by the truth's ``mount_offset_um``."""
-        beads = self.beads_in_sample(pattern)
-        holder_name = self.mounted()
+    def beads_on_stage(self, pattern: Pattern, sample: str) -> np.ndarray:
+        """`beads_in_sample` where they really are on `sample`'s stage: through the mount as it
+        truly is, the one described shifted by the truth's ``mount_offset_um`` (one offset, or one
+        per sample cube)."""
+        beads = self.beads_in_sample(pattern, sample)
+        holder_name = self.mounted(sample)
         if holder_name is None:
             return beads
-        mount = self.instrument.sample_holder().holders[holder_name].mount
+        mount = self.instrument.sample_holder(sample).holders[holder_name].mount
         offset = self.truth.get("mount_offset_um", {})
+        if sample in offset:
+            offset = offset[sample]
         matrix = holder_to_stage(mount, (offset.get("x", 0.0), offset.get("y", 0.0)))
         y, x, depth = beads
         on_stage = matrix[:2, :2] @ np.stack([x, y]) + matrix[:2, 3:4]
@@ -228,7 +234,9 @@ class Simulator:
             answer, answer.electrons_by_source, *self._view(detector, state, answer)
         )
         bins = next(axis for axis in self.instrument.detector_axes(detector) if axis.name == "m")
-        fluorophore = self.instrument.simulation_at(state).fluorophore
+        fluorophore = self.instrument.simulation_at(
+            state, self.instrument.sample_of(detector)
+        ).fluorophore
         if fluorophore is None:
             shares = np.zeros(bins.size)
             shares[0] = 1.0
@@ -248,7 +256,7 @@ class Simulator:
         """What of the sample lands on each pixel, how far each is from the middle (0 to 1), where
         each is from the middle along x and y in micrometres of the sample, and how much a bead takes
         of what passes through it."""
-        pattern = self.instrument.simulation_at(state).pattern
+        pattern = self.instrument.simulation_at(state, self.instrument.sample_of(detector)).pattern
         width, height = answer.size
         columns, rows = np.meshgrid(np.arange(width, dtype=float), np.arange(height, dtype=float))
         centred = np.stack([columns - (width - 1) / 2, rows - (height - 1) / 2])
@@ -263,7 +271,9 @@ class Simulator:
         """Each stain, with how much of it lands on each pixel."""
         return [
             (stain, np.minimum(self._slice(detector, state, answer, stain.pattern), 1.0))
-            for stain in self.instrument.simulation_at(state).stains.values()
+            for stain in self.instrument.simulation_at(
+                state, self.instrument.sample_of(detector)
+            ).stains.values()
         ]
 
     @staticmethod
@@ -295,15 +305,16 @@ class Simulator:
         )
         width, height = answer.size
         field = np.zeros((height, width))
-        y, x, depth = self.beads_on_stage(pattern)
+        sample = self.instrument.sample_of(detector)
+        y, x, depth = self.beads_on_stage(pattern, sample)
 
         moves = self._table.states[state_key(self.instrument, state)][detector]["focus"]["moves"]
-        sample_moves = {move.name for move in self.instrument.sample_moves()}
+        sample_moves = {move.name for move in self.instrument.sample_moves(sample)}
         sample_um = sum(float(state[name]) for name in moves if name in sample_moves)
         lens_um = sum(float(state[name]) for name in moves if name not in sample_moves)
         lit = np.ones(depth.shape)
         for sheet in answer.sheet_by_source.values():
-            plane = sum(float(state[move.name]) for move in self.instrument.sheet_moves())
+            plane = sum(float(state[move.name]) for move in self.instrument.sheet_moves(sample))
             lit = lit * np.exp(-2.0 * ((depth + sample_um - plane) / sheet["waist_um"]) ** 2)
         if self.instrument.scanner_of(detector) is not None:
             # A focused spot and what it passes back section the sample: nothing else is lit.

@@ -12,12 +12,24 @@ logger = logging.getLogger(__name__)
 
 
 def software_autofocus_hook(hook: SoftwareAutofocusHook, context: protocols.HookContext) -> None:
-    """Sweep Z (`hook.z_range` around the current position, `hook.steps` planes), park at best focus.
+    """Sweep Z (`hook.z_range` around the current position, `hook.steps` planes), park at best focus:
+    on every sample, by the first camera on that sees it.
 
     Registered only on a microscope with a stage and a detector (`newswitch.microscope.parts`).
     """
     assert context.detector_manager is not None
-    detector = context.detector_manager.list_active_detectors()[0].name
+    instrument = context.values.instrument
+    looking: dict[str, str] = {}
+    for found in context.detector_manager.list_active_detectors():
+        if found.delivers_images():
+            looking.setdefault(instrument.sample_of(found.name), found.name)
+    for detector in looking.values():
+        _refocus(hook, context, detector)
+
+
+def _refocus(hook: SoftwareAutofocusHook, context: protocols.HookContext, detector: str) -> None:
+    """The sweep of `software_autofocus_hook`, by `detector`, on what focuses it."""
+    assert context.detector_manager is not None
     stage = stage_of(context.values, detector)
     steps = max(3, hook.steps)
     z_range = hook.z_range

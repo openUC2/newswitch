@@ -230,13 +230,18 @@ def placed_by_metadata(microscope: Microscope, detector: str) -> Placed:
     return lambda column, row: (matrix @ np.array([column, row, 0.0, 1.0]))[:2]
 
 
-def bead_misses(microscope: Microscope, image: np.ndarray, place: Placed) -> list[float]:
-    """How far each bright spot of `image`, placed by `place`, is from the nearest real bead."""
+def bead_misses(
+    microscope: Microscope, image: np.ndarray, place: Placed, sample: str | None = None
+) -> list[float]:
+    """How far each bright spot of `image`, placed by `place`, is from the nearest real bead of
+    `sample` (the only one, by default)."""
     assert microscope.values is not None
     assert isinstance(microscope.detector, SimulatedDetectorManager)
     simulator = microscope.detector.simulator
-    pattern = simulator.instrument.simulation_at(microscope.values.snapshot()).pattern
-    bead_y, bead_x, _ = simulator.beads_in_sample(pattern)
+    if sample is None:
+        (sample,) = simulator.instrument.samples()
+    pattern = simulator.instrument.simulation_at(microscope.values.snapshot(), sample).pattern
+    bead_y, bead_x, _ = simulator.beads_in_sample(pattern, sample)
     return [
         float(np.min(np.hypot(bead_x - x, bead_y - y)))
         for x, y in (place(column, row) for column, row in bright_peaks(image))

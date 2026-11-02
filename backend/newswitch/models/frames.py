@@ -14,6 +14,7 @@ class Metadata:
     fov_height: float  # how high, along its columns
     light_state: LightPathSnapshot
     acquisition_time: str  # ISO 8601 timestamp of when the image was acquired
+    sample: str = ""  # the sample it was taken of: the cube holding it, whose hub it is placed in
     colormap: str = "gray"  # Colormap used for the image (e.g., 'gray', 'viridis')
     min_value: float | None = (
         None  # Minimum pixel value for display (if None, it will be calculated from the image data)

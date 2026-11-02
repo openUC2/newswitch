@@ -12,23 +12,27 @@ export const PositionSchema = z
   })
   .brand('@newswitch/position')
   .describe(
-    'Where, by axis name: in the sample, the stage, a well (``well:B3``), an image\ntaken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;\na thermometer, where it measures). Without z, z stays.',
+    'Where, by axis name: on a sample (``sample``, or ``sample:<cube>``), a stage, a\nwell (``well:B3``), an image taken (``image:<id>``), a detector (``detector:<name>``,\nits pixels as they are now; a thermometer, where it measures). Without z, z stays. A\nbare ``sample`` is that of the detector, or of the only one.',
   );
 export type Position = z.input<typeof PositionSchema>;
 export type PositionOutput = z.infer<typeof PositionSchema>;
 
 // --- Schemas ---
 export const MoveToArgsSchema = z.object({
-  /** Where, by axis name: in the sample, the stage, a well (``well:B3``), an image
-taken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;
-a thermometer, where it measures). Without z, z stays. */
+  /** Where, by axis name: on a sample (``sample``, or ``sample:<cube>``), a stage, a
+well (``well:B3``), an image taken (``image:<id>``), a detector (``detector:<name>``,
+its pixels as they are now; a thermometer, where it measures). Without z, z stays. A
+bare ``sample`` is that of the detector, or of the only one. */
   position: PositionSchema.describe(
-    'Where, by axis name: in the sample, the stage, a well (``well:B3``), an image\ntaken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;\na thermometer, where it measures). Without z, z stays.',
+    'Where, by axis name: on a sample (``sample``, or ``sample:<cube>``), a stage, a\nwell (``well:B3``), an image taken (``image:<id>``), a detector (``detector:<name>``,\nits pixels as they are now; a thermometer, where it measures). Without z, z stays. A\nbare ``sample`` is that of the detector, or of the only one.',
   ),
-  /** Whose image; by default the first that is on. */
+  /** Whose image; by default the first that is on, of the sample named or the only
+one. */
   detector: z
     .string()
-    .describe('Whose image; by default the first that is on.')
+    .describe(
+      'Whose image; by default the first that is on, of the sample named or the only\none.',
+    )
     .nullable()
     .optional(),
 });

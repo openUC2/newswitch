@@ -74,7 +74,7 @@ class AcquisitionManager:
                     ),
                 )
 
-                self.space.remember(frame.id, metadata.affine_matrix)
+                self.space.remember(frame.id, metadata.affine_matrix, metadata.sample)
                 logger.debug("Acquired frame %s from detector %s", frame.id, detector.name)
                 self.expanse_manager.add_frame(frame)
                 frames.append(frame)

@@ -33,6 +33,7 @@ BASE = {
         "stage": {
             "element": {
                 "kind": "sample",
+                "simulation": "beads",
                 "simulations": {
                     "beads": {
                         "fluorophore": "egfp",
@@ -89,7 +90,6 @@ BASE = {
     "drives": [{"from": "camera.frame", "to": "stage.z", "by": "2 um"}],
     "settings": {
         "simulate": "everything",
-        "simulation": "beads",
         "db_path": "agent.db",
         "image_dir": "/tmp/newswitch/images",
         "cache_dir": "/tmp/newswitch/cache",

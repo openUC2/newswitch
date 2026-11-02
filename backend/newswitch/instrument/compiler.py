@@ -174,8 +174,13 @@ def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
     a swap that shifts it puts the same pixel somewhere else.
     """
     found: dict[str, set[str]] = {detector: set() for detector in instrument.detectors()}
-    key = instrument.simulation_key()
-    states = [s for s in instrument.swap_states() if s[key] == instrument.settings.simulation]
+    on_them = {
+        instrument.simulation_key(sample): instrument.sample_holder(sample).simulation
+        for sample in instrument.samples()
+    }
+    states = [
+        s for s in instrument.swap_states() if all(s[key] == on for key, on in on_them.items())
+    ]
     for state in states:
         for detector in instrument.detectors():
             before = traced_answer(instrument, detector, state)

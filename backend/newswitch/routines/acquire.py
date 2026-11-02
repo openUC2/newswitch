@@ -84,6 +84,7 @@ class _Record:
     calibrated: bool = True
     shape: tuple[int, int] | None = None  # its image, the same under every channel
     scale: np.ndarray | None = None  # its pixels on the sample, the same under every channel
+    sample: str = ""  # the sample its detector sees
     sets: Mapping[str, float] = field(default_factory=dict)  # what its first channel sets
     placed: AxisMap | None = None  # its axes on the sample, once there
 
@@ -99,12 +100,12 @@ class _Merge:
     position: AcquisitionPosition
     index: int
     offsets: list[float]
-    sweep: Move | None
+    sweeps: dict[str, Move | None]  # what sweeps each sample's stack, by sample
     lightings: tuple[_Lighting, ...]
     records: dict[str, _Record]  # by detector, in the order the plan first names them
     swept: bool
-    targets: dict[str, float]  # what to set to get there: its place, then what it sets
-    light_sweep: bool = False  # what sweeps moves the light, not the sample
+    targets: dict[str, float]  # what to set to get there: its places, then what it sets
+    light_sweeps: frozenset[str] = frozenset()  # the samples whose sweep moves the light
 
 
 def _z_step(detector: Detector) -> float | None:
@@ -172,19 +173,27 @@ def _offsets_of(plan: AcquisitionPlan) -> list[float]:
 
 
 def _sweep_of(
-    plan: AcquisitionPlan, offsets: list[float], detector: str | None, values: Values
+    plan: AcquisitionPlan,
+    offsets: list[float],
+    detector: str | None,
+    values: Values,
+    sample: str,
+    alone: bool = True,
 ) -> Move | None:
-    """What sweeps a stack: none for one plane where it is, unless one is named.
+    """What sweeps `sample`'s stack: none for one plane where it is, unless one is named.
 
     What a detector's own wire steps, or what is named among what moves through the sample or
     focuses; otherwise the one thing that does either. Without a detector that takes images,
-    nothing focuses: it is named, or refused.
+    nothing focuses: it is named, or refused, when the sample is `alone` in the plan; beside others,
+    what measures at a point is read at each of their planes where it is.
     """
     named = plan.stack.variable
     if named is None and offsets == [0.0]:
         return None
     instrument = values.instrument
     if detector is None:
+        if not alone:
+            return None
         variable = instrument.variables.get(named or "")
         if not isinstance(variable, Move):
             raise ValueError(
@@ -195,7 +204,7 @@ def _sweep_of(
     wired = instrument.z_drive(detector)
     if wired is not None and named in (None, wired.target):
         return instrument.variables[wired.target]
-    through = instrument.sample_moves()
+    through = instrument.sample_moves(sample)
     if named in (move.name for move in through):
         return instrument.variables[named]
     if values.roles.focuses(detector):
@@ -281,27 +290,20 @@ def _plan_position(
     position: AcquisitionPosition,
     index: int,
     offsets: list[float],
-    sweep: Move | None,
+    sweeps: dict[str, Move | None],
     detector_manager: protocols.DetectorManager,
     optics_manager: protocols.OpticsManager,
     values: Values,
     space: SpaceManager,
-    first: str | None,
+    firsts: dict[str, str | None],
 ) -> _Merge:
     """Everything that can be refused about one position, and the records it will fill."""
-    if position.at is not None and first is None:
-        raise ValueError(
-            "Nothing in this plan takes images, so no image's middle can be brought to a place: "
-            "give its positions by what to set (set_to)"
-        )
-    going = {
-        **({} if position.at is None or first is None else space.targets(position.at, first)),
-        **position.set_to,
-    }
+    going = {**_going(position, firsts, space), **position.set_to}
     values.check(going)
     at = {**values.snapshot(), **values.resolved(going)}
-    if sweep is not None:
-        values.check({sweep.name: at[sweep.name] + offset for offset in offsets})
+    for sweep in sweeps.values():
+        if sweep is not None:
+            values.check({sweep.name: at[sweep.name] + offset for offset in offsets})
 
     records: dict[str, _Record] = {}
     lightings: list[_Lighting] = []
@@ -315,7 +317,10 @@ def _plan_position(
         exposures: list[_Exposure] = []
         for name in channel.detectors:
             detector = _find_detector(name, detector_manager)
-            record = records.setdefault(name, _Record(detector, sets=values.resolved(targets)))
+            record = records.setdefault(
+                name,
+                _Record(detector, sample=space.sample_of(name), sets=values.resolved(targets)),
+            )
             images = detector.delivers_images()
             if images:
                 scale, measured = optics_manager.scale_under(name, under)
@@ -353,18 +358,53 @@ def _plan_position(
         record.data = np.empty(
             tuple(int(sizes[name] or 0) for name in record.dims), dtype=detector.data_type
         )
-    light_moves = values.instrument.sheet_moves()
+    (only,) = list(sweeps.values()) if len(sweeps) == 1 else [None]
     return _Merge(
         position=position,
         index=index,
         offsets=offsets,
-        sweep=sweep,
+        sweeps=sweeps,
         lightings=tuple(lightings),
         records=records,
         targets=going,
-        light_sweep=sweep is not None and sweep in light_moves,
-        swept=_check_sweep(plan, offsets, lightings, sweep, values),
+        light_sweeps=frozenset(
+            sample
+            for sample, sweep in sweeps.items()
+            if sweep is not None and sweep in values.instrument.sheet_moves(sample)
+        ),
+        swept=_check_sweep(plan, offsets, lightings, only, values),
     )
+
+
+def _going(
+    position: AcquisitionPosition, firsts: dict[str, str | None], space: SpaceManager
+) -> dict[str, float]:
+    """What brings each sample's image to where `position` is: a place on "the sample" is that
+    place on each sample, by its own stage; a place on one sample is only that one's.
+
+    Raises:
+        ValueError: Nothing that takes images looks at the samples it names.
+    """
+    if position.at is None:
+        return {}
+    on = space.sample_of_system(position.at.system)
+    looking = {
+        sample: first
+        for sample, first in firsts.items()
+        if first is not None and (on is None or on == sample)
+    }
+    if not looking:
+        raise ValueError(
+            "Nothing in this plan takes images of "
+            + (f"the sample {on}" if on is not None else "any sample")
+            + ", so no image's middle can be brought to a place: give its positions by what to "
+            "set (set_to)"
+        )
+    return {
+        name: value
+        for first in looking.values()
+        for name, value in space.targets(position.at, first).items()
+    }
 
 
 def _check_memory(arrays: list[np.ndarray]) -> None:
@@ -379,13 +419,17 @@ def _check_memory(arrays: list[np.ndarray]) -> None:
 
 
 def _place(merge: _Merge, space: SpaceManager, values: Values) -> None:
-    """Where every record's axes go on the sample: once at each position, where it is now (after
+    """Where every record's axes go on its sample: once at each position, where it is now (after
     its hooks), under what the record's channels set (one binning, one objective for all)."""
     now = values.snapshot()
     for name, record in merge.records.items():
         if record.placed is None:
             record.placed = space.record_map(
-                name, record.dims, merge.offsets, merge.light_sweep, {**now, **record.sets}
+                name,
+                record.dims,
+                merge.offsets,
+                record.sample in merge.light_sweeps,
+                {**now, **record.sets},
             )
 
 
@@ -450,9 +494,17 @@ def _lights_off(values: Values) -> None:
     )
 
 
-def _sweep_to(merge: _Merge, base: float, offset: float, values: Values, task: Task) -> None:
-    if merge.sweep is not None:
-        values.set({merge.sweep.name: base + offset}, task=task)
+def _sweep_to(
+    merge: _Merge, bases: Mapping[str, float], offset: float, values: Values, task: Task
+) -> None:
+    """Every sample's stack to its plane `offset` from where it was: each by what sweeps it."""
+    planes = {
+        sweep.name: bases[sweep.name] + offset
+        for sweep in merge.sweeps.values()
+        if sweep is not None
+    }
+    if planes:
+        values.set(planes, task=task)
 
 
 def acquire(
@@ -488,23 +540,44 @@ def acquire(
     named = list(dict.fromkeys(name for channel in plan.channels for name in channel.detectors))
     if not named:
         raise ValueError(f"The channel {plan.channels[0].name!r} names no detector")
-    # What looks: whose image's middle goes to a place, and whose focus sweeps a stack.
-    first = next(
-        (name for name in named if _find_detector(name, detector_manager).delivers_images()), None
-    )
-    sweep = _sweep_of(plan, offsets, first, values)
+    # Each sample the plan sees, and on each what looks: whose image's middle goes to a place,
+    # and whose focus sweeps the sample's stack.
+    for name in named:
+        _find_detector(name, detector_manager)
+    samples = list(dict.fromkeys(space.sample_of(name) for name in named))
+    if plan.stack.variable is not None and len(samples) > 1:
+        raise ValueError(
+            f"This plan sees the samples {samples}, and {plan.stack.variable} would sweep one of "
+            "them: leave stack.variable out, and each sweeps what focuses it"
+        )
+    firsts = {
+        sample: next(
+            (
+                name
+                for name in named
+                if space.sample_of(name) == sample
+                and _find_detector(name, detector_manager).delivers_images()
+            ),
+            None,
+        )
+        for sample in samples
+    }
+    sweeps = {
+        sample: _sweep_of(plan, offsets, firsts[sample], values, sample, len(samples) == 1)
+        for sample in samples
+    }
     merges = [
         _plan_position(
             plan,
             position,
             index,
             offsets,
-            sweep,
+            sweeps,
             detector_manager,
             optics_manager,
             values,
             space,
-            first,
+            firsts,
         )
         for index, position in enumerate(plan.positions)
     ]
@@ -551,14 +624,18 @@ def acquire(
                 # Position hooks run there (an autofocus may refocus); the stacks are centred on where
                 # it is afterwards.
                 hook_manager.execute_all(plan.p_hooks or [])
-                base = 0.0 if merge.sweep is None else float(values[merge.sweep.name])
+                bases = {
+                    sweep.name: float(values[sweep.name])
+                    for sweep in merge.sweeps.values()
+                    if sweep is not None
+                }
                 _place(merge, space, values)
 
                 if merge.swept:
                     # The detector steps what sweeps: the routine only brings it to the first plane.
                     for lighting in merge.lightings:
                         task.pausepoint()
-                        _sweep_to(merge, base, merge.offsets[0], values, task)
+                        _sweep_to(merge, bases, merge.offsets[0], values, task)
                         values.set(lighting.targets)
                         exposure = lighting.exposures[0]
                         _activate(exposure, detector_manager)
@@ -579,7 +656,7 @@ def acquire(
                     continue
 
                 for z_index, offset in enumerate(merge.offsets):
-                    _sweep_to(merge, base, offset, values, task)
+                    _sweep_to(merge, bases, offset, values, task)
                     hook_manager.execute_all(plan.z_hooks or [])
 
                     for lighting in merge.lightings:
@@ -619,8 +696,9 @@ def acquire(
                         calibrated=record.calibrated,
                         quantity=record.detector.quantity,
                         unit=record.detector.unit,
-                        mount_id=space.state.mount_id,
-                        mount=zyx_rows(space.mount()),
+                        sample=record.sample,
+                        mount_id=space.state.samples[record.sample].mount_id,
+                        mount=zyx_rows(space.mount(record.sample)),
                     )
                 )
             )

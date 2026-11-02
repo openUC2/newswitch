@@ -302,8 +302,10 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
     )
 
     if isinstance(detector, SimulatedDetectorManager):
-        # What it renders is on what is mounted now.
-        detector.simulator.mounted = lambda: space_state.holder
+        # What it renders is on what each sample is mounted on now.
+        detector.simulator.mounted = lambda sample: (
+            space_state.samples[sample].holder if sample in space_state.samples else None
+        )
 
     def refresh() -> None:
         """What the optics find, then where that puts every pixel."""

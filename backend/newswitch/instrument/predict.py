@@ -59,22 +59,21 @@ class Channel:
 
 
 def state_key(instrument: Instrument, state: Mapping[str, Any]) -> str:
-    """Names one simulation, and one combination of what the swaps put in place."""
+    """Names what is on every sample, and one combination of what the swaps put in place."""
     swaps = sorted(v.name for v in instrument.variables.values() if v.verb == "swaps")
-    names = [instrument.simulation_key(), *swaps]
+    names = [*instrument.simulation_keys(), *swaps]
     return ",".join(f"{name}={state[name]}" for name in names)
 
 
 def _in_the_sheet(
-    instrument: Instrument, state: Mapping[str, Any], arriving: Mapping[str, Any]
+    instrument: Instrument, state: Mapping[str, Any], arriving: Mapping[str, Any], sample: str
 ) -> float:
-    """How much of a source's light reaches the sample: its nearest part, if the sheet missed it."""
+    """How much of a source's light reaches `sample`: its nearest part, if the sheet missed it."""
     if "sheet" not in arriving:
         return 1.0
-    plane = sum(float(state[move.name]) for move in instrument.sheet_moves())
-    return math.exp(
-        -2.0 * ((instrument.lit_um(state) - plane) / arriving["sheet"]["waist_um"]) ** 2
-    )
+    plane = sum(float(state[move.name]) for move in instrument.sheet_moves(sample))
+    lit = instrument.lit_um(state, sample=sample)
+    return math.exp(-2.0 * ((lit - plane) / arriving["sheet"]["waist_um"]) ** 2)
 
 
 def _mounted(
@@ -124,7 +123,8 @@ def assemble(
     pixel_y = axis_y.step * binning / magnification
     width, height = axis_x.size // binning, axis_y.size // binning
 
-    stage = instrument.cubes[instrument.sample_cube()]
+    sample = instrument.sample_of(detector)
+    stage = instrument.cubes[sample]
     centre = [0.0, 0.0]
     for variable in stage.variables.values():
         if variable.verb == "moves" and variable.along in ("x", "y"):
@@ -146,7 +146,7 @@ def assemble(
             * per_mw_ms
             * exposure
             * _share(arriving, pixel_area, abs(pixel_x) / binning, abs(pixel_y) / binning, pixels)
-            * _in_the_sheet(instrument, state, arriving)
+            * _in_the_sheet(instrument, state, arriving, sample)
             * binned
         )
 
@@ -240,9 +240,10 @@ class Compiled:
             imaging["magnification"] += sensitivity["magnification_per_um"] * moved
             if name not in focus["moves"]:
                 blur_squared += (sensitivity["blur_um_per_um"] * moved) ** 2
-        sample = {move.name for move in self.instrument.sample_moves()}
+        on = self.instrument.sample_of(detector)
+        sample = {move.name for move in self.instrument.sample_moves(on)}
         lens_um = sum(float(state[name]) for name in focus["moves"] if name not in sample)
-        defocus_um = self.instrument.lit_um(state, lens_um) + lens_um
+        defocus_um = self.instrument.lit_um(state, lens_um, sample=on) + lens_um
         imaging["in_focus_um"] = float(np.sqrt(blur_squared))
         imaging["blur_um_per_um"] = focus["blur_um_per_um"]
         imaging["spot_center_um"] = float(

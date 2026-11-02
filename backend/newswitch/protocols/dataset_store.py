@@ -65,8 +65,10 @@ class AcquiredRecord:
     unit: str = ""
     """What its values are in: empty for counts."""
     """Whether its pixel scale was measured, rather than predicted from the optics."""
+    sample: str = ""
+    """The sample it was taken of, by the cube holding it."""
     mount_id: str = "0"
-    """Which mounting of a sample it was taken on: what its sample micrometres are of."""
+    """Which mounting of its sample it was taken on: what its sample micrometres are of."""
     mount: tuple[tuple[float, float, float, float], ...] = (
         (1.0, 0.0, 0.0, 0.0),
         (0.0, 1.0, 0.0, 0.0),

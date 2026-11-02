@@ -35,9 +35,6 @@ class Settings(BaseModel):
     """What has no hardware: all of it, to run a description dry; what its ``hardware`` section
     does not wire, so that a real camera can sit beside a simulated stage; or nothing, so that what
     is not wired is refused."""
-    simulation: str
-    """Which of the sample holder's ``simulations`` is on it: what a simulation draws, and what
-    predictions assume, on real hardware too."""
     db_path: str
     """SQLite file of the arkitekt agent (state history, journal); relative to the working
     directory."""

@@ -193,7 +193,9 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
         places=((0.0, 0.0), (60.0, 40.0)),
     )
     world = space_3d(
-        mikro, "sample", reference=f"sample-dual-camera-{BUILT[-1].space_state.mount_id}"
+        mikro,
+        "sample",
+        reference=f"sample-dual-camera-stage-{BUILT[-1].space_state.samples['stage'].mount_id}",
     )
 
     def beads_in_stage(made: AcquiredDataset) -> np.ndarray:
@@ -242,7 +244,9 @@ def test_a_thermometer_is_a_scalar_dataset_at_its_point(mikro: Mikro, tmp_path: 
     readings = np.asarray(dataset.data)
     assert np.all(np.abs(readings - 22.0) < 0.5)
     world = space_3d(
-        mikro, "sample", reference=f"sample-he-microscope-{BUILT[-1].space_state.mount_id}"
+        mikro,
+        "sample",
+        reference=f"sample-he-microscope-stage-{BUILT[-1].space_state.samples['stage'].mount_id}",
     )
     (point,) = np.asarray(
         dataset.intrinsic_system.transform_points_to(

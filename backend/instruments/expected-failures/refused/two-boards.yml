@@ -13,6 +13,7 @@ cubes:
   stage:
     element:
       kind: sample
+      simulation: gfp-beads
       simulations:
         gfp-beads:
           fluorophore: egfp
@@ -67,7 +68,6 @@ hardware:
 
 settings:
   simulate: everything
-  simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache

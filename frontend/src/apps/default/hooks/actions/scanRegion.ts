@@ -85,6 +85,7 @@ export const MetadataSchema = z
       "A light path as it was for an image, and what that image's calibration depends on.",
     ),
     acquisition_time: z.string(),
+    sample: z.string(),
     colormap: z.string(),
     min_value: z.number().nullable().optional(),
     max_value: z.number().nullable().optional(),

@@ -23,7 +23,8 @@ cubes:
   stage:
     element:
       kind: sample
-      simulations:   # what can be on it; settings.simulation says which is
+      simulation: gfp-beads
+      simulations:   # what can be on it; simulation: says which is
         gfp-beads:
           fluorophore: egfp
           absorbed: 5.0e-4
@@ -135,7 +136,6 @@ hardware:
 
 settings:
   simulate: everything
-  simulation: gfp-beads
   db_path: arkitekt_agent.db     # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache   # cleared on every start

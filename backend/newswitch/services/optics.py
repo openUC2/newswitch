@@ -217,16 +217,22 @@ class OpticsManager:
 
     def _source(self, name: str, values: Mapping[str, Any]) -> SourceOptics:
         assert self.table is not None and self.instrument is not None
-        sample = self.instrument.sample_cube()
+        lit = self.instrument.samples_lit_by(name)
         sides = [
             route[-1].side
+            for sample in lit
             for route in self.instrument.routes(self.instrument.illumination, name, sample)
         ]
         side = sides[0] if sides else None
         entries = self.table.states[state_key(self.instrument, values)]
-        arriving = next(
-            (entry["coupling"][name] for entry in entries.values() if name in entry["coupling"]),
-            {},
+        # What arrives of it at a detector that sees a sample it lights: elsewhere, nothing does.
+        seeing, arriving = next(
+            (
+                (detector, entry["coupling"][name])
+                for detector, entry in entries.items()
+                if name in entry["coupling"] and self.instrument.sample_of(detector) in lit
+            ),
+            (None, {}),
         )
         band = arriving.get("band_mean_nm")
         found = {
@@ -243,20 +249,19 @@ class OpticsManager:
                 thickness_um=2.0 * sheet["waist_um"],
                 reach_um=sheet["rayleigh_um"],
                 along=sheet["along"],
-                edge_share=self._edge_share(sheet, values),
+                edge_share=None if seeing is None else self._edge_share(sheet, values, seeing),
                 **found,
             )
         if "field_um" in arriving:
             return SourceOptics(shape="field", field_um=arriving["field_um"], **found)
         return SourceOptics(shape="spot", **found)
 
-    def _edge_share(self, sheet: Mapping[str, Any], values: Mapping[str, Any]) -> float | None:
-        """How strong a sheet still is at the edge of what the first detector sees of it."""
+    def _edge_share(
+        self, sheet: Mapping[str, Any], values: Mapping[str, Any], detector: str
+    ) -> float:
+        """How strong a sheet still is at the edge of what `detector`, which sees it, sees."""
         assert self.table is not None and self.instrument is not None
-        detectors = self.instrument.detectors()
-        if not detectors:
-            return None
-        width, height = self.table.answer(detectors[0], values).field_of_view_um
+        width, height = self.table.answer(detector, values).field_of_view_um
         half = (width if sheet["along"] == "x" else height) / 2.0
         return 1.0 / math.sqrt(1.0 + (half / sheet["rayleigh_um"]) ** 2)
 

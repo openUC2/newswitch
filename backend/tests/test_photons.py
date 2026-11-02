@@ -110,7 +110,7 @@ def test_the_full_chain_by_hand(tmp_path: Path) -> None:
     """A bead's electrons per milliwatt and millisecond, multiplied out factor by factor."""
     instrument = described(tmp_path, lambda d: None)
     grid = tracing.wavelengths(instrument)
-    sample = instrument.simulation_at(instrument.initial_state())
+    sample = instrument.simulation_at(instrument.initial_state(), "stage")
     photons = 1e-6 * 488e-9 / (6.62607015e-34 * 299792458.0)
     laser = tracing._gaussian(grid, 488.0, 2.0)
     laser = laser / laser.sum()

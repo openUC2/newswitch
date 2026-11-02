@@ -146,9 +146,12 @@ def _setting(name: str, value: Any) -> SettingInput:  # noqa: ANN401 - a variabl
     return SettingInput(name=name, text=str(value))
 
 
-def microscope_state(instrument: Instrument, state: Mapping[str, Any]) -> OptikitStateInput:
-    """What every device was set to; the stage as lengths, the rest as settings."""
-    holder = instrument.sample_cube()
+def microscope_state(
+    instrument: Instrument, state: Mapping[str, Any], sample: str
+) -> OptikitStateInput:
+    """What every device was set to; `sample`'s stage as lengths, the rest (another sample's stage
+    too) as settings."""
+    holder = sample
     moves = instrument.cubes[holder].moves
     stage = {short: f"{state[move.name]} um" for short, move in moves.items() if short in "xyz"}
     devices = [
@@ -182,7 +185,7 @@ def anchors_of_channels(
 
 
 def _anchor_of_plane(
-    instrument: Instrument, plane: AcquiredPlane, stack: str = "z"
+    instrument: Instrument, plane: AcquiredPlane, sample: str, stack: str = "z"
 ) -> CoordinateAnchorInput:
     return CoordinateAnchorInput(
         axis_anchors=[
@@ -190,7 +193,7 @@ def _anchor_of_plane(
             AxisAnchorInput(axis="c", value=plane.c),
             AxisAnchorInput(axis=stack, value=plane.z),
         ],
-        microscope=microscope_state(instrument, plane.state),
+        microscope=microscope_state(instrument, plane.state, sample),
         acquisition_window=AcquisitionWindowInput(start=plane.started, end=plane.ended),
     )
 
@@ -198,8 +201,9 @@ def _anchor_of_plane(
 class MikroDatasetStore:
     """Stores what an acquisition merged in mikro, in the space of the sample it was taken of.
 
-    One sample space per mounting (``sample-<instrument>-<mount id>``), and one stage space per
-    instrument (``stage-<instrument>``), the mount between them written whenever it is one not
+    One sample space per sample and mounting (``sample-<instrument>-<sample>-<mount id>``), and one
+    stage space per sample's stage (``stage-<instrument>-<sample>``), the mount between them
+    written whenever it is one not
     written yet: a mount registered later is an edge of its own.
     """
 
@@ -235,7 +239,7 @@ class MikroDatasetStore:
             anchors=[
                 *anchors_of_channels(self.instrument, acquired),
                 *(
-                    _anchor_of_plane(self.instrument, plane, acquired.stack)
+                    _anchor_of_plane(self.instrument, plane, acquired.sample, acquired.stack)
                     for plane in acquired.planes
                 ),
             ],
@@ -243,7 +247,7 @@ class MikroDatasetStore:
         sample = space_3d(
             self.client,
             "sample",
-            reference=f"sample-{self.instrument.name}-{acquired.mount_id}",
+            reference=f"sample-{self.instrument.name}-{acquired.sample}-{acquired.mount_id}",
         )
         dataset.intrinsic_system.transform_to(
             sample,
@@ -255,7 +259,11 @@ class MikroDatasetStore:
             else PlacementValidity.INFERRED,
         )
         if (acquired.mount_id, acquired.mount) not in self._mounted:
-            stage = space_3d(self.client, "stage", reference=f"stage-{self.instrument.name}")
+            stage = space_3d(
+                self.client,
+                "stage",
+                reference=f"stage-{self.instrument.name}-{acquired.sample}",
+            )
             stage.transform_to(
                 sample,
                 kind="BY_DIMENSION",

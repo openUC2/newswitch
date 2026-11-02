@@ -11,7 +11,8 @@ cubes:
   sample:
     element:
       kind: sample
-      simulations:   # what can be on it; settings.simulation says which is
+      simulation: gfp-beads
+      simulations:   # what can be on it; simulation: says which is
         gfp-beads:
           fluorophore: egfp
           absorbed: 1.0e-4
@@ -46,7 +47,6 @@ detection:
 
 settings:
   simulate: unwired
-  simulation: gfp-beads
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache

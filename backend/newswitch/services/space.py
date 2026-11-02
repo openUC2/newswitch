@@ -1,25 +1,31 @@
-"""Where everything is, on the sample: the coordinate graph of the running microscope.
+"""Where everything is, on its sample: the coordinate graph of the running microscope.
 
-The one place a pixel is placed. A detector's pixel goes to the stage by how large its pixels are
-on the sample (calibrated, or else as the optics predict: `OpticsManager.scale_under`) and where it
-looks (`newswitch.services.stage.where`), the middle of its sensor where it looks; and from the stage
-to the sample by the mount. An image taken is its detector's placement then, kept under its id, so
-that a point in it is a place to go.
+The one place a pixel is placed. A detector's pixel goes to its sample's stage by how large its
+pixels are on the sample (calibrated, or else as the optics predict: `OpticsManager.scale_under`)
+and where it looks (`newswitch.services.stage.where`), the middle of its sensor where it looks; and
+from the stage to the sample by the mount. An image taken is its detector's placement then, kept
+under its id, so that a point in it is a place to go.
 
-    detector:camera -> stage:  BY_DIMENSION
+Each sample is a hub of its own (`Instrument.samples`), on a stage of its own:
+
+    detector:cam_a -> stage:stage_a:  BY_DIMENSION
                                  (x, y) -> (x, y): T(where) · A · T(pixel from the sensor's middle)
                                  ()     -> (z):    the plane it looks at
                                its colors or arrival times: no part, nothing said
-    detector:thermometer -> stage:  BY_DIMENSION, () -> (x, y, z): where it sits on the stage
-    stage -> sample:          AFFINE, the mount
-    well:B3 -> sample:        BY_DIMENSION, (x, y) -> (x, y): where the mounted plate has it
-    image:<id> -> sample:     AFFINE, its detector's placement when it was taken
+    detector:thermometer -> stage:stage_b:  BY_DIMENSION, () -> (x, y, z): where it sits
+    stage:stage_a -> sample:stage_a:        AFFINE, that sample's mount
+    well:stage_a:B3 -> sample:stage_a:      BY_DIMENSION, (x, y) -> (x, y): where its plate has it
+    image:<id> -> sample:<its sample>:      AFFINE, its detector's placement when it was taken
 
 A part from fewer axes than it states is walked forwards only: the camera's pixel is on the sample,
 but nothing about a sample point says which pixel sees it (`targets` asks the other way round).
 
-What is mounted is one of the holders the description names for its sample (`mount_holder`); a new
-mounting is a new sample, with the mount the description gives it and none of the images taken.
+What a sample is mounted on is one of the holders the description names for it (`mount_holder`); a
+new mounting is a new sample, with the mount the description gives it and none of its images.
+
+The bare names ``sample``, ``stage`` and ``well:B3`` are short for those of one sample: the only one,
+or the one a detector sees (`resolve`). With several samples and nothing to say which, a bare name
+is refused, never guessed.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from typing import Any
 import numpy as np
 
 from newswitch.instrument.space import (
+    PLACE,
     SAMPLE,
     SPATIAL,
     STAGE,
@@ -44,12 +51,15 @@ from newswitch.instrument.space import (
     detector_system,
     holder_to_stage,
     image_system,
+    place_system,
     places_of,
+    sample_system,
     spatial,
     spatial_affine,
+    stage_system,
     translation,
 )
-from newswitch.instrument.spec import MountedHolder, Thermometer
+from newswitch.instrument.spec import Instrument, MountedHolder, Thermometer
 from newswitch.models.devices import Detector
 from newswitch.models.space import (
     Axis,
@@ -59,6 +69,7 @@ from newswitch.models.space import (
     HolderShape,
     MeasuredPoint,
     Position,
+    SampleSpace,
     Transformation,
     WellShape,
 )
@@ -97,8 +108,8 @@ def _new_mount_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
-def _shape_of(name: str, mounted: MountedHolder) -> HolderShape:
-    """What is mounted as a view draws it, in sample micrometres."""
+def _shape_of(sample: str, name: str, mounted: MountedHolder) -> HolderShape:
+    """What `sample` is mounted on as a view draws it, in its sample's micrometres."""
     holder = mounted.holder
     plate = holder.plate
     return HolderShape(
@@ -110,7 +121,7 @@ def _shape_of(name: str, mounted: MountedHolder) -> HolderShape:
         if plate is None
         else [
             WellShape(
-                name=f"well:{well}",
+                name=place_system(sample, well),
                 x=x * 1000.0,
                 y=y * 1000.0,
                 diameter_um=None if plate.well.diameter is None else plate.well.diameter * 1000.0,
@@ -136,27 +147,99 @@ class SpaceManager:
         self.values = values
         self.optics = optics
         self.detector_state = detector_state
-        self._images: dict[str, np.ndarray] = {}
+        self._images: dict[str, tuple[str, np.ndarray]] = {}
         self._published = ""
         self._refreshing = threading.Lock()
-        holder = None if values is None else values.instrument.sample_holder()
-        self._holders: dict[str, MountedHolder] = {} if holder is None else dict(holder.holders)
-        self.state.holders = list(self._holders)
-        # Every start is a mounting of its own: what is on the stage now need not be what was
-        # before, and the mount lives in memory only.
-        self.state.mount_id = _new_mount_id()
-        if holder is not None and holder.mounted is not None:
-            self._mount(holder.mounted, self.state.mount_id)
+        self._holders: dict[str, dict[str, MountedHolder]] = {}
+        samples: dict[str, SampleSpace] = {}
+        for sample in [] if self.instrument is None else self.instrument.samples():
+            holder = self.instrument.sample_holder(sample)
+            self._holders[sample] = dict(holder.holders)
+            # Every start is a mounting of its own: what is on a stage now need not be what was
+            # before, and the mount lives in memory only.
+            samples[sample] = SampleSpace(
+                sample=sample, mount_id=_new_mount_id(), holders=list(holder.holders)
+            )
+            if holder.mounted is not None:
+                self._mount(samples[sample], holder.mounted)
+        self.state.samples = samples
+
+    @property
+    def instrument(self) -> Instrument | None:
+        """What is placed, if anything is."""
+        return None if self.values is None else self.values.instrument
+
+    # ------------------------------------------------------------- which sample
+
+    def samples(self) -> list[str]:
+        """The samples, by the cubes holding them."""
+        return [] if self.instrument is None else self.instrument.samples()
+
+    def sample_of(self, detector: str) -> str:
+        """The sample `detector` sees, or sits beside."""
+        assert self.instrument is not None
+        return self.instrument.sample_of(detector)
+
+    def one_sample(self, sample: str | None = None, detector: str | None = None) -> str:
+        """`sample`, or the one `detector` sees, or the only one.
+
+        Raises:
+            ValueError: No such sample; or several, and nothing says which.
+        """
+        samples = self.samples()
+        if sample is not None:
+            if sample not in samples:
+                raise ValueError(f"No sample {sample!r}: there are {samples}")
+            return sample
+        if detector is not None:
+            return self.sample_of(detector)
+        if len(samples) == 1:
+            return samples[0]
+        raise ValueError(
+            f"Which sample? There are {samples}: name one, or the detector that looks at it"
+        )
+
+    def resolve(self, system: str, detector: str | None = None) -> str:
+        """`system` as the graph names it: a bare ``sample``, ``stage`` or ``well:B3`` is that of the
+        sample `detector` sees, or of the only one; any other name is already the graph's.
+
+        Raises:
+            ValueError: A bare name, several samples, and no detector to say which.
+        """
+        head, _, rest = system.partition(":")
+        if system == SAMPLE:
+            return sample_system(self.one_sample(detector=detector))
+        if system == STAGE:
+            return stage_system(self.one_sample(detector=detector))
+        if head == PLACE and rest and ":" not in rest:
+            return place_system(self.one_sample(detector=detector), rest)
+        return system
+
+    def sample_of_system(self, system: str) -> str | None:
+        """The sample `system` is a part of: ``sample:stage_a``'s, an image's, a detector's. None
+        for a bare name, which is any sample's (`resolve`)."""
+        head, _, rest = system.partition(":")
+        if not rest or (head == PLACE and ":" not in rest):
+            return None
+        if head in (SAMPLE, STAGE):
+            return rest
+        if head == PLACE:
+            return rest.partition(":")[0]
+        if head == "image":
+            return self._images[rest][0] if rest in self._images else None
+        if head == "detector":
+            return self.sample_of(rest)
+        return None
 
     # ------------------------------------------------------------- the edges
 
-    def mount(self) -> np.ndarray:
-        """Stage micrometres to sample micrometres."""
-        return np.array(self.state.mount, dtype=float)
+    def mount(self, sample: str | None = None) -> np.ndarray:
+        """`sample`'s stage micrometres to its sample micrometres (the only sample's, by default)."""
+        return np.array(self.state.samples[self.one_sample(sample)].mount, dtype=float)
 
     def to_stage(self, detector: str, values: Mapping[str, Any] | None = None) -> np.ndarray:
-        """Where `detector`'s pixels (column, row, plane) are in stage micrometres, under `values`
-        or as things are now."""
+        """Where `detector`'s pixels (column, row, plane) are in its stage's micrometres, under
+        `values` or as things are now."""
         assert self.values is not None
         at = self.values.snapshot() if values is None else values
         scale, _ = self.optics.scale_under(detector, at)
@@ -171,7 +254,7 @@ class SpaceManager:
         return matrix
 
     def _looks_at(self, detector: str, at: Mapping[str, Any]) -> tuple[float, float, float]:
-        """Where the middle of `detector`'s sensor looks, in stage micrometres, under `at`."""
+        """Where the middle of `detector`'s sensor looks, in its stage's micrometres, under `at`."""
         assert self.values is not None
         roles = self.values.roles
         return (
@@ -186,30 +269,39 @@ class SpaceManager:
         return np.array([(width - 1) / 2.0, (height - 1) / 2.0, 0.0, 1.0])
 
     def placement(self, detector: str, values: Mapping[str, Any] | None = None) -> np.ndarray:
-        """Where `detector`'s pixels (column, row, plane) are on the sample."""
-        return self.mount() @ self.to_stage(detector, values)
+        """Where `detector`'s pixels (column, row, plane) are on the sample it sees."""
+        return self.mount(self.sample_of(detector)) @ self.to_stage(detector, values)
 
-    def remember(self, image: str, to_sample: np.ndarray | list[list[float]]) -> None:
-        """Keep where the pixels of an image taken are, so a point in it is a place to go."""
-        self._images[image] = np.array(to_sample, dtype=float)
+    def remember(
+        self, image: str, to_sample: np.ndarray | list[list[float]], sample: str | None = None
+    ) -> None:
+        """Keep where the pixels of an image taken of `sample` are, so a point in it is a place to
+        go."""
+        self._images[image] = (self.one_sample(sample), np.array(to_sample, dtype=float))
 
-    def forget_images(self) -> None:
-        """The images belong to what was mounted: a new mounting starts without them."""
-        self._images.clear()
+    def forget_images(self, sample: str | None = None) -> None:
+        """The images belong to what was mounted: a new mounting of `sample` (of every sample, by
+        default) starts without them."""
+        self._images = {
+            image: kept
+            for image, kept in self._images.items()
+            if sample is not None and kept[0] != sample
+        }
 
     def _detector_edge(
         self, detector: Detector, values: Mapping[str, Any] | None = None
     ) -> Transformation:
-        """Where `detector` measures, on the stage, under `values` or as things are now: its
-        pixels, or the point it reads at."""
+        """Where `detector` measures, on its sample's stage, under `values` or as things are now:
+        its pixels, or the point it reads at."""
         source = detector_system(detector.name)
+        stage = stage_system(self.sample_of(detector.name))
         if not detector.delivers_images():
-            assert self.values is not None
-            element = self.values.instrument.cubes[detector.name].element
+            assert self.instrument is not None
+            element = self.instrument.cubes[detector.name].element
             assert isinstance(element, Thermometer), f"{detector.name} measures nowhere known"
             at = element.on_stage
             point = [[at.x * 1000.0], [at.y * 1000.0], [at.z * 1000.0]]
-            return by_dimension(source, STAGE, [affine_part((), SPATIAL, point)], "on stage")
+            return by_dimension(source, stage, [affine_part((), SPATIAL, point)], "on stage")
         matrix = self.to_stage(detector.name, values)
         if detector.has_axis("z"):  # it steps its planes itself: each is its step further
             matrix[2, 2] = detector.axis("z").step or 1.0
@@ -219,54 +311,75 @@ class SpaceManager:
                 spatial_affine(matrix, ("x", "y"), ("x", "y")),
                 spatial_affine(matrix, (), ("z",)),
             ]
-        return by_dimension(source, STAGE, parts, "pixels")
+        return by_dimension(source, stage, parts, "pixels")
 
     def _live(
         self, values: Mapping[str, Any] | None = None
     ) -> tuple[list[CoordinateSystem], list[Transformation]]:
         """The systems and edges that hold under `values` (now, by default), but for the images
         taken."""
-        systems = [spatial(SAMPLE), spatial(STAGE)]
-        edges = [Transformation(STAGE, SAMPLE, "AFFINE", "mount", affine=self.mount()[:3].tolist())]
+        systems: list[CoordinateSystem] = []
+        edges: list[Transformation] = []
+        for sample, space in self.state.samples.items():
+            hub, stage = sample_system(sample), stage_system(sample)
+            systems += [spatial(hub), spatial(stage)]
+            mount = np.array(space.mount, dtype=float)[:3].tolist()
+            edges.append(Transformation(stage, hub, "AFFINE", "mount", affine=mount))
+            if space.holder is not None:
+                for place, (x, y) in places_of(self._holders[sample][space.holder].holder).items():
+                    name = place_system(sample, place)
+                    systems.append(spatial(name, ("x", "y")))
+                    edges.append(
+                        by_dimension(
+                            name,
+                            hub,
+                            [
+                                DimensionPart(
+                                    "TRANSLATION", ["x", "y"], ["x", "y"], translation=[x, y]
+                                )
+                            ],
+                            "place",
+                        )
+                    )
         if self.values is not None:
             for detector in self.detector_state.detectors:
                 systems.append(_system_of(detector))
                 edges.append(self._detector_edge(detector, values))
-        if self.state.holder is not None:
-            for place, (x, y) in places_of(self._holders[self.state.holder].holder).items():
-                systems.append(spatial(place, ("x", "y")))
-                edges.append(
-                    by_dimension(
-                        place,
-                        SAMPLE,
-                        [DimensionPart("TRANSLATION", ["x", "y"], ["x", "y"], translation=[x, y])],
-                        "place",
-                    )
-                )
         return systems, edges
 
     def graph(self, values: Mapping[str, Any] | None = None) -> CoordinateGraph:
         """The coordinate graph as it holds under `values`: now, by default."""
         systems, edges = self._live(values)
-        for image, matrix in self._images.items():
+        for image, (sample, matrix) in self._images.items():
             systems.append(spatial(image_system(image), unit=""))
             edges.append(
                 Transformation(
-                    image_system(image), SAMPLE, "AFFINE", "image", affine=matrix[:3].tolist()
+                    image_system(image),
+                    sample_system(sample),
+                    "AFFINE",
+                    "image",
+                    affine=matrix[:3].tolist(),
                 )
             )
         return CoordinateGraph(systems, edges)
 
     def transform(
-        self, position: Position, target: str = SAMPLE, axes: tuple[str, ...] | None = None
+        self,
+        position: Position,
+        target: str = SAMPLE,
+        axes: tuple[str, ...] | None = None,
+        detector: str | None = None,
     ) -> dict[str, float]:
         """Where `position` is in `target`, by axis name: along `axes`, or all the route states.
+        Bare names are those of the sample `detector` sees, or of the only one (`resolve`).
 
         Raises:
             NoRoute: Its system is none the graph knows, or not one that leads to `target`.
-            ValueError: An axis asked for depends on one the position does not give.
+            ValueError: An axis asked for depends on one the position does not give; or a bare
+                name, several samples and no detector.
         """
-        return self.graph().transform(position, target, axes)
+        found = Position(self.resolve(position.system, detector), position.coordinates)
+        return self.graph().transform(found, self.resolve(target, detector), axes)
 
     # ------------------------------------------------------------- going there
 
@@ -275,17 +388,19 @@ class SpaceManager:
 
         Sideways, the one move along each way (`Roles.x`, `Roles.y`). Along the axis only when the
         position has a z, by what focuses it; a z that only a light sheet's move reaches is refused,
-        not guessed.
+        not guessed. A bare ``sample`` is the one `detector` sees.
 
         Raises:
             ValueError: Nothing, or several things, move it along a way it has to go.
-            NoRoute: The position's system is none the graph knows.
+            NoRoute: The position's system is none the graph knows, or on another sample.
         """
         assert self.values is not None
         roles = self.values.roles
         at = self.values.snapshot()
         has_z = "z" in position.coordinates
-        on_stage = self.transform(position, STAGE, ("x", "y", "z") if has_z else ("x", "y"))
+        on_stage = self.transform(
+            position, STAGE, ("x", "y", "z") if has_z else ("x", "y"), detector=detector
+        )
         # How far the middle of the image is from where the sensor's middle looks: a window that is
         # not in the middle of its sensor looks beside it.
         aside = (self.to_stage(detector) @ self._image_middle(detector))[:2] - np.array(
@@ -304,7 +419,8 @@ class SpaceManager:
         }
         if has_z:
             focus = roles.focus(detector)
-            if focus in self.values.instrument.sheet_moves():
+            assert self.instrument is not None
+            if focus in self.instrument.sheet_moves(self.sample_of(detector)):
                 raise ValueError(f"{focus.name} moves a light sheet: a z is not reached by it yet")
             plane = roles.plane_um(detector, at)
             found[focus.name] = float(at[focus.name]) + on_stage["z"] - plane
@@ -312,38 +428,48 @@ class SpaceManager:
 
     # ------------------------------------------------------------- the mount
 
-    def mount_holder(self, holder: str) -> None:
-        """Mount `holder`: a new sample, where the description says it sits, with no images taken.
+    def mount_holder(self, holder: str, sample: str | None = None) -> None:
+        """Mount `holder` on `sample` (the only one, by default): a new sample, where the
+        description says it sits, with none of its images taken.
 
         Raises:
-            ValueError: The description names no such holder.
+            ValueError: The description names no such holder for it, or no such sample.
         """
-        if holder not in self._holders:
-            raise ValueError(f"No holder {holder!r} to mount: there are {sorted(self._holders)}")
-        self._mount(holder, _new_mount_id())
-        self.forget_images()
+        sample = self.one_sample(sample)
+        if holder not in self._holders[sample]:
+            raise ValueError(
+                f"No holder {holder!r} to mount on {sample}: there are "
+                f"{sorted(self._holders[sample])}"
+            )
+        space = self.state.samples[sample]
+        space.mount_id = _new_mount_id()
+        self._mount(space, holder)
+        self.forget_images(sample)
         self.refresh()
 
-    def _mount(self, holder: str, mount_id: str) -> None:
-        mounted = self._holders[holder]
-        self.state.mount = np.linalg.inv(holder_to_stage(mounted.mount)).tolist()
-        self.state.mount_id = mount_id
-        self.state.holder = holder
-        self.state.shape = _shape_of(holder, mounted)
+    def _mount(self, space: SampleSpace, holder: str) -> None:
+        mounted = self._holders[space.sample][holder]
+        space.mount = np.linalg.inv(holder_to_stage(mounted.mount)).tolist()
+        space.holder = holder
+        space.shape = _shape_of(space.sample, holder, mounted)
 
-    def register_mount(self, matrix: list[list[float]]) -> None:
-        """Say where what is mounted sits: stage micrometres to sample micrometres."""
+    def register_mount(self, matrix: list[list[float]], sample: str | None = None) -> None:
+        """Say where what `sample` is mounted on sits: its stage micrometres to its sample
+        micrometres."""
         found = np.array(matrix, dtype=float)
         if found.shape != (4, 4) or abs(np.linalg.det(found)) < 1e-12:
             raise ValueError("a mount is an invertible 4x4 matrix")
-        self.state.mount = found.tolist()
+        self.state.samples[self.one_sample(sample)].mount = found.tolist()
         self.refresh()
 
     def origin_here(self, detector: str) -> None:
-        """Make the sample's x and y 0 at the middle of `detector`'s image now."""
+        """Make the x and y 0 of the sample `detector` sees the middle of its image now."""
         assert self.values is not None
+        sample = self.sample_of(detector)
         middle = self.placement(detector) @ self._image_middle(detector)
-        self.register_mount((translation(-middle[0], -middle[1]) @ self.mount()).tolist())
+        self.register_mount(
+            (translation(-middle[0], -middle[1]) @ self.mount(sample)).tolist(), sample
+        )
 
     # ------------------------------------------------------------- publishing
 
@@ -356,6 +482,7 @@ class SpaceManager:
             to_sample=matrix.tolist(),
             pixel_um=[float(np.hypot(*matrix[:2, 0])), float(np.hypot(*matrix[:2, 1]))],
             calibrated=calibrated,
+            sample=self.sample_of(detector),
         )
 
     def record_map(
@@ -366,9 +493,9 @@ class SpaceManager:
         light_sweep: bool = False,
         values: Mapping[str, Any] | None = None,
     ) -> AxisMap:
-        """Where an acquired record's axes go on the sample, under `values` (as things are now, by
-        default; a record's, what its channel sets): `detector`'s route to the sample (`graph`),
-        over the record's `dims`.
+        """Where an acquired record's axes go on the sample `detector` sees, under `values` (as
+        things are now, by default; a record's, what its channel sets): `detector`'s route to its
+        sample (`graph`), over the record's `dims`.
 
         A detector that takes images has its plane index placed by the stack: the plane it looks
         at now, then `offsets` (moving the light is moving the sample the other way). What
@@ -377,7 +504,9 @@ class SpaceManager:
         send every input to one value). Where it was read along the stack, time, channels and
         arrival times are placed nowhere.
         """
-        route = self.graph(values).axis_map(detector_system(detector), SAMPLE)
+        route = self.graph(values).axis_map(
+            detector_system(detector), sample_system(self.sample_of(detector))
+        )
         images = self.detector_state.get(detector).delivers_images()
         rows: dict[str, np.ndarray] = {}
         for axis in SPATIAL:
@@ -404,8 +533,9 @@ class SpaceManager:
         return AxisMap(dims, stated, np.vstack([*(rows[axis] for axis in stated), bottom]))
 
     def _measured(self, detector: str) -> MeasuredPoint:
-        at = self.transform(Position(detector_system(detector)), SAMPLE, SPATIAL)
-        return MeasuredPoint(detector, at["x"], at["y"], at["z"])
+        sample = self.sample_of(detector)
+        at = self.transform(Position(detector_system(detector)), sample_system(sample), SPATIAL)
+        return MeasuredPoint(detector, at["x"], at["y"], at["z"], sample)
 
     def refresh(self) -> None:
         """Publish the graph as it holds now, where every detector's pixels are and where every
