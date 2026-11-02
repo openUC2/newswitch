@@ -22,6 +22,23 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from newswitch.models.space import Position
+
+__all__ = [
+    "SAMPLE",
+    "STAGE",
+    "CoordinateGraph",
+    "Edge",
+    "NoRoute",
+    "Position",
+    "detector_system",
+    "image_system",
+    "rotation_z",
+    "scaling",
+    "translation",
+    "zyx_rows",
+]
+
 #: The hub: the frame of what is mounted.
 SAMPLE = "sample"
 #: Where the stage is.
@@ -56,6 +73,14 @@ def scaling(x: float = 1.0, y: float = 1.0, z: float = 1.0) -> Matrix:
     return np.diag([x, y, z, 1.0])
 
 
+def zyx_rows(matrix: Matrix) -> tuple[tuple[float, float, float, float], ...]:
+    """A 4x4 over (x, y, z) as the three rows over (z, y, x) mikro and arrays take."""
+    order = (2, 1, 0)
+    return tuple(
+        (*(float(matrix[row, column]) for column in order), float(matrix[row, 3])) for row in order
+    )
+
+
 def rotation_z(degrees: float) -> Matrix:
     """A 4x4 rotation about z, counter-clockwise by `degrees` (x towards y)."""
     radians = np.deg2rad(degrees)
@@ -73,16 +98,6 @@ class Edge:
     target: str
     matrix: Matrix
     name: str = ""  # what made it: "mount", "calibrated", "predicted", ...
-
-
-@dataclass(frozen=True)
-class Position:
-    """A place, in a coordinate system. No `z`: wherever z is."""
-
-    system: str
-    x: float
-    y: float
-    z: float | None = None
 
 
 class CoordinateGraph:

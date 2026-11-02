@@ -158,6 +158,7 @@ def test_a_stack_of_a_volume_sweeps_the_stage(tmp_path: Path, instrument: spec.I
         m.optics,
         m.detector,
         m.values,
+        m.space,
         m.hooks,
         Task.local(),
     )

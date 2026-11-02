@@ -31,8 +31,6 @@ def calibrated(microscope: Microscope) -> Microscope:
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
-            fov_width=10.0,
-            fov_height=10.0,
         )
     )
     return microscope
@@ -73,6 +71,7 @@ def run(built: Microscope, config: AcquisitionPlan, store: Store | None = None) 
         optics_manager=built.optics,
         detector_manager=built.detector,
         values=built.values,
+        space=built.space,
         hook_manager=built.hooks,
     )
 

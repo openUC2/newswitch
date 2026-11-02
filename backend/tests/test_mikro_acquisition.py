@@ -105,6 +105,7 @@ def run(
         m.optics,
         m.detector,
         m.values,
+        m.space,
         m.hooks,
         Task.local(),
     )
@@ -185,7 +186,7 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
         [AcquisitionChannel(detectors=["camera_green"], name="gfp", set_to=LASER)],
         places=((0.0, 0.0), (60.0, 40.0)),
     )
-    world = space_3d(mikro, "stage", reference="stage-dual-camera")
+    world = space_3d(mikro, "sample", reference="sample-dual-camera-0")
 
     def beads_in_stage(made: AcquiredDataset) -> np.ndarray:
         dataset = mikro.get_array_dataset(made.id)

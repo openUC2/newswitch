@@ -151,22 +151,13 @@ class OpticsManager:
         answer = self.table.answer(detector, self.values() if values is None else values)
         (xx, xy), (yx, yy) = answer.pixel_to_stage
         return CalibratedLightPath(
-            # A calibration says how far the stage moves to shift the image by a pixel: the
-            # opposite of the sample point that pixel sees.
             affine_matrix=[
-                [-xx, -xy, 0.0, 0.0],
-                [-yx, -yy, 0.0, 0.0],
+                [xx, xy, 0.0, 0.0],
+                [yx, yy, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
-            ],
-            fov_width=answer.field_of_view_um[0] * self._read_share(detector, "x"),
-            fov_height=answer.field_of_view_um[1] * self._read_share(detector, "y"),
+            ]
         )
-
-    def _read_share(self, detector: str, axis: str) -> float:
-        """How much of its `axis` a detector reads: its window, of all of it."""
-        delivered = self.detector_state.get(detector).axis(axis)
-        return (delivered.windowed() or 1) / (delivered.size or 1)
 
     def scale_under(
         self, detector: str, values: Mapping[str, Any]
@@ -206,13 +197,14 @@ class OpticsManager:
         path = self._path(name, values)
         found, calibrated = self.scale_under(name, values)
         matrix = found.affine_matrix
+        height, width = self.detector_state.get(name).plane()
         return DetectorOptics(
             name=name,
             calibrated=calibrated,
-            pixel_to_stage=[[-matrix[0][0], -matrix[0][1]], [-matrix[1][0], -matrix[1][1]]],
+            pixel_to_stage=[[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]],
             pixel_um=float(np.hypot(matrix[0][0], matrix[1][0])),
-            field_width_um=abs(found.fov_width),
-            field_height_um=abs(found.fov_height),
+            field_width_um=float(np.hypot(matrix[0][0], matrix[1][0])) * width,
+            field_height_um=float(np.hypot(matrix[0][1], matrix[1][1])) * height,
             spot_px=answer.spot_px,
             expected_counts=answer.light,
             read_noise_counts=answer.read_noise_counts,

@@ -11,6 +11,7 @@ from newswitch.protocols.cache import CacheManager
 from newswitch.protocols.detector import DetectorManager
 from newswitch.protocols.expanse import ExpanseManager
 from newswitch.protocols.optics import OpticsManager
+from newswitch.services.space import SpaceManager
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,10 @@ class AcquisitionManager:
         metadata_manager: MetadataManager,
         optics_manager: OpticsManager,
         cache_manager: CacheManager,
+        space: SpaceManager,
     ) -> None:
         """Initialize the AcquisitionManager with the provided managers."""
+        self.space = space
         self.expanse_manager = expanse_manager
         self.detector_manager = detector_manager
         self.metadata_manager = metadata_manager
@@ -36,7 +39,8 @@ class AcquisitionManager:
     def acquire(self, names: Optional[list[str]] = None) -> list[Frame]:
         """A frame from each active detector (only those in `names`, when given).
 
-        Each frame is cached, gets the metadata of its light path, and is added to the expanse.
+        Each frame is cached, gets the metadata of its light path, and is added to the expanse; where
+        its pixels are is kept (`SpaceManager.remember`), so a point in it is a place to go.
         """
         frames: list[Frame] = []
 
@@ -70,6 +74,7 @@ class AcquisitionManager:
                     ),
                 )
 
+                self.space.remember(frame.id, metadata.affine_matrix)
                 logger.debug("Acquired frame %s from detector %s", frame.id, detector.name)
                 self.expanse_manager.add_frame(frame)
                 frames.append(frame)

@@ -7,16 +7,12 @@ export const CalibratedLightPathSchema = z
     __identifier: z
       .literal('@newswitch/calibrated_light_path')
       .default('@newswitch/calibrated_light_path'),
-    /** 4x4 affine transformation matrix for mapping between coordinate systems */
+    /** Pixel to sample micrometres, without where it looks: its 2x2 is the scale */
     affine_matrix: z
       .array(z.array(z.number()))
       .describe(
-        '4x4 affine transformation matrix for mapping between coordinate systems',
+        'Pixel to sample micrometres, without where it looks: its 2x2 is the scale',
       ),
-    /** Field of view width in micrometers */
-    fov_width: z.number().describe('Field of view width in micrometers'),
-    /** Field of view height in micrometers */
-    fov_height: z.number().describe('Field of view height in micrometers'),
     /** Of what changes where a pixel looks: this matrix holds for as long as it does */
     key: z
       .string()
@@ -25,7 +21,9 @@ export const CalibratedLightPathSchema = z
       ),
   })
   .brand('@newswitch/calibrated_light_path')
-  .describe('Shared state for affine transformation parameters.');
+  .describe(
+    'How a step along a column and along a row moves on the sample, for one light path.',
+  );
 export type CalibratedLightPath = z.input<typeof CalibratedLightPathSchema>;
 export type CalibratedLightPathOutput = z.infer<
   typeof CalibratedLightPathSchema
@@ -37,7 +35,7 @@ export const CalibrateLightPathReturnSchema = z.object({
   /** The calibrated light paths. */
   return0: z.array(
     CalibratedLightPathSchema.describe(
-      'Shared state for affine transformation parameters.',
+      'How a step along a column and along a row moves on the sample, for one light path.',
     ),
   ),
 });

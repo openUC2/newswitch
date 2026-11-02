@@ -22,6 +22,8 @@ from newswitch.states.expanse import ExpanseState
 from newswitch.states.hooks import HookState
 from newswitch.states.io import IOState
 from newswitch.states.optics import OpticsState
+from newswitch.states.space import SpaceState
+from newswitch.services.space import SpaceManager
 
 app = App("newswitch", app_context=Run)
 app.registry.merge(models.app.registry)
@@ -31,12 +33,14 @@ app.register_state(HookState, required_locks=[locks.HOOKS])
 app.register_state(ExpanseState, required_locks=[locks.EXPANSE])
 app.register_state(CalibrationState)
 app.register_state(OpticsState)
+app.register_state(SpaceState)
 app.register_context(IOManager, locks=[locks.IO])
 app.register_context(HookManager, locks=[locks.HOOKS])
 app.register_context(ExpanseManager, locks=[locks.EXPANSE])
 app.register_context(CalibrationManager)
 app.register_context(OpticsManager)
 app.register_context(MetadataManager)
+app.register_context(SpaceManager)
 app.register_context(CacheManager, locks=[locks.CACHE])
 app.register_context(FrameSink)  # provided by the entrypoint
 app.register_context(DatasetStore)  # provided by the entrypoint
@@ -56,6 +60,8 @@ async def provide_core(
     OpticsState,
     OpticsManager,
     MetadataManager,
+    SpaceState,
+    SpaceManager,
     CacheManager,
 ]:
     """What every microscope has."""
@@ -72,6 +78,8 @@ async def provide_core(
         m.optics_state,
         m.optics,
         m.metadata,
+        m.space_state,
+        m.space,
         m.cache,
     )
 

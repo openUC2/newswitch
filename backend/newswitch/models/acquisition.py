@@ -1,11 +1,13 @@
 """What an acquisition is asked to do: a plan, a region scan."""
 
 from dataclasses import dataclass
+from typing import Optional
 from enum import Enum
 
 from arkitekt import model_field, withValidator
 
 from newswitch.models.hooks import Hook
+from newswitch.models.space import Position
 
 
 class PositionOrder(str, Enum):
@@ -44,9 +46,13 @@ class AcquisitionChannel:
 class AcquisitionPosition:
     """One place to go: each is a dataset of its own."""
 
+    at: Optional[Position] = model_field(
+        default=None,
+        description="Where to look: a place in the sample, an image, a well; nothing: stay.",
+    )
     set_to: dict[str, float] = model_field(
         default_factory=dict,
-        description="What to set to get there, by variable (e.g., 'stage.x'); nothing: stay.",
+        description="What else to set there, by variable (e.g., 'objective.slot').",
     )
     name: str = model_field(default="", description="What to call it.")
 

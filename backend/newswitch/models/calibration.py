@@ -1,4 +1,4 @@
-"""A calibrated light path: the pixel-to-stage transform of one light path configuration."""
+"""A calibrated light path: how large a detector's pixels are on the sample, as measured."""
 
 from dataclasses import dataclass
 
@@ -9,7 +9,7 @@ from newswitch.models.light_path import AffineMatrix
 
 @dataclass
 class CalibratedLightPath:
-    """Shared state for affine transformation parameters."""
+    """How a step along a column and along a row moves on the sample, for one light path."""
 
     affine_matrix: AffineMatrix = model_field(
         default_factory=lambda: [
@@ -18,10 +18,8 @@ class CalibratedLightPath:
             [0.0, 0.0, 1.0, 0.0],
             [0.0, 0.0, 0.0, 1.0],
         ],
-        description="4x4 affine transformation matrix for mapping between coordinate systems",
+        description="Pixel to sample micrometres, without where it looks: its 2x2 is the scale",
     )
-    fov_width: float = model_field(default=10.0, description="Field of view width in micrometers")
-    fov_height: float = model_field(default=10.0, description="Field of view height in micrometers")
     key: str = model_field(
         default="",
         description="Of what changes where a pixel looks: this matrix holds for as long as it does",

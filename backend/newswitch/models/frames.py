@@ -7,11 +7,11 @@ from newswitch.models.light_path import AffineMatrix, LightPathSnapshot
 
 @dataclass
 class Metadata:
-    """Data class representing metadata for an image, including its ID and affine transformation matrix."""
+    """Where an image's pixels are on the sample, and what it was taken under."""
 
-    affine_matrix: AffineMatrix  # 4x4 affine transformation matrix, mapping from expanse coordinates to pixel coordinates
-    fov_width: float  # Field of view width in micrometers
-    fov_height: float  # Field of view height in micrometers
+    affine_matrix: AffineMatrix  # pixel column, row and plane to sample micrometres
+    fov_width: float  # how wide it is on the sample, in micrometres, along its rows
+    fov_height: float  # how high, along its columns
     light_state: LightPathSnapshot
     acquisition_time: str  # ISO 8601 timestamp of when the image was acquired
     colormap: str = "gray"  # Colormap used for the image (e.g., 'gray', 'viridis')

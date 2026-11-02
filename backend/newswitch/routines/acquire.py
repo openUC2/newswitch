@@ -20,6 +20,7 @@ import numpy as np
 from arkitekt import Task
 
 from newswitch import protocols
+from newswitch.instrument.space import zyx_rows
 from newswitch.instrument.spec import Move
 from newswitch.models.acquisition import (
     AcquiredDataset,
@@ -35,7 +36,7 @@ from newswitch.protocols.dataset_store import (
     AcquiredPosition,
     DatasetStore,
 )
-from newswitch.services.stage import where
+from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
 
 logger = logging.getLogger(__name__)
@@ -79,9 +80,8 @@ class _Merge:
     pixel_to_world: np.ndarray  # x, y pixels to x, y micrometres, every axis increasing
     calibrated: bool
     swept: bool
-    x: float = 0.0
-    y: float = 0.0
-    first_z: float | None = None
+    targets: dict[str, float]  # what to set to get there: its place, then what it sets
+    placed: np.ndarray | None = None  # where the array's x, y, z go on the sample, once there
     light_moves: tuple[Move, ...] = ()
 
 
@@ -204,10 +204,16 @@ def _plan_position(
     detector_manager: protocols.DetectorManager,
     optics_manager: protocols.OpticsManager,
     values: Values,
+    space: SpaceManager,
+    first: str,
 ) -> _Merge:
     """Everything that can be refused about one position, and the array it will fill."""
-    values.check(position.set_to)
-    at = {**values.snapshot(), **values.resolved(position.set_to)}
+    going = {
+        **({} if position.at is None else space.targets(position.at, first)),
+        **position.set_to,
+    }
+    values.check(going)
+    at = {**values.snapshot(), **values.resolved(going)}
     if sweep is not None:
         values.check({sweep.name: at[sweep.name] + offset for offset in offsets})
 
@@ -245,9 +251,7 @@ def _plan_position(
             types.add(detector.data_type)
             scale, measured = optics_manager.scale_under(name, under)
             matrix = scale.affine_matrix
-            # A calibration says how far the stage moves to shift the image by a pixel, the
-            # opposite of which point of the sample that pixel sees.
-            to_world = -np.array([[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]])
+            to_world = np.array([[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]])
             flip_x, flip_y = bool(to_world[0, 0] < 0), bool(to_world[1, 1] < 0)
             upright = to_world * np.array([[-1 if flip_x else 1, -1 if flip_y else 1]] * 2)
             if reference is None:
@@ -294,6 +298,7 @@ def _plan_position(
         dims=dims,
         planes=[],
         pixel_to_world=reference,
+        targets=going,
         calibrated=calibrated,
         light_moves=tuple(values.instrument.sheet_moves()),
         swept=_check_sweep(plan, offsets, lightings, sweep, values),
@@ -311,19 +316,35 @@ def _check_memory(arrays: list[np.ndarray]) -> None:
         )
 
 
-def _to_stage(merge: _Merge) -> tuple[tuple[float, float, float, float], ...]:
-    """``z, y, x`` pixel index to stage micrometres: the middle of the image is where the stage was."""
-    assert merge.first_z is not None
+def _placed(merge: _Merge, first: str, space: SpaceManager) -> np.ndarray:
+    """Where the array's x (column), y (row) and z index go on the sample, as things are now.
+
+    The first detector's placement (`SpaceManager.placement`), the way round its images were turned
+    to be kept.
+    """
+    exposure = next(
+        e for lighting in merge.lightings for e in lighting.exposures if e.detector.name == first
+    )
     height, width = merge.data.shape[-2:]
-    middle_x, middle_y = (width - 1) / 2, (height - 1) / 2
-    (xx, xy), (yx, yy) = merge.pixel_to_world
+    turned = np.eye(4)
+    if exposure.flip_x:
+        turned[0, 0], turned[0, 3] = -1.0, width - 1.0
+    if exposure.flip_y:
+        turned[1, 1], turned[1, 3] = -1.0, height - 1.0
+    return space.placement(first) @ turned
+
+
+def _to_sample(merge: _Merge) -> tuple[tuple[float, float, float, float], ...]:
+    """``z, y, x`` index to sample micrometres: its plane and pixels where they were placed."""
+    assert merge.placed is not None
+    placed = merge.placed
     # Moving the light is moving the sample the other way.
     direction = -1.0 if merge.sweep in merge.light_moves else 1.0
     dz = direction * (merge.offsets[1] - merge.offsets[0]) if len(merge.offsets) > 1 else 1.0
     return (
-        (float(dz), 0.0, 0.0, float(merge.first_z + direction * merge.offsets[0])),
-        (0.0, float(yy), float(yx), float(merge.y - yy * middle_y - yx * middle_x)),
-        (0.0, float(xy), float(xx), float(merge.x - xy * middle_y - xx * middle_x)),
+        (float(dz), 0.0, 0.0, float(placed[2, 3] + direction * merge.offsets[0])),
+        (0.0, float(placed[1, 1]), float(placed[1, 0]), float(placed[1, 3])),
+        (0.0, float(placed[0, 1]), float(placed[0, 0]), float(placed[0, 3])),
     )
 
 
@@ -401,6 +422,7 @@ def acquire(
     optics_manager: protocols.OpticsManager,
     detector_manager: protocols.DetectorManager,
     values: Values,
+    space: SpaceManager,
     hook_manager: protocols.HookManager,
     task: Task,
 ) -> list[AcquiredDataset]:
@@ -430,7 +452,16 @@ def acquire(
     sweep = _sweep_of(plan, offsets, first, values)
     merges = [
         _plan_position(
-            plan, position, index, offsets, sweep, detector_manager, optics_manager, values
+            plan,
+            position,
+            index,
+            offsets,
+            sweep,
+            detector_manager,
+            optics_manager,
+            values,
+            space,
+            first,
         )
         for index, position in enumerate(plan.positions)
     ]
@@ -466,13 +497,13 @@ def acquire(
 
             for position_index in order:
                 merge = merges[position_index]
-                values.set(merge.position.set_to, task=task)
+                values.set(merge.targets, task=task)
                 # Position hooks run there (an autofocus may refocus); the stacks are centred on where
                 # it is afterwards.
                 hook_manager.execute_all(plan.p_hooks or [])
                 base = 0.0 if merge.sweep is None else float(values[merge.sweep.name])
-                if merge.first_z is None:
-                    merge.x, merge.y, merge.first_z = where(values, first)
+                if merge.placed is None:
+                    merge.placed = _placed(merge, first, space)
 
                 if merge.swept:
                     # The detector steps what sweeps: the routine only brings it to the first plane.
@@ -532,7 +563,9 @@ def acquire(
                     dims=merge.dims,
                     channels=merge.channels,
                     planes=tuple(merge.planes),
-                    to_stage=_to_stage(merge),
+                    to_sample=_to_sample(merge),
+                    mount_id=space.state.mount_id,
+                    mount=zyx_rows(space.mount()),
                     calibrated=merge.calibrated,
                 )
             )

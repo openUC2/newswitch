@@ -91,7 +91,7 @@ export const MetadataSchema = z
   })
   .brand('@newswitch/metadata')
   .describe(
-    'Data class representing metadata for an image, including its ID and affine transformation matrix.',
+    "Where an image's pixels are on the sample, and what it was taken under.",
   );
 export type Metadata = z.input<typeof MetadataSchema>;
 export type MetadataOutput = z.infer<typeof MetadataSchema>;
@@ -118,9 +118,9 @@ export const FrameSchema = z
     scales: z.array(
       ScaleSchema.describe('Represents a scale factor for a 3D volume.'),
     ),
-    /** Data class representing metadata for an image, including its ID and affine transformation matrix. */
+    /** Where an image's pixels are on the sample, and what it was taken under. */
     metadata: MetadataSchema.describe(
-      'Data class representing metadata for an image, including its ID and affine transformation matrix.',
+      "Where an image's pixels are on the sample, and what it was taken under.",
     ),
     /** Metadata for a raw array before it is saved as an image, including the light path and acquisition settings. */
     array_metadata: ArrayMetadataSchema.describe(
@@ -162,6 +162,12 @@ export const ScanRegionArgsSchema = z.object({
   end_x: z.number(),
   end_y: z.number(),
   overlap: z.number().nullable().optional(),
+  /** What the corners are in: the sample, the stage, an image taken. */
+  system: z
+    .string()
+    .describe('What the corners are in: the sample, the stage, an image taken.')
+    .nullable()
+    .optional(),
   /** The detector to calculate the FOV for (all other detectors will follow). If None, use the first active detector. */
   detector_name: z
     .string()
@@ -194,16 +200,16 @@ export const ScanRegionDefinition: ActionDefinition<
   name: 'scan_region',
   appKey: 'default',
   description:
-    'Scan a rectangular region of the stage tile by tile.\n\nThe region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered\nwith fields of view of the detector (`detector_name`, else the first active one),\noverlapping by `overlap`, visited in `scan_order`; every active detector acquires a\nframe at each tile.',
+    'Scan a rectangular region tile by tile.\n\nThe region from (start_x, start_y) to (end_x, end_y) (micrometres of `system`) is covered\nwith fields of view of the detector (`detector_name`, else the first active one),\noverlapping by `overlap`, visited in `scan_order`; every active detector acquires a\nframe at each tile.',
   argsSchema: ScanRegionArgsSchema,
   returnSchema: ScanRegionReturnSchema,
   lockKeys: ['detector', 'expanse_state', 'io', 'motion'],
 };
 
 /**
- * Scan a rectangular region of the stage tile by tile.
+ * Scan a rectangular region tile by tile.
 
-The region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered
+The region from (start_x, start_y) to (end_x, end_y) (micrometres of `system`) is covered
 with fields of view of the detector (`detector_name`, else the first active one),
 overlapping by `overlap`, visited in `scan_order`; every active detector acquires a
 frame at each tile.

@@ -37,6 +37,7 @@ from newswitch.services.hooks.software_autofocus import software_autofocus_hook
 from newswitch.services.io import LocalFileConfig, LocalFileIOManager
 from newswitch.services.metadata import MetadataManager
 from newswitch.services.optics import OpticsManager
+from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
 from newswitch.settings import Settings
 from newswitch.states.autofocus import AutofocusState
@@ -44,6 +45,7 @@ from newswitch.states.calibration import CalibrationState
 from newswitch.states.detector import DetectorState
 from newswitch.states.io import IOState
 from newswitch.states.optics import OpticsState
+from newswitch.states.space import SpaceState
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
@@ -218,6 +220,8 @@ class Microscope:
     optics_state: OpticsState
     optics: protocols.OpticsManager
     metadata: protocols.MetadataManager
+    space_state: SpaceState
+    space: SpaceManager
     cache: protocols.CacheManager
     autofocus_state: AutofocusState
     uc2_bus: Optional[UC2BusManager]
@@ -292,12 +296,22 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         values=None if values is None else values.snapshot,
         roles=None if values is None else values.roles,
     )
-    calibration.on_change = optics.refresh
+    space_state = SpaceState()
+    space = SpaceManager(
+        state=space_state, values=values, optics=optics, detector_state=detector_state
+    )
+
+    def refresh() -> None:
+        """What the optics find, then where that puts every pixel."""
+        optics.refresh()
+        space.refresh()
+
+    calibration.on_change = refresh
     if values is not None:
-        values.on_change = optics.refresh
+        values.on_change = refresh
     if detector is not None:
-        detector.on_change = optics.refresh
-    optics.refresh()
+        detector.on_change = refresh
+    refresh()
 
     hook_state = states.HookState()
     hooks = PythonHookManager(
@@ -314,11 +328,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
 
     expanse_state = states.ExpanseState()
     expanse = ExpanseManager(expanse=expanse_state)
-    metadata = MetadataManager(
-        values=values,
-        calibration_state=calibration_state,
-        optics=optics,
-    )
+    metadata = MetadataManager(space=space, optics=optics, detector_state=detector_state)
     cache = LocalCacheManager(LocalCacheConfig(base_path=str(settings.cache_dir)))
 
     acquisition = (
@@ -328,6 +338,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
             metadata_manager=metadata,
             optics_manager=optics,
             cache_manager=cache,
+            space=space,
         )
         if detector is not None
         else None
@@ -351,6 +362,8 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         optics_state=optics_state,
         optics=optics,
         metadata=metadata,
+        space_state=space_state,
+        space=space,
         cache=cache,
         autofocus_state=AutofocusState(),
         uc2_bus=uc2_bus,

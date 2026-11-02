@@ -79,7 +79,7 @@ def acquire(
 ) -> RecordingStore:
     """Run the routine on `m`, wired as the app wires it."""
     store = store or RecordingStore()
-    run_plan(config, store, m.optics, m.detector, m.values, m.hooks, Task.local())
+    run_plan(config, store, m.optics, m.detector, m.values, m.space, m.hooks, Task.local())
     return store
 
 
@@ -106,7 +106,7 @@ def assert_same_beads(first: np.ndarray, second: np.ndarray, tolerance: float = 
 
 def stage_of(acquired: AcquiredPosition, z: int, y: float, x: float) -> np.ndarray:
     """Where a pixel is in stage micrometres, by the dataset's own placement."""
-    return np.array(acquired.to_stage) @ np.array([z, y, x, 1.0])
+    return np.array(acquired.to_sample) @ np.array([z, y, x, 1.0])
 
 
 # --- two detectors behind two filters
@@ -216,7 +216,7 @@ def test_placement_has_the_pixel_size_and_the_middle_at_the_stage(tmp_path: Path
         ),
     )
     (acquired,) = store.published
-    z_row, y_row, x_row = acquired.to_stage
+    z_row, y_row, x_row = acquired.to_sample
     assert z_row[0] == pytest.approx(2.0)
     assert z_row[3] == pytest.approx(-2.0)
     assert y_row[1] == pytest.approx(0.65, rel=0.02)

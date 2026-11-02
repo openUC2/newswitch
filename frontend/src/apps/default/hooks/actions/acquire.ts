@@ -85,16 +85,39 @@ export const AcquisitionChannelSchema = z
 export type AcquisitionChannel = z.input<typeof AcquisitionChannelSchema>;
 export type AcquisitionChannelOutput = z.infer<typeof AcquisitionChannelSchema>;
 
+export const PositionSchema = z
+  .object({
+    __identifier: z
+      .literal('@newswitch/position')
+      .default('@newswitch/position'),
+    system: z.string(),
+    x: z.number(),
+    y: z.number(),
+    z: z.number().nullable().optional(),
+  })
+  .brand('@newswitch/position')
+  .describe(
+    'Where to look: a place in the sample, an image, a well; nothing: stay.',
+  );
+export type Position = z.input<typeof PositionSchema>;
+export type PositionOutput = z.infer<typeof PositionSchema>;
+
 export const AcquisitionPositionSchema = z
   .object({
     __identifier: z
       .literal('@newswitch/acquisition_position')
       .default('@newswitch/acquisition_position'),
-    /** What to set to get there, by variable (e.g., 'stage.x'); nothing: stay. */
+    /** Where to look: a place in the sample, an image, a well; nothing: stay. */
+    at: PositionSchema.describe(
+      'Where to look: a place in the sample, an image, a well; nothing: stay.',
+    )
+      .nullable()
+      .optional(),
+    /** What else to set there, by variable (e.g., 'objective.slot'). */
     set_to: z
       .record(z.string(), z.number())
       .describe(
-        "What to set to get there, by variable (e.g., 'stage.x'); nothing: stay.",
+        "What else to set there, by variable (e.g., 'objective.slot').",
       ),
     /** What to call it. */
     name: z.string().describe('What to call it.'),

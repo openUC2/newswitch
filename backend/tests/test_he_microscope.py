@@ -89,7 +89,16 @@ def test_an_acquisition_has_a_channel_per_color(tmp_path: Path) -> None:
         detectors=["camera"], name="he", set_to={"white_led.power": m.values["white_led.power"]}
     )
     store = RecordingStore()
-    run_plan(acquisition([channel]), store, m.optics, m.detector, m.values, m.hooks, Task.local())
+    run_plan(
+        acquisition([channel]),
+        store,
+        m.optics,
+        m.detector,
+        m.values,
+        m.space,
+        m.hooks,
+        Task.local(),
+    )
     data = store.published[0].data
     assert data.shape[1] == 3
     assert data[0, 0].astype(float).mean() != data[0, 1].astype(float).mean()

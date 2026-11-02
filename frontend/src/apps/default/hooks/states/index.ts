@@ -8,6 +8,7 @@ import { IOStateDefinition } from './IOState';
 import { MoveStateDefinition } from './MoveState';
 import { OpticsStateDefinition } from './OpticsState';
 import { SourceStateDefinition } from './SourceState';
+import { SpaceStateDefinition } from './SpaceState';
 import { SwapStateDefinition } from './SwapState';
 import { TuneStateDefinition } from './TuneState';
 import { UC2StateDefinition } from './UC2State';
@@ -122,6 +123,17 @@ export type {
   SourceState,
 } from './SourceState';
 export {
+  DetectorPlacementSchema,
+  SpaceStateSchema,
+  SpaceStateDefinition,
+  useSpaceState,
+} from './SpaceState';
+export type {
+  DetectorPlacement,
+  DetectorPlacementOutput,
+  SpaceState,
+} from './SpaceState';
+export {
   SwapOptionSchema,
   SwapValueSchema,
   SwapStateSchema,
@@ -155,6 +167,7 @@ export const globalStateDefinition = {
   MoveState: MoveStateDefinition,
   OpticsState: OpticsStateDefinition,
   SourceState: SourceStateDefinition,
+  SpaceState: SpaceStateDefinition,
   SwapState: SwapStateDefinition,
   TuneState: TuneStateDefinition,
   UC2State: UC2StateDefinition,

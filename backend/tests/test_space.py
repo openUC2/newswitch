@@ -16,7 +16,15 @@ from newswitch.instrument.space import (
     scaling,
     translation,
 )
+from arkitekt import Task
+
 from newswitch.microscope.parts import Microscope
+from newswitch.models.acquisition import AcquisitionChannel
+from newswitch.models.devices import AxisWindow
+from newswitch.models.space import Position
+from newswitch.routines.acquire import acquire as run_plan
+from tests.conftest import acquisition
+from tests.test_acquire import RecordingStore
 
 # --- the graph
 
@@ -91,38 +99,154 @@ def bright_peaks(image: np.ndarray, count: int = 12) -> list[tuple[float, float]
     return [(float(columns[i]), float(rows[i])) for i in order]
 
 
-def placed_by_metadata(
-    microscope: Microscope, detector: str
-) -> Callable[[float, float], np.ndarray]:
-    """Where today's placement (the expanse's) says a pixel is: its affine, column and row in."""
+Placed = Callable[[float, float], np.ndarray]
+
+
+def placed_by_metadata(microscope: Microscope, detector: str) -> Placed:
+    """Where the expanse says a pixel is: its frame's affine, column and row in."""
     assert microscope.optics is not None and microscope.metadata is not None
     path = microscope.optics.get_light_path_for_detector(detector)
     matrix = np.array(microscope.metadata.get_metadata_for_light_path(path).affine_matrix)
     return lambda column, row: (matrix @ np.array([column, row, 0.0, 1.0]))[:2]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="today's expanse placement is M·T(stage): its offset is scaled, and its origin a corner",
-)
-def test_a_bead_is_where_the_placement_says(microscope: Microscope) -> None:
-    """Away from where the stage starts, the brightest beads of an image are placed on beads.
-
-    The simulator knows where its beads are; a placement that is right puts every bright spot
-    within a bead's width of one, and a wrong one, on average, half a bead spacing (~50 um) away.
-    """
-    assert microscope.values is not None and microscope.detector is not None
-    microscope.values.set(
-        {"laser_488.power": 20.0, "led_625.power": 0.0, "stage.x": AWAY[0], "stage.y": AWAY[1]}
-    )
-    image = microscope.detector.capture_image("camera").data
-    place = placed_by_metadata(microscope, "camera")
+def bead_misses(microscope: Microscope, image: np.ndarray, place: Placed) -> list[float]:
+    """How far each bright spot of `image`, placed by `place`, is from the nearest real bead."""
+    assert microscope.values is not None
     assert isinstance(microscope.detector, SimulatedDetectorManager)
     simulator = microscope.detector.simulator
     pattern = simulator.instrument.simulation_at(microscope.values.snapshot()).pattern
     bead_y, bead_x, _ = _beads(pattern)
-    misses = []
-    for column, row in bright_peaks(image):
-        x, y = place(column, row)
-        misses.append(float(np.min(np.hypot(bead_x - x, bead_y - y))))
-    assert np.median(misses) < 3.0, misses
+    return [
+        float(np.min(np.hypot(bead_x - x, bead_y - y)))
+        for x, y in (place(column, row) for column, row in bright_peaks(image))
+    ]
+
+
+def on_beads(misses: list[float], within_um: float) -> bool:
+    """Whether at least four bright spots are placed on a bead.
+
+    Beads are ~100 um apart: a wrong placement lands a spot within a few um of one about once in
+    three hundred times. The rest of the brightest spots of a small window can be noise.
+    """
+    return sum(miss < within_um for miss in misses) >= 4
+
+
+def lit_away(microscope: Microscope) -> None:
+    """Fluorescence, with the stage far from where it starts."""
+    assert microscope.values is not None
+    microscope.values.set(
+        {"laser_488.power": 20.0, "led_625.power": 0.0, "stage.x": AWAY[0], "stage.y": AWAY[1]}
+    )
+
+
+@pytest.mark.parametrize(
+    ("binning", "windows"),
+    [
+        (1, []),
+        (2, []),
+        (1, [AxisWindow("x", 40, 300), AxisWindow("y", 100, 256)]),
+        (2, [AxisWindow("x", 37, 300), AxisWindow("y", 101, 256)]),
+    ],
+)
+def test_a_bead_is_where_the_placement_says(
+    microscope: Microscope, binning: int, windows: list[AxisWindow]
+) -> None:
+    """Away from where the stage starts, the brightest beads of an image are placed on beads.
+
+    The simulator knows where its beads are; a placement that is right puts the bright spots that
+    are beads within a bead's width of one (`on_beads`). A window and a binning move and grow the
+    pixels, not the beads.
+    """
+    assert microscope.values is not None and microscope.detector is not None
+    lit_away(microscope)
+    microscope.values.set({"camera.binning": binning})
+    microscope.detector.update_detector("camera", windows=windows)
+    image = microscope.detector.capture_image("camera").data
+    misses = bead_misses(microscope, image, placed_by_metadata(microscope, "camera"))
+    assert on_beads(misses, 3.0 * binning), misses
+
+
+def test_a_dataset_is_placed_on_its_beads(microscope: Microscope) -> None:
+    """What an acquisition hands mikro places its pixels as the live image does: on the beads."""
+    lit_away(microscope)
+    store = RecordingStore()
+    channel = AcquisitionChannel(
+        detectors=["camera"], set_to={"laser_488.power": 20.0, "led_625.power": 0.0}
+    )
+    m = microscope
+    run_plan(
+        acquisition([channel], places=(AWAY,)),
+        store,
+        m.optics,
+        m.detector,
+        m.values,
+        m.space,
+        m.hooks,
+        Task.local(),
+    )
+    (acquired,) = store.published
+    rows = np.array(acquired.to_sample)
+
+    def place(column: float, row: float) -> np.ndarray:
+        z, y, x = rows @ np.array([0.0, row, column, 1.0])
+        return np.array([x, y])
+
+    misses = bead_misses(microscope, acquired.data[0, 0, 0], place)
+    assert on_beads(misses, 3.0), misses
+
+
+# --- going there
+
+
+def test_a_place_on_the_sample_comes_to_the_middle_of_the_image(microscope: Microscope) -> None:
+    """Moving to a sample point puts it where the image's middle is placed."""
+    assert microscope.values is not None
+    target = Position("sample", 1234.0, -567.0)
+    microscope.values.set(microscope.space.targets(target, "camera"))
+    middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
+    assert middle[:2] == pytest.approx([1234.0, -567.0])
+
+
+def test_a_point_in_an_image_taken_is_a_place_to_go(microscope: Microscope) -> None:
+    """Its pixel's sample point comes under the middle of the image, from wherever the stage is."""
+    assert microscope.values is not None and microscope.acquisition is not None
+    lit_away(microscope)
+    (frame,) = microscope.acquisition.acquire(["camera"])
+    seen = np.array(frame.metadata.affine_matrix) @ np.array([10.0, 20.0, 0.0, 1.0])
+    microscope.values.set({"stage.x": 0.0, "stage.y": 0.0})
+    microscope.values.set(
+        microscope.space.targets(Position(f"image:{frame.id}", 10.0, 20.0), "camera")
+    )
+    middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
+    assert middle[:2] == pytest.approx(seen[:2])
+
+
+def test_the_sample_starts_where_it_is_said_to(microscope: Microscope) -> None:
+    """Its origin set here, the sample point under the middle of the image is 0, 0."""
+    assert microscope.values is not None
+    microscope.values.set({"stage.x": 300.0, "stage.y": 40.0})
+    microscope.space.origin_here("camera")
+    middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
+    assert middle[:2] == pytest.approx([0.0, 0.0], abs=1e-9)
+    on_stage = microscope.space.transform(Position("sample", 0.0, 0.0), "stage")
+    assert on_stage[:2] == pytest.approx([300.0, 40.0])
+    assert microscope.space_state.mount[0][3] == pytest.approx(-300.0)
+
+
+def test_a_mount_that_is_no_map_is_refused(microscope: Microscope) -> None:
+    """A singular matrix would lose where the stage is."""
+    with pytest.raises(ValueError, match="invertible"):
+        microscope.space.register_mount([[0.0] * 4] * 4)
+
+
+def test_a_window_beside_the_middle_comes_to_the_place_itself(microscope: Microscope) -> None:
+    """What comes to a place is the middle of the image as read out, not of the sensor."""
+    assert microscope.values is not None and microscope.detector is not None
+    microscope.detector.update_detector(
+        "camera", windows=[AxisWindow("x", 0, 100), AxisWindow("y", 300, 200)]
+    )
+    target = Position("sample", 250.0, 75.0)
+    microscope.values.set(microscope.space.targets(target, "camera"))
+    middle = microscope.space.placement("camera") @ np.array([49.5, 99.5, 0.0, 1.0])
+    assert middle[:2] == pytest.approx([250.0, 75.0])

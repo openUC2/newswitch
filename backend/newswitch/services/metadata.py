@@ -1,4 +1,5 @@
-"""What an image was taken under: where its pixels are, and the light path it came through."""
+"""What an image was taken under: where its pixels are on the sample, and the light path it came
+through."""
 
 from __future__ import annotations
 
@@ -9,44 +10,30 @@ import numpy as np
 from newswitch.models.frames import Metadata
 from newswitch.models.light_path import LightPath, LightPathSnapshot
 from newswitch.services.optics import OpticsManager
-from newswitch.services.stage import where
-from newswitch.services.values import Values
-from newswitch.states.calibration import CalibrationState
+from newswitch.services.space import SpaceManager
+from newswitch.states.detector import DetectorState
 
 
 class MetadataManager:
-    """Says where a detector's pixels are: as calibrated, or else as the optics predict."""
+    """Says where a detector's pixels are, as the space says (`SpaceManager.placement`)."""
 
     def __init__(
-        self,
-        values: Values,
-        calibration_state: CalibrationState,
-        optics: OpticsManager,
+        self, space: SpaceManager, optics: OpticsManager, detector_state: DetectorState
     ) -> None:
-        """A manager reading those states, with `optics` for what no calibration covers."""
-        self._values = values
-        self._calibration_state = calibration_state
+        """A manager placing by `space`, with the light paths of `optics`."""
+        self._space = space
         self._optics = optics
+        self._detector_state = detector_state
 
     def get_metadata_for_light_path(self, light_path: LightPath) -> Metadata:
         """Where the pixels of an image through `light_path` are, under the current values."""
         snapshot = self._optics.snapshot(light_path)
-        try:
-            calibration = self._calibration_state.get_calibrated_path(light_path_state=snapshot)
-        except ValueError:
-            calibration = self._optics.predicted(light_path.detector)
-        x, y, z = where(self._values, light_path.detector)
-        at = [
-            [1.0, 0.0, 0.0, x],
-            [0.0, 1.0, 0.0, y],
-            [0.0, 0.0, 1.0, z],
-            [0.0, 0.0, 0.0, 1.0],
-        ]
-        combined = np.dot(np.array(calibration.affine_matrix), np.array(at))
+        placement = self._space.placement(light_path.detector)
+        height, width = self._detector_state.get(light_path.detector).plane()
         return Metadata(
-            affine_matrix=combined.tolist(),
-            fov_height=calibration.fov_height,
-            fov_width=calibration.fov_width,
+            affine_matrix=placement.tolist(),
+            fov_width=float(np.hypot(*placement[:2, 0])) * width,
+            fov_height=float(np.hypot(*placement[:2, 1])) * height,
             light_state=snapshot,
             acquisition_time=datetime.now().isoformat(),
         )

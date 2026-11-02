@@ -24,6 +24,7 @@ CORE_STATES = {
     "HookState",
     "ExpanseState",
     "CalibrationState",
+    "SpaceState",
     "OpticsState",
 }
 

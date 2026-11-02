@@ -91,7 +91,7 @@ export const MetadataSchema = z
   })
   .brand('@newswitch/metadata')
   .describe(
-    'Data class representing metadata for an image, including its ID and affine transformation matrix.',
+    "Where an image's pixels are on the sample, and what it was taken under.",
   );
 export type Metadata = z.input<typeof MetadataSchema>;
 export type MetadataOutput = z.infer<typeof MetadataSchema>;
@@ -118,9 +118,9 @@ export const FrameSchema = z
     scales: z.array(
       ScaleSchema.describe('Represents a scale factor for a 3D volume.'),
     ),
-    /** Data class representing metadata for an image, including its ID and affine transformation matrix. */
+    /** Where an image's pixels are on the sample, and what it was taken under. */
     metadata: MetadataSchema.describe(
-      'Data class representing metadata for an image, including its ID and affine transformation matrix.',
+      "Where an image's pixels are on the sample, and what it was taken under.",
     ),
     /** Metadata for a raw array before it is saved as an image, including the light path and acquisition settings. */
     array_metadata: ArrayMetadataSchema.describe(

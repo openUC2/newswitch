@@ -136,12 +136,13 @@ def calibrate_pixel_to_stage(
     dx_um: float,
     dy_um: float,
 ) -> list[list[float]]:
-    """The 4x4 pixel-to-stage affine from two stage moves at a fixed focus.
+    """The 4x4 pixel-to-sample scale from two stage moves at a fixed focus.
 
     `moved_x` is taken after moving the stage `dx_um` in x only, `moved_y` after moving it
     `dy_um` in y only (both from where `reference` was taken). Their pixel shifts give the
-    2x2 map from stage micrometres to pixels; its inverse is the pixel-to-stage scale
-    (rotation, flip and skew included). Z is left as it is (1:1).
+    2x2 map from stage micrometres to pixels. What the sample shows moves the other way than
+    the stage, so the negative of its inverse is how far apart on the sample a step along a
+    column and along a row are (rotation, flip and skew included). Z is left as it is (1:1).
 
     Raises:
         ValueError: A move did not shift the image, or both shifted it the same way: the
@@ -156,7 +157,7 @@ def calibrate_pixel_to_stage(
             f"the stage moves shifted the image by {sx} and {sy} px: the pixel scale cannot "
             "be determined"
         )
-    px_to_um = np.linalg.inv(um_to_px)
+    px_to_um = -np.linalg.inv(um_to_px)
     return [
         [float(px_to_um[0, 0]), float(px_to_um[0, 1]), 0.0, 0.0],
         [float(px_to_um[1, 0]), float(px_to_um[1, 1]), 0.0, 0.0],

@@ -7,7 +7,6 @@ from newswitch.models.devices import Detector
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import AffineMatrix
-from newswitch.routines.common import field_of_view
 from newswitch.services.stage import Stage, stage_of
 from newswitch.services.values import Values
 
@@ -126,18 +125,8 @@ def calibrate_light_path(
             problems.append(str(error))
             continue
 
-        fov_width, fov_height = field_of_view(
-            detector,
-            float(np.hypot(affine_matrix[0][0], affine_matrix[1][0])),
-            float(np.hypot(affine_matrix[0][1], affine_matrix[1][1])),
-        )
-
-        # Store the calculated affine matrix in the calibration manager's state
         calibrated_light_path = CalibratedLightPath(
-            key=light_path_state.key,
-            affine_matrix=affine_matrix,
-            fov_width=fov_width,
-            fov_height=fov_height,
+            key=light_path_state.key, affine_matrix=affine_matrix
         )
         calibration_manager.set_calibrated_state(calibrated_light_path)
         calibrated_light_paths.append(calibrated_light_path)

@@ -171,13 +171,18 @@ def _anchor_of_plane(instrument: Instrument, plane: AcquiredPlane) -> Coordinate
 
 
 class MikroDatasetStore:
-    """Stores what an acquisition merged in mikro, in the space of this microscope's stage."""
+    """Stores what an acquisition merged in mikro, in the space of the sample it was taken of.
+
+    One sample space per mounting (``sample-<instrument>-<mount id>``), and one stage space per
+    instrument (``stage-<instrument>``), the mount between them written once per mounting.
+    """
 
     def __init__(self, client: Mikro, instrument: Instrument, microscope: Microscope) -> None:
         """A store through `client`, reading the states of `microscope`."""
         self.client = client
         self.instrument = instrument
         self.microscope = microscope
+        self._mounted: set[str] = set()
 
     def check(self) -> None:
         """A client is there: it connects with its first call, so a mikro that is down is only
@@ -206,21 +211,41 @@ class MikroDatasetStore:
                 *(_anchor_of_plane(self.instrument, plane) for plane in acquired.planes),
             ],
         )
-        world = space_3d(self.client, "stage", reference=f"stage-{self.instrument.name}")
+        sample = space_3d(
+            self.client,
+            "sample",
+            reference=f"sample-{self.instrument.name}-{acquired.mount_id}",
+        )
         dataset.intrinsic_system.transform_to(
-            world,
+            sample,
             kind="BY_DIMENSION",
             parts=[
                 DimensionPartInput(
                     kind=PartKind.AFFINE,
                     input_axes=SPATIAL,
                     output_axes=SPATIAL,
-                    affine=acquired.to_stage,
+                    affine=acquired.to_sample,
                 )
             ],
-            name=f"{acquired.name} -> stage",
+            name=f"{acquired.name} -> sample",
             validity=PlacementValidity.VALIDATED
             if acquired.calibrated
             else PlacementValidity.INFERRED,
         )
+        if acquired.mount_id not in self._mounted:
+            stage = space_3d(self.client, "stage", reference=f"stage-{self.instrument.name}")
+            stage.transform_to(
+                sample,
+                kind="BY_DIMENSION",
+                parts=[
+                    DimensionPartInput(
+                        kind=PartKind.AFFINE,
+                        input_axes=SPATIAL,
+                        output_axes=SPATIAL,
+                        affine=acquired.mount,
+                    )
+                ],
+                name=f"mount {acquired.mount_id}",
+            )
+            self._mounted.add(acquired.mount_id)
         return AcquiredDataset(id=str(dataset.id), name=acquired.name, position=acquired.position)

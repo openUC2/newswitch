@@ -40,16 +40,24 @@ class AcquiredPosition:
     position: int
     data: np.ndarray
     """Along `dims`. A mirrored or inverted detector's images are flipped already, so that every
-    channel shows the sample the same way round and `to_stage` is one map for all of them."""
+    channel shows the sample the same way round and `to_sample` is one map for all of them."""
     dims: tuple[str, ...]
     """The axes of `data`: ``(t, c, z, y, x)``, or ``(t, c, m, z, y, x)`` from a detector timing its
     photons."""
     channels: tuple[AcquiredChannel, ...]
     planes: tuple[AcquiredPlane, ...]
-    to_stage: tuple[tuple[float, float, float, float], ...]
-    """``z, y, x`` pixel index to stage micrometres: three rows of a homogeneous matrix."""
+    to_sample: tuple[tuple[float, float, float, float], ...]
+    """``z, y, x`` index to sample micrometres: three rows of a homogeneous matrix."""
     calibrated: bool
-    """Whether `to_stage` was measured, rather than predicted from the optics."""
+    """Whether its pixel scale was measured, rather than predicted from the optics."""
+    mount_id: str = "0"
+    """Which mounting of a sample it was taken on: what its sample micrometres are of."""
+    mount: tuple[tuple[float, float, float, float], ...] = (
+        (1.0, 0.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
+    )
+    """``z, y, x`` stage micrometres to sample micrometres, for that mounting."""
 
 
 @runtime_checkable

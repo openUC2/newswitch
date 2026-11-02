@@ -168,7 +168,7 @@ def test_an_acquisition_stops_at_a_lost_command_and_says_which(tmp_path: Path) -
     channel = AcquisitionChannel(detectors=["camera"], name="gfp", set_to={"laser_488.power": 40.0})
     plan = acquisition([channel], planes=[0.0, 10.0, 20.0, 30.0])
     with pytest.raises(RuntimeError, match=r"stage\.z: no answer"):
-        acquire(plan, store, m.optics, m.detector, m.values, m.hooks, Task.local())
+        acquire(plan, store, m.optics, m.detector, m.values, m.space, m.hooks, Task.local())
     assert store.published == []
 
 
@@ -178,7 +178,9 @@ def test_a_failed_acquisition_turns_the_light_off(tmp_path: Path) -> None:
     channel = AcquisitionChannel(detectors=["camera"], name="gfp", set_to={"laser_488.power": 40.0})
     plan = acquisition([channel], planes=[0.0, 10.0, 20.0, 30.0])
     with pytest.raises(RuntimeError):
-        acquire(plan, RecordingStore(), m.optics, m.detector, m.values, m.hooks, Task.local())
+        acquire(
+            plan, RecordingStore(), m.optics, m.detector, m.values, m.space, m.hooks, Task.local()
+        )
     assert m.values["laser_488.power"] == 0.0
 
 

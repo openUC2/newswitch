@@ -12,7 +12,9 @@ from newswitch.models.acquisition import (
 )
 from newswitch.models.frames import Frame
 from newswitch.routines.common import acquire_step
-from newswitch.services.stage import stage_of
+from newswitch.instrument.space import SAMPLE
+from newswitch.models.space import Position
+from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ def scan_region(
     metadata_manager: protocols.MetadataManager,
     detector_manager: protocols.DetectorManager,
     values: Values,
+    space: SpaceManager,
     task: Task,
     scan_order: ScanOrder,
     start_x: float,
@@ -31,6 +34,9 @@ def scan_region(
     end_x: float,
     end_y: float,
     overlap: float = 0.1,
+    system: Annotated[
+        str, Description("What the corners are in: the sample, the stage, an image taken.")
+    ] = SAMPLE,
     detector_name: Annotated[
         str,
         Description(
@@ -39,9 +45,9 @@ def scan_region(
     ]
     | None = None,
 ) -> list[Frame]:
-    """Scan a rectangular region of the stage tile by tile.
+    """Scan a rectangular region tile by tile.
 
-    The region from (start_x, start_y) to (end_x, end_y) (stage micrometres) is covered
+    The region from (start_x, start_y) to (end_x, end_y) (micrometres of `system`) is covered
     with fields of view of the detector (`detector_name`, else the first active one),
     overlapping by `overlap`, visited in `scan_order`; every active detector acquires a
     frame at each tile.
@@ -120,11 +126,10 @@ def scan_region(
 
     logger.info("%d cols x %d rows: %d tiles", cols, rows, len(path_points))
 
-    stage = stage_of(values, current_detector.name)
     acquired_images: list[Frame] = []
     total = len(path_points)
     for i, (tgt_x, tgt_y) in enumerate(path_points):
-        stage.move(x=tgt_x, y=tgt_y, is_absolute=True)
+        values.set(space.targets(Position(system, tgt_x, tgt_y), current_detector.name), task=task)
         acquired_images.extend(
             acquire_step(acquisition_manager, task, i + 1, total, f"Acquired tile {i + 1}/{total}")
         )

@@ -313,6 +313,7 @@ def test_the_frames_step_the_sheet_and_leave_the_stage(tmp_path: Path) -> None:
         m.optics,
         m.detector,
         m.values,
+        m.space,
         m.hooks,
         Task.local(),
     )
@@ -339,10 +340,10 @@ def test_a_bead_is_at_the_same_z_whichever_swept(tmp_path: Path) -> None:
                 offsets=[float(index) * 0.5 for index in range(-60, 61)], variable=variable
             ),
         )
-        run_plan(plan, store, m.optics, m.detector, m.values, m.hooks, Task.local())
+        run_plan(plan, store, m.optics, m.detector, m.values, m.space, m.hooks, Task.local())
         published = store.published[0]
         lit = (published.data.astype(float)[0, 0] - 100.0).clip(min=0).sum(axis=(1, 2))
-        z_step, _, _, z_first = published.to_stage[0]
+        z_step, _, _, z_first = published.to_sample[0]
         return float(z_first + z_step * lit.argmax())
 
     (tmp_path / "wired").mkdir()

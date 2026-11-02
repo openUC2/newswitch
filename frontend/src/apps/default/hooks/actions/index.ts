@@ -16,8 +16,11 @@ import { LedMatrixOffDefinition } from './ledMatrixOff';
 import { MoveDefinition } from './move';
 import { MoveHomeDefinition } from './moveHome';
 import { MoveOneDefinition } from './moveOne';
+import { MoveToDefinition } from './moveTo';
+import { RegisterMountDefinition } from './registerMount';
 import { RunAutofocusDefinition } from './runAutofocus';
 import { ScanRegionDefinition } from './scanRegion';
+import { SetSampleOriginHereDefinition } from './setSampleOriginHere';
 import { SetWindowDefinition } from './setWindow';
 import { StartLiveViewDefinition } from './startLiveView';
 import { StopLiveViewDefinition } from './stopLiveView';
@@ -199,6 +202,20 @@ export {
 } from './moveOne';
 export type { MoveOneArgs, MoveOneReturn } from './moveOne';
 export {
+  MoveToArgsSchema,
+  MoveToReturnSchema,
+  MoveToDefinition,
+  useMoveTo,
+} from './moveTo';
+export type { MoveToArgs, MoveToReturn } from './moveTo';
+export {
+  RegisterMountArgsSchema,
+  RegisterMountReturnSchema,
+  RegisterMountDefinition,
+  useRegisterMount,
+} from './registerMount';
+export type { RegisterMountArgs, RegisterMountReturn } from './registerMount';
+export {
   RunAutofocusArgsSchema,
   RunAutofocusReturnSchema,
   RunAutofocusDefinition,
@@ -212,6 +229,16 @@ export {
   useScanRegion,
 } from './scanRegion';
 export type { ScanRegionArgs, ScanRegionReturn } from './scanRegion';
+export {
+  SetSampleOriginHereArgsSchema,
+  SetSampleOriginHereReturnSchema,
+  SetSampleOriginHereDefinition,
+  useSetSampleOriginHere,
+} from './setSampleOriginHere';
+export type {
+  SetSampleOriginHereArgs,
+  SetSampleOriginHereReturn,
+} from './setSampleOriginHere';
 export {
   AxisWindowSchema,
   SetWindowArgsSchema,
@@ -286,8 +313,11 @@ export const globalActionDefinition = {
   Move: MoveDefinition,
   MoveHome: MoveHomeDefinition,
   MoveOne: MoveOneDefinition,
+  MoveTo: MoveToDefinition,
+  RegisterMount: RegisterMountDefinition,
   RunAutofocus: RunAutofocusDefinition,
   ScanRegion: ScanRegionDefinition,
+  SetSampleOriginHere: SetSampleOriginHereDefinition,
   SetWindow: SetWindowDefinition,
   StartLiveView: StartLiveViewDefinition,
   StopLiveView: StopLiveViewDefinition,

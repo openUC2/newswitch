@@ -4,7 +4,7 @@ from typing import Tuple
 
 from arkitekt import App
 
-from newswitch.actions import values
+from newswitch.actions import space, values
 from newswitch.microscope import locks
 from newswitch.microscope.apps import core
 from newswitch.microscope.run import Run
@@ -34,3 +34,6 @@ app.register_action(values.move_one, locks=[locks.MOTION])
 app.register_action(values.move_home, locks=[locks.MOTION])
 app.register_action(values.swap, locks=[locks.SWAP])
 app.register_action(values.tune, locks=[locks.TUNE])
+app.register_action(space.move_to, locks=[locks.MOTION])
+app.register_action(space.set_sample_origin_here)
+app.register_action(space.register_mount)
