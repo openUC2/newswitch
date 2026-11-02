@@ -8,6 +8,7 @@ import { ActionButton } from "@/components/ActionButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useStage } from "@/lib/microscope/values";
+import { SampleSwitch } from "@/lib/microscope/sample";
 import { cn } from "@/lib/utils";
 import {
   ArrowDown,
@@ -83,6 +84,8 @@ export function MoveControl() {
         <span className="text-sm font-medium">
           {t("microscope.stageControl")}
         </span>
+        {/* With several samples, which one's stage: the same pick as the stage view's. */}
+        <SampleSwitch />
       </div>
 
       <div className="grid grid-cols-3 gap-2">

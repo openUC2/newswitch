@@ -187,8 +187,11 @@ def test_one_plan_acquires_both_samples(m: Microscope) -> None:
     """One position on "the sample" is that point on each, each brought there by its own stage;
     a stack sweeps each sample's own focus; each record is on its own sample."""
     assert m.values is not None
+    # A channel lights what it names, and only that: both arms' sources, for both cameras.
     channel = AcquisitionChannel(
-        name="all", detectors=["cam_a", "cam_b", "thermometer"], set_to={"laser_488.power": 20.0}
+        name="all",
+        detectors=["cam_a", "cam_b", "thermometer"],
+        set_to={"laser_488.power": 20.0, "white_led.power": 0.01},
     )
     x, y = MIDDLE[0] + 300.0, MIDDLE[1] - 200.0
     plan = AcquisitionPlan(
@@ -207,6 +210,11 @@ def test_one_plan_acquires_both_samples(m: Microscope) -> None:
     b_z = {plane.state["stage_b.z"] for plane in cam_b.planes}
     assert len(a_z) == 3 and len(b_z) == 3
     assert thermometer.data.shape == (1, 1, 3, 1, 1, 1)
+    # What each took is its own sample, lit: GFP beads, and a stained section in color.
+    beads = cam_a.data[0, 0, 1].astype(float)
+    assert np.percentile(beads, 99.9) > 3 * np.median(beads)
+    red, green, blue = (np.median(cam_b.data[0, c, 1].astype(float)) for c in range(3))
+    assert green < blue and green < red and min(red, green, blue) > 0
 
 
 def test_a_named_sweep_across_two_samples_is_refused(m: Microscope) -> None:

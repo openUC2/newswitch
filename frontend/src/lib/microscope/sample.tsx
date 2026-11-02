@@ -21,6 +21,31 @@ export const SceneSampleProvider = ({
   </SceneSampleContext.Provider>
 );
 
+/** Which sample a panel beside the scene acts on, switched inline: the same pick as the scene's,
+ * shown only where there are several samples and none is pinned. */
+export const SampleSwitch = () => {
+  const pinned = useContext(SceneSampleContext);
+  const samples = useSamples();
+  const current = useSceneSample();
+  const setSceneSample = useModeStore((s) => s.setSceneSample);
+  if (pinned !== undefined || samples.length < 2) return null;
+  return (
+    <ButtonGroup className="ml-auto">
+      {samples.map((sample) => (
+        <Button
+          key={sample}
+          size="xs"
+          variant={sample === current ? "default" : "outline"}
+          aria-pressed={sample === current}
+          onClick={() => setSceneSample(sample)}
+        >
+          <span className="font-mono text-[11px]">{sample}</span>
+        </Button>
+      ))}
+    </ButtonGroup>
+  );
+};
+
 /** Switches which sample the view shows: only where there are several, and none is pinned. */
 export const SamplePicker = () => {
   const pinned = useContext(SceneSampleContext);
