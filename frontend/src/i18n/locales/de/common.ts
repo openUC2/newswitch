@@ -21,6 +21,7 @@ export const language = {
 export const navigation = {
   manageUsers: "Benutzer verwalten",
   auditLog: "Audit-Protokoll",
+  coordinateSystems: "Koordinatensysteme (Debug)",
   backToMicroscope: "Zurück zum Mikroskop",
   index: "Mikroskop",
   replay: "Wiedergabe",

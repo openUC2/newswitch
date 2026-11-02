@@ -21,6 +21,7 @@ export const language = {
 export const navigation = {
   manageUsers: "Manage users",
   auditLog: "Audit log",
+  coordinateSystems: "Coordinate systems (debug)",
   backToMicroscope: "Back to microscope",
   index: "Microscope",
   replay: "Replay",

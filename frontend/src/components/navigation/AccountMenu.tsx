@@ -9,7 +9,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { LogOut, ScrollText, ShieldUser, KeyRound } from "lucide-react";
+import {
+  LogOut,
+  ScrollText,
+  ShieldUser,
+  KeyRound,
+  Waypoints,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -79,6 +85,10 @@ export function AccountMenu({
             </>
           )}
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate("/debug/space")}>
+            <Waypoints className="h-4 w-4" />
+            {t("navigation.coordinateSystems")}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setPasswordDialogOpen(true)}>
             <KeyRound className="h-4 w-4" />
             {t("auth.changePassword")}

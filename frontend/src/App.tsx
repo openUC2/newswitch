@@ -12,6 +12,7 @@ import {
   IndexPage,
   LoginPage,
   ReplayPage,
+  SpaceDebugPage,
   UsersPage,
 } from "./pages";
 import { appsDefinition } from "./apps";
@@ -78,6 +79,16 @@ function App() {
             element={
               <ScopedRoute scope="replay">
                 <ReplayPage />
+              </ScopedRoute>
+            }
+          />
+
+          {/* A debug view of the coordinate graph the microscope runs on. */}
+          <Route
+            path="/debug/space"
+            element={
+              <ScopedRoute scope="debug">
+                <SpaceDebugPage />
               </ScopedRoute>
             }
           />
