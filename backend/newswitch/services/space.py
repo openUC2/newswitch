@@ -56,6 +56,11 @@ def _middle_offset(detector: Detector, name: str, values: Mapping[str, Any]) -> 
     return (axis.window_start + (binning - 1) / 2 - (size - 1) / 2) / binning
 
 
+def _new_mount_id() -> str:
+    """An id for a mounting no other has."""
+    return uuid.uuid4().hex[:8]
+
+
 def _shape_of(name: str, mounted: MountedHolder) -> HolderShape:
     """What is mounted as a view draws it, in sample micrometres."""
     holder = mounted.holder
@@ -101,6 +106,9 @@ class SpaceManager:
         holder = None if values is None else values.instrument.sample_holder()
         self._holders: dict[str, MountedHolder] = {} if holder is None else dict(holder.holders)
         self.state.holders = list(self._holders)
+        # Every start is a mounting of its own: what is on the stage now need not be what was
+        # before, and the mount lives in memory only.
+        self.state.mount_id = _new_mount_id()
         if holder is not None and holder.mounted is not None:
             self._mount(holder.mounted, self.state.mount_id)
 
@@ -230,7 +238,7 @@ class SpaceManager:
         """
         if holder not in self._holders:
             raise ValueError(f"No holder {holder!r} to mount: there are {sorted(self._holders)}")
-        self._mount(holder, uuid.uuid4().hex[:8])
+        self._mount(holder, _new_mount_id())
         self.forget_images()
         self.refresh()
 

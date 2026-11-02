@@ -30,7 +30,7 @@ from mikro import Mikro, space_3d  # noqa: E402
 from main_fastapi import create_app  # noqa: E402
 from newswitch.infra.accounts.auth import AllowAllAuthenticator  # noqa: E402
 from newswitch.instrument import spec  # noqa: E402
-from newswitch.microscope.parts import build_microscope  # noqa: E402
+from newswitch.microscope.parts import Microscope, build_microscope  # noqa: E402
 from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel  # noqa: E402
 from newswitch.routines.acquire import acquire  # noqa: E402
 from newswitch.infra.mikro.connection import MikroConnection  # noqa: E402
@@ -87,6 +87,10 @@ def mikro() -> Iterator[Mikro]:
         yield client
 
 
+#: The microscopes `run` built, newest last: what their datasets were placed in is theirs.
+BUILT: list[Microscope] = []
+
+
 def run(
     mikro: Mikro,
     tmp_path: Path,
@@ -99,6 +103,7 @@ def run(
     """The routine on a simulated instrument, through the store a server would use."""
     described = spec.load(INSTRUMENTS / instrument)
     m = build_microscope(run_settings(tmp_path), described)
+    BUILT.append(m)
     return acquire(
         acquisition(streams, planes, times, places, name=f"test {uuid.uuid4().hex[:8]}"),
         MikroDatasetStore(mikro, described, m),
@@ -186,7 +191,9 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
         [AcquisitionChannel(detectors=["camera_green"], name="gfp", set_to=LASER)],
         places=((0.0, 0.0), (60.0, 40.0)),
     )
-    world = space_3d(mikro, "sample", reference="sample-dual-camera-0")
+    world = space_3d(
+        mikro, "sample", reference=f"sample-dual-camera-{BUILT[-1].space_state.mount_id}"
+    )
 
     def beads_in_stage(made: AcquiredDataset) -> np.ndarray:
         dataset = mikro.get_array_dataset(made.id)

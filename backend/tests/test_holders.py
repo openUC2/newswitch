@@ -153,3 +153,15 @@ def test_a_plate_beside_its_mount_is_not_where_it_is_said_to_be(tmp_path: Path) 
     image = m.detector.capture_image("camera").data
     misses = bead_misses(m, image, placed_by_metadata(m, "camera"))
     assert not on_beads(misses, 3.0), misses
+
+
+def test_every_start_is_a_mounting_of_its_own(tmp_path: Path) -> None:
+    """What is on the stage now need not be what was there last time: its images are not mixed."""
+    first, second = (
+        build_microscope(
+            run_settings(tmp_path / name, instrument=REFERENCE_INSTRUMENT),
+            spec.load(REFERENCE_INSTRUMENT),
+        )
+        for name in ("one", "two")
+    )
+    assert first.space_state.mount_id != second.space_state.mount_id

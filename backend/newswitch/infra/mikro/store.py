@@ -174,7 +174,8 @@ class MikroDatasetStore:
     """Stores what an acquisition merged in mikro, in the space of the sample it was taken of.
 
     One sample space per mounting (``sample-<instrument>-<mount id>``), and one stage space per
-    instrument (``stage-<instrument>``), the mount between them written once per mounting.
+    instrument (``stage-<instrument>``), the mount between them written whenever it is one not
+    written yet: a mount registered later is an edge of its own.
     """
 
     def __init__(self, client: Mikro, instrument: Instrument, microscope: Microscope) -> None:
@@ -182,7 +183,7 @@ class MikroDatasetStore:
         self.client = client
         self.instrument = instrument
         self.microscope = microscope
-        self._mounted: set[str] = set()
+        self._mounted: set[tuple[str, tuple[tuple[float, ...], ...]]] = set()
 
     def check(self) -> None:
         """A client is there: it connects with its first call, so a mikro that is down is only
@@ -232,7 +233,7 @@ class MikroDatasetStore:
             if acquired.calibrated
             else PlacementValidity.INFERRED,
         )
-        if acquired.mount_id not in self._mounted:
+        if (acquired.mount_id, acquired.mount) not in self._mounted:
             stage = space_3d(self.client, "stage", reference=f"stage-{self.instrument.name}")
             stage.transform_to(
                 sample,
@@ -247,5 +248,5 @@ class MikroDatasetStore:
                 ],
                 name=f"mount {acquired.mount_id}",
             )
-            self._mounted.add(acquired.mount_id)
+            self._mounted.add((acquired.mount_id, acquired.mount))
         return AcquiredDataset(id=str(dataset.id), name=acquired.name, position=acquired.position)

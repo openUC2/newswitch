@@ -270,8 +270,7 @@ export const ChunkVolume = ({ chunk }: { chunk: ChunkData }) => {
                 if (d > bounds.y) break; 
                 
                 vec3 uvw = p + 0.5;
-                uvw.y = 1.0 - uvw.y; 
-                
+                // Row 0 of the data at the box's low y: rows run along +y, as the chunks do.
                 float val = texture(colorTexture, uvw).r;
                 maxVal = max(maxVal, val); 
                 

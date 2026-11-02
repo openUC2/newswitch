@@ -34,26 +34,29 @@ export const HolderPlane = () => {
       {shape.wells.map((well) => {
         const radius = (well.diameter_um ?? well.size_um ?? 1000) / 2;
         return (
-          <mesh
-            key={well.name}
-            position={[well.x, well.y, DEPTH]}
-            onClick={(e) => {
-              if (interactionMode !== "MOVE") return;
-              e.stopPropagation();
-              assign({ position: { system: well.name, x: 0, y: 0 } });
-            }}
-          >
-            {well.size_um ? (
-              <planeGeometry args={[well.size_um, well.size_um]} />
-            ) : (
-              <ringGeometry args={[radius * 0.94, radius, 48]} />
+          <group key={well.name} position={[well.x, well.y, DEPTH]}>
+            {/* All of the well is what a click hits, not only its rim */}
+            <mesh
+              onClick={(e) => {
+                if (interactionMode !== "MOVE") return;
+                e.stopPropagation();
+                assign({ position: { system: well.name, x: 0, y: 0 } });
+              }}
+            >
+              {well.size_um ? (
+                <planeGeometry args={[well.size_um, well.size_um]} />
+              ) : (
+                <circleGeometry args={[radius, 48]} />
+              )}
+              <meshBasicMaterial color="#94a3b8" transparent opacity={0.06} />
+            </mesh>
+            {!well.size_um && (
+              <mesh>
+                <ringGeometry args={[radius * 0.94, radius, 48]} />
+                <meshBasicMaterial color="#94a3b8" transparent opacity={0.5} />
+              </mesh>
             )}
-            <meshBasicMaterial
-              color="#94a3b8"
-              transparent
-              opacity={well.size_um ? 0.08 : 0.5}
-            />
-          </mesh>
+          </group>
         );
       })}
     </group>
