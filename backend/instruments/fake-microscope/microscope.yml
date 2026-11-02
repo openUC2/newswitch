@@ -147,7 +147,7 @@ settings:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@7
+  catalog: newswitch@8
   bloks:
     view-bench:
       description: 'Bench: both arms, the swaps, and what calibrating has measured.'

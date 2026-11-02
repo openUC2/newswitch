@@ -37,7 +37,7 @@ class AcquisitionManager:
         self.cache_manager = cache_manager
 
     def acquire(self, names: Optional[list[str]] = None) -> list[Frame]:
-        """A frame from each active detector (only those in `names`, when given).
+        """A frame from each active detector that takes images (only those in `names`, when given).
 
         Each frame is cached, gets the metadata of its light path, and is added to the expanse; where
         its pixels are is kept (`SpaceManager.remember`), so a point in it is a place to go.
@@ -47,7 +47,7 @@ class AcquisitionManager:
         for detector in self.detector_manager.state.detectors:
             if names is not None and detector.name not in names:
                 continue
-            if detector.is_active:
+            if detector.is_active and detector.delivers_images():
                 image_data = self.detector_manager.capture_image(detector.name).data
 
                 light_path = self.optics_manager.get_light_path_for_detector(detector.name)

@@ -8,23 +8,22 @@ export const PositionSchema = z
       .literal('@newswitch/position')
       .default('@newswitch/position'),
     system: z.string(),
-    x: z.number(),
-    y: z.number(),
-    z: z.number().nullable().optional(),
+    coordinates: z.record(z.string(), z.number()),
   })
   .brand('@newswitch/position')
   .describe(
-    'Where: in the sample, the stage, an image taken (``image:<id>``), a detector\n(``detector:<name>``, its pixels as they are now). Without z, z stays.',
+    'Where, by axis name: in the sample, the stage, a well (``well:B3``), an image\ntaken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;\na thermometer, where it measures). Without z, z stays.',
   );
 export type Position = z.input<typeof PositionSchema>;
 export type PositionOutput = z.infer<typeof PositionSchema>;
 
 // --- Schemas ---
 export const MoveToArgsSchema = z.object({
-  /** Where: in the sample, the stage, an image taken (``image:<id>``), a detector
-(``detector:<name>``, its pixels as they are now). Without z, z stays. */
+  /** Where, by axis name: in the sample, the stage, a well (``well:B3``), an image
+taken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;
+a thermometer, where it measures). Without z, z stays. */
   position: PositionSchema.describe(
-    'Where: in the sample, the stage, an image taken (``image:<id>``), a detector\n(``detector:<name>``, its pixels as they are now). Without z, z stays.',
+    'Where, by axis name: in the sample, the stage, a well (``well:B3``), an image\ntaken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;\na thermometer, where it measures). Without z, z stays.',
   ),
   /** Whose image; by default the first that is on. */
   detector: z

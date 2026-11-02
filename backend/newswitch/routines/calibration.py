@@ -108,7 +108,7 @@ def calibrate_light_path(
     calibrated_light_paths: list[CalibratedLightPath] = []
     problems: list[str] = []
     for detector in detector_state.detectors:
-        if not detector.is_active:
+        if not detector.is_active or not detector.delivers_images():
             continue
         light_path = optics_manager.get_light_path_for_detector(detector.name)
         light_path_state = metadata_manager.get_current_state_for_light_path(light_path)

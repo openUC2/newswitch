@@ -59,7 +59,7 @@ class AxisWindow:
 
 @dataclass
 class Detector:
-    """What delivers images: its name is its cube's."""
+    """What measures the sample: along its axes, or with none, at one point. Its name is its cube's."""
 
     name: str
     is_active: bool = False
@@ -67,7 +67,13 @@ class Detector:
     colors: list[str] = field(default_factory=list)
     """A color camera's channels by name (an image each per exposure); empty for a mono one."""
     axes: list[DetectorAxis] = field(default_factory=list)
-    """What it delivers, in the order of a dataset's axes; the image is its last two, y and x."""
+    """What it delivers, in the order of a dataset's axes; an image is its last two, y and x."""
+    quantity: str = "intensity"
+    """What its values are: intensity (of light), temperature."""
+    unit: str = ""
+    """What its values are in: empty for counts, degC for a temperature."""
+    reading: Optional[float] = None
+    """The last value of a detector that measures at one point, while live; None for an image."""
 
     # --- current readout: what the device applied, which its variables then report
     current_exposure_ms: Optional[float] = None
@@ -89,6 +95,10 @@ class Detector:
     def has_axis(self, name: str) -> bool:
         """Whether it delivers an axis called `name`."""
         return any(axis.name == name for axis in self.axes)
+
+    def delivers_images(self) -> bool:
+        """Whether it delivers images: it has a y and an x along space. A thermometer does not."""
+        return self.has_axis("y") and self.has_axis("x")
 
     def plane(self) -> tuple[int, int]:
         """The (y, x) size of its image, after its windows and binning."""

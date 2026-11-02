@@ -267,7 +267,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
             lambda: values.snapshot(),
             lambda name, value: values.stepped(name, value),
         )
-        if instrument is not None and instrument.detectors()
+        if instrument is not None and (instrument.detectors() or instrument.thermometers())
         else None
     )
     if instrument is not None:

@@ -19,11 +19,13 @@ from scipy import ndimage
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.predict import Answer, state_key
 from newswitch.instrument.space import holder_to_stage
-from newswitch.instrument.spec import Instrument, Pattern, Stain
+from newswitch.instrument.spec import Instrument, Pattern, Stain, Thermometer
 from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
 
 #: The hidden errors, in an instrument's folder.
 TRUTH = "truth.yml"
+#: What the air beside the sample is, unless the truth says otherwise.
+AIR_TEMPERATURE_C = 22.0
 
 
 def load_truth(instrument: Instrument) -> dict[str, Any]:
@@ -136,6 +138,14 @@ class Simulator:
         self._noise = np.random.default_rng(11)
         self.mounted: Callable[[], str | None] = lambda: self.instrument.sample_holder().mounted
         """Which holder is mounted: the space says (`newswitch.services.space`)."""
+
+    def temperature(self, thermometer: str) -> float:
+        """What `thermometer` reads: the air beside the sample (``air_temperature_c`` in the truth,
+        22 °C without one), strayed by its noise."""
+        element = self.instrument.cubes[thermometer].element
+        assert isinstance(element, Thermometer)
+        air = float(self.truth.get("air_temperature_c", AIR_TEMPERATURE_C))
+        return air + float(self._noise.normal(0.0, element.noise)) if element.noise else air
 
     def beads_in_sample(self, pattern: Pattern) -> np.ndarray:
         """Where `pattern`'s beads are on what is mounted, as ``(y, x, depth)`` in sample micrometres.

@@ -91,7 +91,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@7
+  catalog: newswitch@8
   bloks:
     view-color:
       description: 'Color: the three bands of one camera, and where it is focused.'

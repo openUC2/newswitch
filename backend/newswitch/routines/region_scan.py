@@ -64,9 +64,11 @@ def scan_region(
     if detector_name is not None:
         current_detector = detector_manager.state.get(detector_name)
     else:
-        active_detectors = detector_manager.state.get_active_detectors()
+        active_detectors = [
+            d for d in detector_manager.state.get_active_detectors() if d.delivers_images()
+        ]
         if not active_detectors:
-            raise ValueError("No active detectors found.")
+            raise ValueError("No active detector that takes images.")
         current_detector = active_detectors[0]
 
     current_light_path = optics_manager.get_light_path_for_detector(current_detector.name)
@@ -129,7 +131,8 @@ def scan_region(
     acquired_images: list[Frame] = []
     total = len(path_points)
     for i, (tgt_x, tgt_y) in enumerate(path_points):
-        values.set(space.targets(Position(system, tgt_x, tgt_y), current_detector.name), task=task)
+        where = Position(system, {"x": tgt_x, "y": tgt_y})
+        values.set(space.targets(where, current_detector.name), task=task)
         acquired_images.extend(
             acquire_step(acquisition_manager, task, i + 1, total, f"Acquired tile {i + 1}/{total}")
         )

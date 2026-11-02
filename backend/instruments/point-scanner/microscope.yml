@@ -100,7 +100,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@7
+  catalog: newswitch@8
   bloks:
     view-scan:
       description: 'Scan: the beam path, the raster on the sample, and the image it builds.'

@@ -75,6 +75,19 @@ the beads on what is mounted (in every well of a plate); `truth.yml` may say it 
     mounted: slide
 ```
 
+**What sits beside it**: a thermometer is a cube of its own, a detector of no light. It has no
+axes, so it measures at one point: `on_stage` is where it sits on the stage insert, in stage
+coordinates, so it moves with the stage and the sample. The coordinate graph places it there by a
+BY_DIMENSION part from no axes onto x, y and z, and `SpaceState.points` says where that is on the
+sample. A simulated one reads the air beside the sample, 22 °C unless `truth.yml` says otherwise
+(`air_temperature_c`), within its `noise`; it is read once a second while live, and published as
+its `reading`. It takes no image, so an acquisition refuses it, and no driver reads a real one yet.
+
+```yaml
+  thermometer:
+    element: {kind: thermometer, on_stage: {x: 30 mm, y: 0 mm}}   # 3 cm from the section
+```
+
 The compiler covers every simulation when a server starts. Calibration needs something to correlate: on an empty slide its arithmetic gives a meaningless
 pixel size, without an error. An epi source's light is drawn from the beads, also what a sample
 reflects: a mirror is predicted right, but drawn dark.
@@ -190,7 +203,7 @@ nothing. Each states the `catalog` it is written against and its `bloks` by name
 
 ```yaml
 ui:
-  catalog: newswitch@7
+  catalog: newswitch@8
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'
@@ -211,7 +224,7 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `dual-camera` | Two cameras, each behind a filter of its own (BP 525/50, BP 625/50), seeing the sample at once. |
 | `rgb-camera` | One color camera: every exposure gives an image per color. |
 | `cam-test` | One simulated uc2_cam_py camera and nothing else. Without that library, the optics stand in, with a warning. |
-| `he-microscope` | White light through an H&E-stained section, onto a color camera, with two objectives. |
+| `he-microscope` | White light through an H&E-stained section, onto a color camera, with two objectives, and a thermometer on the stage insert 3 cm from the section. |
 | `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image, of one plane of a volume. |
 | `light-sheet` | A sheet from the side, whose positioner the camera's frames step, and a stage for x, y and z. |
 | `flim` | A point scanner on a thin section, timing each photon against a pulsed laser. |

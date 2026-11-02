@@ -285,6 +285,7 @@ class OpticsManager:
                 {
                     detector.name: self._detector(detector.name, values)
                     for detector in self.detector_state.detectors
+                    if detector.delivers_images()
                 },
             )
             self._publish(

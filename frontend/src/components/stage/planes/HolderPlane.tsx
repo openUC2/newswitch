@@ -40,7 +40,9 @@ export const HolderPlane = () => {
               onClick={(e) => {
                 if (interactionMode !== "MOVE") return;
                 e.stopPropagation();
-                assign({ position: { system: well.name, x: 0, y: 0 } });
+                assign({
+                  position: { system: well.name, coordinates: { x: 0, y: 0 } },
+                });
               }}
             >
               {well.size_um ? (

@@ -13,9 +13,8 @@ from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 from newswitch.instrument import spec
 from newswitch.instrument.space import holder_to_stage
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.space import Position
 from tests.conftest import run_settings
-from tests.test_space import bead_misses, lit_away, on_beads, placed_by_metadata
+from tests.test_space import at, bead_misses, lit_away, on_beads, placed_by_metadata
 
 #: Where the reference microscope's plate really sits, beside where its description says.
 OFFSET_UM = (180.0, -95.0)
@@ -98,8 +97,8 @@ def test_it_starts_on_what_its_description_mounts(microscope: Microscope) -> Non
     assert (state.holder, state.holders) == ("slide", ["slide", "plate"])
     assert state.shape is not None
     assert (state.shape.width_um, state.shape.height_um) == (75_000.0, 25_000.0)
-    middle = microscope.space.transform(Position("stage", 0.0, 0.0), "sample")
-    assert middle[:2] == pytest.approx([37_500.0, 12_500.0])
+    middle = microscope.space.transform(at("stage", 0.0, 0.0), "sample", ("x", "y"))
+    assert middle == pytest.approx({"x": 37_500.0, "y": 12_500.0})
 
 
 def test_mounting_is_a_new_sample(microscope: Microscope) -> None:
@@ -114,7 +113,7 @@ def test_mounting_is_a_new_sample(microscope: Microscope) -> None:
     assert state.shape is not None and len(state.shape.wells) == 96
     assert microscope.expanse_state.current_frames == []
     with pytest.raises(ValueError, match="no route"):
-        microscope.space.transform(Position(f"image:{frame.id}", 0.0, 0.0))
+        microscope.space.transform(at(f"image:{frame.id}", 0.0, 0.0))
     with pytest.raises(ValueError, match="No holder 'dish'"):
         microscope.space.mount_holder("dish")
 
@@ -123,7 +122,7 @@ def test_a_well_is_a_place_to_go(microscope: Microscope) -> None:
     """B3's middle comes under the middle of the image."""
     assert microscope.values is not None
     microscope.space.mount_holder("plate")
-    microscope.values.set(microscope.space.targets(Position("well:B3", 0.0, 0.0), "camera"))
+    microscope.values.set(microscope.space.targets(at("well:B3", 0.0, 0.0), "camera"))
     middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
     assert middle[:2] == pytest.approx([(14.38 + 18.0) * 1000.0, (11.24 + 9.0) * 1000.0])
 
@@ -138,7 +137,7 @@ def test_the_beads_of_a_well_are_where_the_plate_is(tmp_path: Path) -> None:
     plate = m.values.instrument.sample_holder().holders["plate"]
     m.space.register_mount(np.linalg.inv(holder_to_stage(plate.mount, OFFSET_UM)).tolist())
     lit_away(m)
-    m.values.set(m.space.targets(Position("well:B3", 0.0, 0.0), "camera"))
+    m.values.set(m.space.targets(at("well:B3", 0.0, 0.0), "camera"))
     image = m.detector.capture_image("camera").data
     misses = bead_misses(m, image, placed_by_metadata(m, "camera"))
     assert on_beads(misses, 3.0), misses
@@ -149,7 +148,7 @@ def test_a_plate_beside_its_mount_is_not_where_it_is_said_to_be(tmp_path: Path) 
     m = on_the_plate(tmp_path)
     assert m.values is not None and m.detector is not None
     lit_away(m)
-    m.values.set(m.space.targets(Position("well:B3", 0.0, 0.0), "camera"))
+    m.values.set(m.space.targets(at("well:B3", 0.0, 0.0), "camera"))
     image = m.detector.capture_image("camera").data
     misses = bead_misses(m, image, placed_by_metadata(m, "camera"))
     assert not on_beads(misses, 3.0), misses

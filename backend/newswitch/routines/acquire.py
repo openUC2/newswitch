@@ -448,6 +448,13 @@ def acquire(
     first = next((name for channel in plan.channels for name in channel.detectors), None)
     if first is None:
         raise ValueError(f"The channel {plan.channels[0].name!r} names no detector")
+    for name in {name for channel in plan.channels for name in channel.detectors}:
+        detector = _find_detector(name, detector_manager)
+        if not detector.delivers_images():
+            raise ValueError(
+                f"{name} measures {detector.quantity} at one point: what an acquisition keeps is "
+                "images, and a reading has no place in their array yet"
+            )
     first = _find_detector(first, detector_manager).name
     sweep = _sweep_of(plan, offsets, first, values)
     merges = [

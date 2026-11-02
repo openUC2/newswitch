@@ -10,11 +10,35 @@ from newswitch.instrument.spec import Drive, Instrument, Sensor
 from newswitch.models.devices import Detector, DetectorAxis
 
 
+#: How often a thermometer is read while live (Hz): a temperature does not change by the frame.
+THERMOMETER_RATE = 1.0
+
+
 def detectors(instrument: Instrument) -> list[Detector]:
-    """One `Detector` per sensor or point detector, all on, with the axes it delivers.
+    """One `Detector` per sensor or point detector, all on, with the axes it delivers, and one per
+    thermometer, with none.
 
     Every axis reads out whole; the binnable ones at the initial binning.
     """
+    return [*_light_detectors(instrument), *_thermometers(instrument)]
+
+
+def _thermometers(instrument: Instrument) -> list[Detector]:
+    """A thermometer measures at one point: no axes, a temperature, read once a second."""
+    return [
+        Detector(
+            name=name,
+            is_active=True,
+            data_type="float32",
+            quantity="temperature",
+            unit="degC",
+            current_frame_rate=THERMOMETER_RATE,
+        )
+        for name in instrument.thermometers()
+    ]
+
+
+def _light_detectors(instrument: Instrument) -> list[Detector]:
     found = []
     for name in instrument.detectors():
         cube = instrument.cubes[name]
@@ -68,7 +92,7 @@ def cameras(instrument: Instrument) -> tuple[list[Detector], dict[str, dict[str,
     """
     found = []
     vendor_options: dict[str, dict[str, Any]] = {}
-    for detector in detectors(instrument):
+    for detector in _light_detectors(instrument):
         camera = instrument.hardware.cameras.get(detector.name)
         if camera is None:
             continue
@@ -94,7 +118,11 @@ def check_wired(
     Raises:
         SpecError: Something is not wired; every one is listed.
     """
-    problems = []
+    problems = [
+        f"the thermometer {name}: no driver reads a thermometer yet, so it is simulated or nothing"
+        for name in instrument.thermometers()
+        if simulate != "everything"
+    ]
     if simulate == "nothing":
         problems += [
             f"{variable.name} has no wired actuator (hardware.actuators)"

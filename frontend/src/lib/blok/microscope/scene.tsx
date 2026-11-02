@@ -8,6 +8,7 @@ import { RectangleDrawer } from "@/components/stage/interactions/RectangleDrawer
 import { StagePositioner } from "@/components/stage/interactions/StagePositioner";
 import { FramesPlane } from "@/components/stage/planes/FramesPlane";
 import { HolderPlane } from "@/components/stage/planes/HolderPlane";
+import { PointsPlane } from "@/components/stage/planes/PointsPlane";
 import { ImagesPlane } from "@/components/stage/planes/ImagesPlane";
 import { LivesPlane } from "@/components/stage/planes/LivesPlane";
 import { StageAxis } from "@/components/stage/planes/StageAxis";
@@ -56,6 +57,11 @@ export const sceneBlokComponents: BlokComponentDefinition[] = [
     "HolderLayer",
     "What is mounted: its outline and a plate's wells; in move mode (hold M), click a well to go there.",
     HolderPlane,
+  ),
+  layerBlok(
+    "PointsLayer",
+    "Where each detector that measures at one point (a thermometer beside the sample) measures, with what it read last.",
+    PointsPlane,
   ),
   layerBlok(
     "FramesLayer",

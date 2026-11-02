@@ -1,4 +1,5 @@
 import { useDetectorState } from "@/apps/default/hooks/states";
+import { deliversImages } from "@/lib/microscope/space";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -15,7 +16,8 @@ export function DetectorPicker({
   size?: "sm" | "xs";
 }) {
   const { data: detectorState } = useDetectorState({ subscribe: true });
-  const detectors = detectorState?.detectors ?? [];
+  // An acquisition keeps images: what measures at a point has no place in them yet.
+  const detectors = (detectorState?.detectors ?? []).filter(deliversImages);
   const toggle = (name: string) =>
     onChange(
       value.includes(name)

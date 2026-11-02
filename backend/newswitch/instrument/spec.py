@@ -71,6 +71,8 @@ Picoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ps"))]
 Nanoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ns"))]
 Milliwatts = Annotated[StrictFloat, BeforeValidator(_in_unit("mW"))]
 Hertz = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("Hz"))]
+#: A temperature, as a thermometer reads it.
+Celsius = Annotated[StrictFloat, BeforeValidator(_in_unit("degC"))]
 #: How fast something moves.
 MicrometresPerSecond = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("um/s"))]
 #: A fraction of the light: of what arrives, or of a filter's band.
@@ -547,7 +549,29 @@ class PointDetector:
     axes: dict[Literal["microtime"], MicrotimeAxis] = field(default_factory=dict)
 
 
-#: An optical element: what it is, and the numbers that say what it does to light.
+@dataclass(frozen=True, config=STRICT)
+class StagePoint:
+    """A point on the stage insert, in stage coordinates: it moves with the stage, so with the sample."""
+
+    x: Millimetres
+    y: Millimetres
+    z: Millimetres = 0.0
+
+
+@dataclass(frozen=True, config=STRICT)
+class Thermometer:
+    """Reads the temperature at one point: a detector with no axes, placed where it measures.
+
+    `on_stage` is where it sits on the stage insert, beside the sample; light has nothing to do with
+    it. What a simulated one reads, the simulator knows (`newswitch.drivers.simulator`).
+    """
+
+    kind: Literal["thermometer"]
+    on_stage: StagePoint
+    noise: Annotated[StrictFloat, Field(ge=0.0)] = 0.05  # how far a reading strays, in kelvin
+
+
+#: An element: what it is, and the numbers that say what it does to light (or, a thermometer, not).
 Element = Annotated[
     Source
     | Lens
@@ -558,7 +582,8 @@ Element = Annotated[
     | Splitter
     | Scanner
     | Pinhole
-    | PointDetector,
+    | PointDetector
+    | Thermometer,
     Field(discriminator="kind"),
 ]
 
@@ -954,8 +979,12 @@ class Instrument:
                 }
 
     def detectors(self) -> list[str]:
-        """The cubes of the detectors, in the order they are described."""
+        """The cubes of the detectors of light, in the order they are described."""
         return self._holding(Sensor, PointDetector)
+
+    def thermometers(self) -> list[str]:
+        """The cubes of the thermometers: detectors too, of no light, measuring at one point."""
+        return self._holding(Thermometer)
 
     def sources(self) -> list[str]:
         """The cubes of the light sources, in the order they are described."""

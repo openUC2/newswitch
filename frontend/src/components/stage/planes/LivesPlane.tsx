@@ -1,4 +1,5 @@
 import { useDetectorState } from "@/apps/default/hooks/states";
+import { deliversImages } from "@/lib/microscope/space";
 import { useMemo } from "react";
 import { LivePlane } from "./stream/LivePlane";
 
@@ -10,7 +11,10 @@ export const LivesPlane = () => {
   const { data: detectorState } = useDetectorState({ subscribe: true });
 
   const renderableDetectors = useMemo(() => {
-    return detectorState?.detectors?.map((x) => x).slice(0, MAX_DISPLAYABLE);
+    // What measures at a point (a thermometer) has no image to place.
+    return detectorState?.detectors
+      ?.filter(deliversImages)
+      .slice(0, MAX_DISPLAYABLE);
   }, [detectorState?.detectors]);
 
   if (!detectorState) return null;

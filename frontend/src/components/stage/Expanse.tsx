@@ -15,6 +15,7 @@ import { ElementPanel } from "./panels/ElementPanel";
 import { ScanRegionPanel } from "./panels/ScanRegionPanel";
 import { FramesPlane } from "./planes/FramesPlane";
 import { HolderPlane } from "./planes/HolderPlane";
+import { PointsPlane } from "./planes/PointsPlane";
 import { ImagesPlane } from "./planes/ImagesPlane";
 import { LivesPlane } from "./planes/LivesPlane";
 import { StageAxis } from "./planes/StageAxis";
@@ -52,6 +53,8 @@ export const Expanse = () => {
           <StagePlane />
 
           <HolderPlane />
+
+          <PointsPlane />
 
           <CameraController />
 

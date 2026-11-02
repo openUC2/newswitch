@@ -11,10 +11,13 @@ from newswitch.services.values import Values
 
 
 def _looking(space: SpaceManager, detector: Optional[str]) -> str:
-    """The detector named, or else the first that is on, or else the first."""
+    """The detector named, or else the first imaging one that is on, or else the first imaging one.
+
+    A thermometer measures at a point: it has no image whose middle could go anywhere.
+    """
     if detector is not None:
         return detector
-    detectors = space.detector_state.detectors
+    detectors = [d for d in space.detector_state.detectors if d.delivers_images()]
     if not detectors:
         raise ValueError("Nothing here looks at the sample")
     return next((d.name for d in detectors if d.is_active), detectors[0].name)
@@ -30,8 +33,9 @@ def move_to(
     """Look at a place: the middle of the detector's image goes there.
 
     Args:
-        position: Where: in the sample, the stage, an image taken (``image:<id>``), a detector
-            (``detector:<name>``, its pixels as they are now). Without z, z stays.
+        position: Where, by axis name: in the sample, the stage, a well (``well:B3``), an image
+            taken (``image:<id>``), a detector (``detector:<name>``, its pixels as they are now;
+            a thermometer, where it measures). Without z, z stays.
         detector: Whose image; by default the first that is on.
     """
     values.set(space.targets(position, _looking(space, detector)), task=task)

@@ -40,6 +40,9 @@ export const DetectorSchema = z
         'One axis a detector delivers, measuring a domain of the sample: space, spectrum, microtime.',
       ),
     ),
+    quantity: z.string(),
+    unit: z.string(),
+    reading: z.number().nullable().optional(),
     current_exposure_ms: z.number().nullable().optional(),
     current_gain: z.number().nullable().optional(),
     current_frame_rate: z.number().nullable().optional(),
@@ -55,7 +58,9 @@ export const DetectorSchema = z
     pixel_format: z.string().nullable().optional(),
   })
   .brand('@newswitch/detector')
-  .describe("What delivers images: its name is its cube's.");
+  .describe(
+    "What measures the sample: along its axes, or with none, at one point. Its name is its cube's.",
+  );
 export type Detector = z.input<typeof DetectorSchema>;
 export type DetectorOutput = z.infer<typeof DetectorSchema>;
 
@@ -63,7 +68,9 @@ export type DetectorOutput = z.infer<typeof DetectorSchema>;
 export const DetectorStateSchema = z.object({
   is_acquiring: z.boolean(),
   detectors: z.array(
-    DetectorSchema.describe("What delivers images: its name is its cube's."),
+    DetectorSchema.describe(
+      "What measures the sample: along its axes, or with none, at one point. Its name is its cube's.",
+    ),
   ),
 });
 

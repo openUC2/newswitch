@@ -10,6 +10,12 @@ import { Matrix4, Vector3 } from "three";
  * stage through the mount (`SpaceState.mount`, stage to sample). Nothing is placed in here.
  */
 
+/** Whether `detector` delivers images: a y and an x along space. A thermometer measures at a point. */
+export const deliversImages = (detector: Detector): boolean =>
+  ["y", "x"].every((name) =>
+    detector.axes.some((axis) => axis.name === name && axis.domain === "space"),
+  );
+
 /** A 4x4 as the server sends it (rows), as three.js takes it. */
 export const toMatrix4 = (rows?: number[][] | null): Matrix4 => {
   const matrix = new Matrix4();
@@ -34,10 +40,10 @@ export const useDetectorPlacement = (detector: string) => {
   return data?.detectors?.[detector];
 };
 
-/** The detector the view is of: the first that is on, else the first. */
+/** The detector the view is of: the first imaging one that is on, else the first imaging one. */
 export const useViewDetector = (): Detector | undefined => {
   const { data } = useDetectorState({ subscribe: true });
-  const detectors = data?.detectors ?? [];
+  const detectors = (data?.detectors ?? []).filter(deliversImages);
   return detectors.find((d) => d.is_active) ?? detectors[0];
 };
 
@@ -62,6 +68,22 @@ export const useLookingAt = (): Vector3 | undefined => {
   return new Vector3((width - 1) / 2, (height - 1) / 2, 0).applyMatrix4(
     toMatrix4(placement.to_sample),
   );
+};
+
+/** Where each detector that measures at one point measures, on the sample, with what it read last. */
+export const useMeasuredPoints = () => {
+  const { data: space } = useSpaceState({ subscribe: true });
+  const { data: detectors } = useDetectorState({ subscribe: true });
+  return Object.values(space?.points ?? {}).map((point) => {
+    const detector = detectors?.detectors.find(
+      (d) => d.name === point.detector,
+    );
+    return {
+      ...point,
+      reading: detector?.reading ?? null,
+      unit: detector?.unit ?? "",
+    };
+  });
 };
 
 /** Stage micrometres to sample micrometres: where what is mounted sits. */

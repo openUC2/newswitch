@@ -129,9 +129,15 @@ export function DetectorControl() {
               <Monitor className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">{detector.name}</span>
               <span className="font-mono text-xs text-muted-foreground">
-                {detector.axes
-                  .map((axis) => `${axis.name} ${axis.delivered_size ?? "…"}`)
-                  .join(" × ")}
+                {detector.axes.length > 0
+                  ? detector.axes
+                      .map(
+                        (axis) => `${axis.name} ${axis.delivered_size ?? "…"}`,
+                      )
+                      .join(" × ")
+                  : `${detector.quantity} at a point: ${
+                      detector.reading?.toFixed(2) ?? "…"
+                    } ${detector.unit}`}
               </span>
             </div>
             <Switch

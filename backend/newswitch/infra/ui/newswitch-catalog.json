@@ -1,6 +1,6 @@
 {
   "name": "newswitch",
-  "version": 7,
+  "version": 8,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
     {
@@ -264,6 +264,19 @@
           "description": "Extra Tailwind classes appended to the element."
         }
       ]
+    },
+    {
+      "name": "PointsLayer",
+      "description": "Where each detector that measures at one point (a thermometer beside the sample) measures, with what it read last.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
     },
     {
       "name": "RectangleDrawer",

@@ -8,13 +8,18 @@ from scipy import ndimage
 
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument.space import (
+    SPATIAL,
     CoordinateGraph,
-    Edge,
     NoRoute,
+    affine_part,
+    by_dimension,
     rotation_z,
     scaling,
+    spatial,
+    spatial_affine,
     translation,
 )
+from newswitch.models.space import Axis, CoordinateSystem, DimensionPart, Transformation
 from arkitekt import Task
 
 from newswitch.microscope.parts import Microscope
@@ -28,34 +33,50 @@ from tests.test_acquire import RecordingStore
 # --- the graph
 
 
+def affine(source: str, target: str, matrix: np.ndarray) -> Transformation:
+    """An AFFINE edge over (x, y, z) both sides, from a 4x4."""
+    return Transformation(source, target, "AFFINE", affine=np.asarray(matrix)[:3].tolist())
+
+
+def frames(*names: str) -> list[CoordinateSystem]:
+    """Frames in space, x, y and z in micrometres."""
+    return [spatial(name) for name in names]
+
+
+def at(system: str, x: float, y: float, z: float | None = None) -> Position:
+    """A position by axis name; without z, z is not said."""
+    return Position(system, {"x": x, "y": y, **({} if z is None else {"z": z})})
+
+
 def test_a_route_may_walk_an_edge_backwards() -> None:
     """Going to a place means walking from it to the motors, whichever way the edges were made."""
     graph = CoordinateGraph(
+        frames("pixels", "stage", "plate"),
         [
-            Edge("pixels", "stage", scaling(0.5, 0.5)),
-            Edge("plate", "stage", translation(100.0, 0.0)),
-        ]
+            affine("pixels", "stage", scaling(0.5, 0.5)),
+            affine("plate", "stage", translation(100.0, 0.0)),
+        ],
     )
-    assert graph.transform((4.0, 2.0, 0.0), "pixels", "plate") == pytest.approx([-98.0, 1.0, 0.0])
+    found = graph.transform(at("pixels", 4.0, 2.0, 0.0), "plate")
+    assert found == pytest.approx({"x": -98.0, "y": 1.0, "z": 0.0})
 
 
 def test_systems_that_are_not_connected_have_no_route() -> None:
     """Nothing is guessed."""
     with pytest.raises(NoRoute):
-        CoordinateGraph().route("a", "b")
+        CoordinateGraph(frames("a", "b")).route("a", "b")
 
 
 def test_a_route_is_the_shortest() -> None:
     """Two ways to the same place: the one with fewer edges is walked."""
+    shortcut = affine("a", "c", translation(5.0))
+    shortcut.name = "shortcut"
     graph = CoordinateGraph(
-        [
-            Edge("a", "b", translation(1.0)),
-            Edge("b", "c", translation(1.0)),
-            Edge("a", "c", translation(5.0)),
-        ]
+        frames("a", "b", "c"),
+        [affine("a", "b", translation(1.0)), affine("b", "c", translation(1.0)), shortcut],
     )
-    assert [edge.name for edge, _ in graph.route("a", "c")] == [""]
-    assert graph.transform((0.0, 0.0, 0.0), "a", "c") == pytest.approx([5.0, 0.0, 0.0])
+    assert [edge.name for edge, _ in graph.route("a", "c")] == ["shortcut"]
+    assert graph.transform(at("a", 0.0, 0.0, 0.0), "c")["x"] == pytest.approx(5.0)
 
 
 def test_a_point_in_an_earlier_image_is_a_place_to_go() -> None:
@@ -67,17 +88,117 @@ def test_a_point_in_an_earlier_image_is_a_place_to_go() -> None:
         @ scaling(-pixel_um, pixel_um)  # x is flipped
         @ translation(-(size[0] - 1) / 2, -(size[1] - 1) / 2)
     )
-    graph = CoordinateGraph([Edge("image:1", "stage", image)])
-    middle = graph.transform(((size[0] - 1) / 2, (size[1] - 1) / 2, 0.0), "image:1", "stage")
-    assert middle[:2] == pytest.approx(stage)
-    corner = graph.transform((0.0, 0.0, 0.0), "image:1", "stage")
-    assert corner[:2] == pytest.approx([100.0 + pixel_um * 31.5, 50.0 - pixel_um * 23.5])
+    graph = CoordinateGraph(
+        [spatial("image:1", unit=""), spatial("stage")], [affine("image:1", "stage", image)]
+    )
+    middle = graph.transform(
+        at("image:1", (size[0] - 1) / 2, (size[1] - 1) / 2), "stage", ("x", "y")
+    )
+    assert middle == pytest.approx({"x": stage[0], "y": stage[1]})
+    corner = graph.transform(at("image:1", 0.0, 0.0), "stage", ("x", "y"))
+    assert corner == pytest.approx({"x": 100.0 + pixel_um * 31.5, "y": 50.0 - pixel_um * 23.5})
 
 
 def test_a_turned_edge_turns_its_points() -> None:
     """A quarter turn takes x to y."""
-    graph = CoordinateGraph([Edge("a", "b", rotation_z(90.0))])
-    assert graph.transform((1.0, 0.0, 0.0), "a", "b") == pytest.approx([0.0, 1.0, 0.0])
+    graph = CoordinateGraph(frames("a", "b"), [affine("a", "b", rotation_z(90.0))])
+    assert graph.transform(at("a", 1.0, 0.0, 0.0), "b") == pytest.approx(
+        {"x": 0.0, "y": 1.0, "z": 0.0}
+    )
+
+
+# --- by dimension
+
+#: A color camera's pixels: colors, rows and columns, as mikro types them.
+CAMERA = CoordinateSystem("camera", [Axis("c", "CHANNEL"), Axis("y", "SPACE"), Axis("x", "SPACE")])
+
+
+def camera_graph() -> CoordinateGraph:
+    """Pixels of 0.5 um onto the stage, looking at the plane 7 um up; the colors said nothing of."""
+    pixels = scaling(0.5, 0.5) @ translation(z=7.0)
+    return CoordinateGraph(
+        [CAMERA, spatial("stage")],
+        [
+            by_dimension(
+                "camera",
+                "stage",
+                [
+                    spatial_affine(pixels, ("x", "y"), ("x", "y")),
+                    spatial_affine(pixels, (), ("z",)),
+                ],
+            )
+        ],
+    )
+
+
+def test_by_dimension_places_its_parts_and_says_nothing_of_the_rest() -> None:
+    """A pixel's column and row go onto the stage, its plane is where it looks; its color is no
+    place, so a pixel of any color is in the same one."""
+    graph = camera_graph()
+    route = graph.axis_map("camera", "stage")
+    assert route.output_axes == ("x", "y", "z")
+    assert graph.transform(Position("camera", {"x": 4.0, "y": 2.0}), "stage") == pytest.approx(
+        {"x": 2.0, "y": 1.0, "z": 7.0}
+    )
+    assert graph.transform(
+        Position("camera", {"c": 2.0, "x": 4.0, "y": 2.0}), "stage"
+    ) == graph.transform(Position("camera", {"x": 4.0, "y": 2.0}), "stage")
+
+
+def test_a_part_that_changes_rank_is_walked_forwards_only() -> None:
+    """A pixel is a place on the stage, but a place on the stage is no pixel: nothing says which
+    plane it is in, so no route goes back."""
+    with pytest.raises(NoRoute):
+        camera_graph().route("stage", "camera")
+
+
+def test_an_axis_a_route_let_go_of_is_not_taken_again() -> None:
+    """Through a system without z, z is dropped: never taken as 0."""
+    graph = CoordinateGraph(
+        [spatial("a"), spatial("flat", ("x", "y")), spatial("b")],
+        [
+            by_dimension("a", "flat", [DimensionPart("IDENTITY", ["x", "y"], ["x", "y"])]),
+            by_dimension("flat", "b", [DimensionPart("IDENTITY", ["x", "y"], ["x", "y"])]),
+        ],
+    )
+    assert graph.axis_map("a", "b").output_axes == ("x", "y")
+    with pytest.raises(ValueError, match="z"):
+        graph.transform(at("a", 1.0, 2.0, 3.0), "b", SPATIAL)
+
+
+def test_a_point_has_no_axes_and_is_placed_all_the_same() -> None:
+    """A thermometer measures at one point: a part from no axes onto x, y and z places it."""
+    point = CoordinateSystem("thermometer")
+    graph = CoordinateGraph(
+        [point, spatial("stage"), spatial("sample")],
+        [
+            by_dimension(
+                "thermometer",
+                "stage",
+                [affine_part((), SPATIAL, [[30_000.0], [0.0], [0.0]])],
+            ),
+            affine("stage", "sample", translation(-100.0, 50.0)),
+        ],
+    )
+    assert graph.transform(Position("thermometer"), "sample") == pytest.approx(
+        {"x": 29_900.0, "y": 50.0, "z": 0.0}
+    )
+    with pytest.raises(NoRoute):
+        graph.route("sample", "thermometer")
+
+
+def test_an_axis_a_position_needs_and_does_not_give_is_refused() -> None:
+    """A position without z is not at z 0: where z matters, it is said so."""
+    graph = CoordinateGraph(frames("a", "b"), [affine("a", "b", rotation_z(0.0) @ _tilt())])
+    with pytest.raises(ValueError, match="depends on"):
+        graph.transform(at("a", 1.0, 0.0), "b", ("x",))
+
+
+def _tilt() -> np.ndarray:
+    """x reads z as well."""
+    matrix = np.eye(4)
+    matrix[0, 2] = 0.1
+    return matrix
 
 
 # --- the graph against what is really there
@@ -201,7 +322,7 @@ def test_a_dataset_is_placed_on_its_beads(microscope: Microscope) -> None:
 def test_a_place_on_the_sample_comes_to_the_middle_of_the_image(microscope: Microscope) -> None:
     """Moving to a sample point puts it where the image's middle is placed."""
     assert microscope.values is not None
-    target = Position("sample", 1234.0, -567.0)
+    target = at("sample", 1234.0, -567.0)
     microscope.values.set(microscope.space.targets(target, "camera"))
     middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
     assert middle[:2] == pytest.approx([1234.0, -567.0])
@@ -214,9 +335,7 @@ def test_a_point_in_an_image_taken_is_a_place_to_go(microscope: Microscope) -> N
     (frame,) = microscope.acquisition.acquire(["camera"])
     seen = np.array(frame.metadata.affine_matrix) @ np.array([10.0, 20.0, 0.0, 1.0])
     microscope.values.set({"stage.x": 0.0, "stage.y": 0.0})
-    microscope.values.set(
-        microscope.space.targets(Position(f"image:{frame.id}", 10.0, 20.0), "camera")
-    )
+    microscope.values.set(microscope.space.targets(at(f"image:{frame.id}", 10.0, 20.0), "camera"))
     middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
     assert middle[:2] == pytest.approx(seen[:2])
 
@@ -228,8 +347,8 @@ def test_the_sample_starts_where_it_is_said_to(microscope: Microscope) -> None:
     microscope.space.origin_here("camera")
     middle = microscope.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
     assert middle[:2] == pytest.approx([0.0, 0.0], abs=1e-9)
-    on_stage = microscope.space.transform(Position("sample", 0.0, 0.0), "stage")
-    assert on_stage[:2] == pytest.approx([300.0, 40.0])
+    on_stage = microscope.space.transform(at("sample", 0.0, 0.0), "stage", ("x", "y"))
+    assert on_stage == pytest.approx({"x": 300.0, "y": 40.0})
 
 
 def test_a_mount_that_is_no_map_is_refused(microscope: Microscope) -> None:
@@ -244,7 +363,7 @@ def test_a_window_beside_the_middle_comes_to_the_place_itself(microscope: Micros
     microscope.detector.update_detector(
         "camera", windows=[AxisWindow("x", 0, 100), AxisWindow("y", 300, 200)]
     )
-    target = Position("sample", 250.0, 75.0)
+    target = at("sample", 250.0, 75.0)
     microscope.values.set(microscope.space.targets(target, "camera"))
     middle = microscope.space.placement("camera") @ np.array([49.5, 99.5, 0.0, 1.0])
     assert middle[:2] == pytest.approx([250.0, 75.0])

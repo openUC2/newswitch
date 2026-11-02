@@ -91,9 +91,7 @@ export const PositionSchema = z
       .literal('@newswitch/position')
       .default('@newswitch/position'),
     system: z.string(),
-    x: z.number(),
-    y: z.number(),
-    z: z.number().nullable().optional(),
+    coordinates: z.record(z.string(), z.number()),
   })
   .brand('@newswitch/position')
   .describe(

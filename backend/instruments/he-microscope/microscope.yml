@@ -71,6 +71,11 @@ cubes:
       gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
       binning: {initial: 1, min: 1, max: 4, step: 1}
 
+  # Beside the slide on the stage insert, 3 cm along x from where the section is: it moves with the
+  # stage, so the space places it on the sample (detector:thermometer -> stage, () -> (x, y, z)).
+  thermometer:
+    element: {kind: thermometer, on_stage: {x: 30 mm, y: 0 mm}}
+
 illumination:
   - {from: white_led, to: condenser}
   - {from: condenser, to: stage, side: transmitted, field: 2 mm}
@@ -102,7 +107,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@7
+  catalog: newswitch@8
   bloks:
     view-slide:
       description: 'Slide: the section, its stains, the objectives and the focus.'

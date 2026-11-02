@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { useDetectorState } from "@/apps/default/hooks/states";
+import { deliversImages } from "@/lib/microscope/space";
 import { useStagePosition } from "@/lib/microscope/values";
 import { Camera } from "lucide-react";
 import { useState } from "react";
@@ -12,7 +13,9 @@ export function LiveView({ detector: named }: { detector?: string }) {
   // Use camera state to determine if live view is active
   const isLive = detectorState?.is_acquiring ?? false;
   // The one it is told to show, or the one picked, or else the first that is on.
-  const active = detectorState?.detectors.filter((d) => d.is_active) ?? [];
+  const active =
+    detectorState?.detectors.filter((d) => d.is_active && deliversImages(d)) ??
+    [];
   const [picked, setPicked] = useState<string | null>(null);
   const detector =
     named ?? active.find((d) => d.name === picked)?.name ?? active.at(0)?.name;

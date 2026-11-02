@@ -13,7 +13,7 @@ import { useLookingAt } from "@/lib/microscope/space";
 const useMoveViewTo = () => {
   const { assign } = useMoveTo();
   return (x: number, y: number) => {
-    assign({ position: { system: "sample", x, y } });
+    assign({ position: { system: "sample", coordinates: { x, y } } });
   };
 };
 import { useModeStore } from "@/store/modeStore";

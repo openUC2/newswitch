@@ -123,20 +123,35 @@ export type {
   SourceState,
 } from './SourceState';
 export {
+  AxisSchema,
+  CoordinateSystemSchema,
+  DimensionPartSchema,
+  TransformationSchema,
   WellShapeSchema,
   HolderShapeSchema,
   DetectorPlacementSchema,
+  MeasuredPointSchema,
   SpaceStateSchema,
   SpaceStateDefinition,
   useSpaceState,
 } from './SpaceState';
 export type {
+  Axis,
+  AxisOutput,
+  CoordinateSystem,
+  CoordinateSystemOutput,
+  DimensionPart,
+  DimensionPartOutput,
+  Transformation,
+  TransformationOutput,
   WellShape,
   WellShapeOutput,
   HolderShape,
   HolderShapeOutput,
   DetectorPlacement,
   DetectorPlacementOutput,
+  MeasuredPoint,
+  MeasuredPointOutput,
   SpaceState,
 } from './SpaceState';
 export {

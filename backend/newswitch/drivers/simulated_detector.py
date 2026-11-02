@@ -51,6 +51,17 @@ def _times_photons(detector: Detector) -> bool:
     return detector.has_axis("m")
 
 
+def _imaging(detector: Detector) -> Detector:
+    """`detector`, which delivers images.
+
+    Raises:
+        ValueError: It measures at one point (a thermometer): it has no image.
+    """
+    if not detector.delivers_images():
+        raise ValueError(f"{detector.name} measures {detector.quantity} at one point: no image")
+    return detector
+
+
 def _plane_at(detector: Detector, binning: int) -> tuple[int, int]:
     """The (y, x) size of `detector`'s images in its windows, were it binned by `binning`."""
     y, x = (
@@ -242,7 +253,7 @@ class SimulatedDetectorManager:
 
     def plane_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
         """The (y, x) size of its images, at `binning` or the one it has now."""
-        detector = self.state.get(name)
+        detector = _imaging(self.state.get(name))
         factor = detector.binning() if binning is None else self._snap_binning(int(binning))
         return _plane_at(detector, factor)
 
@@ -278,6 +289,7 @@ class SimulatedDetectorManager:
         detector = self._active(name)
         if detector is None:
             raise ValueError(f"No active detector {name or ''}".rstrip())
+        _imaging(detector)
         with self._lock:
             readout = self._readout(detector.name)
             if not readout.streaming:
@@ -286,8 +298,10 @@ class SimulatedDetectorManager:
 
     def capture_channels(self, name: str) -> np.ndarray:
         """One exposure along every axis but ``z``: ``(c, y, x)`` in the order of its `colors`,
-        ``(m, y, x)`` timing its photons, ``(y, x)`` otherwise."""
+        ``(m, y, x)`` timing its photons, ``(y, x)`` of an image, ``()`` of a thermometer."""
         detector = self.state.get(name)
+        if not detector.delivers_images():
+            return np.array(self._read(detector), dtype=detector.data_type)
         values = self.values()
         if _times_photons(detector):
             histogram = self.simulator.render_microtime(name, values)
@@ -297,6 +311,11 @@ class SimulatedDetectorManager:
         colors = self.simulator.render_colors(name, values)
         stacked = np.stack([colors[color] for color in detector.colors])
         return windows_of.read_out(stacked, detector, ("c", "y", "x"))
+
+    def _read(self, detector: Detector) -> float:
+        """What a detector that measures at one point reads now; published as its `reading`."""
+        detector.reading = round(self.simulator.temperature(detector.name), 3)
+        return detector.reading
 
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """Each event of the detector steps what its wire reaches; the sweep ends on the last plane.
@@ -346,14 +365,19 @@ class SimulatedDetectorManager:
                     if readout.streaming:
                         self._set_streaming(detector, readout, False)
                     continue
+                imaging = detector.delivers_images()
                 if not readout.streaming:
                     self._set_streaming(detector, readout, True)
                     readout.next_due_ns = 0
-                    self._start_session(detector, readout)
+                    if imaging:
+                        self._start_session(detector, readout)
                 now_ns = time.monotonic_ns()
                 if now_ns >= readout.next_due_ns:
-                    frame = self._next_frame(detector, readout)
-                    sink.broadcast_sync(detector.name, frame.data)
+                    if imaging:
+                        frame = self._next_frame(detector, readout)
+                        sink.broadcast_sync(detector.name, frame.data)
+                    else:
+                        self._read(detector)  # no image to stream: its reading is published
                     rate = detector.current_frame_rate
                     period_ns = 0 if rate is None else int(1e9 / rate)
                     readout.next_due_ns = now_ns + period_ns

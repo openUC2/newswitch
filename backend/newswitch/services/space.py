@@ -6,9 +6,17 @@ looks (`newswitch.services.stage.where`), the middle of its sensor where it look
 to the sample by the mount. An image taken is its detector's placement then, kept under its id, so
 that a point in it is a place to go.
 
-    pixel -> stage:   T(where) · A · T(offset of the pixel from the middle of the sensor)
-    stage -> sample:  the mount
-    well:B3 -> sample: where the mounted plate has it
+    detector:camera -> stage:  BY_DIMENSION
+                                 (x, y) -> (x, y): T(where) · A · T(pixel from the sensor's middle)
+                                 ()     -> (z):    the plane it looks at
+                               its colors or arrival times: no part, nothing said
+    detector:thermometer -> stage:  BY_DIMENSION, () -> (x, y, z): where it sits on the stage
+    stage -> sample:          AFFINE, the mount
+    well:B3 -> sample:        BY_DIMENSION, (x, y) -> (x, y): where the mounted plate has it
+    image:<id> -> sample:     AFFINE, its detector's placement when it was taken
+
+A part from fewer axes than it states is walked forwards only: the camera's pixel is on the sample,
+but nothing about a sample point says which pixel sees it (`targets` asks the other way round).
 
 What is mounted is one of the holders the description names for its sample (`mount_holder`); a new
 mounting is a new sample, with the mount the description gives it and none of the images taken.
@@ -27,18 +35,32 @@ import numpy as np
 
 from newswitch.instrument.space import (
     SAMPLE,
+    SPATIAL,
     STAGE,
     CoordinateGraph,
-    Edge,
+    affine_part,
+    by_dimension,
     detector_system,
     holder_to_stage,
     image_system,
     places_of,
+    spatial,
+    spatial_affine,
     translation,
 )
-from newswitch.instrument.spec import MountedHolder
+from newswitch.instrument.spec import MountedHolder, Thermometer
 from newswitch.models.devices import Detector
-from newswitch.models.space import DetectorPlacement, HolderShape, Position, WellShape
+from newswitch.models.space import (
+    Axis,
+    CoordinateSystem,
+    DetectorPlacement,
+    DimensionPart,
+    HolderShape,
+    MeasuredPoint,
+    Position,
+    Transformation,
+    WellShape,
+)
 from newswitch.services.optics import OpticsManager
 from newswitch.services.values import Values
 from newswitch.states.detector import DetectorState
@@ -54,6 +76,19 @@ def _middle_offset(detector: Detector, name: str, values: Mapping[str, Any]) -> 
     binning = int(values.get(f"{detector.name}.binning", axis.binning)) if axis.binnable else 1
     size = axis.size or 1
     return (axis.window_start + (binning - 1) / 2 - (size - 1) / 2) / binning
+
+
+#: What mikro calls an axis that measures each domain.
+_AXIS_TYPES = {"space": "SPACE", "spectrum": "CHANNEL", "microtime": "MICROTIME", "time": "TIME"}
+
+
+def _system_of(detector: Detector) -> CoordinateSystem:
+    """What `detector` delivers, as a system: an axis of indices for each of its axes; none for one
+    that measures at a point."""
+    return CoordinateSystem(
+        detector_system(detector.name),
+        [Axis(axis.name, _AXIS_TYPES[axis.domain]) for axis in detector.axes],
+    )
 
 
 def _new_mount_id() -> str:
@@ -161,33 +196,70 @@ class SpaceManager:
         """The images belong to what was mounted: a new mounting starts without them."""
         self._images.clear()
 
+    def _detector_edge(self, detector: Detector) -> Transformation:
+        """Where `detector` measures, on the stage: its pixels, or the point it reads at."""
+        source = detector_system(detector.name)
+        if not detector.delivers_images():
+            assert self.values is not None
+            element = self.values.instrument.cubes[detector.name].element
+            assert isinstance(element, Thermometer), f"{detector.name} measures nowhere known"
+            at = element.on_stage
+            point = [[at.x * 1000.0], [at.y * 1000.0], [at.z * 1000.0]]
+            return by_dimension(source, STAGE, [affine_part((), SPATIAL, point)], "on stage")
+        matrix = self.to_stage(detector.name)
+        if detector.has_axis("z"):  # it steps its planes itself: each is its step further
+            matrix[2, 2] = detector.axis("z").step or 1.0
+            parts = [spatial_affine(matrix)]
+        else:
+            parts = [
+                spatial_affine(matrix, ("x", "y"), ("x", "y")),
+                spatial_affine(matrix, (), ("z",)),
+            ]
+        return by_dimension(source, STAGE, parts, "pixels")
+
+    def _live(self) -> tuple[list[CoordinateSystem], list[Transformation]]:
+        """The systems and edges that hold now, but for the images taken."""
+        systems = [spatial(SAMPLE), spatial(STAGE)]
+        edges = [Transformation(STAGE, SAMPLE, "AFFINE", "mount", affine=self.mount()[:3].tolist())]
+        if self.values is not None:
+            for detector in self.detector_state.detectors:
+                systems.append(_system_of(detector))
+                edges.append(self._detector_edge(detector))
+        if self.state.holder is not None:
+            for place, (x, y) in places_of(self._holders[self.state.holder].holder).items():
+                systems.append(spatial(place, ("x", "y")))
+                edges.append(
+                    by_dimension(
+                        place,
+                        SAMPLE,
+                        [DimensionPart("TRANSLATION", ["x", "y"], ["x", "y"], translation=[x, y])],
+                        "place",
+                    )
+                )
+        return systems, edges
+
     def graph(self) -> CoordinateGraph:
         """The coordinate graph as it holds now."""
-        edges = [Edge(STAGE, SAMPLE, self.mount(), "mount")]
-        if self.values is not None:
-            edges += [
-                Edge(detector_system(detector.name), STAGE, self.to_stage(detector.name), "pixels")
-                for detector in self.detector_state.detectors
-            ]
-        edges += [
-            Edge(image_system(image), SAMPLE, matrix, "image")
-            for image, matrix in self._images.items()
-        ]
-        if self.state.holder is not None:
-            edges += [
-                Edge(place, SAMPLE, translation(x, y), "holder")
-                for place, (x, y) in places_of(self._holders[self.state.holder].holder).items()
-            ]
-        return CoordinateGraph(edges)
+        systems, edges = self._live()
+        for image, matrix in self._images.items():
+            systems.append(spatial(image_system(image), unit=""))
+            edges.append(
+                Transformation(
+                    image_system(image), SAMPLE, "AFFINE", "image", affine=matrix[:3].tolist()
+                )
+            )
+        return CoordinateGraph(systems, edges)
 
-    def transform(self, position: Position, target: str = SAMPLE) -> np.ndarray:
-        """Where `position` is in `target`, as (x, y, z); a position without z is at its z 0.
+    def transform(
+        self, position: Position, target: str = SAMPLE, axes: tuple[str, ...] | None = None
+    ) -> dict[str, float]:
+        """Where `position` is in `target`, by axis name: along `axes`, or all the route states.
 
         Raises:
-            NoRoute: Its system is none the graph knows.
+            NoRoute: Its system is none the graph knows, or not one that leads to `target`.
+            ValueError: An axis asked for depends on one the position does not give.
         """
-        point = (position.x, position.y, 0.0 if position.z is None else position.z)
-        return self.graph().transform(point, position.system, target)
+        return self.graph().transform(position, target, axes)
 
     # ------------------------------------------------------------- going there
 
@@ -205,7 +277,8 @@ class SpaceManager:
         assert self.values is not None
         roles = self.values.roles
         at = self.values.snapshot()
-        on_stage = self.transform(position, STAGE)
+        has_z = "z" in position.coordinates
+        on_stage = self.transform(position, STAGE, ("x", "y", "z") if has_z else ("x", "y"))
         # How far the middle of the image is from where the sensor's middle looks: a window that is
         # not in the middle of its sensor looks beside it.
         aside = (self.to_stage(detector) @ self._image_middle(detector))[:2] - np.array(
@@ -214,18 +287,20 @@ class SpaceManager:
         x_move, y_move = roles.x(detector), roles.y(detector)
         found = {
             x_move.name: float(at[x_move.name])
-            + float(on_stage[0] - aside[0])
+            + on_stage["x"]
+            - float(aside[0])
             - sum(float(at[m.name]) for m in roles.sideways(detector, "x")),
             y_move.name: float(at[y_move.name])
-            + float(on_stage[1] - aside[1])
+            + on_stage["y"]
+            - float(aside[1])
             - sum(float(at[m.name]) for m in roles.sideways(detector, "y")),
         }
-        if position.z is not None:
+        if has_z:
             focus = roles.focus(detector)
             if focus in self.values.instrument.sheet_moves():
                 raise ValueError(f"{focus.name} moves a light sheet: a z is not reached by it yet")
             plane = roles.plane_um(detector, at)
-            found[focus.name] = float(at[focus.name]) + float(on_stage[2]) - plane
+            found[focus.name] = float(at[focus.name]) + on_stage["z"] - plane
         return found
 
     # ------------------------------------------------------------- the mount
@@ -276,18 +351,32 @@ class SpaceManager:
             calibrated=calibrated,
         )
 
+    def _measured(self, detector: str) -> MeasuredPoint:
+        at = self.transform(Position(detector_system(detector)), SAMPLE, SPATIAL)
+        return MeasuredPoint(detector, at["x"], at["y"], at["z"])
+
     def refresh(self) -> None:
-        """Publish where every detector's pixels are now, if that changed."""
+        """Publish the graph as it holds now, where every detector's pixels are and where every
+        detector that measures at a point measures, if that changed."""
         if self.values is None:
             return
         with self._refreshing:
-            placed = {
-                detector.name: self._placed(detector.name)
-                for detector in self.detector_state.detectors
-            }
+            detectors = self.detector_state.detectors
+            placed = {d.name: self._placed(d.name) for d in detectors if d.delivers_images()}
+            points = {d.name: self._measured(d.name) for d in detectors if not d.delivers_images()}
+            systems, edges = self._live()
             text = json.dumps(
-                {name: asdict(found) for name, found in placed.items()}, sort_keys=True
+                [
+                    {name: asdict(found) for name, found in placed.items()},
+                    {name: asdict(found) for name, found in points.items()},
+                    [asdict(system) for system in systems],
+                    [asdict(edge) for edge in edges],
+                ],
+                sort_keys=True,
             )
             if text != self._published:
                 self._published = text
+                self.state.systems = systems
+                self.state.transformations = edges
+                self.state.points = points
                 self.state.detectors = placed
