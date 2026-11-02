@@ -30,6 +30,11 @@ if TYPE_CHECKING:
 BINNINGS = [1, 2, 4]
 #: Longest pause of the live loop (s): while idle, and between two paced images.
 IDLE_INTERVAL_S = 0.1
+#: Shortest pause of the live loop (s), even when it is behind: a lock is not fair, so a loop that
+#: takes longer to render a frame than its frame rate allows would take the detectors straight back,
+#: and whoever waits for one (a capture, a calibration) would wait for seconds. Out of the lock this
+#: long, the one waiting gets it, within about a frame.
+YIELD_S = 0.002
 
 
 @dataclass
@@ -348,9 +353,7 @@ class SimulatedDetectorManager:
                 self._end_live_sessions()
                 koil.sleep(IDLE_INTERVAL_S)
                 continue
-            wait_s = self._stream_due_frames(sink)
-            if wait_s > 0:
-                koil.sleep(wait_s)
+            koil.sleep(max(self._stream_due_frames(sink), YIELD_S))
 
     def _stream_due_frames(self, sink: FrameSink) -> float:
         """Send `sink` an image of every active detector that is due.

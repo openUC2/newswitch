@@ -481,6 +481,41 @@ class TestLiveStream:
         manager.stop_acquire_live()
         assert 2 <= len(broadcaster.sent) <= 12
 
+    def test_a_capture_gets_in_while_the_loop_is_behind(
+        self,
+        live: tuple[SimulatedDetectorManager, RecordingBroadcaster],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A frame that takes longer to render than its frame rate allows (an H&E slide in color
+        at 30 Hz) leaves the loop no time to wait: whoever asks for the detector meanwhile (a
+        calibration, an autofocus) still gets it within about a frame, not after seconds."""
+        manager, broadcaster = live
+        render = manager.simulator.render
+
+        def slow(*args: object, **kwargs: object) -> np.ndarray:
+            time.sleep(0.05)
+            return render(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(manager.simulator, "render", slow)
+        manager.update_detector("camera_a", frame_rate=100.0)
+        manager.state.is_acquiring = True
+        wait_until(lambda: len(broadcaster.sent) >= 2)
+
+        waited: list[float] = []
+
+        def captures() -> None:
+            for _ in range(5):
+                started = time.monotonic()
+                manager.capture_image("camera_a")
+                waited.append(time.monotonic() - started)
+
+        thread = threading.Thread(target=captures, daemon=True)
+        thread.start()
+        thread.join(timeout=10.0)
+        assert len(waited) == 5, f"only {len(waited)} of 5 captures got in within 10 s"
+        assert max(waited) < 0.5, waited
+        assert len(broadcaster.sent) > 2  # and the stream went on
+
     def test_stop_acquire_live(
         self, live: tuple[SimulatedDetectorManager, RecordingBroadcaster]
     ) -> None:
