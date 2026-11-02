@@ -54,7 +54,6 @@ def test_it_is_a_detector_with_no_axes(m: Microscope) -> None:
 
 def test_its_system_is_a_point_placed_on_the_stage(m: Microscope) -> None:
     """detector:thermometer has no axes; a BY_DIMENSION part from none onto x, y, z places it."""
-    m.space.refresh()
     system = next(s for s in m.space_state.systems if s.name == "detector:thermometer")
     assert system.axes == []
     (edge,) = [t for t in m.space_state.transformations if t.input == "detector:thermometer"]
@@ -65,8 +64,8 @@ def test_its_system_is_a_point_placed_on_the_stage(m: Microscope) -> None:
 
 
 def test_it_is_three_centimetres_from_the_sample(m: Microscope) -> None:
-    """Nothing mounted, the sample's frame is the stage's: it measures 3 cm from the section."""
-    m.space.refresh()
+    """Nothing mounted, the sample's frame is the stage's: it measures 3 cm from the section.
+    Published from the start, before anything moves."""
     point = m.space_state.points["thermometer"]
     assert (point.x, point.y, point.z) == pytest.approx((30_000.0, 0.0, 0.0))
 
@@ -154,13 +153,23 @@ def test_an_acquisition_of_it_is_refused_before_anything_moves(m: Microscope) ->
 
 
 def test_looking_goes_by_an_imaging_detector(m: Microscope) -> None:
-    """Moving to a place puts it under the camera's image, never the thermometer's nothing."""
+    """Moving to a place puts it under the camera's image, even with the camera off and the
+    thermometer on: a point has no middle to bring anywhere."""
     from newswitch.actions.space import move_to
 
-    assert m.values is not None
+    assert m.values is not None and m.detector is not None
+    m.detector.deactivate_detector("camera")
     move_to(m.space, m.values, Task.local(), Position("sample", {"x": 120.0, "y": -40.0}))
     middle = m.space.placement("camera") @ np.array([255.5, 255.5, 0.0, 1.0])
     assert middle[:2] == pytest.approx([120.0, -40.0])
+
+
+def test_an_image_of_whatever_is_on_is_never_the_thermometers(m: Microscope) -> None:
+    """With the camera off, there is no image to take: said so, not that a thermometer has none."""
+    assert m.detector is not None
+    m.detector.deactivate_detector("camera")
+    with pytest.raises(ValueError, match="No active detector"):
+        m.detector.capture_image(None)
 
 
 def test_no_driver_reads_a_real_thermometer_yet() -> None:

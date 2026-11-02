@@ -110,8 +110,11 @@ class SimulatedDetectorManager:
     # ------------------------------------------------------------- finding them
 
     def _active(self, name: str | None = None) -> Optional[Detector]:
+        """The active detector called `name`; without a name, the first active one with images."""
         for detector in self.state.detectors:
-            if detector.is_active and (name is None or detector.name == name):
+            if not detector.is_active:
+                continue
+            if detector.name == name or (name is None and detector.delivers_images()):
                 return detector
         return None
 
