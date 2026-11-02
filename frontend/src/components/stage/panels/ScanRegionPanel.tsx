@@ -21,6 +21,7 @@ import {
 import { ActionButton } from "@/components/ActionButton";
 import { getOptionsFromZod } from "@/hooks/zodToChoices";
 import { useTranslation } from "react-i18next";
+import { useViewDetector } from "@/lib/microscope/space";
 
 const scanPatternOptions = getOptionsFromZod(
   ScanRegionArgsSchema.shape.scan_order,
@@ -35,6 +36,9 @@ export const ScanRegionPanel = () => {
   const updateRegion = useScansStore((s) => s.updateRegion);
   const deleteRegion = useScansStore((s) => s.deleteRegion);
   const setSelectedRegionId = useScansStore((s) => s.setSelectedRegionId);
+
+  // The camera of the scene's sample: its sample is the one scanned.
+  const looking = useViewDetector();
 
   // 2. Get Camera Data
   const viewProjectionMatrix = useViewStore((s) => s.viewProjectionMatrix);
@@ -96,6 +100,8 @@ export const ScanRegionPanel = () => {
             end_y: screenPos.region.end.y,
             scan_order: screenPos.region.pattern,
             overlap: screenPos.region.overlap,
+            system: "sample",
+            detector_name: looking?.name,
           }}
         >
           {t("microscope.scan")}

@@ -15,6 +15,7 @@ import { ElementPanel } from "./panels/ElementPanel";
 import { ScanRegionPanel } from "./panels/ScanRegionPanel";
 import { FramesPlane } from "./planes/FramesPlane";
 import { HolderPlane } from "./planes/HolderPlane";
+import { SamplePicker, SceneSampleProvider } from "@/lib/microscope/sample";
 import { PointsPlane } from "./planes/PointsPlane";
 import { ImagesPlane } from "./planes/ImagesPlane";
 import { LivesPlane } from "./planes/LivesPlane";
@@ -34,50 +35,53 @@ export const Expanse = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-black">
-      <PanelProvider>
-        <KeyboardModeController />
-        <SceneWrapper>
-          <color attach="background" args={["#020617"]} />
-          <ambientLight intensity={0.7} />
-          <pointLight position={[100, 100, 100]} />
+      <SceneSampleProvider>
+        <PanelProvider>
+          <KeyboardModeController />
+          <SceneWrapper>
+            <color attach="background" args={["#020617"]} />
+            <ambientLight intensity={0.7} />
+            <pointLight position={[100, 100, 100]} />
 
-          {/* The Camera Matrix Sync ensures that we can access the view matrix outside in html world */}
-          <CameraMatrixSync />
+            {/* The Camera Matrix Sync ensures that we can access the view matrix outside in html world */}
+            <CameraMatrixSync />
 
-          <CurrentFrameLightPathPlane />
+            <CurrentFrameLightPathPlane />
 
-          <StageAxis />
+            <StageAxis />
 
-          <FramesPlane />
+            <FramesPlane />
 
-          <StagePlane />
+            <StagePlane />
 
-          <HolderPlane />
+            <HolderPlane />
 
-          <PointsPlane />
+            <PointsPlane />
 
-          <CameraController />
+            <CameraController />
 
-          {/* The Live Video Feed */}
-          <LivesPlane />
+            {/* The Live Video Feed */}
+            <LivesPlane />
 
-          <CurrentLightPathPlane />
+            <CurrentLightPathPlane />
 
-          <ImagesPlane />
+            <ImagesPlane />
 
-          <StagePositioner />
-          <RectangleDrawer />
-        </SceneWrapper>
+            <StagePositioner />
+            <RectangleDrawer />
+          </SceneWrapper>
 
-        <ScanRegionPanel />
-        <ImageMetadataPanel />
-        <ElementPanel />
+          <ScanRegionPanel />
+          <ImageMetadataPanel />
+          <ElementPanel />
 
-        <FramePanel />
+          <FramePanel />
 
-        <SceneOverlay />
-        <DebugOverlay />
-      </PanelProvider>
+          <SceneOverlay />
+          <SamplePicker />
+          <DebugOverlay />
+        </PanelProvider>
+      </SceneSampleProvider>
     </div>
   );
 };

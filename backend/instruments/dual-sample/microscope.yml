@@ -154,3 +154,20 @@ settings:
   cache_dir: /tmp/newswitch/cache
   camera_recording_dir: data/recordings
   camera_debug_window: false
+
+ui:
+  catalog: newswitch@9
+  bloks:
+    view-dual-sample:
+      description: 'Two samples: each stage, its focus and its camera, side by side.'
+      default: true
+      file: view.bsx
+    view-stage:
+      description: 'Stage: one sample at a time, picked at its top, with the images taken there.'
+      file: ../views/stage.bsx
+    view-acquire:
+      description: 'Acquire: time, positions, z planes and detectors of both samples, stored in mikro.'
+      file: ../views/acquire.bsx
+    view-minimal:
+      description: 'Minimal: the live image and the stage, nothing else.'
+      file: ../views/minimal.bsx

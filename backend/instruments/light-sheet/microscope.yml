@@ -100,7 +100,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@8
+  catalog: newswitch@9
   bloks:
     view-sheet:
       description: 'Sheet: the sheet through the sample, the live plane, and where z is.'

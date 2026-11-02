@@ -101,7 +101,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@8
+  catalog: newswitch@9
   bloks:
     view-flim:
       description: 'FLIM: the lifetime axis the SPAD delivers, the beam and the focus.'

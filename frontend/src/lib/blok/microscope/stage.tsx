@@ -31,6 +31,7 @@ import {
 import { renderChildList } from "@arkitektio/bsx/renderer/bloks/shared/render";
 import { childListSchema, classNameSchema } from "@arkitektio/bsx/catalogs";
 import { cn } from "@/lib/utils";
+import { SamplePicker, SceneSampleProvider } from "@/lib/microscope/sample";
 import { useIsLive } from "./locks";
 
 export const StageView = createBlokComponent(
@@ -42,15 +43,22 @@ export const StageView = createBlokComponent(
           "A StageScene and the panels floating over it.",
         ),
         className: classNameSchema,
+        sample: z
+          .string()
+          .optional()
+          .describe(
+            "Which sample it shows, by the cube holding it (SpaceState.samples). Left out: the first, and a picker switches between several.",
+          ),
       })
       .describe(
-        "The stage view: holds the 3D StageScene and the panels that float over it. Keyboard modes (D/E/M) apply while it is shown.",
+        "The stage view: holds the 3D StageScene and the panels that float over it. It shows one sample: its stage, its holder, its frames and its live images. Keyboard modes (D/E/M) apply while it is shown.",
       ),
   },
   ({ buildChild, component, schema }) => {
     const blok = useBlok(component, schema);
     const children = useValue(blok.children);
     const className = useValue(blok.className);
+    const sample = useValue(blok.sample);
     // Keep the camera state live while the view is shown, as Expanse does.
     useDetectorState({ subscribe: true });
 
@@ -61,10 +69,13 @@ export const StageView = createBlokComponent(
           className,
         )}
       >
-        <PanelProvider>
-          <KeyboardModeController />
-          {renderChildList(children, buildChild)}
-        </PanelProvider>
+        <SceneSampleProvider sample={sample ?? undefined}>
+          <PanelProvider>
+            <KeyboardModeController />
+            {renderChildList(children, buildChild)}
+            <SamplePicker />
+          </PanelProvider>
+        </SceneSampleProvider>
       </div>
     );
   },

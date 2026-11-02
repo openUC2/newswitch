@@ -1,5 +1,5 @@
 import { useMoveTo } from "@/apps/default/hooks/actions";
-import { useSpaceState } from "@/apps/default/hooks/states/SpaceState";
+import { useSampleSpace, useViewDetector } from "@/lib/microscope/space";
 import { useModeStore } from "@/store/modeStore";
 import { Line } from "@react-three/drei";
 
@@ -7,14 +7,15 @@ import { Line } from "@react-three/drei";
 const DEPTH = -0.5;
 
 /**
- * What is mounted, on the sample: its outline from its top left corner, and a plate's wells.
- * In move mode (hold M) a click on a well brings its middle to the middle of the view.
+ * What the scene's sample is mounted on: its outline from its top left corner, and a plate's wells.
+ * In move mode (hold M) a click on a well brings its middle to the middle of the view's image.
  */
 export const HolderPlane = () => {
-  const { data } = useSpaceState({ subscribe: true });
+  const space = useSampleSpace();
+  const looking = useViewDetector();
   const { assign } = useMoveTo();
   const interactionMode = useModeStore((s) => s.interactionMode);
-  const shape = data?.shape;
+  const shape = space?.shape;
   if (!shape) return null;
 
   const { width_um: width, height_um: height } = shape;
@@ -42,6 +43,7 @@ export const HolderPlane = () => {
                 e.stopPropagation();
                 assign({
                   position: { system: well.name, coordinates: { x: 0, y: 0 } },
+                  detector: looking?.name,
                 });
               }}
             >

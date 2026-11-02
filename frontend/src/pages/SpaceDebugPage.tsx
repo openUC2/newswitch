@@ -33,16 +33,29 @@ const fmt = (value: number): string => {
   return Number(value.toPrecision(4)).toString();
 };
 
-/** A list of a holder's many places, collapsed: they are one kind of system. */
+/** A list of a holder's many places, collapsed: they are one kind of system, per sample. */
 const PLACE = /^well:/;
-const groupOf = (name: string) => (PLACE.test(name) ? "well:*" : name);
+const groupOf = (name: string) =>
+  PLACE.test(name) ? name.replace(/^(well:[^:]+):.*$/, "$1:*") : name;
 
-/** Which column of the diagram a system sits in: what measures, the stage, the sample, places. */
+/** Which column of the diagram a system sits in: what measures, a stage, a sample, places. */
 const columnOf = (name: string): number => {
   if (name.startsWith("detector:")) return 0;
-  if (name === "stage") return 1;
-  if (name === "sample") return 2;
+  if (name.startsWith("stage:")) return 1;
+  if (name.startsWith("sample:")) return 2;
   return 3;
+};
+
+/** The sample a node of the diagram belongs to, so that each sample's nodes sit together. */
+const sampleOfNode = (
+  node: string,
+  detectors: Record<string, string>,
+): string => {
+  const [head, rest = ""] = node.split(/:(.*)/s);
+  if (head === "stage" || head === "sample") return rest;
+  if (head === "well") return rest.split(":")[0];
+  if (head === "detector") return detectors[rest] ?? "";
+  return "";
 };
 
 /** A part, in one line: ``(x, y) → (x, y) AFFINE``. */
@@ -104,11 +117,19 @@ const axesOf = (systems: CoordinateSystem[], name: string) =>
 const GraphDiagram = ({
   systems,
   edges,
+  detectorSamples,
+  samples,
 }: {
   systems: CoordinateSystem[];
   edges: Transformation[];
+  detectorSamples: Record<string, string>;
+  samples: string[];
 }) => {
-  const nodes = [...new Set(systems.map((system) => groupOf(system.name)))];
+  const rank = (node: string) =>
+    samples.indexOf(sampleOfNode(node, detectorSamples));
+  const nodes = [
+    ...new Set(systems.map((system) => groupOf(system.name))),
+  ].sort((a, b) => rank(a) - rank(b));
   const counts = new Map<string, number>();
   systems.forEach((system) => {
     const group = groupOf(system.name);
@@ -213,11 +234,10 @@ const GraphDiagram = ({
       {nodes.map((node) => {
         const at = place.get(node);
         if (!at) return null;
-        const hub = node === "sample";
-        const axes =
-          node === "well:*"
-            ? `${counts.get(node)} places · x, y`
-            : axesOf(systems, node).join(", ") || "a point: no axes";
+        const hub = node.startsWith("sample:");
+        const axes = node.endsWith(":*")
+          ? `${counts.get(node)} places · x, y`
+          : axesOf(systems, node).join(", ") || "a point: no axes";
         return (
           <g key={node}>
             <rect
@@ -330,6 +350,21 @@ export function SpaceDebugPage() {
   const { data: detectorState } = useDetectorState({ subscribe: true });
   const systems = space?.systems ?? [];
   const edges = space?.transformations ?? [];
+  const samples = Object.values(space?.samples ?? {});
+  const detectorSamples: Record<string, string> = {
+    ...Object.fromEntries(
+      Object.values(space?.detectors ?? {}).map((placed) => [
+        placed.detector,
+        placed.sample,
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.values(space?.points ?? {}).map((point) => [
+        point.detector,
+        point.sample,
+      ]),
+    ),
+  };
   const placeEdges = edges.filter((edge) => PLACE.test(edge.input));
   const otherEdges = edges.filter((edge) => !PLACE.test(edge.input));
   const readings = new Map(
@@ -354,13 +389,19 @@ export function SpaceDebugPage() {
             <CardTitle>Coordinate systems</CardTitle>
             <CardDescription>
               The graph the microscope places everything by, as the server
-              publishes it (SpaceState). The sample is the hub; an image taken
-              is placed by its frame's own matrix, not listed here.
+              publishes it (SpaceState). Each sample is a hub of its own, on a
+              stage of its own; an image taken is placed by its frame's own
+              matrix, not listed here.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {space ? (
-              <GraphDiagram systems={systems} edges={edges} />
+              <GraphDiagram
+                systems={systems}
+                edges={edges}
+                detectorSamples={detectorSamples}
+                samples={samples.map((found) => found.sample)}
+              />
             ) : (
               <p className="text-sm text-muted-foreground">
                 Waiting for the microscope…
@@ -372,30 +413,36 @@ export function SpaceDebugPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Mounted</CardTitle>
+              <CardTitle className="text-base">
+                {samples.length > 1 ? `${samples.length} samples` : "Mounted"}
+              </CardTitle>
               <CardDescription>
-                Stage micrometres to sample micrometres.
+                Each on a stage of its own: its stage micrometres to its sample
+                micrometres.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">
-                  {space?.holder ?? "nothing: the sample is the stage"}
-                </Badge>
-                <Badge variant="outline">mount {space?.mount_id ?? "…"}</Badge>
-                {(space?.holders ?? []).length > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    can mount: {space?.holders.join(", ")}
-                  </span>
-                )}
-              </div>
-              {space && (
-                <Matrix
-                  rows={space.mount.slice(0, 3)}
-                  columns={["x", "y", "z"]}
-                  outputs={["x", "y", "z"]}
-                />
-              )}
+            <CardContent className="space-y-4 text-sm">
+              {samples.map((found) => (
+                <div key={found.sample} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono">sample:{found.sample}</span>
+                    <Badge variant="secondary">
+                      {found.holder ?? "nothing: the sample is its stage"}
+                    </Badge>
+                    <Badge variant="outline">mount {found.mount_id}</Badge>
+                    {found.holders.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        can mount: {found.holders.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <Matrix
+                    rows={found.mount.slice(0, 3)}
+                    columns={["x", "y", "z"]}
+                    outputs={["x", "y", "z"]}
+                  />
+                </div>
+              ))}
             </CardContent>
           </Card>
 
@@ -461,6 +508,9 @@ export function SpaceDebugPage() {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm">{placed.detector}</span>
+                  {samples.length > 1 && (
+                    <Badge variant="outline">on {placed.sample}</Badge>
+                  )}
                   <Badge variant={placed.calibrated ? "default" : "secondary"}>
                     {placed.calibrated ? "calibrated" : "predicted"}
                   </Badge>

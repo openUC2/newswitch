@@ -57,6 +57,9 @@ export interface ModeState {
   displayModeOptions: DisplayModeOption[];
   setInteractionMode: (mode: InteractionMode) => void;
   setDisplayMode: (mode: DisplayMode) => void;
+  /** The sample the stage view shows, by the cube holding it; null: the first. */
+  sceneSample: string | null;
+  setSceneSample: (sample: string | null) => void;
 }
 
 export const createModeStore = () =>
@@ -73,6 +76,11 @@ export const createModeStore = () =>
       setDisplayMode: (mode) =>
         set((state) => {
           state.displayMode = mode;
+        }),
+      sceneSample: null,
+      setSceneSample: (sample) =>
+        set((state) => {
+          state.sceneSample = sample;
         }),
     })),
   );

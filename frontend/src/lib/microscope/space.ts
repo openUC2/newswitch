@@ -2,12 +2,14 @@ import { useDetectorState } from "@/apps/default/hooks/states/DetectorState";
 import type { Detector } from "@/apps/default/hooks/states/DetectorState";
 import { useSpaceState } from "@/apps/default/hooks/states/SpaceState";
 import { Matrix4, Vector3 } from "three";
+import { useSceneSample } from "./sampleContext";
 
 /**
- * Where things are. The scene is the sample's frame, in micrometres: the server places every
- * detector's pixels in it (`SpaceState.detectors[name].to_sample`: column, row and plane to
- * sample micrometres), every frame taken (its metadata's affine, the same map then), and the
- * stage through the mount (`SpaceState.mount`, stage to sample). Nothing is placed in here.
+ * Where things are. A scene is one sample's frame, in micrometres (`useSceneSample`): the server
+ * places every detector's pixels in its own sample's (`SpaceState.detectors[name].to_sample`:
+ * column, row and plane to sample micrometres, and `.sample`), every frame taken (its metadata's
+ * affine and sample), and each stage through its sample's mount (`SpaceState.samples[cube].mount`,
+ * stage to sample). Nothing is placed in here.
  */
 
 /** Whether `detector` delivers images: a y and an x along space. A thermometer measures at a point. */
@@ -40,10 +42,25 @@ export const useDetectorPlacement = (detector: string) => {
   return data?.detectors?.[detector];
 };
 
-/** The detector the view is of: the first imaging one that is on, else the first imaging one. */
+/** Whether `detector` sees the scene's sample. */
+export const useSeesScene = (): ((detector: string) => boolean) => {
+  const sample = useSceneSample();
+  const { data } = useSpaceState({ subscribe: true });
+  return (detector: string) => {
+    const seen =
+      data?.detectors?.[detector]?.sample ?? data?.points?.[detector]?.sample;
+    return seen === undefined || seen === "" || seen === sample;
+  };
+};
+
+/** The detector the view is of: of the scene's sample, the first imaging one that is on, else the
+ * first imaging one. */
 export const useViewDetector = (): Detector | undefined => {
   const { data } = useDetectorState({ subscribe: true });
-  const detectors = (data?.detectors ?? []).filter(deliversImages);
+  const sees = useSeesScene();
+  const detectors = (data?.detectors ?? []).filter(
+    (d) => deliversImages(d) && sees(d.name),
+  );
   return detectors.find((d) => d.is_active) ?? detectors[0];
 };
 
@@ -70,11 +87,16 @@ export const useLookingAt = (): Vector3 | undefined => {
   );
 };
 
-/** Where each detector that measures at one point measures, on the sample, with what it read last. */
+/** Where each detector that measures at one point beside the scene's sample measures, with what it
+ * read last. */
 export const useMeasuredPoints = () => {
   const { data: space } = useSpaceState({ subscribe: true });
   const { data: detectors } = useDetectorState({ subscribe: true });
-  return Object.values(space?.points ?? {}).map((point) => {
+  const sample = useSceneSample();
+  const points = Object.values(space?.points ?? {}).filter(
+    (point) => !point.sample || point.sample === sample,
+  );
+  return points.map((point) => {
     const detector = detectors?.detectors.find(
       (d) => d.name === point.detector,
     );
@@ -86,8 +108,12 @@ export const useMeasuredPoints = () => {
   });
 };
 
-/** Stage micrometres to sample micrometres: where what is mounted sits. */
-export const useMount = (): Matrix4 => {
+/** The scene's sample: its mount, what it is mounted on and what that looks like. */
+export const useSampleSpace = () => {
   const { data } = useSpaceState({ subscribe: true });
-  return toMatrix4(data?.mount);
+  const sample = useSceneSample();
+  return sample === undefined ? undefined : data?.samples?.[sample];
 };
+
+/** The scene's stage micrometres to its sample micrometres: where what is mounted sits. */
+export const useMount = (): Matrix4 => toMatrix4(useSampleSpace()?.mount);

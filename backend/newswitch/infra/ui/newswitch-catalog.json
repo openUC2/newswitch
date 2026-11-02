@@ -1,6 +1,6 @@
 {
   "name": "newswitch",
-  "version": 8,
+  "version": 9,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
     {
@@ -420,7 +420,7 @@
     },
     {
       "name": "StageView",
-      "description": "The stage view: holds the 3D StageScene and the panels that float over it. Keyboard modes (D/E/M) apply while it is shown.",
+      "description": "The stage view: holds the 3D StageScene and the panels that float over it. It shows one sample: its stage, its holder, its frames and its live images. Keyboard modes (D/E/M) apply while it is shown.",
       "acceptsChildren": true,
       "context": "HTML",
       "childrenContext": null,
@@ -439,6 +439,12 @@
           "kind": "STRING",
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
+        },
+        {
+          "key": "sample",
+          "kind": "STRING",
+          "required": false,
+          "description": "Which sample it shows, by the cube holding it (SpaceState.samples). Left out: the first, and a picker switches between several."
         }
       ]
     },

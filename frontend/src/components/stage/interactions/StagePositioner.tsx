@@ -4,16 +4,21 @@ import { useState } from "react";
 import type { Vector3 } from "three";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useLookingAt } from "@/lib/microscope/space";
+import { useLookingAt, useViewDetector } from "@/lib/microscope/space";
 
 /**
- * Brings a point of the sample (the scene's frame) to the middle of the view, in x and y only: a
- * click on the scene says nothing about focus. The server finds what to move (`move_to`).
+ * Brings a point of the scene's sample to the middle of the view's image, in x and y only: a click
+ * on the scene says nothing about focus. The server finds what to move (`move_to`): "the sample" is
+ * the one the view's camera sees.
  */
 const useMoveViewTo = () => {
   const { assign } = useMoveTo();
+  const looking = useViewDetector();
   return (x: number, y: number) => {
-    assign({ position: { system: "sample", coordinates: { x, y } } });
+    assign({
+      position: { system: "sample", coordinates: { x, y } },
+      detector: looking?.name,
+    });
   };
 };
 import { useModeStore } from "@/store/modeStore";
