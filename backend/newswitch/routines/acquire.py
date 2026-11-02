@@ -1,10 +1,16 @@
 """Performing an acquisition: every channel, on every plane, at every position, every time.
 
-What it takes is merged rather than saved image by image: every detector of every channel becomes
-channels of the dataset, and each position one ``(t, c, z, y, x)`` dataset in the `DatasetStore`,
-placed in stage space, with nothing in the local cache. A plan is regular by what it is, so what is
-left to refuse, before anything moves, is what cannot be one array: uneven planes, detectors that
-disagree on their image size or pixel size under what their channel sets.
+What it takes is kept rather than saved image by image: each detector, at each position, makes one
+record in the `DatasetStore`, along its own axes (`Detector.axes`), with nothing in the local cache.
+Its axes are ``t``, ``c`` (the channels that name it, each of its colors), what else it delivers
+but space (``m``, when a photon arrived), the plane ``z``, and its space (``y``, ``x``); a
+thermometer, which measures at a point, has ``(t, c, z)``. Each record is placed on the sample by
+its own detector's route through the coordinate graph (`SpaceManager.record_map`), as a BY_DIMENSION
+that names only what has a place.
+
+A plan is regular by what it is, so what is left to refuse, before anything moves, is what cannot
+be one record: uneven planes, or a detector whose image size or placement changes between the
+channels that name it.
 """
 
 import logging
@@ -12,7 +18,7 @@ import os
 import random
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -20,7 +26,7 @@ import numpy as np
 from arkitekt import Task
 
 from newswitch import protocols
-from newswitch.instrument.space import zyx_rows
+from newswitch.instrument.space import AxisMap, to_parts, zyx_rows
 from newswitch.instrument.spec import Move
 from newswitch.models.acquisition import (
     AcquiredDataset,
@@ -30,29 +36,29 @@ from newswitch.models.acquisition import (
     PositionOrder,
 )
 from newswitch.models.devices import Detector
+from newswitch.models.space import Axis
 from newswitch.protocols.dataset_store import (
     AcquiredChannel,
     AcquiredPlane,
-    AcquiredPosition,
+    AcquiredRecord,
     DatasetStore,
 )
-from newswitch.services.space import SpaceManager
+from newswitch.services.space import AXIS_TYPES, SpaceManager
 from newswitch.services.values import Values
 
 logger = logging.getLogger(__name__)
 
-#: How far apart the pixel sizes of two channels may be: one registration maps them all.
-SCALE_TOLERANCE = 0.01
+#: How far apart one detector's pixel sizes may be between its channels: one record, one map. A
+#: filter in the way alone changes it by a hundredth of a percent; another objective, by far more.
+PLACEMENT_TOLERANCE = 0.01
 
 
 @dataclass(frozen=True)
 class _Exposure:
-    """What one detector contributes to a channel: dataset channels, from `first_channel` on."""
+    """What one detector contributes to a channel: its record's channels, from `first_channel` on."""
 
     detector: Detector
     first_channel: int
-    flip_x: bool
-    flip_y: bool
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,25 @@ class _Lighting:
 
 
 @dataclass
+class _Record:
+    """What one detector acquires at one position, and what it has so far."""
+
+    detector: Detector
+    channels: list[AcquiredChannel] = field(default_factory=list)
+    axes: tuple[Axis, ...] = ()
+    data: np.ndarray | None = None
+    planes: list[AcquiredPlane] = field(default_factory=list)
+    calibrated: bool = True
+    shape: tuple[int, int] | None = None  # its image, the same under every channel
+    scale: np.ndarray | None = None  # its pixels on the sample, the same under every channel
+    placed: AxisMap | None = None  # its axes on the sample, once there
+
+    @property
+    def dims(self) -> tuple[str, ...]:
+        return tuple(axis.name for axis in self.axes)
+
+
+@dataclass
 class _Merge:
     """What is being acquired at one position, and what it has so far."""
 
@@ -73,16 +98,10 @@ class _Merge:
     offsets: list[float]
     sweep: Move | None
     lightings: tuple[_Lighting, ...]
-    channels: tuple[AcquiredChannel, ...]
-    data: np.ndarray
-    dims: tuple[str, ...]  # the axes of `data`: t, c, then what the detectors deliver
-    planes: list[AcquiredPlane]
-    pixel_to_world: np.ndarray  # x, y pixels to x, y micrometres, every axis increasing
-    calibrated: bool
+    records: dict[str, _Record]  # by detector, in the order the plan first names them
     swept: bool
     targets: dict[str, float]  # what to set to get there: its place, then what it sets
-    placed: np.ndarray | None = None  # where the array's x, y, z go on the sample, once there
-    light_moves: tuple[Move, ...] = ()
+    light_sweep: bool = False  # what sweeps moves the light, not the sample
 
 
 def _z_step(detector: Detector) -> float | None:
@@ -150,17 +169,26 @@ def _offsets_of(plan: AcquisitionPlan) -> list[float]:
 
 
 def _sweep_of(
-    plan: AcquisitionPlan, offsets: list[float], detector: str, values: Values
+    plan: AcquisitionPlan, offsets: list[float], detector: str | None, values: Values
 ) -> Move | None:
     """What sweeps a stack: none for one plane where it is, unless one is named.
 
     What a detector's own wire steps, or what is named among what moves through the sample or
-    focuses; otherwise the one thing that does either.
+    focuses; otherwise the one thing that does either. Without a detector that takes images,
+    nothing focuses: it is named, or refused.
     """
     named = plan.stack.variable
     if named is None and offsets == [0.0]:
         return None
     instrument = values.instrument
+    if detector is None:
+        variable = instrument.variables.get(named or "")
+        if not isinstance(variable, Move):
+            raise ValueError(
+                "Nothing in this plan takes images, so nothing says what a stack sweeps: name "
+                "what moves (stack.variable)"
+            )
+        return variable
     wired = instrument.z_drive(detector)
     if wired is not None and named in (None, wired.target):
         return instrument.variables[wired.target]
@@ -192,7 +220,46 @@ def _sources_of(targets: Mapping[str, float], values: Values) -> tuple[str, ...]
 
 
 def _channel_label(channel: AcquisitionChannel, detector: Detector, color: str | None) -> str:
-    return " ".join(part for part in (channel.name, detector.name, color) if part)
+    unit = f"({detector.unit})" if detector.unit else None
+    return " ".join(part for part in (channel.name, detector.name, color, unit) if part)
+
+
+def _axes_of(detector: Detector) -> tuple[Axis, ...]:
+    """A record's axes: time, its channels, what it delivers but space, the plane, its space.
+
+    A detector that measures at a point has a plane index (INDEX: the plane it was read at), and
+    no place along it.
+    """
+    images = detector.delivers_images()
+    own = [axis for axis in detector.axes if axis.name not in ("c", "z")]
+    return (
+        Axis("t", "TIME"),
+        Axis("c", "CHANNEL"),
+        *(Axis(a.name, AXIS_TYPES[a.domain]) for a in own if a.domain != "space"),
+        Axis("z", "SPACE" if images else "INDEX"),
+        *(Axis(a.name, "SPACE") for a in own if a.domain == "space"),
+    )
+
+
+def _check_alike(record: _Record, shape: tuple[int, int], scale: np.ndarray, name: str) -> None:
+    """One detector is one record: the same image size and placement under every channel.
+
+    Raises:
+        ValueError: Its channels set it differently (a binning, an objective of their own).
+    """
+    if record.shape is None or record.scale is None:
+        record.shape, record.scale = shape, scale
+        return
+    if shape != record.shape:
+        raise ValueError(
+            f"{name} takes images of {shape[0]} x {shape[1]} in one channel and "
+            f"{record.shape[0]} x {record.shape[1]} in another: one record has one size"
+        )
+    if not np.allclose(scale, record.scale, rtol=PLACEMENT_TOLERANCE, atol=1e-9):
+        raise ValueError(
+            f"{name} has pixels of {scale.tolist()} um in one channel and "
+            f"{record.scale.tolist()} um in another: one record has one placement"
+        )
 
 
 def _plan_position(
@@ -205,11 +272,16 @@ def _plan_position(
     optics_manager: protocols.OpticsManager,
     values: Values,
     space: SpaceManager,
-    first: str,
+    first: str | None,
 ) -> _Merge:
-    """Everything that can be refused about one position, and the array it will fill."""
+    """Everything that can be refused about one position, and the records it will fill."""
+    if position.at is not None and first is None:
+        raise ValueError(
+            "Nothing in this plan takes images, so no image's middle can be brought to a place: "
+            "give its positions by what to set (set_to)"
+        )
     going = {
-        **({} if position.at is None else space.targets(position.at, first)),
+        **({} if position.at is None or first is None else space.targets(position.at, first)),
         **position.set_to,
     }
     values.check(going)
@@ -217,13 +289,8 @@ def _plan_position(
     if sweep is not None:
         values.check({sweep.name: at[sweep.name] + offset for offset in offsets})
 
-    reference: np.ndarray | None = None
-    size: tuple[int, int] | None = None
-    bins: set[int | None] = set()
-    types: set[str] = set()
-    calibrated = True
+    records: dict[str, _Record] = {}
     lightings: list[_Lighting] = []
-    channels: list[AcquiredChannel] = []
     for channel in plan.channels:
         if not channel.detectors:
             raise ValueError(f"The channel {channel.name!r} names no detector")
@@ -234,73 +301,50 @@ def _plan_position(
         exposures: list[_Exposure] = []
         for name in channel.detectors:
             detector = _find_detector(name, detector_manager)
-            shape = detector_manager.plane_under(name, under.get(f"{name}.binning"))
-            if size is None:
-                size = shape
-            elif size != shape:
-                raise ValueError(
-                    f"{detector.name} takes images of {shape[0]} x {shape[1]}, others "
-                    f"{size[0]} x {size[1]}: they cannot share an array"
+            record = records.setdefault(name, _Record(detector))
+            images = detector.delivers_images()
+            if images:
+                scale, measured = optics_manager.scale_under(name, under)
+                _check_alike(
+                    record,
+                    detector_manager.plane_under(name, under.get(f"{name}.binning")),
+                    np.array(scale.affine_matrix, dtype=float),
+                    name,
                 )
-            bins.add(next((axis.size for axis in detector.axes if axis.name == "m"), None))
-            if len(bins) > 1:
-                raise ValueError(
-                    f"{detector.name} has {sorted(map(str, bins))} arrival-time bins and others "
-                    "have not: they cannot share an array"
-                )
-            types.add(detector.data_type)
-            scale, measured = optics_manager.scale_under(name, under)
-            matrix = scale.affine_matrix
-            to_world = np.array([[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]])
-            flip_x, flip_y = bool(to_world[0, 0] < 0), bool(to_world[1, 1] < 0)
-            upright = to_world * np.array([[-1 if flip_x else 1, -1 if flip_y else 1]] * 2)
-            if reference is None:
-                reference = upright
-            elif not np.allclose(
-                np.diag(upright), np.diag(reference), rtol=SCALE_TOLERANCE, atol=0.0
-            ):
-                raise ValueError(
-                    f"{detector.name} has pixels of {np.diag(upright).tolist()} um, the others "
-                    f"{np.diag(reference).tolist()}: one dataset has one pixel size"
-                )
-            calibrated = calibrated and measured
-            exposures.append(_Exposure(detector, len(channels), flip_x, flip_y))
-            channels.extend(
+                record.calibrated = record.calibrated and measured
+            exposures.append(_Exposure(detector, len(record.channels)))
+            record.channels.extend(
                 AcquiredChannel(
                     label=_channel_label(channel, detector, color),
                     detector=detector.name,
-                    sources=names,
+                    sources=names if images else (),
                     color=color,
+                    light=images,
                 )
                 for color in (detector.colors or [None])
             )
         lightings.append(_Lighting(channel, targets, tuple(exposures)))
 
-    assert size is not None and reference is not None
-    microtime = next(iter(bins))
-    # Arrival time sits before z, where mikro has its axes: (t, c, m, z, y, x).
-    dims = ("t", "c", *([] if microtime is None else ["m"]), "z", "y", "x")
-    shape = (
-        plan.times,
-        len(channels),
-        *([] if microtime is None else [microtime]),
-        len(offsets),
-        *size,
-    )
+    for record in records.values():
+        detector = record.detector
+        microtime = next((axis.size for axis in detector.axes if axis.name == "m"), None)
+        record.axes = _axes_of(detector)
+        sizes = {"t": plan.times, "c": len(record.channels), "z": len(offsets), "m": microtime}
+        if record.shape is not None:
+            sizes["y"], sizes["x"] = record.shape
+        record.data = np.empty(
+            tuple(int(sizes[name] or 0) for name in record.dims), dtype=detector.data_type
+        )
+    light_moves = values.instrument.sheet_moves()
     return _Merge(
         position=position,
         index=index,
         offsets=offsets,
         sweep=sweep,
         lightings=tuple(lightings),
-        channels=tuple(channels),
-        data=np.empty(shape, dtype=np.result_type(*types)),
-        dims=dims,
-        planes=[],
-        pixel_to_world=reference,
+        records=records,
         targets=going,
-        calibrated=calibrated,
-        light_moves=tuple(values.instrument.sheet_moves()),
+        light_sweep=sweep is not None and sweep in light_moves,
         swept=_check_sweep(plan, offsets, lightings, sweep, values),
     )
 
@@ -316,36 +360,11 @@ def _check_memory(arrays: list[np.ndarray]) -> None:
         )
 
 
-def _placed(merge: _Merge, first: str, space: SpaceManager) -> np.ndarray:
-    """Where the array's x (column), y (row) and z index go on the sample, as things are now.
-
-    The first detector's placement (`SpaceManager.placement`), the way round its images were turned
-    to be kept.
-    """
-    exposure = next(
-        e for lighting in merge.lightings for e in lighting.exposures if e.detector.name == first
-    )
-    height, width = merge.data.shape[-2:]
-    turned = np.eye(4)
-    if exposure.flip_x:
-        turned[0, 0], turned[0, 3] = -1.0, width - 1.0
-    if exposure.flip_y:
-        turned[1, 1], turned[1, 3] = -1.0, height - 1.0
-    return space.placement(first) @ turned
-
-
-def _to_sample(merge: _Merge) -> tuple[tuple[float, float, float, float], ...]:
-    """``z, y, x`` index to sample micrometres: its plane and pixels where they were placed."""
-    assert merge.placed is not None
-    placed = merge.placed
-    # Moving the light is moving the sample the other way.
-    direction = -1.0 if merge.sweep in merge.light_moves else 1.0
-    dz = direction * (merge.offsets[1] - merge.offsets[0]) if len(merge.offsets) > 1 else 1.0
-    return (
-        (float(dz), 0.0, 0.0, float(placed[2, 3] + direction * merge.offsets[0])),
-        (0.0, float(placed[1, 1]), float(placed[1, 0]), float(placed[1, 3])),
-        (0.0, float(placed[0, 1]), float(placed[0, 0]), float(placed[0, 3])),
-    )
+def _place(merge: _Merge, space: SpaceManager) -> None:
+    """Where every record's axes go on the sample, as things are now: once at each position."""
+    for name, record in merge.records.items():
+        if record.placed is None:
+            record.placed = space.record_map(name, record.dims, merge.offsets, merge.light_sweep)
 
 
 def _expose(
@@ -356,7 +375,7 @@ def _expose(
     store: DatasetStore,
     detector_manager: protocols.DetectorManager,
 ) -> None:
-    """Every detector of a channel takes its image, into the array of the position."""
+    """Every detector of a channel takes what it takes, into its record at the position."""
     for exposure in lighting.exposures:
         _activate(exposure, detector_manager)
         started = datetime.now(timezone.utc)
@@ -381,23 +400,20 @@ def _keep(
     started: datetime,
     store: DatasetStore,
 ) -> None:
-    """One exposure's `images` (`capture_channels`), one per channel, into the array, the way round
-    all channels are."""
+    """One exposure (`capture_channels`: one per color, along what the detector delivers), into its
+    detector's record, as it was delivered."""
     ended = datetime.now(timezone.utc)
     now = store.state()
+    record = merge.records[exposure.detector.name]
+    assert record.data is not None
     if not exposure.detector.has_axis("c"):
-        images = images[np.newaxis]  # one channel: what it delivers is its only image
+        images = images[np.newaxis]  # one color: what it delivers is its only one
     for offset, image in enumerate(images):
-        if exposure.flip_x:
-            image = image[..., ::-1]
-        if exposure.flip_y:
-            image = image[..., ::-1, :]
         channel = exposure.first_channel + offset
-        place: tuple[Any, ...] = (time_index, channel, z_index)
-        if "m" in merge.dims:
-            place = (time_index, channel, slice(None), z_index)
-        merge.data[place] = image
-        merge.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))
+        at = {"t": time_index, "c": channel, "z": z_index}
+        place: tuple[Any, ...] = tuple(at.get(name, slice(None)) for name in record.dims)
+        record.data[place] = image
+        record.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))
 
 
 def _lights_off(values: Values) -> None:
@@ -426,14 +442,15 @@ def acquire(
     hook_manager: protocols.HookManager,
     task: Task,
 ) -> list[AcquiredDataset]:
-    """Acquire times x positions x planes x channels, into one dataset per position.
+    """Acquire times x positions x planes x channels, into a record per position and detector.
 
     Each time it visits each position, then each plane of the stack, and every channel sets what it
     sets and its detectors take their images; hooks run at the start (`m_hooks`), each time
     (`t_hooks`), at each position (`p_hooks`) and at each plane (`z_hooks`).
 
     Returns:
-        The datasets created, one per position.
+        The datasets created: for each position, one per detector, in the order the plan names
+        them.
 
     Raises:
         ValueError: What is asked for is no array, or names something this microscope has not.
@@ -445,17 +462,13 @@ def acquire(
     if plan.times < 1:
         raise ValueError(f"An acquisition is done at least once, not {plan.times} times")
     offsets = _offsets_of(plan)
-    first = next((name for channel in plan.channels for name in channel.detectors), None)
-    if first is None:
+    named = list(dict.fromkeys(name for channel in plan.channels for name in channel.detectors))
+    if not named:
         raise ValueError(f"The channel {plan.channels[0].name!r} names no detector")
-    for name in {name for channel in plan.channels for name in channel.detectors}:
-        detector = _find_detector(name, detector_manager)
-        if not detector.delivers_images():
-            raise ValueError(
-                f"{name} measures {detector.quantity} at one point: what an acquisition keeps is "
-                "images, and a reading has no place in their array yet"
-            )
-    first = _find_detector(first, detector_manager).name
+    # What looks: whose image's middle goes to a place, and whose focus sweeps a stack.
+    first = next(
+        (name for name in named if _find_detector(name, detector_manager).delivers_images()), None
+    )
     sweep = _sweep_of(plan, offsets, first, values)
     merges = [
         _plan_position(
@@ -472,7 +485,14 @@ def acquire(
         )
         for index, position in enumerate(plan.positions)
     ]
-    _check_memory([merge.data for merge in merges])
+    _check_memory(
+        [
+            record.data
+            for merge in merges
+            for record in merge.records.values()
+            if record.data is not None
+        ]
+    )
 
     # Every hook must be able to run where it is asked for, before anything moves
     for hooks, level in (
@@ -485,7 +505,7 @@ def acquire(
 
     hook_manager.execute_all(plan.m_hooks or [])
 
-    total = sum(merge.data.shape[0] * len(merge.offsets) * len(merge.lightings) for merge in merges)
+    total = sum(plan.times * len(merge.offsets) * len(merge.lightings) for merge in merges)
     done = 0
     task.progress(0, message=f"Starting acquisition: {total} exposures of all detectors")
 
@@ -509,8 +529,7 @@ def acquire(
                 # it is afterwards.
                 hook_manager.execute_all(plan.p_hooks or [])
                 base = 0.0 if merge.sweep is None else float(values[merge.sweep.name])
-                if merge.placed is None:
-                    merge.placed = _placed(merge, first, space)
+                _place(merge, space)
 
                 if merge.swept:
                     # The detector steps what sweeps: the routine only brings it to the first plane.
@@ -560,22 +579,27 @@ def acquire(
             90 + int(10 * merge.index / len(merges)), f"Writing position {merge.index + 1}"
         )
         label = merge.position.name or f"P{merge.index + 1}"
-        name = plan.name if len(merges) == 1 else f"{plan.name} {label}"
-        datasets.append(
-            store.publish(
-                AcquiredPosition(
-                    name=name,
-                    position=merge.index,
-                    data=merge.data,
-                    dims=merge.dims,
-                    channels=merge.channels,
-                    planes=tuple(merge.planes),
-                    to_sample=_to_sample(merge),
-                    mount_id=space.state.mount_id,
-                    mount=zyx_rows(space.mount()),
-                    calibrated=merge.calibrated,
+        for detector, record in merge.records.items():
+            assert record.data is not None and record.placed is not None
+            parts = [plan.name, *([] if len(merges) == 1 else [label]), detector]
+            datasets.append(
+                store.publish(
+                    AcquiredRecord(
+                        name=" ".join(part for part in parts if part),
+                        position=merge.index,
+                        detector=detector,
+                        data=record.data,
+                        axes=record.axes,
+                        channels=tuple(record.channels),
+                        planes=tuple(record.planes),
+                        registration=tuple(to_parts(record.placed)),
+                        calibrated=record.calibrated,
+                        quantity=record.detector.quantity,
+                        unit=record.detector.unit,
+                        mount_id=space.state.mount_id,
+                        mount=zyx_rows(space.mount()),
+                    )
                 )
             )
-        )
     task.progress(100, message=f"Acquisition complete: {len(datasets)} datasets")
     return datasets

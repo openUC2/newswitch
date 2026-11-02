@@ -397,6 +397,8 @@ export const AcquiredDatasetSchema = z
     position: z
       .number()
       .describe('Which position of the acquisition it holds, from 0'),
+    /** Which detector's record it is */
+    detector: z.string().describe("Which detector's record it is"),
   })
   .brand('@newswitch/acquired_dataset')
   .describe('A dataset an acquisition created, in the store it went to.');
@@ -411,7 +413,8 @@ export const AcquireArgsSchema = z.object({
   ),
 });
 export const AcquireReturnSchema = z.object({
-  /** The datasets created, one per position. */
+  /** The datasets created: for each position, one per detector, in the order the plan names
+them. */
   return0: z.array(
     AcquiredDatasetSchema.describe(
       'A dataset an acquisition created, in the store it went to.',
@@ -430,14 +433,14 @@ export const AcquireDefinition: ActionDefinition<AcquireArgs, AcquireReturn> = {
   name: 'acquire',
   appKey: 'default',
   description:
-    'Acquire times x positions x planes x channels, into one dataset per position.\n\nEach time it visits each position, then each plane of the stack, and every channel sets what it\nsets and its detectors take their images; hooks run at the start (`m_hooks`), each time\n(`t_hooks`), at each position (`p_hooks`) and at each plane (`z_hooks`).',
+    'Acquire times x positions x planes x channels, into a record per position and detector.\n\nEach time it visits each position, then each plane of the stack, and every channel sets what it\nsets and its detectors take their images; hooks run at the start (`m_hooks`), each time\n(`t_hooks`), at each position (`p_hooks`) and at each plane (`z_hooks`).',
   argsSchema: AcquireArgsSchema,
   returnSchema: AcquireReturnSchema,
   lockKeys: ['detector', 'motion', 'swap', 'tune'],
 };
 
 /**
- * Acquire times x positions x planes x channels, into one dataset per position.
+ * Acquire times x positions x planes x channels, into a record per position and detector.
 
 Each time it visits each position, then each plane of the stack, and every channel sets what it
 sets and its detectors take their images; hooks run at the start (`m_hooks`), each time

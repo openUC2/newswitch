@@ -270,13 +270,12 @@ def test_a_camera_that_sees_nothing_does_not_cost_the_others_theirs(tmp_path: Pa
     assert found["camera_green"].calibrated and not found["camera_red"].calibrated
 
 
-def test_they_cannot_share_a_dataset_but_each_has_its_own(tmp_path: Path) -> None:
-    """An array is regular; two positions of different cameras are still two arrays."""
+def test_cameras_of_two_sizes_make_a_record_each(tmp_path: Path) -> None:
+    """An array is regular, so each camera is a record of its own size."""
     m = described(tmp_path, two_sizes)
-    with pytest.raises(ValueError, match="cannot share an array"):
-        acquire(m, AcquisitionPlan(channels=[lit("camera_green", "camera_red")]))
-    store = acquire(m, AcquisitionPlan(channels=[lit("camera_red")]))
-    assert store.published[0].data.shape[-2:] == (1024, 2048)
+    green, red = acquire(m, AcquisitionPlan(channels=[lit("camera_green", "camera_red")])).published
+    assert red.data.shape[-2:] == (1024, 2048)
+    assert green.data.shape[-2:] != red.data.shape[-2:]
 
 
 # --- oil

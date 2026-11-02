@@ -15,7 +15,7 @@ from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
-from newswitch.infra.mikro.store import _dataset_axes, _optical_element
+from newswitch.infra.mikro.store import _optical_element, dataset_axes
 from tests.conftest import run_settings
 from tests.test_acquire import acquire, plan
 
@@ -132,7 +132,7 @@ def test_it_is_a_microtime_axis_for_mikro(
 ) -> None:
     """Declared with its type, in mikro's order, and a pyramid can be made of it."""
     acquired = acquire(microscope, plan([stream()])).published[0]
-    names, axes, types = _dataset_axes(instrument, acquired)
+    names, axes, types = dataset_axes(instrument, acquired)
     assert names == ("t", "c", "m", "z", "y", "x")
     declared = axes[names.index("m")]
     assert declared.type == schema.AxisType.MICROTIME
@@ -143,8 +143,8 @@ def test_it_is_a_microtime_axis_for_mikro(
     assert level_zero.sizes["m"] == 64
 
 
-def test_other_datasets_keep_their_axes(tmp_path: Path) -> None:
-    """Nothing declared, nothing new."""
+def test_other_datasets_are_typed_by_their_own_axes(tmp_path: Path) -> None:
+    """A camera's record: time, channels, and space, each declared as what it is."""
     instrument = spec.load(INSTRUMENT.parent / "dual-camera")
     m = build_microscope(run_settings(tmp_path), instrument)
     streams = [
@@ -154,8 +154,9 @@ def test_other_datasets_keep_their_axes(tmp_path: Path) -> None:
         )
     ]
     acquired = acquire(m, plan(streams)).published[0]
-    axes = ("t", "c", "z", "y", "x")
-    assert _dataset_axes(instrument, acquired) == (axes, list(axes), {})
+    names, _, types = dataset_axes(instrument, acquired)
+    assert names == ("t", "c", "z", "y", "x")
+    assert types == {"t": "TIME", "c": "CHANNEL", "z": "SPACE", "y": "SPACE", "x": "SPACE"}
 
 
 def test_the_new_elements_are_mikros_elements(instrument: spec.Instrument) -> None:
@@ -166,8 +167,10 @@ def test_the_new_elements_are_mikros_elements(instrument: spec.Instrument) -> No
     assert isinstance(_optical_element(instrument, "galvo", state), schema.MirrorElementInput)
 
 
-def test_detectors_with_and_without_arrival_times_cannot_share_a_dataset(tmp_path: Path) -> None:
-    """Refused before anything moves."""
+def test_detectors_with_and_without_arrival_times_keep_records_of_their_own(
+    tmp_path: Path,
+) -> None:
+    """Each along what it delivers: the SPAD's arrival times are the SPAD's alone."""
 
     def change(data: dict[str, Any]) -> None:
         data["cubes"]["pmt"] = {
@@ -178,12 +181,14 @@ def test_detectors_with_and_without_arrival_times_cannot_share_a_dataset(tmp_pat
         data["drives"].append({"from": "galvo.pixel", "to": "pmt.sample"})
 
     m = build_microscope(run_settings(tmp_path), spec.load(edited(tmp_path, change)))
-    assert m.values is not None
-    moved_from = m.values.snapshot()
     both = AcquisitionChannel(
         detectors=["spad", "pmt"],
         set_to={"laser_488.power": 50},
     )
-    with pytest.raises(ValueError, match="arrival-time bins"):
-        acquire(m, plan([both]))
-    assert m.values.snapshot() == moved_from
+    spad, pmt = acquire(m, plan([both])).published
+    assert (spad.detector, spad.dims, spad.data.shape[2]) == (
+        "spad",
+        ("t", "c", "m", "z", "y", "x"),
+        64,
+    )
+    assert (pmt.detector, pmt.dims) == ("pmt", ("t", "c", "z", "y", "x"))

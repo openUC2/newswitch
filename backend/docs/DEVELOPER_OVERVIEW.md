@@ -146,7 +146,8 @@ records; the managers keep it up to date, so the frontend sees all of it.
   `SpaceState` publishes the live graph (`systems`, `transformations`), every imaging detector's
   placement as a 4x4, where each point detector measures (`points`), the mount and what is mounted.
 - **MetadataManager** (`services/metadata.py`) places each frame by `SpaceManager.placement`;
-  an acquisition's datasets are placed by the same (`AcquiredPosition.to_sample`).
+  an acquisition keeps a record per position and detector (`AcquiredRecord`), along its own axes,
+  placed by its detector's route (`SpaceManager.record_map`, as BY_DIMENSION parts: `to_parts`).
 - **Holders** (`newswitch/instrument/holders/*.yml`): a slide, a dish, a 96-well plate, each a
   frame from its top left corner. A description names the ones its sample takes and where each
   sits on its stage (`holders`, `mounted` on the `kind: sample` element).

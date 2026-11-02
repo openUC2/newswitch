@@ -1,10 +1,11 @@
-"""What an acquisition becomes in mikro: an `ArrayDataset`, with anchors, placed in stage space.
+"""What an acquisition becomes in mikro: an `ArrayDataset` per record, with anchors, on the sample.
 
 =================== =================================================================
-dataset             ``(t, c, z, y, x)`` of one stage position
-channel anchor      ``c``: its label, and the light path it was seen through
-plane anchor        ``t, c, z``: the microscope's state, and when the image was taken
-registration edge   pixels to the shared stage space of this microscope
+dataset             one detector at one position, along its own axes, each typed:
+                    ``(t, c, z, y, x)`` of a camera, ``(t, c, z)`` of a thermometer
+channel anchor      ``c``: its label, and the light path it was seen through (if light)
+plane anchor        ``t, c, z``: the microscope's state, and when it was taken
+registration edge   a BY_DIMENSION onto the sample's space, the record's parts as they are
 =================== =================================================================
 
 Importing this needs the extra ``mikro``.
@@ -36,34 +37,52 @@ from newswitch.instrument import spec
 from newswitch.instrument.spec import Instrument
 from newswitch.microscope.parts import Microscope
 from newswitch.models.acquisition import AcquiredDataset
-from newswitch.protocols.dataset_store import AcquiredChannel, AcquiredPlane, AcquiredPosition
+from newswitch.models.space import DimensionPart
+from newswitch.protocols.dataset_store import AcquiredChannel, AcquiredPlane, AcquiredRecord
 
 #: The axes a dataset shares with the stage's space.
 SPATIAL = ("z", "y", "x")
 
+#: What an axis of each type says it is, beside its name.
+_DESCRIPTIONS = {
+    "TIME": "Each time the acquisition went through its positions",
+    "CHANNEL": "A channel of the plan, in a color of the detector",
+    "INDEX": "The plane of the stack it was read at; what measures at a point is not placed by it",
+}
 
-def _dataset_axes(
-    instrument: Instrument, acquired: AcquiredPosition
-) -> tuple[tuple[str, ...], list[Any], dict[str, Any]]:
-    """The names of a dataset's axes, as `create_array_dataset` wants them, and as a pyramid does.
 
-    They are the acquisition's own; an arrival-time axis is declared, as mikro knows it by type.
-    """
-    if "m" not in acquired.dims:
-        return acquired.dims, list(acquired.dims), {}
-    bins = next(
-        axis for axis in instrument.detector_axes(acquired.channels[0].detector) if axis.name == "m"
-    )
-    declared = schema.AxisInput(
-        name="m",
-        type=schema.AxisType.MICROTIME,
-        description=f"Arrival time after the pulse, in bins of {bins.step:g} ps",
-    )
-    return (
-        acquired.dims,
-        [declared if name == "m" else name for name in acquired.dims],
-        {"m": "MICROTIME"},
-    )
+def dataset_axes(
+    instrument: Instrument, acquired: AcquiredRecord
+) -> tuple[tuple[str, ...], list[schema.AxisInput], dict[str, Any]]:
+    """The names of a record's axes, as `create_array_dataset` declares them, and their types, as
+    a pyramid wants them: each as its detector delivers it."""
+    steps = {axis.name: axis for axis in instrument.detector_axes(acquired.detector)}
+    declared = []
+    for axis in acquired.axes:
+        description = _DESCRIPTIONS.get(axis.type)
+        if axis.name == "m" and "m" in steps:
+            description = f"Arrival time after the pulse, in bins of {steps['m'].step:g} ps"
+        declared.append(
+            schema.AxisInput(
+                name=axis.name, type=schema.AxisType(axis.type), description=description
+            )
+        )
+    return acquired.dims, declared, {axis.name: axis.type for axis in acquired.axes}
+
+
+def mikro_parts(parts: tuple[DimensionPart, ...]) -> list[DimensionPartInput]:
+    """A record's registration as mikro's BY_DIMENSION parts, part for part."""
+    return [
+        DimensionPartInput(
+            kind=PartKind(part.kind),
+            input_axes=tuple(part.input_axes),
+            output_axes=tuple(part.output_axes),
+            scale=None if part.scale is None else tuple(part.scale),
+            translation=None if part.translation is None else tuple(part.translation),
+            affine=None if part.affine is None else tuple(tuple(row) for row in part.affine),
+        )
+        for part in parts
+    ]
 
 
 def _optical_element(instrument: Instrument, name: str, state: Mapping[str, Any]) -> Any:  # noqa: ANN401
@@ -144,15 +163,18 @@ def microscope_state(instrument: Instrument, state: Mapping[str, Any]) -> Optiki
     return OptikitStateInput(stage=StageStateInput(**stage), devices=devices)
 
 
-def _anchors_of_channels(
-    instrument: Instrument, acquired: AcquiredPosition
+def anchors_of_channels(
+    instrument: Instrument, acquired: AcquiredRecord
 ) -> list[CoordinateAnchorInput]:
+    """What each index of a record's ``c`` is: its label, and the light path if light reached it."""
     first_state = {plane.c: plane.state for plane in reversed(acquired.planes)}
     return [
         CoordinateAnchorInput(
             axis_anchors=[AxisAnchorInput(axis="c", value=index)],
             label=LabelInput(label=channel.label),
-            light_graph=light_graph(instrument, channel, first_state[index]),
+            light_graph=light_graph(instrument, channel, first_state[index])
+            if channel.light
+            else None,
         )
         for index, channel in enumerate(acquired.channels)
     ]
@@ -193,13 +215,13 @@ class MikroDatasetStore:
         """What the running microscope is set to now."""
         return self.microscope.values.snapshot()
 
-    def publish(self, acquired: AcquiredPosition) -> AcquiredDataset:
-        """Write `acquired`: the images, their anchors, and their place in the stage's space.
+    def publish(self, acquired: AcquiredRecord) -> AcquiredDataset:
+        """Write `acquired`: what it took, its anchors, and its place on the sample.
 
-        The space is found again by its reference, so every image of this microscope lands in the
-        same one; the reference names the microscope, as two of them have two different stages.
+        The sample's space is found again by its reference, so every record of one mounting lands
+        in the same one, whatever detector took it.
         """
-        names, axes, types = _dataset_axes(self.instrument, acquired)
+        names, axes, types = dataset_axes(self.instrument, acquired)
         image = xr.DataArray(acquired.data, dims=names)
         level_zero, scales = dataset_arrays(image, levels=1, method="mean", types=types)
         dataset = self.client.create_array_dataset(
@@ -208,7 +230,7 @@ class MikroDatasetStore:
             name=acquired.name,
             axes=axes,
             anchors=[
-                *_anchors_of_channels(self.instrument, acquired),
+                *anchors_of_channels(self.instrument, acquired),
                 *(_anchor_of_plane(self.instrument, plane) for plane in acquired.planes),
             ],
         )
@@ -220,14 +242,7 @@ class MikroDatasetStore:
         dataset.intrinsic_system.transform_to(
             sample,
             kind="BY_DIMENSION",
-            parts=[
-                DimensionPartInput(
-                    kind=PartKind.AFFINE,
-                    input_axes=SPATIAL,
-                    output_axes=SPATIAL,
-                    affine=acquired.to_sample,
-                )
-            ],
+            parts=mikro_parts(acquired.registration),
             name=f"{acquired.name} -> sample",
             validity=PlacementValidity.VALIDATED
             if acquired.calibrated
@@ -249,4 +264,9 @@ class MikroDatasetStore:
                 name=f"mount {acquired.mount_id}",
             )
             self._mounted.add((acquired.mount_id, acquired.mount))
-        return AcquiredDataset(id=str(dataset.id), name=acquired.name, position=acquired.position)
+        return AcquiredDataset(
+            id=str(dataset.id),
+            name=acquired.name,
+            position=acquired.position,
+            detector=acquired.detector,
+        )

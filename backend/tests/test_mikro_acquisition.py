@@ -129,9 +129,9 @@ def coordinates_of(anchor: dict[str, Any]) -> dict[str, int]:
     return {item["axis"]: item["value"] for item in coordinates}
 
 
-def test_two_detectors_merge_into_one_dataset(mikro: Mikro, tmp_path: Path) -> None:
-    """t, c, z, y, x on the server, and the pixels of both cameras in it."""
-    (made,) = run(
+def test_two_detectors_are_a_dataset_each(mikro: Mikro, tmp_path: Path) -> None:
+    """t, c, z, y, x on the server, each camera's pixels in its own."""
+    made = run(
         mikro,
         tmp_path,
         "dual-camera",
@@ -143,19 +143,20 @@ def test_two_detectors_merge_into_one_dataset(mikro: Mikro, tmp_path: Path) -> N
         planes=[-2.0, 0.0, 2.0],
         times=2,
     )
-    dataset = mikro.get_array_dataset(made.id)
-    assert tuple(dataset.axis_names) == ("t", "c", "z", "y", "x")
-    assert tuple(dataset.shape) == (2, 2, 3, 512, 512)
-    data = np.asarray(dataset.data)
-    assert data.shape == (2, 2, 3, 512, 512)
-    assert data.max() > 200
-    # the two channels really are two images
-    assert not np.array_equal(data[0, 0, 0], data[0, 1, 0])
+    assert [dataset.detector for dataset in made] == ["camera_green", "camera_red"]
+    green, red = (np.asarray(mikro.get_array_dataset(d.id).data) for d in made)
+    for d in made:
+        dataset = mikro.get_array_dataset(d.id)
+        assert tuple(dataset.axis_names) == ("t", "c", "z", "y", "x")
+        assert tuple(dataset.shape) == (2, 1, 3, 512, 512)
+    assert max(green.max(), red.max()) > 200
+    # the two cameras really took two images
+    assert not np.array_equal(green[0, 0, 0], red[0, 0, 0])
 
 
 def test_every_channel_and_plane_has_its_anchor(mikro: Mikro, tmp_path: Path) -> None:
     """A channel's label and light path; a plane's microscope state and time."""
-    (made,) = run(
+    made, _ = run(
         mikro,
         tmp_path,
         "dual-camera",
@@ -167,12 +168,12 @@ def test_every_channel_and_plane_has_its_anchor(mikro: Mikro, tmp_path: Path) ->
     labels = {
         coordinates_of(a)["c"]: a["channelLabel"]["label"] for a in anchors if a["channelLabel"]
     }
-    assert labels == {0: "gfp camera_green", 1: "gfp camera_red"}
+    assert labels == {0: "gfp camera_green"}
     assert all(a["lightGraph"] for a in anchors if a["channelLabel"])
 
     planes = [a for a in anchors if a["microscope"]]
     assert {tuple(sorted(coordinates_of(a).items())) for a in planes} == {
-        (("c", c), ("t", 0), ("z", z)) for c in range(2) for z in range(2)
+        (("c", 0), ("t", 0), ("z", z)) for z in range(2)
     }
     assert all(a["acquisitionWindow"]["start"] for a in planes)
     stage_z = {
@@ -255,16 +256,21 @@ async def test_a_served_agent_acquires_into_mikro(tmp_path: Path) -> None:
     # Not the last event: the test client drops frames when its 0.1 s read times out, so whether
     # COMPLETED reaches it is chance. The server holding the dataset is what counts.
     assert not [event for event in events if event.event_type in ("FAILED", "CRITICAL")], events
-    found: list[dict[str, Any]] = []
+    wanted = [f"{name} camera_green", f"{name} camera_red"]
+    found: list[str] = []
     for _ in range(60):
-        found = graphql(
-            "query ($name: String!) { arrayDatasets(filters: {search: $name}) { id name shape } }",
-            name=name,
-        )["arrayDatasets"]
-        if found:
+        found = sorted(
+            d["name"]
+            for d in graphql(
+                "query ($name: String!) { arrayDatasets(filters: {search: $name}) { id name } }",
+                name=name,
+            )["arrayDatasets"]
+            if d["name"] in wanted
+        )
+        if found == wanted:
             break
         await asyncio.sleep(0.5)
-    assert [d["name"] for d in found if d["name"] == name] == [name]
+    assert found == wanted
 
 
 def test_a_stack_the_camera_sweeps_reaches_the_server(mikro: Mikro, tmp_path: Path) -> None:

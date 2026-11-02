@@ -8,7 +8,7 @@ from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel, Ac
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.hooks import SoftwareAutofocusHook, ZCalibrationHook
 from newswitch.protocols import UnsupportedHook
-from newswitch.protocols.dataset_store import AcquiredPosition
+from newswitch.protocols.dataset_store import AcquiredRecord
 from newswitch.routines.acquire import acquire
 from tests.conftest import acquisition
 
@@ -47,7 +47,7 @@ class Store:
 
     def __init__(self) -> None:
         """Nothing yet."""
-        self.published: list[AcquiredPosition] = []
+        self.published: list[AcquiredRecord] = []
 
     def check(self) -> None:
         """Always there."""
@@ -56,7 +56,7 @@ class Store:
         """Nothing of interest here."""
         return {}
 
-    def publish(self, acquired: AcquiredPosition) -> AcquiredDataset:
+    def publish(self, acquired: AcquiredRecord) -> AcquiredDataset:
         """Keep it."""
         self.published.append(acquired)
         return AcquiredDataset(id="1", name=acquired.name, position=acquired.position)

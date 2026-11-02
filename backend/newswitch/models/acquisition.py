@@ -129,6 +129,7 @@ class AcquiredDataset:
     id: str
     name: str
     position: int = model_field(description="Which position of the acquisition it holds, from 0")
+    detector: str = model_field(default="", description="Which detector's record it is")
 
 
 class ScanOrder(str, Enum):

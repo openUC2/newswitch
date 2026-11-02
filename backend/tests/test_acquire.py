@@ -1,4 +1,4 @@
-"""A multidimensional acquisition: detectors merged into channels, a dataset per position."""
+"""A multidimensional acquisition: a record per position and detector, along its own axes."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from newswitch.models.acquisition import (
     AcquisitionPosition,
     AcquisitionStack,
 )
-from newswitch.protocols.dataset_store import AcquiredPosition
+from newswitch.protocols.dataset_store import AcquiredRecord
 from newswitch.routines.acquire import acquire as run_plan
 from newswitch.infra.mikro.none import NoDatasetStore
 from tests.conftest import acquisition as plan
@@ -36,7 +36,7 @@ LED = {"led_625.power": 2.5e-5}
 class RecordingStore:
     """Keeps what it is given."""
 
-    published: list[AcquiredPosition] = field(default_factory=list)
+    published: list[AcquiredRecord] = field(default_factory=list)
 
     def check(self) -> None:
         """Always there."""
@@ -45,11 +45,14 @@ class RecordingStore:
         """Nothing of interest here."""
         return {"stage.z": 0.0}
 
-    def publish(self, acquired: AcquiredPosition) -> AcquiredDataset:
+    def publish(self, acquired: AcquiredRecord) -> AcquiredDataset:
         """Keep it."""
         self.published.append(acquired)
         return AcquiredDataset(
-            id=str(acquired.position), name=acquired.name, position=acquired.position
+            id=str(acquired.position),
+            name=acquired.name,
+            position=acquired.position,
+            detector=acquired.detector,
         )
 
 
@@ -104,16 +107,29 @@ def assert_same_beads(first: np.ndarray, second: np.ndarray, tolerance: float = 
         assert np.linalg.norm(second - bead, axis=1).min() < tolerance
 
 
-def stage_of(acquired: AcquiredPosition, z: int, y: float, x: float) -> np.ndarray:
-    """Where a pixel is in stage micrometres, by the dataset's own placement."""
-    return np.array(acquired.to_sample) @ np.array([z, y, x, 1.0])
+def sample_of(acquired: AcquiredRecord, **at: float) -> dict[str, float]:
+    """Where a point of a record is on the sample, by its own registration, part by part: only
+    what its parts state."""
+    found: dict[str, float] = {}
+    for part in acquired.registration:
+        assert part.kind == "AFFINE" and part.affine is not None
+        point = np.array([*(at[axis] for axis in part.input_axes), 1.0])
+        for axis, row in zip(part.output_axes, part.affine):
+            found[axis] = float(np.dot(row, point))
+    return found
+
+
+def stage_of(acquired: AcquiredRecord, z: int, y: float, x: float) -> np.ndarray:
+    """Where a pixel is in sample micrometres (nothing mounted: the stage's), as (z, y, x)."""
+    found = sample_of(acquired, z=z, y=y, x=x)
+    return np.array([found["z"], found["y"], found["x"]])
 
 
 # --- two detectors behind two filters
 
 
-def test_two_detectors_of_a_channel_become_two_channels(tmp_path: Path) -> None:
-    """Both cameras, one lighting: t, c, z, y, x, and a label each."""
+def test_two_detectors_of_a_channel_become_two_records(tmp_path: Path) -> None:
+    """Both cameras, one lighting: a record each, t, c, z, y, x, labelled."""
     m = built(tmp_path, "dual-camera")
     store = acquire(
         m,
@@ -129,15 +145,16 @@ def test_two_detectors_of_a_channel_become_two_channels(tmp_path: Path) -> None:
             times=2,
         ),
     )
-    (acquired,) = store.published
-    assert acquired.data.shape == (2, 2, 3, 512, 512)
-    assert [c.label for c in acquired.channels] == ["all camera_green", "all camera_red"]
-    assert {c.detector for c in acquired.channels} == {"camera_green", "camera_red"}
-    assert len(acquired.planes) == 2 * 2 * 3
-    assert {(p.t, p.c, p.z) for p in acquired.planes} == {
-        (t, c, z) for t in range(2) for c in range(2) for z in range(3)
-    }
-    assert acquired.data.dtype == np.uint16 and acquired.data.max() > 0
+    green, red = store.published
+    for acquired, name in ((green, "camera_green"), (red, "camera_red")):
+        assert acquired.detector == name and acquired.dims == ("t", "c", "z", "y", "x")
+        assert acquired.data.shape == (2, 1, 3, 512, 512)
+        assert [c.label for c in acquired.channels] == [f"all {name}"]
+        assert {(p.t, p.c, p.z) for p in acquired.planes} == {
+            (t, 0, z) for t in range(2) for z in range(3)
+        }
+        assert acquired.data.dtype == np.uint16 and acquired.data.max() > 0
+    assert (green.name, red.name) == ("run camera_green", "run camera_red")
 
 
 def test_each_filter_sees_its_own_light(tmp_path: Path) -> None:
@@ -149,12 +166,13 @@ def test_each_filter_sees_its_own_light(tmp_path: Path) -> None:
             [AcquisitionChannel(detectors=["camera_green", "camera_red"], name="gfp", set_to=LASER)]
         ),
     )
-    green, red = store.published[0].data[0, :, 0]
+    green, red = (acquired.data[0, 0, 0] for acquired in store.published)
     assert np.percentile(green, 99.9) > 5 * np.percentile(red, 99.9)
 
 
-def test_the_mirrored_arm_is_turned_back(tmp_path: Path) -> None:
-    """The splitter's reflected arm sees the sample mirrored; merged, a bead is at one pixel.
+def test_the_mirrored_arm_is_kept_as_taken_and_placed_mirrored(tmp_path: Path) -> None:
+    """The splitter's reflected arm sees the sample mirrored: its record is as the camera took it,
+    and its registration turns it back, so a bead is at one place on the sample in both.
 
     Green shows a bead bright, red (transmitted) the same bead dark.
     """
@@ -168,15 +186,21 @@ def test_the_mirrored_arm_is_turned_back(tmp_path: Path) -> None:
             ]
         ),
     )
+    green_record, red_record = store.published
     green, red = (
-        ndimage.gaussian_filter(image.astype(float), 2.0)
-        for image in store.published[0].data[0, :, 0]
+        ndimage.gaussian_filter(acquired.data[0, 0, 0].astype(float), 2.0)
+        for acquired in store.published
     )
-    merged = np.corrcoef(green.ravel(), red.ravel())[0, 1]
-    assert merged < -0.5, "the beads of one channel are not where they are in the other"
-    # As the camera really takes it, mirrored, it would not line up.
-    mirrored = np.corrcoef(green.ravel(), red[:, ::-1].ravel())[0, 1]
-    assert abs(mirrored) < 0.2
+    # As taken, the red arm is mirrored along x: turned back, its dark beads are green's bright ones.
+    assert np.corrcoef(green.ravel(), red[:, ::-1].ravel())[0, 1] < -0.5
+    assert abs(np.corrcoef(green.ravel(), red.ravel())[0, 1]) < 0.2
+    # Its registration says so: the same pixel column runs the other way on the sample.
+    step = {
+        acquired.detector: sample_of(acquired, z=0, y=0.0, x=1.0)["x"]
+        - sample_of(acquired, z=0, y=0.0, x=0.0)["x"]
+        for acquired in (green_record, red_record)
+    }
+    assert step["camera_green"] == pytest.approx(-step["camera_red"])
 
 
 def test_positions_become_datasets_placed_in_stage_space(tmp_path: Path) -> None:
@@ -190,10 +214,10 @@ def test_positions_become_datasets_placed_in_stage_space(tmp_path: Path) -> None
         ),
     )
     first, second = store.published
-    assert (first.name, second.name) == ("run P1", "run P2")
+    assert (first.name, second.name) == ("run P1 camera_green", "run P2 camera_green")
     assert first.data.shape == (1, 1, 1, 512, 512)
 
-    def in_stage(acquired: AcquiredPosition) -> np.ndarray:
+    def in_stage(acquired: AcquiredRecord) -> np.ndarray:
         return np.array(
             [
                 stage_of(acquired, 0, row, column)[1:]
@@ -205,7 +229,7 @@ def test_positions_become_datasets_placed_in_stage_space(tmp_path: Path) -> None
 
 
 def test_placement_has_the_pixel_size_and_the_middle_at_the_stage(tmp_path: Path) -> None:
-    """10x onto a 6.5 um pixel; every scale positive, as flips made every axis increase."""
+    """10x onto a 6.5 um pixel; the planes 2 um apart; the image's middle where the stage is."""
     m = built(tmp_path, "dual-camera")
     store = acquire(
         m,
@@ -216,11 +240,17 @@ def test_placement_has_the_pixel_size_and_the_middle_at_the_stage(tmp_path: Path
         ),
     )
     (acquired,) = store.published
-    z_row, y_row, x_row = acquired.to_sample
+    (part,) = acquired.registration
+    assert (part.kind, part.input_axes, part.output_axes) == (
+        "AFFINE",
+        ["z", "y", "x"],
+        ["z", "y", "x"],
+    )
+    z_row, y_row, x_row = part.affine
     assert z_row[0] == pytest.approx(2.0)
     assert z_row[3] == pytest.approx(-2.0)
-    assert y_row[1] == pytest.approx(0.65, rel=0.02)
-    assert x_row[2] == pytest.approx(0.65, rel=0.02)
+    assert abs(y_row[1]) == pytest.approx(0.65, rel=0.02)
+    assert abs(x_row[2]) == pytest.approx(0.65, rel=0.02)
     middle = stage_of(acquired, 0, 255.5, 255.5)
     assert middle[1:3] == pytest.approx([50.0, 100.0], abs=1e-6)
     assert acquired.calibrated is False
@@ -316,22 +346,27 @@ def test_what_is_no_array_is_refused_before_anything_moves(
     assert store.published == []
 
 
-def test_detectors_of_different_pixel_size_are_refused(tmp_path: Path) -> None:
-    """One registration maps a dataset: binning one camera would make it wrong."""
+def test_detectors_of_different_pixel_size_keep_their_own(tmp_path: Path) -> None:
+    """Each record has its own registration: a binned camera is a record of its own size."""
     m = built(tmp_path, "dual-camera")
     assert m.values is not None
     m.values.set({"camera_red.binning": 2})
-    with pytest.raises(ValueError, match="cannot share an array|one pixel size"):
-        acquire(
-            m,
-            plan(
-                [
-                    AcquisitionChannel(
-                        detectors=["camera_green", "camera_red"], name="x", set_to=LASER
-                    )
-                ]
-            ),
+    green, red = acquire(
+        m,
+        plan(
+            [AcquisitionChannel(detectors=["camera_green", "camera_red"], name="x", set_to=LASER)]
+        ),
+    ).published
+    assert green.data.shape[-2:] == (512, 512) and red.data.shape[-2:] == (256, 256)
+
+    def one(acquired: AcquiredRecord) -> float:
+        """How far apart two neighbouring pixels of a row are on the sample."""
+        return abs(
+            sample_of(acquired, z=0, y=0.0, x=1.0)["x"]
+            - sample_of(acquired, z=0, y=0.0, x=0.0)["x"]
         )
+
+    assert one(red) == pytest.approx(2 * one(green), rel=0.02)
 
 
 def test_without_a_store_it_says_so(tmp_path: Path) -> None:
@@ -477,7 +512,7 @@ def test_a_channel_binning_differently_is_refused_before_it_is_set(tmp_path: Pat
     """What decides is what the channel would set, not what is set now."""
     m = built(tmp_path, "fake-microscope")
     assert m.values is not None
-    with pytest.raises(ValueError, match="cannot share an array"):
+    with pytest.raises(ValueError, match="one record has one size"):
         acquire(
             m,
             plan(
@@ -494,10 +529,10 @@ def test_a_channel_binning_differently_is_refused_before_it_is_set(tmp_path: Pat
 
 
 def test_a_channel_with_another_objective_is_refused_before_it_is_set(tmp_path: Path) -> None:
-    """Another pixel size, under what the channel sets: one dataset has one."""
+    """Another pixel size, under what the channel sets: one record has one placement."""
     m = built(tmp_path, "fake-microscope")
     assert m.values is not None
-    with pytest.raises(ValueError, match="one pixel size"):
+    with pytest.raises(ValueError, match="one record has one placement"):
         acquire(
             m,
             plan(

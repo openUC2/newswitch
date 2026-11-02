@@ -3,7 +3,7 @@
 from typing import Any, Mapping
 
 from newswitch.models.acquisition import AcquiredDataset
-from newswitch.protocols.dataset_store import AcquiredPosition
+from newswitch.protocols.dataset_store import AcquiredRecord
 
 
 class NoDatasetStore:
@@ -22,6 +22,6 @@ class NoDatasetStore:
         """Never reached: `check` refuses first."""
         raise RuntimeError(self.MESSAGE)
 
-    def publish(self, acquired: AcquiredPosition) -> AcquiredDataset:
+    def publish(self, acquired: AcquiredRecord) -> AcquiredDataset:
         """Never reached: `check` refuses first."""
         raise RuntimeError(self.MESSAGE)

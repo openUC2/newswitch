@@ -30,7 +30,7 @@ from newswitch.instrument.tracing import coupling
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage
 from newswitch.tools.check_instrument import _stage_moves
 from tests.conftest import acquisition, run_settings
-from tests.test_acquire import RecordingStore
+from tests.test_acquire import RecordingStore, sample_of
 
 INSTRUMENT = Path(__file__).parent.parent / "instruments" / "light-sheet"
 
@@ -343,8 +343,7 @@ def test_a_bead_is_at_the_same_z_whichever_swept(tmp_path: Path) -> None:
         run_plan(plan, store, m.optics, m.detector, m.values, m.space, m.hooks, Task.local())
         published = store.published[0]
         lit = (published.data.astype(float)[0, 0] - 100.0).clip(min=0).sum(axis=(1, 2))
-        z_step, _, _, z_first = published.to_sample[0]
-        return float(z_first + z_step * lit.argmax())
+        return sample_of(published, z=float(lit.argmax()), y=0.0, x=0.0)["z"]
 
     (tmp_path / "wired").mkdir()
     (tmp_path / "moved").mkdir()

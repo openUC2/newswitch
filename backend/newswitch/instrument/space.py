@@ -50,6 +50,7 @@ __all__ = [
     "scaling",
     "spatial",
     "spatial_affine",
+    "to_parts",
     "translation",
     "walks_backwards",
     "zyx_rows",
@@ -318,6 +319,21 @@ def edge_map(
     bottom = np.zeros(len(ins) + 1)
     bottom[-1] = 1.0
     return AxisMap(tuple(ins), tuple(stated), np.vstack([*(rows[a] for a in stated), bottom]))
+
+
+def to_parts(axis_map: AxisMap) -> list[DimensionPart]:
+    """`axis_map` as a BY_DIMENSION says it: one AFFINE part from the axes it reads onto the axes it
+    states. An axis it neither reads nor states no part names, and so nothing is said of it: a
+    camera record's time and channels, a thermometer's all."""
+    if not axis_map.output_axes:
+        return []
+    form = axis_map.matrix[:-1]
+    reads = [
+        axis for index, axis in enumerate(axis_map.input_axes) if np.any(form[:, index] != 0.0)
+    ]
+    columns = [axis_map.input_axes.index(axis) for axis in reads]
+    rows = [[*(row[column] for column in columns), row[-1]] for row in form]
+    return [affine_part(reads, axis_map.output_axes, rows)]
 
 
 def compose(maps: Iterable[AxisMap], source_axes: Sequence[str]) -> AxisMap:

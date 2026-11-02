@@ -1084,8 +1084,11 @@ class Instrument:
         return None
 
     def detector_axes(self, detector: str) -> tuple[DetectorAxis, ...]:
-        """What the logical detector `detector` delivers, in the order of a dataset's axes."""
+        """What the logical detector `detector` delivers, in the order of a dataset's axes; a
+        thermometer, which measures at a point, delivers none."""
         element = self.cubes[detector].element
+        if isinstance(element, Thermometer):
+            return ()
         found = []
         if isinstance(element, Sensor) and element.colors:
             found.append(

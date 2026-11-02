@@ -15,11 +15,16 @@ from newswitch.instrument.errors import SpecError
 from newswitch.instrument.parts import check_wired
 from newswitch.instrument.space import translation
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.acquisition import AcquisitionChannel
+from newswitch.models.acquisition import (
+    AcquisitionChannel,
+    AcquisitionPlan,
+    AcquisitionPosition,
+    AcquisitionStack,
+)
 from newswitch.models.space import Position
 from newswitch.routines.acquire import acquire as run_plan
 from tests.conftest import acquisition, run_settings
-from tests.test_acquire import RecordingStore
+from tests.test_acquire import RecordingStore, sample_of
 from tests.test_simulated_detector import RecordingBroadcaster, wait_until
 
 HE = Path(__file__).parents[1] / "instruments" / "he-microscope"
@@ -131,25 +136,65 @@ def test_the_acquire_button_takes_the_images(m: Microscope) -> None:
     assert len(m.acquisition.acquire()) == 1
 
 
-def test_an_acquisition_of_it_is_refused_before_anything_moves(m: Microscope) -> None:
-    """A reading has no place in an array of images yet: said so, and the stage stays."""
+def run(
+    m: Microscope, plan: AcquisitionPlan, store: RecordingStore | None = None
+) -> RecordingStore:
+    """Acquire `plan` on `m`, into a store that keeps what it is given."""
     assert m.values is not None and m.detector is not None
-    before = m.values.snapshot()["stage.x"]
-    with pytest.raises(ValueError, match="at one point"):
-        run_plan(
-            acquisition(
-                [AcquisitionChannel(name="air", detectors=["camera", "thermometer"])],
-                places=((500.0, 0.0),),
+    store = store or RecordingStore()
+    run_plan(plan, store, m.optics, m.detector, m.values, m.space, m.hooks, Task.local())
+    return store
+
+
+def test_an_acquisition_keeps_a_record_of_it_beside_the_camera(tmp_path: Path) -> None:
+    """Each by what it measures: the camera's images along (t, c, z, y, x), placed by its pixels,
+    and the thermometer's readings along (t, c, z), placed at its point, 3 cm from the section."""
+    m = he(tmp_path, {"air_temperature_c": 37.0})
+    channel = AcquisitionChannel(name="air", detectors=["camera", "thermometer"])
+    camera, thermometer = run(
+        m, acquisition([channel], planes=[-2.0, 0.0, 2.0], times=2, places=((500.0, 0.0),))
+    ).published
+
+    assert camera.dims == ("t", "c", "z", "y", "x") and camera.data.shape == (2, 3, 3, 512, 512)
+    assert [axis.type for axis in camera.axes] == ["TIME", "CHANNEL", "SPACE", "SPACE", "SPACE"]
+    middle = sample_of(camera, z=1.0, y=255.5, x=255.5)
+    assert (middle["x"], middle["y"]) == pytest.approx((500.0, 0.0), abs=1e-6)
+
+    assert thermometer.dims == ("t", "c", "z") and thermometer.data.shape == (2, 1, 3)
+    assert [axis.type for axis in thermometer.axes] == ["TIME", "CHANNEL", "INDEX"]
+    assert (thermometer.quantity, thermometer.unit) == ("temperature", "degC")
+    assert thermometer.data.dtype == np.float32
+    assert np.allclose(thermometer.data, 37.0, atol=0.3)
+    assert [c.label for c in thermometer.channels] == ["air thermometer (degC)"]
+    assert not thermometer.channels[0].light and thermometer.channels[0].sources == ()
+    (part,) = thermometer.registration
+    assert (part.kind, part.input_axes, part.output_axes) == ("AFFINE", [], ["z", "y", "x"])
+    assert np.ravel(part.affine) == pytest.approx([0.0, 0.0, 30_000.0])
+
+
+def test_a_thermometer_alone_is_read_where_the_stage_is_set(tmp_path: Path) -> None:
+    """Nothing takes images: no image's middle to bring anywhere, and nothing that focuses."""
+    m = he(tmp_path)
+    channel = AcquisitionChannel(name="air", detectors=["thermometer"])
+    (record,) = run(m, acquisition([channel], times=3)).published
+    assert record.data.shape == (3, 1, 1)
+    with pytest.raises(ValueError, match="give its positions by what to set"):
+        run(
+            m,
+            AcquisitionPlan(
+                channels=[channel],
+                positions=[AcquisitionPosition(at=Position("sample", {"x": 1.0, "y": 0.0}))],
             ),
-            RecordingStore(),
-            m.optics,
-            m.detector,
-            m.values,
-            m.space,
-            m.hooks,
-            Task.local(),
         )
-    assert m.values.snapshot()["stage.x"] == before
+    with pytest.raises(ValueError, match="name what moves"):
+        run(m, acquisition([channel], planes=[0.0, 1.0]))
+    swept = run(
+        m,
+        AcquisitionPlan(
+            channels=[channel], stack=AcquisitionStack(offsets=[0.0, 1.0], variable="stage.z")
+        ),
+    ).published[0]
+    assert swept.data.shape == (1, 1, 2)
 
 
 def test_looking_goes_by_an_imaging_detector(m: Microscope) -> None:

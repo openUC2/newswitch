@@ -37,6 +37,7 @@ from newswitch.instrument.space import (
     SAMPLE,
     SPATIAL,
     STAGE,
+    AxisMap,
     CoordinateGraph,
     affine_part,
     by_dimension,
@@ -79,7 +80,7 @@ def _middle_offset(detector: Detector, name: str, values: Mapping[str, Any]) -> 
 
 
 #: What mikro calls an axis that measures each domain.
-_AXIS_TYPES = {"space": "SPACE", "spectrum": "CHANNEL", "microtime": "MICROTIME", "time": "TIME"}
+AXIS_TYPES = {"space": "SPACE", "spectrum": "CHANNEL", "microtime": "MICROTIME", "time": "TIME"}
 
 
 def _system_of(detector: Detector) -> CoordinateSystem:
@@ -87,7 +88,7 @@ def _system_of(detector: Detector) -> CoordinateSystem:
     that measures at a point."""
     return CoordinateSystem(
         detector_system(detector.name),
-        [Axis(axis.name, _AXIS_TYPES[axis.domain]) for axis in detector.axes],
+        [Axis(axis.name, AXIS_TYPES[axis.domain]) for axis in detector.axes],
     )
 
 
@@ -350,6 +351,44 @@ class SpaceManager:
             pixel_um=[float(np.hypot(*matrix[:2, 0])), float(np.hypot(*matrix[:2, 1]))],
             calibrated=calibrated,
         )
+
+    def record_map(
+        self,
+        detector: str,
+        dims: tuple[str, ...],
+        offsets: list[float],
+        light_sweep: bool = False,
+    ) -> AxisMap:
+        """Where an acquired record's axes go on the sample, as things are now: `detector`'s route
+        to the sample (`graph`), over the record's `dims`.
+
+        A detector that takes images has its plane index placed by the stack: the plane it looks
+        at now, then `offsets` (moving the light is moving the sample the other way). What
+        measures at a point is where it is at every plane: its plane index is placed nowhere. Time,
+        channels and arrival times are placed nowhere either.
+        """
+        route = self.graph().axis_map(detector_system(detector), SAMPLE)
+        images = self.detector_state.get(detector).delivers_images()
+        rows: dict[str, np.ndarray] = {}
+        for axis in SPATIAL:
+            if axis not in route.output_axes:
+                continue
+            form = route.matrix[route.output_axes.index(axis)]
+            row = np.zeros(len(dims) + 1)
+            row[-1] = form[-1]
+            for name, factor in zip(route.input_axes, form[:-1]):
+                if factor != 0.0 and name in dims and not (images and name == "z"):
+                    row[dims.index(name)] = factor
+            rows[axis] = row
+        if images and "z" in rows:
+            direction = -1.0 if light_sweep else 1.0
+            step = offsets[1] - offsets[0] if len(offsets) > 1 else 1.0
+            rows["z"][dims.index("z")] = direction * step
+            rows["z"][-1] += direction * offsets[0]
+        stated = tuple(axis for axis in ("z", "y", "x") if axis in rows)
+        bottom = np.zeros(len(dims) + 1)
+        bottom[-1] = 1.0
+        return AxisMap(dims, stated, np.vstack([*(rows[axis] for axis in stated), bottom]))
 
     def _measured(self, detector: str) -> MeasuredPoint:
         at = self.transform(Position(detector_system(detector)), SAMPLE, SPATIAL)

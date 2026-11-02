@@ -81,7 +81,8 @@ coordinates, so it moves with the stage and the sample. The coordinate graph pla
 BY_DIMENSION part from no axes onto x, y and z, and `SpaceState.points` says where that is on the
 sample. A simulated one reads the air beside the sample, 22 °C unless `truth.yml` says otherwise
 (`air_temperature_c`), within its `noise`; it is read once a second while live, and published as
-its `reading`. It takes no image, so an acquisition refuses it, and no driver reads a real one yet.
+its `reading`. An acquisition that names it keeps its readings as a record of its own, `(t, c, z)`,
+placed at its point; no driver reads a real one yet.
 
 ```yaml
   thermometer:
@@ -176,7 +177,7 @@ Scanned beams, tilted sheets and two sheets for one source are not modelled.
 source with a `repetition`, a window that fits in a pulse period, and a `lifetime` on every simulation's
 fluorophore. An acquisition's dataset then has the axes `(t, c, m, z, y, x)`, and what expects one image
 (a live view) gets the sum over `m`. One lifetime holds everywhere, with no instrument response or
-pile-up. Detectors with and without `m` cannot share a dataset.
+pile-up. A detector without `m` beside it keeps a record of its own, without it.
 
 ## How it runs
 
@@ -308,22 +309,27 @@ every_s: 60.0
 
 A channel sets what it says, and a source it does not name is off. It is stored in mikro (`just mikro`,
 then `just dev-mikro`), not in the local cache, and is refused before anything moves when a server has
-no mikro. Each position becomes one `ArrayDataset` of `(t, c, z, y, x)`, of the type its sensors
-deliver, placed in the space of the sample it was taken of (one per mounting, with the mount from
-this microscope's stage space beside it):
+no mikro. Each detector at each position becomes an `ArrayDataset` of its own, along its own axes,
+each declared by type, of the type it delivers, placed in the space of the sample it was taken of (one
+per mounting, with the mount from this microscope's stage space beside it):
 
-- **`c`**: each detector of a channel is a channel of the dataset, and a color camera one per color. A
-  detector whose image comes out mirrored (a splitter's reflected arm) is turned back, so every channel
-  shows the sample the same way round.
-- **Anchors**: `c` has its label and light path; each `t, c, z` has every variable and when the image
-  was taken.
-- **Placement**: the middle of the image is where the stage was, on the sample through the mount. It
-  counts as validated once every detector's light path is calibrated, and as inferred from the optics
-  until then.
+- **Axes**: `t`, then `c`, then what it delivers beside space (`m`, the arrival time), then the plane
+  `z`, then its space (`y`, `x`). A camera is `(t, c, z, y, x)`, a FLIM detector `(t, c, m, z, y, x)`,
+  a thermometer `(t, c, z)`, its `z` the plane it was read at (an INDEX).
+- **`c`**: each channel of the plan that names the detector, and a color camera one per color.
+- **Anchors**: `c` has its label (with the unit, for what is not counted light) and, if light reached
+  it, its light path; each `t, c, z` has every variable and when it was taken.
+- **Placement**: its detector's route through the coordinate graph, as a BY_DIMENSION that names only
+  what has a place: a camera's `(z, y, x)` onto the sample's, the middle of the image where the stage
+  was; a thermometer's point, from no axes at all; time, channels and arrival times nowhere. What a
+  camera takes is kept as it took it: a splitter's mirrored arm is mirrored in its placement, not in
+  its data. It counts as validated once the detector's light path is calibrated, and as inferred from
+  the optics until then.
 
-An array is regular, so what cannot be one is refused before anything moves: uneven planes, values out
-of a variable's range, and detectors that disagree on image size or on pixel size by more than 1% under
-what their channels set. Images stay in memory until everything is taken, so an acquisition larger than
+What cannot be one record is refused before anything moves: uneven planes, values out of a variable's
+range, and a detector whose image size, or pixel size by more than 1%, differs between the channels
+that name it. A plan with no detector that takes images has no image's middle to bring to a place
+(its positions are what they set) and nothing that focuses (its stack names what moves). Images stay in memory until everything is taken, so an acquisition larger than
 the free memory is refused too, and stopping one part way keeps nothing.
 
 ## How it reaches hardware

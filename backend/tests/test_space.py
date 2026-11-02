@@ -28,7 +28,7 @@ from newswitch.models.devices import AxisWindow
 from newswitch.models.space import Position
 from newswitch.routines.acquire import acquire as run_plan
 from tests.conftest import acquisition
-from tests.test_acquire import RecordingStore
+from tests.test_acquire import RecordingStore, sample_of
 
 # --- the graph
 
@@ -306,11 +306,10 @@ def test_a_dataset_is_placed_on_its_beads(microscope: Microscope) -> None:
         Task.local(),
     )
     (acquired,) = store.published
-    rows = np.array(acquired.to_sample)
 
     def place(column: float, row: float) -> np.ndarray:
-        z, y, x = rows @ np.array([0.0, row, column, 1.0])
-        return np.array([x, y])
+        found = sample_of(acquired, z=0.0, y=row, x=column)
+        return np.array([found["x"], found["y"]])
 
     misses = bead_misses(microscope, acquired.data[0, 0, 0], place)
     assert on_beads(misses, 3.0), misses

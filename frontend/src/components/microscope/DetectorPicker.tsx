@@ -3,8 +3,8 @@ import { deliversImages } from "@/lib/microscope/space";
 import { Button } from "@/components/ui/button";
 
 /**
- * Which detectors image a stream: every one picked becomes channels of the dataset, a color camera
- * one per color.
+ * Which detectors a channel reads: each picked keeps a record of its own at every position, along
+ * its own axes; a color camera a channel per color, a thermometer its readings.
  */
 export function DetectorPicker({
   value,
@@ -16,8 +16,7 @@ export function DetectorPicker({
   size?: "sm" | "xs";
 }) {
   const { data: detectorState } = useDetectorState({ subscribe: true });
-  // An acquisition keeps images: what measures at a point has no place in them yet.
-  const detectors = (detectorState?.detectors ?? []).filter(deliversImages);
+  const detectors = detectorState?.detectors ?? [];
   const toggle = (name: string) =>
     onChange(
       value.includes(name)
@@ -40,6 +39,7 @@ export function DetectorPicker({
         >
           {detector.name}
           {detector.colors.length > 0 && ` (${detector.colors.join("")})`}
+          {!deliversImages(detector) && ` (${detector.quantity})`}
         </Button>
       ))}
     </div>

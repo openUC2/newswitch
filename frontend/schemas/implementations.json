@@ -3215,7 +3215,7 @@
     },
     "acquire": {
       "definition": {
-        "description": "Acquire times x positions x planes x channels, into one dataset per position.\n\nEach time it visits each position, then each plane of the stack, and every channel sets what it\nsets and its detectors take their images; hooks run at the start (`m_hooks`), each time\n(`t_hooks`), at each position (`p_hooks`) and at each plane (`z_hooks`).",
+        "description": "Acquire times x positions x planes x channels, into a record per position and detector.\n\nEach time it visits each position, then each plane of the stack, and every channel sets what it\nsets and its detectors take their images; hooks run at the start (`m_hooks`), each time\n(`t_hooks`), at each position (`p_hooks`) and at each plane (`z_hooks`).",
         "collections": [],
         "key": "acquire",
         "version": "1",
@@ -4357,7 +4357,7 @@
             "key": "return0",
             "label": "return0",
             "kind": "LIST",
-            "description": "The datasets created, one per position.",
+            "description": "The datasets created: for each position, one per detector, in the order the plan names\nthem.",
             "identifier": null,
             "nullable": false,
             "effects": [],
@@ -4426,6 +4426,22 @@
                     "children": null,
                     "widget": null,
                     "provides": null
+                  },
+                  {
+                    "key": "detector",
+                    "label": null,
+                    "kind": "STRING",
+                    "description": "Which detector's record it is",
+                    "identifier": null,
+                    "nullable": false,
+                    "effects": [],
+                    "choices": null,
+                    "referenceUnit": null,
+                    "proposedUnits": null,
+                    "dimension": null,
+                    "children": null,
+                    "widget": null,
+                    "provides": null
                   }
                 ],
                 "widget": null,
@@ -4457,7 +4473,7 @@
       "provenanceAudience": null,
       "effects": "UNKNOWN",
       "execution": "PLAIN",
-      "codeHash": "382381ca0e5ab0a28986e81d93cc57b4499494ff6f9a3cbc52383044153edcaa",
+      "codeHash": "5e283ddbbc47259038673cb8132d22a3a4e09a75aace57c3a1d698ae505d8b35",
       "logo": null,
       "asks": null,
       "informs": null,
