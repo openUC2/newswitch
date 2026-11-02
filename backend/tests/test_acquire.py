@@ -201,6 +201,19 @@ def test_the_mirrored_arm_is_kept_as_taken_and_placed_mirrored(tmp_path: Path) -
         for acquired in (green_record, red_record)
     }
     assert step["camera_green"] == pytest.approx(-step["camera_red"])
+    # And where they are: each record's beads, by its own registration, are at one place on the
+    # sample (red's dark, so looked for in its inverse).
+
+    def on_sample(acquired: AcquiredRecord, image: np.ndarray) -> np.ndarray:
+        return np.array(
+            [stage_of(acquired, 0, row, column)[1:] for row, column in bead_pixels(image)]
+        )
+
+    green_image = green_record.data[0, 0, 0].astype(float)
+    red_image = red_record.data[0, 0, 0].astype(float)
+    assert_same_beads(
+        on_sample(green_record, green_image), on_sample(red_record, red_image.max() - red_image)
+    )
 
 
 def test_positions_become_datasets_placed_in_stage_space(tmp_path: Path) -> None:
@@ -506,6 +519,28 @@ def test_planes_beyond_its_travel_are_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="stage.z goes from"):
         acquire(m, plan([channel], planes=[-1e6, 1e6]))
     assert m.values is not None and m.values["stage.z"] == 0.0
+
+
+def test_a_record_is_placed_as_its_channel_sets_the_detector(tmp_path: Path) -> None:
+    """Binned by its channel, from the first position on: pixels twice as large, and the middle of
+    the image where the stage is, at every position."""
+    m = built(tmp_path, "fake-microscope")
+    channel = AcquisitionChannel(
+        detectors=["camera_a"], set_to={"laser_488.power": 20.0, "camera_a.binning": 2.0}
+    )
+    first, second = acquire(m, plan([channel], places=((100.0, 50.0), (300.0, 50.0)))).published
+    mount = m.space.mount()
+    for acquired, (x, y) in ((first, (100.0, 50.0)), (second, (300.0, 50.0))):
+        height, width = acquired.data.shape[-2:]
+        assert (height, width) == (256, 256)
+        step = (
+            sample_of(acquired, z=0, y=0.0, x=1.0)["x"]
+            - sample_of(acquired, z=0, y=0.0, x=0.0)["x"]
+        )
+        assert abs(step) == pytest.approx(10.0, rel=0.01)
+        middle = sample_of(acquired, z=0, y=(height - 1) / 2, x=(width - 1) / 2)
+        expected = mount @ np.array([x, y, 0.0, 1.0])
+        assert (middle["x"], middle["y"]) == pytest.approx((expected[0], expected[1]), abs=1e-6)
 
 
 def test_a_channel_binning_differently_is_refused_before_it_is_set(tmp_path: Path) -> None:

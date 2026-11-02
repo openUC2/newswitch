@@ -82,6 +82,7 @@ class _Record:
     calibrated: bool = True
     shape: tuple[int, int] | None = None  # its image, the same under every channel
     scale: np.ndarray | None = None  # its pixels on the sample, the same under every channel
+    sets: Mapping[str, float] = field(default_factory=dict)  # what its first channel sets
     placed: AxisMap | None = None  # its axes on the sample, once there
 
     @property
@@ -301,7 +302,7 @@ def _plan_position(
         exposures: list[_Exposure] = []
         for name in channel.detectors:
             detector = _find_detector(name, detector_manager)
-            record = records.setdefault(name, _Record(detector))
+            record = records.setdefault(name, _Record(detector, sets=values.resolved(targets)))
             images = detector.delivers_images()
             if images:
                 scale, measured = optics_manager.scale_under(name, under)
@@ -312,6 +313,8 @@ def _plan_position(
                     name,
                 )
                 record.calibrated = record.calibrated and measured
+            else:
+                record.calibrated = False  # where it reads is described, never measured
             exposures.append(_Exposure(detector, len(record.channels)))
             record.channels.extend(
                 AcquiredChannel(
@@ -360,11 +363,15 @@ def _check_memory(arrays: list[np.ndarray]) -> None:
         )
 
 
-def _place(merge: _Merge, space: SpaceManager) -> None:
-    """Where every record's axes go on the sample, as things are now: once at each position."""
+def _place(merge: _Merge, space: SpaceManager, values: Values) -> None:
+    """Where every record's axes go on the sample: once at each position, where it is now (after
+    its hooks), under what the record's channels set (one binning, one objective for all)."""
+    now = values.snapshot()
     for name, record in merge.records.items():
         if record.placed is None:
-            record.placed = space.record_map(name, record.dims, merge.offsets, merge.light_sweep)
+            record.placed = space.record_map(
+                name, record.dims, merge.offsets, merge.light_sweep, {**now, **record.sets}
+            )
 
 
 def _expose(
@@ -529,7 +536,7 @@ def acquire(
                 # it is afterwards.
                 hook_manager.execute_all(plan.p_hooks or [])
                 base = 0.0 if merge.sweep is None else float(values[merge.sweep.name])
-                _place(merge, space)
+                _place(merge, space, values)
 
                 if merge.swept:
                     # The detector steps what sweeps: the routine only brings it to the first plane.

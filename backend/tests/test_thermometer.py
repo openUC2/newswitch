@@ -163,6 +163,8 @@ def test_an_acquisition_keeps_a_record_of_it_beside_the_camera(tmp_path: Path) -
     assert thermometer.dims == ("t", "c", "z") and thermometer.data.shape == (2, 1, 3)
     assert [axis.type for axis in thermometer.axes] == ["TIME", "CHANNEL", "INDEX"]
     assert (thermometer.quantity, thermometer.unit) == ("temperature", "degC")
+    assert camera.calibrated is False  # nothing calibrated yet: inferred from the optics
+    assert thermometer.calibrated is False  # where it reads is described, never measured
     assert thermometer.data.dtype == np.float32
     assert np.allclose(thermometer.data, 37.0, atol=0.3)
     assert [c.label for c in thermometer.channels] == ["air thermometer (degC)"]

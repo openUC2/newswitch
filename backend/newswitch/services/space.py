@@ -197,8 +197,11 @@ class SpaceManager:
         """The images belong to what was mounted: a new mounting starts without them."""
         self._images.clear()
 
-    def _detector_edge(self, detector: Detector) -> Transformation:
-        """Where `detector` measures, on the stage: its pixels, or the point it reads at."""
+    def _detector_edge(
+        self, detector: Detector, values: Mapping[str, Any] | None = None
+    ) -> Transformation:
+        """Where `detector` measures, on the stage, under `values` or as things are now: its
+        pixels, or the point it reads at."""
         source = detector_system(detector.name)
         if not detector.delivers_images():
             assert self.values is not None
@@ -207,7 +210,7 @@ class SpaceManager:
             at = element.on_stage
             point = [[at.x * 1000.0], [at.y * 1000.0], [at.z * 1000.0]]
             return by_dimension(source, STAGE, [affine_part((), SPATIAL, point)], "on stage")
-        matrix = self.to_stage(detector.name)
+        matrix = self.to_stage(detector.name, values)
         if detector.has_axis("z"):  # it steps its planes itself: each is its step further
             matrix[2, 2] = detector.axis("z").step or 1.0
             parts = [spatial_affine(matrix)]
@@ -218,14 +221,17 @@ class SpaceManager:
             ]
         return by_dimension(source, STAGE, parts, "pixels")
 
-    def _live(self) -> tuple[list[CoordinateSystem], list[Transformation]]:
-        """The systems and edges that hold now, but for the images taken."""
+    def _live(
+        self, values: Mapping[str, Any] | None = None
+    ) -> tuple[list[CoordinateSystem], list[Transformation]]:
+        """The systems and edges that hold under `values` (now, by default), but for the images
+        taken."""
         systems = [spatial(SAMPLE), spatial(STAGE)]
         edges = [Transformation(STAGE, SAMPLE, "AFFINE", "mount", affine=self.mount()[:3].tolist())]
         if self.values is not None:
             for detector in self.detector_state.detectors:
                 systems.append(_system_of(detector))
-                edges.append(self._detector_edge(detector))
+                edges.append(self._detector_edge(detector, values))
         if self.state.holder is not None:
             for place, (x, y) in places_of(self._holders[self.state.holder].holder).items():
                 systems.append(spatial(place, ("x", "y")))
@@ -239,9 +245,9 @@ class SpaceManager:
                 )
         return systems, edges
 
-    def graph(self) -> CoordinateGraph:
-        """The coordinate graph as it holds now."""
-        systems, edges = self._live()
+    def graph(self, values: Mapping[str, Any] | None = None) -> CoordinateGraph:
+        """The coordinate graph as it holds under `values`: now, by default."""
+        systems, edges = self._live(values)
         for image, matrix in self._images.items():
             systems.append(spatial(image_system(image), unit=""))
             edges.append(
@@ -358,16 +364,18 @@ class SpaceManager:
         dims: tuple[str, ...],
         offsets: list[float],
         light_sweep: bool = False,
+        values: Mapping[str, Any] | None = None,
     ) -> AxisMap:
-        """Where an acquired record's axes go on the sample, as things are now: `detector`'s route
-        to the sample (`graph`), over the record's `dims`.
+        """Where an acquired record's axes go on the sample, under `values` (as things are now, by
+        default; a record's, what its channel sets): `detector`'s route to the sample (`graph`),
+        over the record's `dims`.
 
         A detector that takes images has its plane index placed by the stack: the plane it looks
         at now, then `offsets` (moving the light is moving the sample the other way). What
         measures at a point is where it is at every plane: its plane index is placed nowhere. Time,
         channels and arrival times are placed nowhere either.
         """
-        route = self.graph().axis_map(detector_system(detector), SAMPLE)
+        route = self.graph(values).axis_map(detector_system(detector), SAMPLE)
         images = self.detector_state.get(detector).delivers_images()
         rows: dict[str, np.ndarray] = {}
         for axis in SPATIAL:
