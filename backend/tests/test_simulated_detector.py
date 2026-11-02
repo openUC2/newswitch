@@ -23,7 +23,7 @@ from newswitch.protocols import DetectorManager
 from newswitch.protocols.detector import DetectorFrame
 from newswitch.services.values import Values
 from newswitch.states.detector import DetectorState
-from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 from tests.conftest import run_settings
 
 FAKE = Path(__file__).parent.parent / "instruments" / "fake-microscope"

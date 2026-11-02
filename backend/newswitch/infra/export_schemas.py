@@ -1,6 +1,6 @@
 """Export the schemas the frontend generates its typed hooks from.
 
-    uv run python -m newswitch.tools.export_schemas            # writes ../frontend/schemas/*.json
+    uv run python -m newswitch.infra.export_schemas            # writes ../frontend/schemas/*.json
 
 What newswitch registers depends on the instrument (`newswitch.microscope.registry`),
 but the frontend's hooks must cover everything newswitch can do. So they are generated
@@ -85,7 +85,7 @@ def export(out: Path = SCHEMA_DIR, instrument: Path = REFERENCE_INSTRUMENT) -> l
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Command line: ``python -m newswitch.tools.export_schemas [-o DIR]``."""
+    """Command line: ``python -m newswitch.infra.export_schemas [-o DIR]``."""
     parser = argparse.ArgumentParser(description="Export the schemas the frontend generates from.")
     parser.add_argument("-o", "--out", type=Path, default=SCHEMA_DIR, help="folder to write into")
     args = parser.parse_args(argv)

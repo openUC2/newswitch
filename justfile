@@ -148,7 +148,7 @@ create-admin username password:
 # Write the schemas of a complete microscope (newswitch/reference/complete-microscope) into
 # frontend/schemas/, which the frontend's codegen generates its typed hooks from.
 export-schemas:
-    cd backend && uv run python -m newswitch.tools.export_schemas
+    cd backend && uv run python -m newswitch.infra.export_schemas
 
 # Fail if the committed schema export or generated frontend code is stale.
 drift-check: export-schemas

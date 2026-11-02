@@ -11,7 +11,7 @@ from main_fastapi import create_app
 from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.instrument import spec
 from newswitch.settings import Settings
-from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 from tests.conftest import registry_names, run_settings
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
@@ -82,7 +82,7 @@ def test_without_an_instrument_only_the_core() -> None:
 
 def test_the_committed_schema_export_is_current(tmp_path: Path) -> None:
     """The frontend generates its hooks from frontend/schemas: it must match the backend."""
-    from newswitch.tools.export_schemas import SCHEMA_DIR, export
+    from newswitch.infra.export_schemas import SCHEMA_DIR, export
 
     for written in export(tmp_path):
         committed = SCHEMA_DIR / written.name
@@ -93,7 +93,7 @@ def test_the_committed_schema_export_is_current(tmp_path: Path) -> None:
 
 def test_the_schema_export_refuses_an_incomplete_microscope(tmp_path: Path) -> None:
     """A part missing from the export would drop its hooks from the frontend."""
-    from newswitch.tools.export_schemas import export
+    from newswitch.infra.export_schemas import export
 
     with pytest.raises(ValueError, match="UC2State"):
         export(tmp_path, CAM_TEST)

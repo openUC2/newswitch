@@ -1,7 +1,7 @@
 """Pytest configuration and shared fixtures for newswitch tests.
 
 The microscope the tests run on is the complete reference microscope
-(`newswitch.tools.export_schemas.REFERENCE_INSTRUMENT`: every part), simulated, with every folder
+(`newswitch.infra.export_schemas.REFERENCE_INSTRUMENT`: every part), simulated, with every folder
 under the test's ``tmp_path``:
 
 - `settings`: the settings of such a run;
@@ -30,7 +30,7 @@ from newswitch.models.acquisition import (
     AcquisitionStack,
 )
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 
 
 @pytest.fixture(autouse=True)

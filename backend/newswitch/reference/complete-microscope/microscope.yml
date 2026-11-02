@@ -1,5 +1,5 @@
 # A microscope with every part and no bloks: what the frontend's hooks are generated from
-# (`newswitch.tools.export_schemas`), and what the tests run on. Not a real one.
+# (`newswitch.infra.export_schemas`), and what the tests run on. Not a real one.
 #
 
 spec: newswitch/instrument/v0

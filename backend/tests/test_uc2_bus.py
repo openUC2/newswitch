@@ -16,7 +16,7 @@ from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.services.values import Values
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
-from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 
 
 def make_virtual_bus() -> VirtualUC2Bus:

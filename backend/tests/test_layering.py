@@ -1,4 +1,5 @@
-"""The microscope never imports what serves it: `newswitch.infra` imports the rest, not the reverse.
+"""The microscope never imports what serves it: `newswitch.infra` and the entry files that put it
+together (``main_fastapi.py``, ``main_arkitekt.py``, ``main.py``) import the rest, not the reverse.
 
 Only imports that run count: one under ``if TYPE_CHECKING:`` names a type and loads nothing.
 """
@@ -10,6 +11,8 @@ import pytest
 
 PACKAGE = Path(__file__).resolve().parents[1] / "newswitch"
 INFRA = PACKAGE / "infra"
+#: What serves the microscope: the package, and the entry files beside it.
+SERVING = ("newswitch.infra", "main", "main_fastapi", "main_arkitekt")
 
 
 def _is_type_checking(test: ast.expr) -> bool:
@@ -44,12 +47,12 @@ def _microscope_modules() -> list[Path]:
 
 @pytest.mark.parametrize("path", _microscope_modules(), ids=lambda p: str(p.relative_to(PACKAGE)))
 def test_the_microscope_does_not_import_infra(path: Path) -> None:
-    """No module outside `newswitch.infra` imports it when it runs."""
+    """No module outside `newswitch.infra` imports it, or an entry file, when it runs."""
     tree = ast.parse(path.read_text(), filename=str(path))
     offending = [
         f"{path.relative_to(PACKAGE.parent)}:{line} imports {name}"
         for line, name in _runtime_imports(tree)
-        if name == "newswitch.infra" or name.startswith("newswitch.infra.")
+        if any(name == serving or name.startswith(f"{serving}.") for serving in SERVING)
     ]
     assert not offending, "\n".join(offending)
 
@@ -59,12 +62,14 @@ def test_the_check_sees_an_import_of_infra() -> None:
     tree = ast.parse(
         "from typing import TYPE_CHECKING\n"
         "from newswitch.infra.http import running_context\n"
+        "import main_fastapi\n"
         "if TYPE_CHECKING:\n"
         "    from newswitch.infra.mikro.connection import MikroConnection\n"
     )
     assert [name for _, name in _runtime_imports(tree)] == [
         "typing.TYPE_CHECKING",
         "newswitch.infra.http.running_context",
+        "main_fastapi",
     ]
 
 

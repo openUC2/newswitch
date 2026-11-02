@@ -26,7 +26,7 @@ What a backend registers depends on its instrument (`create_registry` in
 schemas come from a committed export of a *complete* microscope:
 
 ```bash
-just export-schemas   # = cd backend && uv run python -m newswitch.tools.export_schemas
+just export-schemas   # = cd backend && uv run python -m newswitch.infra.export_schemas
 ```
 
 builds the app registry in-process on the reference microscope

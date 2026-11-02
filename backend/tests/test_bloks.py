@@ -10,7 +10,7 @@ from main_fastapi import create_fastapi_registry
 from newswitch.infra.ui import CATALOG_NAME, PublishedCatalog, check_catalog, load_catalog
 from newswitch.instrument import spec
 from newswitch.instrument.ui import UiConfig
-from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 FAKE = INSTRUMENTS / "fake-microscope"

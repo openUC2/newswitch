@@ -173,7 +173,7 @@ jobs:
         working-directory: frontend
 
       - name: Export the schemas of the complete microscope
-        run: uv run python -m newswitch.tools.export_schemas
+        run: uv run python -m newswitch.infra.export_schemas
         working-directory: backend
 
       - name: Regenerate

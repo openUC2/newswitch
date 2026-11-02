@@ -23,7 +23,7 @@ from newswitch.instrument import hardware, parts, spec
 from newswitch.microscope.parts import build_drivers, build_microscope, build_uc2_bus, bus_options
 from newswitch.settings import Settings
 from newswitch.states.uc2 import UC2State
-from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 from tests.conftest import registry_names, run_settings, wired_only
 
 README = Path(__file__).parent.parent / "instruments" / "README.md"
