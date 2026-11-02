@@ -32,7 +32,7 @@ from argon2.exceptions import VerifyMismatchError
 AUTH_DB_ENV_VAR = "NEWSWITCH_AUTH_DB"
 
 #: Default location, alongside `pyproject.toml` in the backend directory.
-DEFAULT_AUTH_DB = Path(__file__).resolve().parents[2] / "auth.db"
+DEFAULT_AUTH_DB = Path(__file__).resolve().parents[3] / "auth.db"
 
 #: How long an unused session stays valid - generous, since a lab operator can be
 #: away from the instrument for hours without wanting to log back in. Mostly a
@@ -265,7 +265,7 @@ class UserStore:
 
         Callers use this to refuse an edit that would leave zero admins able to log
         in - the one lockout the CLI recovery tool cannot fix without wiping every
-        account (see `newswitch.tools.accounts`).
+        account (see `newswitch.infra.accounts.cli`).
         """
         with self._connect() as connection:
             row = connection.execute(

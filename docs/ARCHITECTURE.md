@@ -318,7 +318,7 @@ A part merges the parts it names things of, so what reaches an app through two p
 The part registries hold no per-run state and nothing is declared on them after import.
 
 The detectors send their frames to the context `FrameSink` (a runtime-checkable
-protocol, `newswitch.broadcasters.FrameSink`), and an acquisition stores its datasets in the
+protocol, `newswitch.protocols.FrameSink`), and an acquisition stores its datasets in the
 context `DatasetStore` (`newswitch/protocols/dataset_store.py`). The core registers both but
 provides neither: the entry file provides them, with startup hooks of its own, and passes in the
 arkitekt `services` the `App` is created with. The background `run_detector_loop(detector:
@@ -366,7 +366,7 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
     app = create_registry(instrument)
     app.register_startup(provide_frame_broadcaster)
     if with_mikro:
-        from newswitch.services import mikro_app  # needs the extra mikro
+        from newswitch.infra.mikro import app as mikro_app  # needs the extra mikro
 
         app.registry.merge(mikro_app.app.registry)
     else:
@@ -388,7 +388,7 @@ JSX-like markup. newswitch's bloks live in the description, as BSX source, writt
 with `file:`, relative to the description; the views instruments share are in
 `backend/instruments/views/`. `declare_ui(app, instrument)` declares its `ui` section, the blok
 marked `default` shown first, checked against the catalog the frontend publishes
-(`newswitch/bloks/newswitch-catalog.json`, written by `cd frontend && yarn catalog:export`, versioned
+(`newswitch/infra/ui/newswitch-catalog.json`, written by `cd frontend && yarn catalog:export`, versioned
 as `newswitch@<n>` by `NEWSWITCH_CATALOG_VERSION` in `frontend/src/lib/blok/microscope/catalog.tsx`,
 which `ui.catalog` names); `declare_agent_ui(app, instrument)` declares its
 `agent_ui` section instead (section 6.1). No blok comes from anywhere else. Bloks are served at
@@ -442,10 +442,10 @@ What happens when you run `uvicorn main_fastapi:create --factory --port 8069`:
      *replaces* the app's default lifespan so agent boot/teardown ride on the
      server's own lifecycle.
 3. Back in `create_app`, the non-agent routers are mounted: auth and accounts
-   (`newswitch/accounts/routes.py`), then the routes of `newswitch/routes/`:
-   the module-level routers `newswitch.routes.liveview.router` at `/stream` (video
-   websockets, from the running agent's `FrameBroadcaster`), `newswitch.routes.files.router`
-   and `newswitch.routes.cache.router`.
+   (`newswitch/infra/accounts/routes.py`), then the routes of `newswitch/infra/http/`:
+   the module-level routers `newswitch.infra.http.liveview.router` at `/stream` (video
+   websockets, from the running agent's `FrameBroadcaster`), `newswitch.infra.http.files.router`
+   and `newswitch.infra.http.cache.router`.
 4. **Server startup → lifespan enters**:
    - the agent swaps its registry for a frozen snapshot and checks the app
      context is there (`require_app_context`),
@@ -562,11 +562,11 @@ sequenceDiagram
 
 Bulk pixels never travel through the state system. The detector background
 loop (`run_detector_loop`, `detector.acquire_live(sink)`) pushes frames into the
-**`FrameBroadcaster`** (`backend/newswitch/broadcasters/`; the `FrameSink` `main_fastapi.py` provides),
+**`FrameBroadcaster`** (`backend/newswitch/infra/streaming/`; the `FrameSink` `main_fastapi.py` provides),
 which keeps the newest frame per detector, by name. Browsers open `WS /stream/frames/{detector}`
-(`backend/newswitch/routes/liveview.py`, its `router` included by `create_app`;
+(`backend/newswitch/infra/http/liveview.py`, its `router` included by `create_app`;
 the first message is the client's auth frame) and get whole frames, one per message: a
-header and the detector's own values (`newswitch/broadcasters/wire.py`), binned to
+header and the detector's own values (`newswitch/infra/streaming/wire.py`), binned to
 `max_size` (default 640; 0 sends full size), at most `max_fps` per second (default 30; 0 sends them
 all), byte-shuffled and zstd-compressed, which is lossless. The client acknowledges each frame and is sent
 the newest one after that, so a slow viewer skips frames and one can join at any time; without
@@ -578,7 +578,7 @@ of the frame rate. The frontend shares one socket per detector and size per tab
 ### 6.1 Two ways to serve
 
 The detectors only know the **`FrameSink`** protocol
-(`backend/newswitch/broadcasters/sink.py`: `start_broadcasting()`,
+(`backend/newswitch/protocols/frame_sink.py`: `start_broadcasting()`,
 `broadcast_sync(detector, frame)` from the detector's thread), a context `create_registry`
 registers and the entry file provides, like the `DatasetStore` an acquisition stores into. Which
 they get, and which UI is declared, is up to the entry file: both start the same way
@@ -591,18 +591,18 @@ startup hooks that provide those (`python main.py fastapi|arkitekt` picks one).
 |---|---|---|
 | Run | `uvicorn main_fastapi:create --factory`, `just dev` | `python main_arkitekt.py`, `just agent` |
 | Registry | `create_fastapi_registry(instrument)` → `App` | `create_arkitekt_registry(instrument)` → `App` |
-| Sink | `FrameBroadcaster` (`newswitch/broadcasters/`), provided as the `FrameSink` | `LovekitSink(cameras_of(current.instrument))` (`newswitch/broadcasters/lovekit.py`), provided as the `FrameSink`; `services=(lovekit_service, mikro_service)` |
-| Dataset store | `MikroDatasetStore` when a mikro is configured (`newswitch/services/mikro_app.py`), else `NoDatasetStore` (`newswitch/services/dataset_store.py`), which refuses an acquisition | `MikroDatasetStore` (`newswitch/services/mikro_store.py`) on the client `mikro_service` provides |
+| Sink | `FrameBroadcaster` (`newswitch/infra/streaming/`), provided as the `FrameSink` | `LovekitSink(cameras_of(current.instrument))` (`newswitch/infra/streaming/lovekit.py`), provided as the `FrameSink`; `services=(lovekit_service, mikro_service)` |
+| Dataset store | `MikroDatasetStore` when a mikro is configured (`newswitch/infra/mikro/app.py`), else `NoDatasetStore` (`newswitch/infra/mikro/none.py`), which refuses an acquisition | `MikroDatasetStore` (`newswitch/infra/mikro/store.py`) on the client `mikro_service` provides |
 | Registers | startup `provide_frame_broadcaster` → `FrameSink`; `provide_no_dataset_store` → `DatasetStore`, or the part `mikro_app` | state `CameraStreams`, startup `provide_lovekit_sink` → `Tuple[FrameSink, CameraStreams]`, startup `provide_dataset_store` → `DatasetStore`, background `publish_camera_streams` (when there are detectors) |
 | UI | the description's `ui`, newswitch frontend's catalog (`declare_ui`) | the description's `agent_ui`, the spec's catalogs and Orkestrator's module (`declare_agent_ui`) |
 | Frames | `WS /stream/...` (above) | lovekit streams, one per detector |
-| Mikro | Configured by hand: `MIKRO_URL`, `MIKRO_DATALAYER_URL`, `MIKRO_TOKEN` (`newswitch/services/mikro_connection.py`); unset runs without one. Compose has a stack for it: `just mikro`, then `just dev-mikro` | `mikro_service`: the one the arkitekt server provides |
-| HTTP routes | auth, accounts, `newswitch/routes/`: live view, files, cache | none |
+| Mikro | Configured by hand: `MIKRO_URL`, `MIKRO_DATALAYER_URL`, `MIKRO_TOKEN` (`newswitch/infra/mikro/connection.py`); unset runs without one. Compose has a stack for it: `just mikro`, then `just dev-mikro` | `mikro_service`: the one the arkitekt server provides |
+| HTTP routes | auth, accounts, `newswitch/infra/http/`: live view, files, cache | none |
 
-`create_app` includes the module-level routers of `newswitch/routes/`:
+`create_app` includes the module-level routers of `newswitch/infra/http/`:
 `liveview.router` at `/stream`, `files.router` (`/files/...`) and `cache.router`
 (`/cache/...`). All read what they need off the running agent's contexts
-(`running_context(connection, cls)` in `routes/__init__.py`, for requests and
+(`running_context(connection, cls)` in `infra/http/__init__.py`, for requests and
 websockets): files the `IOManager`, cache the `CacheManager`, the live view the
 `FrameBroadcaster` (provided as the `FrameSink`). Before startup the HTTP routes answer
 503 and the live-view websocket closes with 1013.
@@ -610,7 +610,7 @@ websockets): files the `IOManager`, cache the `CacheManager`, the live view the
 `main_arkitekt.py` runs the registry with `arkitekt.run`, which logs in to the arkitekt
 server fakts finds (`--url` / `$FAKTS_URL`); it needs the extra `agent`
 (`uv sync --extra agent`), and only it imports lovekit
-(`newswitch.broadcasters` does not import `lovekit.py`).
+(`newswitch.infra.streaming` does not import `lovekit.py`).
 It runs on any instrument: each detector becomes a lovekit `VideoStream`, keyed by its
 cube (stable across restarts) and titled by that too (`cameras_of(instrument)`
 → `list[CameraStream]`). The startup hook `provide_lovekit_sink` provides a
@@ -635,29 +635,30 @@ a fake lovekit client.
 | Path | Role |
 |---|---|
 | `main.py` | **Start here**: the steps both ways of serving share (settings, instrument, registry, serve); `python main.py fastapi\|arkitekt`. |
-| `main_fastapi.py` | Served by FastAPI: the startup hooks `provide_frame_broadcaster` (a `FrameBroadcaster` as the `FrameSink`) and `provide_no_dataset_store` (a `NoDatasetStore` as the `DatasetStore`), `create_fastapi_registry(instrument, with_mikro)` → `App` (`create_registry`, those startup hooks, or the part `mikro_app` in place of the second when asked for, `declare_ui`), `create_app` (`configure_fastapi`, auth, accounts, the routers of `newswitch/routes/`), the uvicorn factory `create`, `main`. |
+| `main_fastapi.py` | Served by FastAPI: the startup hooks `provide_frame_broadcaster` (a `FrameBroadcaster` as the `FrameSink`) and `provide_no_dataset_store` (a `NoDatasetStore` as the `DatasetStore`), `create_fastapi_registry(instrument, with_mikro)` → `App` (`create_registry`, those startup hooks, or the part `mikro_app` in place of the second when asked for, `declare_ui`), `create_app` (`configure_fastapi`, auth, accounts, the routers of `newswitch/infra/http/`), the uvicorn factory `create`, `main`. |
 | `main_arkitekt.py` | Served as an arkitekt agent: `cameras_of(instrument)`, the startup hooks `provide_lovekit_sink` (a `LovekitSink` as the `FrameSink`, and `CameraStreams`) and `provide_dataset_store` (a `MikroDatasetStore` as the `DatasetStore`), `create_arkitekt_registry(instrument)` → `App` (`create_registry` with `lovekit_service` and `mikro_service`, the state `CameraStreams`, those startup hooks, `publish_camera_streams`, `declare_agent_ui`), `create(current)`, `main` (`arkitekt.run`). |
-| `newswitch/tools/` | Tools beside the servers: `check_instrument.py` (prediction, measurement and truth compared), `export_schemas.py` (`just export-schemas`: `create_fastapi_registry` on `REFERENCE_INSTRUMENT`, its registry snapshot written to `frontend/schemas/`), `accounts.py` (account recovery from a shell). |
+| `newswitch/tools/` | Tools beside the servers: `check_instrument.py` (prediction, measurement and truth compared), `export_schemas.py` (`just export-schemas`: `create_fastapi_registry` on `REFERENCE_INSTRUMENT`, its registry snapshot written to `frontend/schemas/`). |
 | `newswitch/settings.py` | `Settings` (`simulate`, `simulation`, `db_path`, `instrument`, `camera_recording_dir`, `camera_debug_window`, `image_dir`, `cache_dir`), the description's `settings` section, `load_settings` (`NEWSWITCH_CONFIG` names the instrument; unset or invalid, a `SpecError`) and `load_devices(config)` → `Instrument \| None`: the settings and instrument both servers start from. |
 | `newswitch/microscope/registry.py` | `create_registry(instrument, services=())`: creates a fresh `App("newswitch", app_context=Run, services=services)` and merges the part registries the instrument has; no UI, no streams (the entry files add those). |
 | `newswitch/microscope/apps/` | One registry per part, an `app` each: `models`, `core` (with the contexts `FrameSink` and `DatasetStore`, which the entry file provides), `values`, `detector`, `uc2`, and what needs several: `focus`, `acquisition`. Plain module-level hooks; a part merges the parts it names things of. |
 | `newswitch/microscope/run.py` | `Run`, the app context: the settings, the instrument and the mikro of one run, and its one `build_microscope` (`Run.microscope`). |
 | `newswitch/microscope/parts.py` | Data and functions: `build_microscope(settings, instrument)` → `Microscope` (a record of every state and manager, what it lacks None), from `build_uc2_bus`, `build_detector_manager`, `build_drivers`. The startup hooks are in `newswitch/microscope/apps/`. |
 | `newswitch/microscope/locks.py` | The lock names, one constant per way of changing a microscope (and per shared service): `MOTION`, `SWAP`, `TUNE`, `DETECTOR`, `GALVO`, `IO`, `HOOKS` = `"hook_registry"`, `EXPANSE` = `"expanse_state"`, `CACHE`. |
-| `newswitch/routes/` | The routes `main_fastapi.py` serves beside the agent (section 6.1), each a module-level `router`: `liveview.py` (`/stream` websockets, from the running `FrameBroadcaster`), `files.py` (`/files/...`, the `IOManager`), `cache.py` (`/cache/...`, the `CacheManager`); `__init__.py`: `running_context(connection, cls)`, the running agent's context for a request or websocket (503 before startup; the live view closes with 1013). |
+| `newswitch/infra/http/` | The routes `main_fastapi.py` serves beside the agent (section 6.1), each a module-level `router`: `liveview.py` (`/stream` websockets, from the running `FrameBroadcaster`), `files.py` (`/files/...`, the `IOManager`), `cache.py` (`/cache/...`, the `CacheManager`); `__init__.py`: `running_context(connection, cls)`, the running agent's context for a request or websocket (503 before startup; the live view closes with 1013). |
 | `newswitch/actions/` | Plain action, background and shutdown functions, registered by the part registries of `newswitch/microscope/apps/`: `core.py` (`clear_expanse`), `values.py` (`move`, `move_one`, `move_home`, `swap`, `tune`), `detector.py` (`capture_image`, the live view, `activate_detector`, `deactivate_detector`, `set_region`, also `run_detector_loop`, `close_detector`), `uc2.py` (home/stop/LED/galvo/node-scan actions, `run_uc2_bus`, `run_uc2_event_dispatch`). |
-| `newswitch/protocols/dataset_store.py`, `newswitch/services/mikro_store.py`, `newswitch/services/dataset_store.py` | Where an acquisition goes: `DatasetStore`, provided by the entry file like `FrameSink`. `MikroDatasetStore` writes one `ArrayDataset` of `(t, c, z, y, x)` per position, with its anchors and its place in the stage's space; `NoDatasetStore` refuses, when a server has no mikro. `mikro_connection.py` and `mikro_app.py` are the mikro of FastAPI mode. |
+| `newswitch/protocols/dataset_store.py`, `newswitch/infra/mikro/store.py`, `newswitch/infra/mikro/none.py` | Where an acquisition goes: `DatasetStore`, provided by the entry file like `FrameSink`. `MikroDatasetStore` writes one `ArrayDataset` of `(t, c, z, y, x)` per position, with its anchors and its place in the stage's space; `NoDatasetStore` refuses, when a server has no mikro. `connection.py` and `app.py` beside them are the mikro of FastAPI mode. |
 | `newswitch/routines/` | Multi-step procedures registered as actions: `region_scan.py`, `acquire.py` (an `AcquisitionPlan`, into a `DatasetStore`), `calibration.py`, `autofocus.py`; `common.py` holds what they share (`z_sweep`, `focus_range`, `field_of_view`, `acquire_step`); `affine_matrix.py` (pixel shifts, the pixel→stage affine). The template for porting ImSwitch "apps". |
-| `newswitch/protocols/` | The **contracts**: the manager protocols only (`app.register_context`), one module per part or service — `base` (`Manager`, `BackgroundManager`), `detector` (+ `DetectorFrame`, `DetectorSessionInfo`), `uc2` (`UC2BusManager`), `acquisition`, `cache`, `calibration`, `dataset_store`, `expanse`, `io`, `optics`, `metadata`, `hook_manager` (+ `HookContext`, `UnsupportedHook`). `Values` is a class, with no protocol. |
+| `newswitch/protocols/` | The **contracts**: the manager protocols only (`app.register_context`), one module per part or service — `base` (`Manager`, `BackgroundManager`), `detector` (+ `DetectorFrame`, `DetectorSessionInfo`), `uc2` (`UC2BusManager`), `acquisition`, `cache`, `calibration`, `dataset_store`, `expanse`, `io`, `optics`, `metadata`, `hook_manager` (+ `HookContext`, `UnsupportedHook`), `frame_sink` (`FrameSink`: where detectors send frames, provided by the entry file). `Values` is a class, with no protocol. |
 | `newswitch/states/` | The states (`app.register_state`): `values.py` (`MoveState`, `SwapState`, `TuneState`, `SourceState`), `detector.py` (`DetectorState`), `optics.py` (`OpticsState`), `uc2.py` (`UC2State`), `io.py` (`IOState`), `hooks.py` (`HookState`), `expanse.py` (`ExpanseState`), `calibration.py` (`CalibrationState`), `autofocus.py` (`AutofocusState`). |
 | `newswitch/models/` | The value types (`app.register_model`): `values.py` (`MoveValue`, `SwapValue`, `SwapOption`, `TuneValue`, `LightSource`), `optics.py` (`DetectorOptics`, `SourceOptics`, `OpticalChannel`), `light_path.py` (`LightElement`, `LightEdge`, `LightPath`, `LightPathSnapshot`), `frames.py` (`Frame`, `Image`, `Metadata`), `devices.py` (`Detector`, `DetectorAxis`), `hooks.py`, `calibration.py`, `io.py`, `uc2.py` (typed hardware events), `acquisition.py` (`AcquisitionPlan`, `AcquisitionChannel`, `AcquisitionPosition`, `AcquisitionStack`, `AcquiredDataset`, `ScanOrder`). |
 | `newswitch/instrument/` | The description and what follows from it (see "Instruments" below): `spec.py` (`Instrument`, the file validated, pydantic dataclasses all the way down; `load`), `hardware.py` (its `hardware` section), `parts.py` (the `Detector`s from the instrument, `cameras`, `check_wired`), `ui.py` (`BlokEntry`, `UiConfig`: its `ui` and `agent_ui` sections), `errors.py` (`SpecError`), `compiler.py`, `tracing.py`, `predict.py`, `roles.py`; the libraries `components/`, `curves/`, `fluorophores/`, `readouts/`. |
-| `newswitch/bloks/` | Declaring the description's bloks: the frontend's catalog (`catalog.py`, `newswitch-catalog.json`); `__init__.py`: `declare_ui`, `declare_agent_ui`. |
+| `newswitch/infra/ui/` | Declaring the description's bloks: the frontend's catalog (`catalog.py`, `newswitch-catalog.json`); `__init__.py`: `declare_ui`, `declare_agent_ui`. |
 | `newswitch/drivers/` | What reaches the world: `base.py` (`Driver`, `Simulated`, `SimulatedMove`, `register_driver`, `build_driver`), `simulator.py` (the simulator of an instrument: `Simulator`, `SimulatedMicroscope`), `simulated_detector.py` (`SimulatedDetectorManager`, whose images come from it, keyed by name). |
 | `newswitch/drivers/uc2/` | Real hardware: `canopen_bus.py` / `rest_bus.py` / `virtual_bus.py` (transports behind `UC2BusManager`), `event_broker.py` (fan-out), `dispatch.py` (events → states), `actuators.py` (the drivers `uc2.stepper`, `uc2.laser`, `uc2.wheel`, `uc2.turret`) and `uc2_detector.py` (real cameras through uc2_cam_py). |
 | `newswitch/services/` | The managers every microscope shares: `values.py` (`Values`), `stage.py` (`Stage`, `stage_of`, `where`), `optics.py` (`OpticsManager`), `acquisition.py`, `cache/`, `calibration.py`, `expanse.py`, `io/`, `metadata.py`, `element_facts.py` (what an element is made of, as it should read), `hooks/` (`manager.py`: `PythonHookManager`; `software_autofocus.py`). |
-| `newswitch/broadcasters/` | The `FrameSink` protocol (`sink.py`, runtime-checkable; the context the detectors stream to, provided by the entry file), `FrameBroadcaster` (`frame.py`, the newest frame per detector) and the live view's message format (`wire.py`) for `main_fastapi.py`; `lovekit.py` for `main_arkitekt.py` (`LovekitSink`, `CameraStream`, `CameraStreams`, `publish_camera_streams`, `MAX_FPS`; not imported by the package). |
-| `newswitch/accounts/` | Users and auth of the FastAPI server: `auth.py` (login, tokens, middleware), `store.py` (the account database), `routes.py` (account management). (Live view, files and cache are in `newswitch/routes/`.) |
+| `newswitch/infra/streaming/` | The `FrameSink`s of the two ways of serving (the protocol, runtime-checkable, is the microscope's: `newswitch/protocols/frame_sink.py`): `FrameBroadcaster` (`frame.py`, the newest frame per detector) and the live view's message format (`wire.py`) for `main_fastapi.py`; `lovekit.py` for `main_arkitekt.py` (`LovekitSink`, `CameraStream`, `CameraStreams`, `publish_camera_streams`, `MAX_FPS`; not imported by the package). |
+| `newswitch/infra/` | What serves the microscope, apart from it: it imports the rest of `newswitch`, which never imports it (`tests/test_layering.py`). `accounts/`, `http/`, `streaming/`, `mikro/`, `ui/`, below and above. |
+| `newswitch/infra/accounts/` | Users and auth of the FastAPI server: `auth.py` (login, tokens, middleware), `store.py` (the account database), `routes.py` (account management), `cli.py` (account recovery from a shell). (Live view, files and cache are in `newswitch/infra/http/`.) |
 | `newswitch/reference/complete-microscope/` | The reference microscope (`microscope.yml`): everything a microscope can have, no views; what the frontend's schemas are exported from. |
 | `instruments/` | The microscopes newswitch runs, a folder each, only ever read (see `instruments/README.md`): `fake-microscope/`, the default in the root `.env`; `cam-test/`, one simulated uc2_cam_py camera, with nothing simulated by newswitch; `dual-camera/`, `rgb-camera/`, `point-scanner/`, `light-sheet/`, `flim/`; `views/`, the views they share. |
 | `tests/` | pytest; agent-level tests drive the app through `AsyncAgentTestClient` (`arkitekt_fastapi.testing`). |

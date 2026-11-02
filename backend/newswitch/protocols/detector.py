@@ -21,7 +21,7 @@ from newswitch.protocols.base import Manager
 from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
-    from newswitch.broadcasters import FrameSink
+    from newswitch.protocols.frame_sink import FrameSink
 
 
 def is_full_sensor(roi: Roi) -> bool:

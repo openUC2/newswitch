@@ -1,7 +1,7 @@
 """Authentication for the newswitch backend.
 
 `UserStoreAuthenticator` (the default `create_app` wires up) checks a real user table
-in `newswitch.accounts.store.UserStore` - several accounts, each with a role - and issues a
+in `newswitch.infra.accounts.store.UserStore` - several accounts, each with a role - and issues a
 random, revocable session token per login. On first run, with no accounts yet, it
 seeds one admin account from `auth.yaml` (or the `admin`/`admin` default), so a fresh
 clone still runs without setup. `AllowAllAuthenticator` is a second, no-op
@@ -38,7 +38,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from newswitch.accounts.store import Role, UserStore
+from newswitch.infra.accounts.store import Role, UserStore
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 AUTH_FILE_ENV_VAR = "NEWSWITCH_AUTH_FILE"
 
 #: Default location, alongside `pyproject.toml` in the backend directory.
-DEFAULT_AUTH_FILE = Path(__file__).resolve().parents[2] / "auth.yaml"
+DEFAULT_AUTH_FILE = Path(__file__).resolve().parents[3] / "auth.yaml"
 
 DEFAULT_USERNAME = "admin"
 DEFAULT_PASSWORD = "admin"

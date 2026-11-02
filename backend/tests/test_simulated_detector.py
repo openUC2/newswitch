@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import yaml
 
-from newswitch.broadcasters import FrameBroadcaster
+from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import parts, spec
 from newswitch.microscope.parts import Microscope, build_microscope

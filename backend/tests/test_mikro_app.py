@@ -9,15 +9,15 @@ from arkitekt import App
 from fastapi.testclient import TestClient
 
 from main_fastapi import create_app, create_fastapi_registry
-from newswitch.accounts.auth import AllowAllAuthenticator
+from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.microscope.run import Run
-from newswitch.services.mikro_connection import MikroConnection
+from newswitch.infra.mikro.connection import MikroConnection
 from tests.conftest import run_settings
 
 pytest.importorskip("mikro")
 
-from newswitch.services import mikro_app  # noqa: E402  (needs the extra "mikro")
-from newswitch.services.mikro_store import MikroDatasetStore  # noqa: E402
+from newswitch.infra.mikro import app as mikro_app  # noqa: E402  (needs the extra "mikro")
+from newswitch.infra.mikro.store import MikroDatasetStore  # noqa: E402
 
 
 class FakeClient:

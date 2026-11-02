@@ -2,7 +2,7 @@
 
 A detector only produces: it starts the sink when it streams and hands it every new frame,
 from its own thread. Who watches is the entrypoint's business: the websocket live view
-(`FrameBroadcaster`, ``main_fastapi.py``) or lovekit streams (`newswitch.broadcasters.lovekit`,
+(`FrameBroadcaster`, ``main_fastapi.py``) or lovekit streams (`newswitch.infra.streaming.lovekit`,
 ``main_arkitekt.py``).
 """
 

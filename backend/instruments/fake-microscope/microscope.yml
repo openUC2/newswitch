@@ -139,7 +139,7 @@ settings:
   camera_debug_window: true      # real cameras only: a window per camera, acquiring from startup on
 
 # What the frontend shows: bloks in blok language v2, checked against the catalog the frontend
-# publishes (newswitch/bloks/newswitch-catalog.json). `catalog` names the version they were written
+# publishes (newswitch/infra/ui/newswitch-catalog.json). `catalog` names the version they were written
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:

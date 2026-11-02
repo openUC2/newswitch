@@ -1,7 +1,7 @@
 import { decompress } from "fzstd";
 
 /**
- * A frame of the live view, as `newswitch/broadcasters/wire.py` sends it: one websocket
+ * A frame of the live view, as `newswitch/infra/streaming/wire.py` sends it: one websocket
  * message is one whole frame, a 32-byte little-endian header and the detector's own values.
  */
 

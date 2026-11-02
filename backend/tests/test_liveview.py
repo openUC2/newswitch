@@ -12,10 +12,10 @@ import zstandard
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from newswitch.accounts.auth import AllowAllAuthenticator
-from newswitch.broadcasters import FrameBroadcaster
-from newswitch.broadcasters.frame import DetectorFrameMessage
-from newswitch.broadcasters.wire import (
+from newswitch.infra.accounts.auth import AllowAllAuthenticator
+from newswitch.infra.streaming import FrameBroadcaster
+from newswitch.infra.streaming.frame import DetectorFrameMessage
+from newswitch.infra.streaming.wire import (
     COMPRESSION_NONE,
     COMPRESSION_SHUFFLED_ZSTD,
     HEADER,
@@ -23,7 +23,7 @@ from newswitch.broadcasters.wire import (
     binning_for,
     pack_frame,
 )
-from newswitch.routes.liveview import router
+from newswitch.infra.http.liveview import router
 
 
 @pytest.fixture

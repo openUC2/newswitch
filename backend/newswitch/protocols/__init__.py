@@ -11,6 +11,7 @@ from .cache import CacheManager
 from .calibration import CalibrationManager
 from .detector import DetectorFrame, DetectorManager, DetectorSessionInfo
 from .expanse import ExpanseManager
+from .frame_sink import FrameSink
 from .hook_manager import HookContext, HookHandler, HookManager, UnsupportedHook
 from .io import IOManager
 from .optics import OpticsManager
@@ -26,6 +27,7 @@ __all__ = [
     "DetectorManager",
     "DetectorSessionInfo",
     "ExpanseManager",
+    "FrameSink",
     "HookContext",
     "HookHandler",
     "HookManager",

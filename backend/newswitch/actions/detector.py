@@ -1,7 +1,7 @@
 """Taking images, and what a detector does beyond its variables."""
 
 from newswitch import protocols
-from newswitch.broadcasters import FrameSink
+from newswitch.protocols.frame_sink import FrameSink
 from newswitch.models.frames import Frame
 from newswitch.protocols import DetectorManager
 from newswitch.states.detector import DetectorState

@@ -19,8 +19,9 @@ particular to them:
              - `main_arkitekt`: registers a lovekit stream per detector and the description's
                ``agent_ui`` bloks (Orkestrator's catalog), and runs it as an arkitekt agent.
 
-Tools beside them (compiling an instrument, exporting the frontend's schemas, recovering
-accounts) are in `newswitch.tools`.
+Tools beside them (compiling an instrument, exporting the frontend's schemas) are in
+`newswitch.tools`; recovering accounts in `newswitch.infra.accounts.cli`. What serves the
+microscope (auth, routes, streams, mikro, the UI) is `newswitch.infra`; the rest is the microscope.
 """
 
 import argparse

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from main_fastapi import create_fastapi_registry
-from newswitch.broadcasters import FrameBroadcaster
+from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.instrument import spec
 from newswitch.routines.affine_matrix import pixel_shift

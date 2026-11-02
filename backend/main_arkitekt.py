@@ -22,8 +22,8 @@ from arkitekt import App, run
 from lovekit import lovekit_service
 from mikro import Mikro, mikro_service
 
-from newswitch.bloks import declare_agent_ui
-from newswitch.broadcasters.lovekit import (
+from newswitch.infra.ui import declare_agent_ui
+from newswitch.infra.streaming.lovekit import (
     CameraStream,
     CameraStreams,
     LovekitSink,
@@ -31,10 +31,10 @@ from newswitch.broadcasters.lovekit import (
 )
 from newswitch.instrument.spec import Instrument
 from newswitch.microscope.registry import create_registry
-from newswitch.broadcasters import FrameSink
+from newswitch.protocols.frame_sink import FrameSink
 from newswitch.microscope.run import Run
 from newswitch.protocols.dataset_store import DatasetStore
-from newswitch.services.mikro_store import MikroDatasetStore
+from newswitch.infra.mikro.store import MikroDatasetStore
 from newswitch.settings import load_settings
 
 

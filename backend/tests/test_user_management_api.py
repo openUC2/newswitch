@@ -13,9 +13,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from main_fastapi import create_app
-from newswitch.accounts.auth import AllowAllAuthenticator, UserStoreAuthenticator
+from newswitch.infra.accounts.auth import AllowAllAuthenticator, UserStoreAuthenticator
 from tests.conftest import run_settings
-from newswitch.accounts.store import Role, UserStore
+from newswitch.infra.accounts.store import Role, UserStore
 
 
 @pytest.fixture

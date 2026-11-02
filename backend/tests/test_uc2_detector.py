@@ -18,7 +18,8 @@ import pytest
 
 uc2_cam_py = pytest.importorskip("uc2_cam_py")
 
-from newswitch.broadcasters import FrameBroadcaster, FrameSink  # noqa: E402
+from newswitch.infra.streaming import FrameBroadcaster  # noqa: E402
+from newswitch.protocols.frame_sink import FrameSink  # noqa: E402
 from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager  # noqa: E402
 from newswitch.models.devices import FULL_SENSOR, Detector  # noqa: E402
 from newswitch.protocols import DetectorManager  # noqa: E402

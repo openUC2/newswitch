@@ -20,7 +20,7 @@ from arkitekt_fastapi.testing import AsyncAgentTestClient, BufferedEvent
 from fastapi import FastAPI
 
 from main_fastapi import create_app, create_fastapi_registry
-from newswitch.accounts.auth import AllowAllAuthenticator
+from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.instrument import spec
 from newswitch.settings import Settings
 from newswitch.models.acquisition import (

@@ -9,11 +9,11 @@ import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
-from newswitch.accounts.auth import Authenticator
-from newswitch.broadcasters import FrameBroadcaster
-from newswitch.broadcasters.frame import FrameSubscription
-from newswitch.broadcasters.wire import pack_frame
-from newswitch.routes import running_context
+from newswitch.infra.accounts.auth import Authenticator
+from newswitch.infra.streaming import FrameBroadcaster
+from newswitch.infra.streaming.frame import FrameSubscription
+from newswitch.infra.streaming.wire import pack_frame
+from newswitch.infra.http import running_context
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ async def stream_frames(
     max_size: int = DEFAULT_MAX_SIZE,
     max_fps: float = DEFAULT_MAX_FPS,
 ) -> None:
-    """A detector's frames, each message one whole frame (`newswitch.broadcasters.wire`).
+    """A detector's frames, each message one whole frame (`newswitch.infra.streaming.wire`).
 
     After its auth frame the client sends one message per frame it took, of any content; the
     next frame comes after that, and it is the newest. A slower client gets fewer frames.

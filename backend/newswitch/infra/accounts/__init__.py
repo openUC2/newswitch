@@ -4,5 +4,5 @@
 - `store`: the account database (users, roles, sessions, audit);
 - `routes`: account management over HTTP (admin-only, except ``/auth/me``).
 
-Recovery from a shell: `newswitch.tools.accounts`.
+Recovery from a shell: `newswitch.infra.accounts.cli`.
 """

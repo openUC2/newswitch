@@ -18,7 +18,7 @@ from examples.declarative_acquisition.instrument import (
     Record,
     Request,
 )
-from newswitch.services.mikro_connection import MikroConnection
+from newswitch.infra.mikro.connection import MikroConnection
 
 
 def heading(text: str) -> None:

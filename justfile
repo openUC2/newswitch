@@ -134,15 +134,15 @@ check: fmt-check lint types test
 
 # List every account and its role (run on the appliance itself)
 list-users:
-    cd backend && uv run python -m newswitch.tools.accounts list-users
+    cd backend && uv run python -m newswitch.infra.accounts.cli list-users
 
 # Recovery: set a new password for an existing account, e.g. after it's forgotten
 reset-password username password:
-    cd backend && uv run python -m newswitch.tools.accounts reset-password {{username}} {{password}}
+    cd backend && uv run python -m newswitch.infra.accounts.cli reset-password {{username}} {{password}}
 
 # Recovery: create a fresh admin account, e.g. if every admin got locked out
 create-admin username password:
-    cd backend && uv run python -m newswitch.tools.accounts create-admin {{username}} {{password}}
+    cd backend && uv run python -m newswitch.infra.accounts.cli create-admin {{username}} {{password}}
 
 
 # Write the schemas of a complete microscope (newswitch/reference/complete-microscope) into

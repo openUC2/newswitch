@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from newswitch.models.io import FileHandle
-from newswitch.routes import running_context
+from newswitch.infra.http import running_context
 from newswitch.protocols.io import IOManager
 
 router = APIRouter(tags=["Files"])

@@ -5,7 +5,7 @@ from typing import Tuple
 from arkitekt import App
 
 from newswitch.actions import core
-from newswitch.broadcasters import FrameSink
+from newswitch.protocols.frame_sink import FrameSink
 from newswitch.microscope import locks
 from newswitch.microscope.apps import models
 from newswitch.microscope.run import Run

@@ -63,7 +63,7 @@ hardware:
       vendor_options: {sensor_width: 640, sensor_height: 480, frame_rate: 20.0}
 
 # What the frontend shows: bloks in blok language v2, checked against the catalog the frontend
-# publishes (newswitch/bloks/newswitch-catalog.json). `catalog` names the version they were written
+# publishes (newswitch/infra/ui/newswitch-catalog.json). `catalog` names the version they were written
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:

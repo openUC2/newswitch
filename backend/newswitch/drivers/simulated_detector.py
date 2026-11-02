@@ -20,7 +20,7 @@ from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo, is_
 from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
-    from newswitch.broadcasters import FrameSink
+    from newswitch.protocols.frame_sink import FrameSink
 
 #: Binning factors a simulated detector offers.
 BINNINGS = [1, 2, 4]

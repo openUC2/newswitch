@@ -20,7 +20,7 @@ import warnings
 from arkitekt import App
 from arkitekt_spec.declare.catalogs import STANDARD_CATALOG_NAME, standard_catalog_release
 
-from newswitch.bloks.catalog import (
+from newswitch.infra.ui.catalog import (
     CATALOG_FILE,
     CATALOG_NAME,
     PublishedCatalog,

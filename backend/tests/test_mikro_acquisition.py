@@ -28,13 +28,13 @@ pytest.importorskip("mikro")
 from mikro import Mikro, space_3d  # noqa: E402
 
 from main_fastapi import create_app  # noqa: E402
-from newswitch.accounts.auth import AllowAllAuthenticator  # noqa: E402
+from newswitch.infra.accounts.auth import AllowAllAuthenticator  # noqa: E402
 from newswitch.instrument import spec  # noqa: E402
 from newswitch.microscope.parts import build_microscope  # noqa: E402
 from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel  # noqa: E402
 from newswitch.routines.acquire import acquire  # noqa: E402
-from newswitch.services.mikro_connection import MikroConnection  # noqa: E402
-from newswitch.services.mikro_store import MikroDatasetStore  # noqa: E402
+from newswitch.infra.mikro.connection import MikroConnection  # noqa: E402
+from newswitch.infra.mikro.store import MikroDatasetStore  # noqa: E402
 from tests.test_acquire import assert_same_beads, bead_pixels
 from tests.conftest import acquisition, collect_until_completed, run_settings  # noqa: E402
 

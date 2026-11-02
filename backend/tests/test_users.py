@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from argon2.exceptions import VerifyMismatchError
 
-from newswitch.accounts.auth import UserStoreAuthenticator
-from newswitch.accounts.store import (
+from newswitch.infra.accounts.auth import UserStoreAuthenticator
+from newswitch.infra.accounts.store import (
     Role,
     User,
     UserAlreadyExistsError,

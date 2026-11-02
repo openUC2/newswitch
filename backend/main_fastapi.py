@@ -20,25 +20,26 @@ from arkitekt_fastapi import configure_fastapi
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from newswitch.accounts.auth import (
+from newswitch.infra.accounts.auth import (
     Authenticator,
     AuthMiddleware,
     default_authenticator,
     make_expand_user_from_request,
 )
-from newswitch.accounts.auth import router as auth_router
-from newswitch.accounts.routes import router as users_router
-from newswitch.bloks import declare_ui
-from newswitch.broadcasters import FrameBroadcaster, FrameSink
+from newswitch.infra.accounts.auth import router as auth_router
+from newswitch.infra.accounts.routes import router as users_router
+from newswitch.infra.ui import declare_ui
+from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.instrument.spec import Instrument
 from newswitch.microscope.registry import create_registry
-from newswitch.routes.cache import router as cache_router
-from newswitch.routes.files import router as files_router
-from newswitch.routes.liveview import router as liveview_router
+from newswitch.infra.http.cache import router as cache_router
+from newswitch.infra.http.files import router as files_router
+from newswitch.infra.http.liveview import router as liveview_router
 from newswitch.microscope.run import Run
 from newswitch.protocols.dataset_store import DatasetStore
-from newswitch.services.dataset_store import NoDatasetStore
-from newswitch.services.mikro_connection import MikroConnection
+from newswitch.protocols.frame_sink import FrameSink
+from newswitch.infra.mikro.none import NoDatasetStore
+from newswitch.infra.mikro.connection import MikroConnection
 from newswitch.settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
     app = create_registry(instrument)
     app.register_startup(provide_frame_broadcaster)
     if with_mikro:
-        from newswitch.services import mikro_app  # needs the extra mikro
+        from newswitch.infra.mikro import app as mikro_app  # needs the extra mikro
 
         app.registry.merge(mikro_app.app.registry)
     else:

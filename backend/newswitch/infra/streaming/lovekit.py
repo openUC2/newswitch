@@ -8,7 +8,7 @@ from their own threads; it keeps the newest one per detector, and the background
 loop. The declared streams are held in the state `CameraStreams`, which the ``agent_ui``
 bloks show (``<StructureDisplay value="@stream" />``).
 
-Not imported by `newswitch.broadcasters`: it needs the extra ``agent``
+Not imported by `newswitch.infra.streaming`: it needs the extra ``agent``
 (``arkitekt[rekuest,lovekit]``).
 """
 
@@ -22,7 +22,7 @@ from lovekit import VideoStream, to_rgba
 from lovekit.api.schema import Stream
 from lovekit.lovekit import Lovekit
 
-from newswitch.broadcasters.sink import FrameSink
+from newswitch.protocols.frame_sink import FrameSink
 
 #: The most frames a stream is sent per second; a detector may acquire faster.
 MAX_FPS = 15.0

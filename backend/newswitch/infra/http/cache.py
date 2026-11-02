@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from newswitch.routes import running_context
+from newswitch.infra.http import running_context
 from newswitch.protocols.cache import CacheManager
 
 router = APIRouter(tags=["Cache"])

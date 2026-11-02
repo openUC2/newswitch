@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from main_fastapi import create_app
-from newswitch.accounts.auth import (
+from newswitch.infra.accounts.auth import (
     AUTH_FILE_ENV_VAR,
     AuthenticationError,
     Credentials,
@@ -26,7 +26,7 @@ from newswitch.accounts.auth import (
     load_credentials,
 )
 from tests.conftest import run_settings
-from newswitch.accounts.store import Role, UserStore
+from newswitch.infra.accounts.store import Role, UserStore
 
 USERNAME = "operator"
 PASSWORD = "hunter2"
@@ -92,7 +92,7 @@ def test_missing_default_file_falls_back_with_a_warning(
     """A fresh clone must run without setup, but must say so."""
     monkeypatch.delenv(AUTH_FILE_ENV_VAR, raising=False)
     monkeypatch.setattr(
-        "newswitch.accounts.auth.DEFAULT_AUTH_FILE", "/nonexistent/auth.yaml", raising=False
+        "newswitch.infra.accounts.auth.DEFAULT_AUTH_FILE", "/nonexistent/auth.yaml", raising=False
     )
     with caplog.at_level("WARNING"):
         credentials = load_credentials()

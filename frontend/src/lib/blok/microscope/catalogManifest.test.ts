@@ -13,7 +13,7 @@ import { toModuleJson, toUiCatalogComponent } from "./catalogManifest";
 // Vitest runs from the frontend's root.
 const BACKEND_CATALOG = resolve(
   process.cwd(),
-  "../backend/newswitch/bloks/newswitch-catalog.json",
+  "../backend/newswitch/infra/ui/newswitch-catalog.json",
 );
 
 const manifest = () =>

@@ -5,9 +5,9 @@ every admin locked out, a forgotten password, or a corrupted role. Talks to the
 `UserStore` directly, bypassing HTTP auth entirely, which is why this is not exposed
 over the network: whoever can run this already has full access to the machine.
 
-    uv run python -m newswitch.tools.accounts list-users
-    uv run python -m newswitch.tools.accounts reset-password alice new-password
-    uv run python -m newswitch.tools.accounts create-admin rescue rescue-password
+    uv run python -m newswitch.infra.accounts.cli list-users
+    uv run python -m newswitch.infra.accounts.cli reset-password alice new-password
+    uv run python -m newswitch.infra.accounts.cli create-admin rescue rescue-password
 """
 
 from __future__ import annotations
@@ -15,12 +15,17 @@ from __future__ import annotations
 import argparse
 import sys
 
-from newswitch.accounts.store import Role, UserAlreadyExistsError, UserNotFoundError, UserStore
+from newswitch.infra.accounts.store import (
+    Role,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+    UserStore,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for `python -m newswitch.tools.accounts`."""
-    parser = argparse.ArgumentParser(prog="python -m newswitch.tools.accounts")
+    """Entry point for `python -m newswitch.infra.accounts.cli`."""
+    parser = argparse.ArgumentParser(prog="python -m newswitch.infra.accounts.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("list-users", help="Print every account and its role.")

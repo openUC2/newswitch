@@ -15,7 +15,7 @@ from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
-from newswitch.services.mikro_store import AXES, MICROTIME_AXES, _dataset_axes, _optical_element
+from newswitch.infra.mikro.store import AXES, MICROTIME_AXES, _dataset_axes, _optical_element
 from tests.conftest import run_settings
 from tests.test_acquire import acquire, plan
 

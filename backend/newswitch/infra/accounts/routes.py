@@ -9,8 +9,8 @@ check on top of that.
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from newswitch.accounts.auth import UserStoreAuthenticator, bearer_token
-from newswitch.accounts.store import (
+from newswitch.infra.accounts.auth import UserStoreAuthenticator, bearer_token
+from newswitch.infra.accounts.store import (
     LoginEvent,
     Role,
     User,

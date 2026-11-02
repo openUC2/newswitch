@@ -7,7 +7,7 @@ import pytest
 from arkitekt import App
 
 from main_fastapi import create_fastapi_registry
-from newswitch.bloks import CATALOG_NAME, PublishedCatalog, check_catalog, load_catalog
+from newswitch.infra.ui import CATALOG_NAME, PublishedCatalog, check_catalog, load_catalog
 from newswitch.instrument import spec
 from newswitch.instrument.ui import UiConfig
 from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
@@ -147,7 +147,7 @@ def test_agent_mode_refuses_a_newswitch_component() -> None:
 
 def test_the_agent_ui_names_orkestrators_catalog() -> None:
     """An agent_ui written against the newswitch catalog is refused."""
-    from newswitch.bloks import check_agent_catalog
+    from newswitch.infra.ui import check_agent_catalog
 
     with pytest.raises(ValueError, match="orkestrator"):
         check_agent_catalog(UiConfig(catalog="newswitch@1", bloks={}))

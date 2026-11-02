@@ -607,7 +607,7 @@ app.register_action(stage.move_stage, optimistics=[OptimisticInput(state="StageS
           illumination); <code>run_uc2_event_dispatch</code> (UC2 board + stage).</li>
       </ol>
       <p>The detectors send their frames to the context <code>FrameSink</code> (a runtime-checkable
-        protocol, <code>newswitch.broadcasters.FrameSink</code>), which the core registers but does not provide:
+        protocol, <code>newswitch.protocols.FrameSink</code>), which the core registers but does not provide:
         the entry file provides it with a startup hook of its own, and passes in the arkitekt <code>services</code>
         the <code>App</code> is created with. The background <code>run_detector_loop(detector: DetectorManager,
         sink: FrameSink)</code> gets both contexts injected and calls <code>detector.acquire_live(sink)</code>.
@@ -662,7 +662,7 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
         renderer. newswitch’s bloks live in the description, as BSX source:
         <code>declare_ui(app, instrument)</code> declares its <code>ui</code> section, the blok marked
         <code>default</code> shown first, checked against the catalog the frontend publishes
-        (<code>newswitch/bloks/newswitch-catalog.json</code>, versioned as <code>newswitch@&lt;n&gt;</code>, which
+        (<code>newswitch/infra/ui/newswitch-catalog.json</code>, versioned as <code>newswitch@&lt;n&gt;</code>, which
         <code>ui.catalog</code> names); <code>declare_agent_ui(app, instrument)</code> declares its
         <code>agent_ui</code> section instead (<a href="#serving">Two ways to serve</a>). No blok comes from anywhere else. Written in blok
         language v2, bloks can bind to states (<code>{self.ObjectiveState.mounted_lenses}</code>), loop
@@ -698,9 +698,9 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
               <code>FrameSink</code>, <code>declare_ui</code>), then calls <code>configure_fastapi(app=app,
               app_registry=registry.registry, expand_user_from_request=…, app_context=config,
               db_file=config.db_path)</code> from <code>arkitekt_fastapi</code>. Then the non-agent routes
-              are added: accounts (<code>newswitch/accounts/routes.py</code>), and the routes of
-              <code>newswitch/routes/</code>, module-level routers — <code>newswitch.routes.liveview.router</code> at
-              <code>/stream</code>, <code>newswitch.routes.files.router</code>, <code>newswitch.routes.cache.router</code>.</p>
+              are added: accounts (<code>newswitch/infra/accounts/routes.py</code>), and the routes of
+              <code>newswitch/infra/http/</code>, module-level routers — <code>newswitch.infra.http.liveview.router</code> at
+              <code>/stream</code>, <code>newswitch.infra.http.files.router</code>, <code>newswitch.infra.http.cache.router</code>.</p>
             <span class="where">backend/main_fastapi.py → create_app()</span>
           </div>
         </li>
@@ -882,7 +882,7 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
         (default 640; 0 sends full size), compressed losslessly. The client acknowledges each frame and is sent the newest
         after that, so a slow viewer skips frames. Scan and acquisition code can broadcast into additional
         slots, for example stitched-map tiles.</p>
-      <p><code>create_app</code> includes the module-level routers of <code>newswitch/routes/</code> —
+      <p><code>create_app</code> includes the module-level routers of <code>newswitch/infra/http/</code> —
         <code>liveview.router</code> at <code>/stream</code>, <code>files.router</code>
         (<code>/files/…</code>), <code>cache.router</code> (<code>/cache/…</code>). All read what they need off
         the running agent’s contexts (<code>running_context(connection, cls)</code> in
@@ -890,8 +890,8 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
         <code>CacheManager</code>, the live view the <code>FrameBroadcaster</code> (provided as the
         <code>FrameSink</code>). Before startup the HTTP routes answer 503 and the live-view websocket closes
         with 1013.</p>
-      <p class="meta" style="margin:0"><span>backend/newswitch/broadcasters/</span>
-        <span>backend/newswitch/routes/liveview.py</span>
+      <p class="meta" style="margin:0"><span>backend/newswitch/infra/streaming/</span>
+        <span>backend/newswitch/infra/http/liveview.py</span>
         <span>frontend/src/components/liveview/StreamingView.tsx</span></p>
 
       <h3 id="serving">Two ways to serve</h3>
@@ -909,18 +909,18 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
           <tbody>
             <tr><td>Run</td><td><code>uvicorn main_fastapi:create --factory</code>, <code>just dev</code></td><td><code>python main_arkitekt.py</code>, <code>just agent</code></td></tr>
             <tr><td>Registry</td><td><code>create_fastapi_registry(instrument)</code> → <code>App</code></td><td><code>create_arkitekt_registry(instrument)</code> → <code>App</code></td></tr>
-            <tr><td>Sink</td><td><code>FrameBroadcaster</code>, provided as the <code>FrameSink</code></td><td><code>LovekitSink(cameras_of(instrument))</code> (<code>broadcasters/lovekit.py</code>), provided as the <code>FrameSink</code>; <code>services=(lovekit_service, mikro_service)</code></td></tr>
+            <tr><td>Sink</td><td><code>FrameBroadcaster</code>, provided as the <code>FrameSink</code></td><td><code>LovekitSink(cameras_of(instrument))</code> (<code>infra/streaming/lovekit.py</code>), provided as the <code>FrameSink</code>; <code>services=(lovekit_service, mikro_service)</code></td></tr>
             <tr><td>Registers</td><td>startup <code>provide_frame_broadcaster</code> → <code>FrameSink</code></td><td>state <code>CameraStreams</code>, startup <code>provide_lovekit_sink</code> → <code>Tuple[FrameSink, CameraStreams]</code>, background <code>publish_camera_streams</code> (when there are detectors)</td></tr>
             <tr><td>UI</td><td>the description’s <code>ui</code>, the newswitch frontend’s catalog (<code>declare_ui</code>)</td><td>the description’s <code>agent_ui</code>, the spec’s catalogs and Orkestrator’s module (<code>declare_agent_ui</code>)</td></tr>
             <tr><td>Frames</td><td><code>WS /stream/…</code> (above)</td><td>lovekit streams, one per detector</td></tr>
-            <tr><td>HTTP routes</td><td>auth, accounts, <code>newswitch/routes/</code>: live view, files, cache</td><td>none</td></tr>
+            <tr><td>HTTP routes</td><td>auth, accounts, <code>newswitch/infra/http/</code>: live view, files, cache</td><td>none</td></tr>
           </tbody>
         </table>
       </div>
       <p><code>main_arkitekt.py</code> runs the registry with <code>arkitekt.run</code>, which logs in to the arkitekt server
         fakts finds (<code>--url</code> / <code>$FAKTS_URL</code>); it needs the extra <code>agent</code>
         (<code>arkitekt[rekuest,lovekit]</code>, <code>uv sync --extra agent</code>), and only it imports
-        lovekit (<code>newswitch.broadcasters</code> does not import <code>lovekit.py</code>). It runs on any instrument: each detector becomes a lovekit <code>VideoStream</code>, keyed by its
+        lovekit (<code>newswitch.infra.streaming</code> does not import <code>lovekit.py</code>). It runs on any instrument: each detector becomes a lovekit <code>VideoStream</code>, keyed by its
         sensor’s cube (stable across restarts) and titled by that too (<code>cameras_of(instrument)</code>
         → <code>list[CameraStream]</code>). The startup hook <code>provide_lovekit_sink</code> provides a
         <code>LovekitSink(cameras_of(load_devices(app_context)))</code> as the <code>FrameSink</code>, and a
@@ -938,8 +938,8 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
       <p class="meta" style="margin:0"><span>backend/main.py</span>
         <span>backend/main_fastapi.py</span>
         <span>backend/main_arkitekt.py</span>
-        <span>backend/newswitch/broadcasters/lovekit.py</span>
-        <span>backend/newswitch/broadcasters/sink.py</span></p>
+        <span>backend/newswitch/infra/streaming/lovekit.py</span>
+        <span>backend/newswitch/protocols/frame_sink.py</span></p>
     </section>
 
     <!-- ============ 7 ============ -->
@@ -950,7 +950,7 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
           <thead><tr><th>Path</th><th>Role</th></tr></thead>
           <tbody>
             <tr><td><code>main.py</code></td><td><strong>Start here</strong>: the steps both ways of serving share (settings, instrument, registry, serve); <code>python main.py fastapi|arkitekt</code>.</td></tr>
-            <tr><td><code>main_fastapi.py</code></td><td>Served by FastAPI: the startup hook <code>provide_frame_broadcaster</code> (a <code>FrameBroadcaster</code> as the <code>FrameSink</code>), <code>create_fastapi_registry(instrument)</code> → <code>App</code> (<code>create_registry</code>, that startup hook, <code>declare_ui</code>), <code>create_app</code> (<code>configure_fastapi</code>, auth, accounts, the routers of <code>newswitch/routes/</code>), the uvicorn factory <code>create</code>, <code>main</code>.</td></tr>
+            <tr><td><code>main_fastapi.py</code></td><td>Served by FastAPI: the startup hook <code>provide_frame_broadcaster</code> (a <code>FrameBroadcaster</code> as the <code>FrameSink</code>), <code>create_fastapi_registry(instrument)</code> → <code>App</code> (<code>create_registry</code>, that startup hook, <code>declare_ui</code>), <code>create_app</code> (<code>configure_fastapi</code>, auth, accounts, the routers of <code>newswitch/infra/http/</code>), the uvicorn factory <code>create</code>, <code>main</code>.</td></tr>
             <tr><td><code>main_arkitekt.py</code></td><td>Served as an arkitekt agent: <code>cameras_of(instrument)</code>, the startup hook <code>provide_lovekit_sink</code> (a <code>LovekitSink</code> as the <code>FrameSink</code>, and <code>CameraStreams</code>), <code>create_arkitekt_registry(instrument)</code> → <code>App</code> (<code>create_registry</code> with <code>lovekit_service</code> and <code>mikro_service</code>, the state <code>CameraStreams</code>, that startup hook, <code>publish_camera_streams</code>, <code>declare_agent_ui</code>), <code>create(current)</code>, <code>main</code> (<code>arkitekt.run</code>).</td></tr>
             <tr><td><code>newswitch/tools/</code></td><td>Tools beside the servers: <code>compile_instrument.py</code> (<code>just compile-fake</code>, <code>just compile-reference</code>), <code>check_instrument.py</code> (prediction, measurement and truth compared), <code>export_schemas.py</code> (<code>just export-schemas</code>: <code>create_fastapi_registry</code> on <code>REFERENCE_INSTRUMENT</code>, its registry snapshot written to <code>frontend/schemas/</code>), <code>accounts.py</code> (account recovery from a shell).</td></tr>
             <tr><td><code>newswitch/settings.py</code></td><td><code>Settings</code> (the app context: <code>use_virtual_microscope</code>, <code>db_path</code>, <code>instrument</code>, <code>camera_recording_dir</code>, <code>camera_debug_window</code>, <code>image_dir</code>, <code>cache_dir</code>), the description’s <code>settings</code> section, <code>load_settings</code> (<code>NEWSWITCH_CONFIG</code> names the instrument; unset or invalid, a <code>SpecError</code>) and <code>load_devices(config)</code> → <code>Instrument | None</code>: the settings and instrument both servers start from.</td></tr>
@@ -959,20 +959,20 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
             <tr><td><code>newswitch/microscope/run.py</code></td><td><code>Run</code>, the app context: the settings, the instrument and the mikro of one run, and its one <code>build_microscope</code> (<code>Run.microscope</code>).</td></tr>
             <tr><td><code>newswitch/microscope/parts.py</code></td><td>Data and functions: <code>build_microscope(settings, instrument)</code> → <code>Microscope</code> (a record of every state and manager, absent parts None), from <code>build_uc2_bus</code>, <code>build_stage</code>, <code>build_illumination</code>, <code>build_objective</code>, <code>build_filter_bank</code>, <code>build_detector_manager</code>. The startup hooks are closures in <code>create_registry</code>.</td></tr>
             <tr><td><code>newswitch/microscope/locks.py</code></td><td>The lock names, one constant per part (and shared service): <code>STAGE</code> = <code>"stage_position"</code>, <code>ILLUMINATION</code>, <code>DETECTOR</code> = <code>"camera_parameters"</code>, <code>OBJECTIVE</code>, <code>FILTER_BANK</code>, <code>GALVO</code>, <code>IO</code>, <code>HOOKS</code> = <code>"hook_registry"</code>, <code>EXPANSE</code> = <code>"expanse_state"</code>, <code>CACHE</code>.</td></tr>
-            <tr><td><code>newswitch/routes/</code></td><td>The routes <code>main_fastapi.py</code> serves beside the agent, each a module-level <code>router</code>: <code>liveview.py</code> (<code>/stream</code> websockets, from the running <code>FrameBroadcaster</code>), <code>files.py</code> (<code>/files/…</code>, the <code>IOManager</code>), <code>cache.py</code> (<code>/cache/…</code>, the <code>CacheManager</code>); <code>__init__.py</code>: <code>running_context(connection, cls)</code>, the running agent’s context for a request or websocket (503 before startup; the live view closes with 1013).</td></tr>
+            <tr><td><code>newswitch/infra/http/</code></td><td>The routes <code>main_fastapi.py</code> serves beside the agent, each a module-level <code>router</code>: <code>liveview.py</code> (<code>/stream</code> websockets, from the running <code>FrameBroadcaster</code>), <code>files.py</code> (<code>/files/…</code>, the <code>IOManager</code>), <code>cache.py</code> (<code>/cache/…</code>, the <code>CacheManager</code>); <code>__init__.py</code>: <code>running_context(connection, cls)</code>, the running agent’s context for a request or websocket (503 before startup; the live view closes with 1013).</td></tr>
             <tr><td><code>newswitch/actions/</code></td><td>Plain action, background and shutdown functions, one module per part, registered by <code>create_registry</code> only when the part is configured: <code>core.py</code> (<code>clear_expanse</code>), <code>stage.py</code>, <code>illumination.py</code>, <code>detector.py</code> (also <code>run_detector_loop</code>, <code>close_detector</code>), <code>objective.py</code>, <code>filter_bank.py</code>, <code>uc2.py</code> (home/stop/LED/galvo/node-scan actions, <code>run_uc2_bus</code>, <code>run_uc2_event_dispatch</code>).</td></tr>
             <tr><td><code>newswitch/routines/</code></td><td>Multi-step procedures registered as actions: <code>region_scan</code>, <code>multidimensional_acquisition</code>, <code>calibration</code>, <code>autofocus</code>; <code>common.py</code> holds what they share (<code>z_sweep</code>, <code>field_of_view</code>, <code>acquire_step</code>). The template for porting ImSwitch “apps”.; <code>affine_matrix.py</code> (pixel shifts, the pixel→stage affine).</td></tr>
             <tr><td><code>newswitch/protocols/</code></td><td>The <strong>contracts</strong>: the manager protocols only (<code>app.register_context</code>), one module per part or service — <code>stage</code>, <code>illumination</code>, <code>detector</code> (+ <code>DetectorFrame</code>), <code>objective</code>, <code>filter_bank</code>, <code>uc2</code> (<code>UC2BusManager</code>), <code>acquisition</code>, <code>cache</code>, <code>calibration</code>, <code>expanse</code>, <code>io</code>, <code>light_path</code>, <code>metadata</code>, <code>hook_manager</code> (+ <code>HookContext</code>, <code>UnsupportedHook</code>).</td></tr>
             <tr><td><code>newswitch/states/</code></td><td>The states (<code>app.register_state</code>), one module per state: <code>StageState</code>, <code>IlluminationState</code>, <code>CameraState</code>, <code>ObjectiveState</code>, <code>FilterBankState</code>, <code>UC2State</code>, <code>IOState</code>, <code>HookState</code>, <code>ExpanseState</code>, <code>CalibrationState</code>, <code>LightPathState</code>, <code>AutofocusState</code>.</td></tr>
             <tr><td><code>newswitch/models/</code></td><td>The value types (<code>app.register_model</code>): <code>light_path</code> (Kube optics model, <code>LightPathSnapshot</code>), <code>frames</code> (<code>Frame</code>, <code>Image</code>, <code>Metadata</code>), <code>devices</code>, <code>hooks</code>, <code>calibration</code>, <code>io</code>, <code>uc2</code> (typed hardware events), <code>acquisition</code> (<code>MultidimensionalAcquisition</code>, <code>StreamIllumination</code>, <code>Stack</code>, …).</td></tr>
             <tr><td><code>newswitch/instrument/</code></td><td>The description and what follows from it: <code>spec.py</code> (<code>Instrument</code>, the file validated, pydantic dataclasses all the way down; <code>load</code>), <code>hardware.py</code> (its <code>hardware</code> section: boards, actuators, cameras; not part of the digest), <code>parts.py</code> (the models from the instrument, <code>cameras</code>, <code>check_wired</code>), <code>ui.py</code> (<code>BlokEntry</code>, <code>UiConfig</code>: its <code>ui</code> and <code>agent_ui</code> sections), <code>errors.py</code> (<code>SpecError</code>), <code>compiler.py</code> (ray tracing with optiland into <code>compiled.json</code>), <code>tracing.py</code>, <code>predict.py</code>.</td></tr>
-            <tr><td><code>newswitch/bloks/</code></td><td>Declaring the description’s bloks: the frontend’s catalog (<code>catalog.py</code>, <code>newswitch-catalog.json</code>); <code>__init__.py</code>: <code>declare_ui</code>, <code>declare_agent_ui</code>.</td></tr>
+            <tr><td><code>newswitch/infra/ui/</code></td><td>Declaring the description’s bloks: the frontend’s catalog (<code>catalog.py</code>, <code>newswitch-catalog.json</code>); <code>__init__.py</code>: <code>declare_ui</code>, <code>declare_agent_ui</code>.</td></tr>
             <tr><td><code>newswitch/drivers/optics/</code></td><td>The simulator of an instrument: <code>simulator.py</code>, and <code>detector.py</code> (<code>OpticsDetectorManager</code>, a <code>VirtualDetectorManager</code> whose images come from it). The detectors are a <code>UC2DetectorManager</code> for wired cameras on real hardware, otherwise these.</td></tr>
             <tr><td><code>newswitch/drivers/virtual/</code></td><td>Full simulation implementations: stage, LED, detector, objective, filter bank; <code>simulation/</code> renders the frames (sample, synthetic PSF, defocus, noise).</td></tr>
             <tr><td><code>newswitch/drivers/uc2/</code></td><td>Real hardware: <code>canopen_bus.py</code>, <code>rest_bus.py</code>, <code>virtual_bus.py</code> (transports behind <code>UC2BusManager</code>), <code>event_broker.py</code> (fan-out), <code>dispatch.py</code> (events → states), plus bus-based device managers for stage, illumination, objective and filter bank, and <code>uc2_detector.py</code> (real cameras through uc2_cam_py).</td></tr>
             <tr><td><code>newswitch/services/</code></td><td>The managers every microscope shares: <code>acquisition</code>, <code>cache/</code>, <code>calibration</code>, <code>expanse</code>, <code>io/</code>, <code>light_path</code>, <code>metadata</code>, <code>hooks/</code> (<code>manager.py</code>: <code>PythonHookManager</code>; <code>software_autofocus.py</code>).</td></tr>
-            <tr><td><code>newswitch/broadcasters/</code></td><td>The <code>FrameSink</code> protocol (<code>sink.py</code>, runtime-checkable; the context the detectors stream to, provided by the entry file), <code>FrameBroadcaster</code> and the live view’s message format (<code>wire.py</code>) for <code>main_fastapi.py</code>; <code>lovekit.py</code> for <code>main_arkitekt.py</code> (<code>LovekitSink</code>, <code>CameraStream</code>, <code>CameraStreams</code>, <code>publish_camera_streams</code>, <code>MAX_FPS</code>; not imported by the package).</td></tr>
-            <tr><td><code>newswitch/accounts/</code></td><td>Users and auth of the FastAPI server: <code>auth.py</code> (login, tokens, middleware), <code>store.py</code> (the account database), <code>routes.py</code> (account management). Live view, files and cache are in <code>newswitch/routes/</code>.</td></tr>
+            <tr><td><code>newswitch/infra/streaming/</code></td><td>The <code>FrameSink</code> protocol (<code>sink.py</code>, runtime-checkable; the context the detectors stream to, provided by the entry file), <code>FrameBroadcaster</code> and the live view’s message format (<code>wire.py</code>) for <code>main_fastapi.py</code>; <code>lovekit.py</code> for <code>main_arkitekt.py</code> (<code>LovekitSink</code>, <code>CameraStream</code>, <code>CameraStreams</code>, <code>publish_camera_streams</code>, <code>MAX_FPS</code>; not imported by the package).</td></tr>
+            <tr><td><code>newswitch/infra/accounts/</code></td><td>Users and auth of the FastAPI server: <code>auth.py</code> (login, tokens, middleware), <code>store.py</code> (the account database), <code>routes.py</code> (account management). Live view, files and cache are in <code>newswitch/infra/http/</code>.</td></tr>
             <tr><td><code>newswitch/reference/complete-microscope/</code></td><td>The reference microscope (<code>microscope.yml</code>, <code>compiled.json</code>): every part, no views; what the frontend’s schemas are exported from.</td></tr>
             <tr><td><code>instruments/</code></td><td>The microscopes newswitch runs, a folder each, only ever read (see <code>instruments/README.md</code>): what changes while one runs lives in the arkitekt states, and restarts from each variable’s <code>initial</code>. <code>fake-microscope/</code>, the default in the root <code>.env</code>; <code>cam-test/</code>, one simulated uc2_cam_py camera, in real-hardware mode. A simulated run ignores a description’s <code>hardware</code> section, apart from a board giving it the UC2 actions on a <code>VirtualUC2Bus</code>; a real one refuses to start until everything with a control is wired (<code>check_wired</code>).</td></tr>
             <tr><td><code>tests/</code></td><td>pytest; agent-level tests drive the app through <code>AsyncAgentTestClient</code> (<code>arkitekt_fastapi.testing</code>).</td></tr>

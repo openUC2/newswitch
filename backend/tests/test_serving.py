@@ -11,7 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from main_fastapi import provide_frame_broadcaster
-from newswitch.broadcasters import FrameBroadcaster, FrameSink
+from newswitch.infra.streaming import FrameBroadcaster
+from newswitch.protocols.frame_sink import FrameSink
 from newswitch.instrument import spec
 from newswitch.microscope.run import Run
 from tests.conftest import run_settings
@@ -22,7 +23,7 @@ from main_arkitekt import (  # noqa: E402  (needs the extra "agent")
     create_arkitekt_registry,
     provide_lovekit_sink,
 )
-from newswitch.broadcasters.lovekit import (  # noqa: E402
+from newswitch.infra.streaming.lovekit import (  # noqa: E402
     CameraStream,
     CameraStreams,
     LovekitSink,

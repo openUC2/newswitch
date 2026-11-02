@@ -22,7 +22,7 @@ from examples.declarative_acquisition.instrument import (
     scaling,
     translation,
 )
-from newswitch.services.mikro_connection import MikroConfigError, MikroConnection
+from newswitch.infra.mikro.connection import MikroConfigError, MikroConnection
 
 PATH = "epi-488"
 

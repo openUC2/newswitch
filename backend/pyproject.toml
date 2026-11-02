@@ -51,13 +51,13 @@ uc2 = [
 # (/opt/MVS) to build, also for the simulated camera, and Python 3.12 - hence the markers,
 # and CI leaves this extra out.
 # Running as an arkitekt agent (`python main_arkitekt.py`): connected to an arkitekt
-# server through rekuest, the cameras streamed through lovekit (newswitch.serving), its images
+# server through rekuest, the cameras streamed through lovekit (newswitch.infra.streaming), its images
 # and their metadata in the mikro that server provides.
 agent = [
     "arkitekt[rekuest,lovekit]==11.6.1",
     "mikro==12.2.0",
 ]
-# Talking to a mikro in FastAPI mode (`newswitch.services.mikro_connection`), where nothing
+# Talking to a mikro in FastAPI mode (`newswitch.infra.mikro.connection`), where nothing
 # provides one: where it is comes from MIKRO_URL and friends.
 mikro = [
     "mikro==12.2.0",

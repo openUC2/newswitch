@@ -23,7 +23,7 @@ from newswitch.models.acquisition import (
 )
 from newswitch.protocols.dataset_store import AcquiredPosition
 from newswitch.routines.acquire import acquire as run_plan
-from newswitch.services.dataset_store import NoDatasetStore
+from newswitch.infra.mikro.none import NoDatasetStore
 from tests.conftest import acquisition as plan
 from tests.conftest import run_settings
 

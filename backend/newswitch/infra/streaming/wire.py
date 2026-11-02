@@ -1,7 +1,7 @@
 """A frame as the live view sends it: a fixed header, then the pixels.
 
 One websocket message is one whole frame, and the client answers each with a message of its
-own before it is sent the next (`newswitch.routes.liveview`). The header (little-endian, 32 bytes, so the
+own before it is sent the next (`newswitch.infra.http.liveview`). The header (little-endian, 32 bytes, so the
 pixels after it are aligned for a typed array):
 
     ====== ===== =========================================================
@@ -38,7 +38,7 @@ from typing import Optional
 import numpy as np
 import zstandard
 
-from newswitch.broadcasters.frame import DetectorFrameMessage
+from newswitch.infra.streaming.frame import DetectorFrameMessage
 
 HEADER = struct.Struct("<4sBBHIHHHHdB3x")
 MAGIC = b"NSF1"

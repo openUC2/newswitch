@@ -17,7 +17,7 @@ import pytest
 
 from newswitch.microscope import parts as microscope
 from newswitch.actions.detector import close_detector
-from newswitch.broadcasters import FrameBroadcaster
+from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.settings import Settings
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import spec

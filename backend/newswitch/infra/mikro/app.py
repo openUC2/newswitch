@@ -1,6 +1,6 @@
 """A mikro for FastAPI mode: its client, and acquisitions stored through it, as long as the agent runs.
 
-Merged only when a mikro is configured (`mikro_connection`): importing this needs the extra ``mikro``.
+Merged only when a mikro is configured (`connection`): importing this needs the extra ``mikro``.
 """
 
 from collections.abc import AsyncIterator
@@ -11,7 +11,7 @@ from mikro import Mikro
 
 from newswitch.microscope.run import Run
 from newswitch.protocols.dataset_store import DatasetStore
-from newswitch.services.mikro_store import MikroDatasetStore
+from newswitch.infra.mikro.store import MikroDatasetStore
 
 app = App("newswitch", app_context=Run)
 app.register_context(Mikro)

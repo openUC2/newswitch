@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from main_fastapi import create_app
-from newswitch.accounts.auth import AllowAllAuthenticator
+from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.instrument import spec
 from newswitch.settings import Settings
 from newswitch.tools.export_schemas import REFERENCE_INSTRUMENT
