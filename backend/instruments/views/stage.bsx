@@ -6,6 +6,7 @@
                 <StageScene>
                     <StageAxis />
                     <StagePlane />
+                    <HolderLayer />
                     <FramesLayer />
                     <ImagesLayer />
                     <LivesLayer />

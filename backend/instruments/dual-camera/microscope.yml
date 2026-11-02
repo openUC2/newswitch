@@ -119,7 +119,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@6
+  catalog: newswitch@7
   bloks:
     view-dual:
       description: 'Dual: both cameras side by side, and what each sees.'

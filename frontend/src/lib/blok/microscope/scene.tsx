@@ -7,6 +7,7 @@ import * as z from "zod";
 import { RectangleDrawer } from "@/components/stage/interactions/RectangleDrawer";
 import { StagePositioner } from "@/components/stage/interactions/StagePositioner";
 import { FramesPlane } from "@/components/stage/planes/FramesPlane";
+import { HolderPlane } from "@/components/stage/planes/HolderPlane";
 import { ImagesPlane } from "@/components/stage/planes/ImagesPlane";
 import { LivesPlane } from "@/components/stage/planes/LivesPlane";
 import { StageAxis } from "@/components/stage/planes/StageAxis";
@@ -50,6 +51,11 @@ export const sceneBlokComponents: BlokComponentDefinition[] = [
     "StagePlane",
     "The stage at its current position (hidden in meta mode).",
     StagePlane,
+  ),
+  layerBlok(
+    "HolderLayer",
+    "What is mounted: its outline and a plate's wells; in move mode (hold M), click a well to go there.",
+    HolderPlane,
   ),
   layerBlok(
     "FramesLayer",

@@ -1,15 +1,33 @@
+import { useMount } from "@/lib/microscope/space";
 import { useStage, useStagePosition } from "@/lib/microscope/values";
 import { useModeStore } from "@/store/modeStore";
+import { useMemo } from "react";
+import { Matrix4 } from "three";
 
 /**
  * StagePlane
- * A purely visual representation of the stage's physical extent and position.
+ * A purely visual representation of the stage's physical extent and position, on the sample:
+ * where the stage is, through the mount (stage to sample).
  * Has no interactive event listeners.
  */
 export const StagePlane = () => {
   const stageState = useStagePosition();
   const stage = useStage();
+  const mount = useMount();
   const interactionMode = useModeStore((s) => s.interactionMode);
+  const placed = useMemo(
+    () =>
+      mount
+        .clone()
+        .multiply(
+          new Matrix4().makeTranslation(
+            stageState.x,
+            stageState.y,
+            stageState.z,
+          ),
+        ),
+    [mount, stageState.x, stageState.y, stageState.z],
+  );
 
   if (!stageState) return null;
   if (interactionMode === "META") return null;
@@ -27,7 +45,7 @@ export const StagePlane = () => {
   const divisions = 20;
 
   return (
-    <group position={[stageState.x, stageState.y, stageState.z]}>
+    <group matrix={placed} matrixAutoUpdate={false}>
       {/* 1. The Solid Base */}
       <mesh position={[0, 0, -1]}>
         <planeGeometry args={[stageRangeX, stageRangeY]} />

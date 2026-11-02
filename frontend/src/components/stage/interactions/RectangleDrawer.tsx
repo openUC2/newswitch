@@ -1,5 +1,4 @@
-import { useCurrentAffineTransform } from "@/hooks/useCurrentAffineTransform";
-import { useCurrentPixelDimensions } from "@/hooks/useCurrentPixelDimensions";
+import { useLookingAt, useViewField } from "@/lib/microscope/space";
 import { useModeStore } from "@/store/modeStore";
 import { useScansStore, type ScanRegion } from "@/store/scansStore";
 import { Line } from "@react-three/drei";
@@ -9,23 +8,14 @@ import * as THREE from "three";
 // --- Path Generation Component ---
 
 const ScanPathPreview = ({ region }: { region: ScanRegion }) => {
-  const affine = useCurrentAffineTransform();
-  const { width: pixelWidth, height: pixelHeight } =
-    useCurrentPixelDimensions();
+  // What the view's detector sees, on the sample: as the server tiles a region with it.
+  const field = useViewField();
 
   const { pathPoints, fovWidth, fovHeight } = useMemo(() => {
-    if (!affine || !pixelWidth || !pixelHeight)
-      return { pathPoints: [], fovWidth: 0, fovHeight: 0 };
+    if (!field) return { pathPoints: [], fovWidth: 0, fovHeight: 0 };
 
-    const scaleX = Math.sqrt(
-      affine[0][0] * affine[0][0] + affine[1][0] * affine[1][0],
-    );
-    const scaleY = Math.sqrt(
-      affine[0][1] * affine[0][1] + affine[1][1] * affine[1][1],
-    );
-
-    const calculatedFovWidth = pixelWidth * scaleX;
-    const calculatedFovHeight = pixelHeight * scaleY;
+    const calculatedFovWidth = field.width;
+    const calculatedFovHeight = field.height;
 
     if (calculatedFovWidth === 0 || calculatedFovHeight === 0) {
       return { pathPoints: [], fovWidth: 0, fovHeight: 0 };
@@ -94,7 +84,7 @@ const ScanPathPreview = ({ region }: { region: ScanRegion }) => {
       fovWidth: calculatedFovWidth,
       fovHeight: calculatedFovHeight,
     };
-  }, [region, affine, pixelWidth, pixelHeight]);
+  }, [region, field]);
 
   if (pathPoints.length === 0) return null;
 
@@ -156,13 +146,14 @@ export const RectangleDrawer = () => {
   // Local transient state for the drawing interaction only
   const [startPos, setStartPos] = useState<THREE.Vector3 | null>(null);
   const [currentPos, setCurrentPos] = useState<THREE.Vector3 | null>(null);
+  const lookingAt = useLookingAt();
 
   if (interactionMode !== "SCAN") return null;
 
   return (
     <group>
       <mesh
-        position={[0, 0, 0]}
+        position={[lookingAt?.x ?? 0, lookingAt?.y ?? 0, 0]}
         onClick={(e) => {
           e.stopPropagation();
           setSelectedRegionId(null);
@@ -198,7 +189,7 @@ export const RectangleDrawer = () => {
           setCurrentPos(null);
         }}
       >
-        <planeGeometry args={[80000, 80000]} />
+        <planeGeometry args={[300000, 300000]} />
         <meshBasicMaterial visible={false} />
       </mesh>
 

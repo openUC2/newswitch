@@ -1,23 +1,19 @@
-import { useMove } from "@/apps/default/hooks/actions";
-import { useStage } from "@/lib/microscope/values";
+import { useMoveTo } from "@/apps/default/hooks/actions";
 import { Html, Line } from "@react-three/drei";
 import { useState } from "react";
 import type { Vector3 } from "three";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useLookingAt } from "@/lib/microscope/space";
 
-/** Moves what moves the view, in x and y only: a click on the scene says nothing about focus. */
+/**
+ * Brings a point of the sample (the scene's frame) to the middle of the view, in x and y only: a
+ * click on the scene says nothing about focus. The server finds what to move (`move_to`).
+ */
 const useMoveViewTo = () => {
-  const stage = useStage();
-  const { assign } = useMove();
+  const { assign } = useMoveTo();
   return (x: number, y: number) => {
-    if (stage.x.length !== 1 || stage.y.length !== 1) return;
-    const [moveX] = stage.x;
-    const [moveY] = stage.y;
-    assign({
-      targets: { [moveX.name]: moveX.value - x, [moveY.name]: moveY.value - y },
-      relative: false,
-    });
+    assign({ position: { system: "sample", x, y } });
   };
 };
 import { useModeStore } from "@/store/modeStore";
@@ -120,6 +116,7 @@ export const StagePositioner = () => {
   const interactionMode = useModeStore((s) => s.interactionMode);
   const [clickPoint, setClickPoint] = useState<Vector3 | null>(null);
   const moveTo = useMoveViewTo();
+  const lookingAt = useLookingAt();
 
   if (interactionMode !== "MOVE") return null;
 
@@ -127,15 +124,16 @@ export const StagePositioner = () => {
     <group>
       {/* Invisible Catch-All Plane for Pointer Events */}
       <mesh
-        position={[0, 0, -2]} // Placed safely below the stage and grid
+        // Below the stage and its grid, around where the view is
+        position={[lookingAt?.x ?? 0, lookingAt?.y ?? 0, -2]}
         onClick={async (e) => {
           e.stopPropagation();
           setClickPoint(e.point);
           moveTo(e.point.x, e.point.y);
         }}
       >
-        {/* A massive plane to ensure you can click anywhere in the expanse */}
-        <planeGeometry args={[10000, 10000]} />
+        {/* Wider than any holder, so that anywhere on the sample can be clicked */}
+        <planeGeometry args={[300000, 300000]} />
         <meshBasicMaterial visible={false} />
       </mesh>
 

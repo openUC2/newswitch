@@ -1,6 +1,6 @@
 {
   "name": "newswitch",
-  "version": 6,
+  "version": 7,
   "description": "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
   "components": [
     {
@@ -130,6 +130,19 @@
     {
       "name": "FramesLayer",
       "description": "The acquired frames, placed where they were taken.",
+      "acceptsChildren": false,
+      "context": "SCENE",
+      "childrenContext": null,
+      "inheritsContext": false,
+      "downstreamOf": [
+        "StageScene"
+      ],
+      "notDownstreamOf": [],
+      "props": []
+    },
+    {
+      "name": "HolderLayer",
+      "description": "What is mounted: its outline and a plate's wells; in move mode (hold M), click a well to go there.",
       "acceptsChildren": false,
       "context": "SCENE",
       "childrenContext": null,

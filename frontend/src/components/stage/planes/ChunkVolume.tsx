@@ -154,9 +154,11 @@ export const ChunkVolume = ({ chunk }: { chunk: ChunkData }) => {
   if (!isVisible) return null;
 
   // 4. Physical 3D Placement
-  const xPos = xIdx * chunkWidth + chunkWidth / 2;
-  const yPos = -(yIdx * chunkHeight) - chunkHeight / 2;
-  const zPos = chunk.z_index * chunkZSize + chunkZSize / 2;
+  // In the frame's pixels (column, row, plane): row 0 at y 0, rows along +y, as the frame's
+  // affine (pixel to sample) takes them; each pixel's middle at its index.
+  const xPos = xIdx * chunkWidth + chunkWidth / 2 - 0.5;
+  const yPos = yIdx * chunkHeight + chunkHeight / 2 - 0.5;
+  const zPos = chunk.z_index * chunkZSize + chunkZSize / 2 - 0.5;
 
   if (!texture) {
     return (
