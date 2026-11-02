@@ -7,7 +7,7 @@ from newswitch.actions import uc2
 from newswitch.microscope.run import Run
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.devices import AxisWindow, Detector, DetectorAxis
-from newswitch.models.space import DetectorPlacement, Position
+from newswitch.models.space import DetectorPlacement, HolderShape, Position, WellShape
 from newswitch.models.hooks import RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 
 app = App("newswitch", app_context=Run)
@@ -18,6 +18,8 @@ for model in (
     AxisWindow,
     Position,
     DetectorPlacement,
+    WellShape,
+    HolderShape,
     models.LightEdge,
     models.LightElement,
     models.LightPath,

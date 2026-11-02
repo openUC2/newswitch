@@ -27,6 +27,30 @@ class Position:
 
 
 @dataclass
+class WellShape:
+    """One well of a mounted plate: its middle on the sample, and how wide it is."""
+
+    name: str
+    """Its place: well:B3."""
+    x: float
+    y: float
+    diameter_um: Optional[float] = None
+    size_um: Optional[float] = None
+
+
+@dataclass
+class HolderShape:
+    """What is mounted, in sample micrometres from its top left corner: for a view to draw."""
+
+    name: str
+    kind: str
+    """slide, dish or plate."""
+    width_um: float
+    height_um: float
+    wells: list[WellShape] = field(default_factory=list)
+
+
+@dataclass
 class DetectorPlacement:
     """Where a detector's pixels are on the sample now: column, row and plane to micrometres."""
 

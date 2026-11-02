@@ -123,12 +123,18 @@ export type {
   SourceState,
 } from './SourceState';
 export {
+  WellShapeSchema,
+  HolderShapeSchema,
   DetectorPlacementSchema,
   SpaceStateSchema,
   SpaceStateDefinition,
   useSpaceState,
 } from './SpaceState';
 export type {
+  WellShape,
+  WellShapeOutput,
+  HolderShape,
+  HolderShapeOutput,
   DetectorPlacement,
   DetectorPlacementOutput,
   SpaceState,

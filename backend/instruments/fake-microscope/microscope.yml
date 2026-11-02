@@ -34,6 +34,10 @@ cubes:
           transmit: 0.95
           reflect: 1.0e-6
           pattern: {beads: 0, radius: 10 um, depth: 4 um}
+      # What it is mounted on (newswitch/instrument/holders): the slide's middle on the stage's 0.
+      holders:
+        slide: {holder: slide-75x25, mount: {x: -37.5 mm, y: -12.5 mm}}
+      mounted: slide
     moves:
       x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: -2000 um, max: 2000 um, speed: 2000 um/s}
       y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: -2000 um, max: 2000 um, speed: 2000 um/s}

@@ -9,7 +9,7 @@ has to find those out from the images, as with a real instrument.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import numpy as np
@@ -18,6 +18,7 @@ from scipy import ndimage
 
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.predict import Answer, state_key
+from newswitch.instrument.space import holder_to_stage
 from newswitch.instrument.spec import Instrument, Pattern, Stain
 from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
 
@@ -131,8 +132,52 @@ class Simulator:
         self.instrument = instrument
         self.truth = load_truth(instrument)
         self._table = compile_instrument(instrument, optical_errors(instrument))
-        self._bead_positions: dict[Pattern, np.ndarray] = {}
+        self._bead_positions: dict[tuple[Pattern, str | None], np.ndarray] = {}
         self._noise = np.random.default_rng(11)
+        self.mounted: Callable[[], str | None] = lambda: self.instrument.sample_holder().mounted
+        """Which holder is mounted: the space says (`newswitch.services.space`)."""
+
+    def beads_in_sample(self, pattern: Pattern) -> np.ndarray:
+        """Where `pattern`'s beads are on what is mounted, as ``(y, x, depth)`` in sample micrometres.
+
+        On a slide or a dish centred on it, on a plate in every well; with nothing mounted, centred
+        on the stage's 0.
+        """
+        holder_name = self.mounted()
+        key = (pattern, holder_name)
+        if key not in self._bead_positions:
+            beads = _beads(pattern)
+            if holder_name is not None:
+                holder = self.instrument.sample_holder().holders[holder_name].holder
+                if holder.plate is None:
+                    middle = (holder.extent.y * 500.0, holder.extent.x * 500.0, 0.0)
+                    beads = beads + np.array(middle)[:, np.newaxis]
+                else:
+                    radius = (holder.plate.well.diameter or holder.plate.well.size or 0.0) * 500.0
+                    inside = beads[:, np.hypot(beads[0], beads[1]) <= radius]
+                    beads = np.concatenate(
+                        [
+                            inside + np.array([y * 1000.0, x * 1000.0, 0.0])[:, np.newaxis]
+                            for x, y in holder.plate.wells().values()
+                        ],
+                        axis=1,
+                    )
+            self._bead_positions[key] = beads
+        return self._bead_positions[key]
+
+    def beads_on_stage(self, pattern: Pattern) -> np.ndarray:
+        """`beads_in_sample` where they really are on the stage: through the mount as it truly is,
+        the one described shifted by the truth's ``mount_offset_um``."""
+        beads = self.beads_in_sample(pattern)
+        holder_name = self.mounted()
+        if holder_name is None:
+            return beads
+        mount = self.instrument.sample_holder().holders[holder_name].mount
+        offset = self.truth.get("mount_offset_um", {})
+        matrix = holder_to_stage(mount, (offset.get("x", 0.0), offset.get("y", 0.0)))
+        y, x, depth = beads
+        on_stage = matrix[:2, :2] @ np.stack([x, y]) + matrix[:2, 3:4]
+        return np.stack([on_stage[1], on_stage[0], depth])
 
     def render(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
         """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names."""
@@ -240,9 +285,7 @@ class Simulator:
         )
         width, height = answer.size
         field = np.zeros((height, width))
-        if pattern not in self._bead_positions:
-            self._bead_positions[pattern] = _beads(pattern)
-        y, x, depth = self._bead_positions[pattern]
+        y, x, depth = self.beads_on_stage(pattern)
 
         moves = self._table.states[state_key(self.instrument, state)][detector]["focus"]["moves"]
         sample_moves = {move.name for move in self.instrument.sample_moves()}

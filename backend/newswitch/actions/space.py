@@ -4,6 +4,7 @@ from typing import Optional
 
 from arkitekt import Task
 
+from newswitch import protocols
 from newswitch.models.space import Position
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
@@ -52,3 +53,17 @@ def register_mount(space: SpaceManager, matrix: list[list[float]]) -> None:
         matrix: 4x4, stage micrometres to sample micrometres.
     """
     space.register_mount(matrix)
+
+
+def mount_holder(
+    space: SpaceManager, expanse_manager: protocols.ExpanseManager, holder: str
+) -> None:
+    """Mount another holder: a new sample, where the description says it sits.
+
+    The images taken were of what was mounted before: the expanse starts empty.
+
+    Args:
+        holder: One of the holders the description names for its sample.
+    """
+    space.mount_holder(holder)
+    expanse_manager.reset_expanse()

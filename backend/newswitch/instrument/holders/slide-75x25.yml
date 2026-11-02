@@ -1,0 +1,4 @@
+spec: newswitch/holder/v0
+description: A standard glass slide, 75 x 25 mm, its top left corner the origin.
+kind: slide
+extent: {x: 75 mm, y: 25 mm}

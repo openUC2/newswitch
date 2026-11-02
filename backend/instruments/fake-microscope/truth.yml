@@ -10,3 +10,4 @@ filter_wedge_px:              # filter 2 has a wedge and shifts the image: the m
   variable: filter_wheel.slot
   slot: 2
   shift: [3.0, -2.0]
+mount_offset_um: {x: 120.0, y: -45.0}   # the slide sits a little beside where its holder says

@@ -7,7 +7,6 @@ import pytest
 from scipy import ndimage
 
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
-from newswitch.drivers.simulator import _beads
 from newswitch.instrument.space import (
     CoordinateGraph,
     Edge,
@@ -116,7 +115,7 @@ def bead_misses(microscope: Microscope, image: np.ndarray, place: Placed) -> lis
     assert isinstance(microscope.detector, SimulatedDetectorManager)
     simulator = microscope.detector.simulator
     pattern = simulator.instrument.simulation_at(microscope.values.snapshot()).pattern
-    bead_y, bead_x, _ = _beads(pattern)
+    bead_y, bead_x, _ = simulator.beads_in_sample(pattern)
     return [
         float(np.min(np.hypot(bead_x - x, bead_y - y)))
         for x, y in (place(column, row) for column, row in bright_peaks(image))
@@ -231,7 +230,6 @@ def test_the_sample_starts_where_it_is_said_to(microscope: Microscope) -> None:
     assert middle[:2] == pytest.approx([0.0, 0.0], abs=1e-9)
     on_stage = microscope.space.transform(Position("sample", 0.0, 0.0), "stage")
     assert on_stage[:2] == pytest.approx([300.0, 40.0])
-    assert microscope.space_state.mount[0][3] == pytest.approx(-300.0)
 
 
 def test_a_mount_that_is_no_map_is_refused(microscope: Microscope) -> None:

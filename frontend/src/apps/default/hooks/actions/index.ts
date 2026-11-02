@@ -13,6 +13,7 @@ import { HomeObjectiveDefinition } from './homeObjective';
 import { HomeStageDefinition } from './homeStage';
 import { LedMatrixFillDefinition } from './ledMatrixFill';
 import { LedMatrixOffDefinition } from './ledMatrixOff';
+import { MountHolderDefinition } from './mountHolder';
 import { MoveDefinition } from './move';
 import { MoveHomeDefinition } from './moveHome';
 import { MoveOneDefinition } from './moveOne';
@@ -181,6 +182,13 @@ export {
 } from './ledMatrixOff';
 export type { LedMatrixOffArgs, LedMatrixOffReturn } from './ledMatrixOff';
 export {
+  MountHolderArgsSchema,
+  MountHolderReturnSchema,
+  MountHolderDefinition,
+  useMountHolder,
+} from './mountHolder';
+export type { MountHolderArgs, MountHolderReturn } from './mountHolder';
+export {
   MoveArgsSchema,
   MoveReturnSchema,
   MoveDefinition,
@@ -310,6 +318,7 @@ export const globalActionDefinition = {
   HomeStage: HomeStageDefinition,
   LedMatrixFill: LedMatrixFillDefinition,
   LedMatrixOff: LedMatrixOffDefinition,
+  MountHolder: MountHolderDefinition,
   Move: MoveDefinition,
   MoveHome: MoveHomeDefinition,
   MoveOne: MoveOneDefinition,

@@ -8,12 +8,17 @@ that a point in it is a place to go.
 
     pixel -> stage:   T(where) · A · T(offset of the pixel from the middle of the sensor)
     stage -> sample:  the mount
+    well:B3 -> sample: where the mounted plate has it
+
+What is mounted is one of the holders the description names for its sample (`mount_holder`); a new
+mounting is a new sample, with the mount the description gives it and none of the images taken.
 """
 
 from __future__ import annotations
 
 import json
 import threading
+import uuid
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
@@ -26,11 +31,14 @@ from newswitch.instrument.space import (
     CoordinateGraph,
     Edge,
     detector_system,
+    holder_to_stage,
     image_system,
+    places_of,
     translation,
 )
+from newswitch.instrument.spec import MountedHolder
 from newswitch.models.devices import Detector
-from newswitch.models.space import DetectorPlacement, Position
+from newswitch.models.space import DetectorPlacement, HolderShape, Position, WellShape
 from newswitch.services.optics import OpticsManager
 from newswitch.services.values import Values
 from newswitch.states.detector import DetectorState
@@ -46,6 +54,30 @@ def _middle_offset(detector: Detector, name: str, values: Mapping[str, Any]) -> 
     binning = int(values.get(f"{detector.name}.binning", axis.binning)) if axis.binnable else 1
     size = axis.size or 1
     return (axis.window_start + (binning - 1) / 2 - (size - 1) / 2) / binning
+
+
+def _shape_of(name: str, mounted: MountedHolder) -> HolderShape:
+    """What is mounted as a view draws it, in sample micrometres."""
+    holder = mounted.holder
+    plate = holder.plate
+    return HolderShape(
+        name=name,
+        kind=holder.kind,
+        width_um=holder.extent.x * 1000.0,
+        height_um=holder.extent.y * 1000.0,
+        wells=[]
+        if plate is None
+        else [
+            WellShape(
+                name=f"well:{well}",
+                x=x * 1000.0,
+                y=y * 1000.0,
+                diameter_um=None if plate.well.diameter is None else plate.well.diameter * 1000.0,
+                size_um=None if plate.well.size is None else plate.well.size * 1000.0,
+            )
+            for well, (x, y) in plate.wells().items()
+        ],
+    )
 
 
 class SpaceManager:
@@ -66,6 +98,11 @@ class SpaceManager:
         self._images: dict[str, np.ndarray] = {}
         self._published = ""
         self._refreshing = threading.Lock()
+        holder = None if values is None else values.instrument.sample_holder()
+        self._holders: dict[str, MountedHolder] = {} if holder is None else dict(holder.holders)
+        self.state.holders = list(self._holders)
+        if holder is not None and holder.mounted is not None:
+            self._mount(holder.mounted, self.state.mount_id)
 
     # ------------------------------------------------------------- the edges
 
@@ -128,6 +165,11 @@ class SpaceManager:
             Edge(image_system(image), SAMPLE, matrix, "image")
             for image, matrix in self._images.items()
         ]
+        if self.state.holder is not None:
+            edges += [
+                Edge(place, SAMPLE, translation(x, y), "holder")
+                for place, (x, y) in places_of(self._holders[self.state.holder].holder).items()
+            ]
         return CoordinateGraph(edges)
 
     def transform(self, position: Position, target: str = SAMPLE) -> np.ndarray:
@@ -179,6 +221,25 @@ class SpaceManager:
         return found
 
     # ------------------------------------------------------------- the mount
+
+    def mount_holder(self, holder: str) -> None:
+        """Mount `holder`: a new sample, where the description says it sits, with no images taken.
+
+        Raises:
+            ValueError: The description names no such holder.
+        """
+        if holder not in self._holders:
+            raise ValueError(f"No holder {holder!r} to mount: there are {sorted(self._holders)}")
+        self._mount(holder, uuid.uuid4().hex[:8])
+        self.forget_images()
+        self.refresh()
+
+    def _mount(self, holder: str, mount_id: str) -> None:
+        mounted = self._holders[holder]
+        self.state.mount = np.linalg.inv(holder_to_stage(mounted.mount)).tolist()
+        self.state.mount_id = mount_id
+        self.state.holder = holder
+        self.state.shape = _shape_of(holder, mounted)
 
     def register_mount(self, matrix: list[list[float]]) -> None:
         """Say where what is mounted sits: stage micrometres to sample micrometres."""

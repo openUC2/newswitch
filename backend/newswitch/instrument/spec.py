@@ -42,6 +42,8 @@ SPEC = "newswitch/instrument/"
 #: The library of components a description can name, and what an entry states it is.
 COMPONENTS = Path(__file__).parent / "components"
 COMPONENT_SPEC = "newswitch/component/"
+#: What an entry of the library of holders (``holders/``) states it is.
+HOLDER_SPEC = "newswitch/holder/"
 
 _UNITS = pint.UnitRegistry()
 
@@ -304,11 +306,116 @@ class Simulation:
 
 
 @dataclass(frozen=True, config=STRICT)
+class Extent:
+    """How far something goes along x and y."""
+
+    x: Annotated[Millimetres, Field(gt=0.0)]
+    y: Annotated[Millimetres, Field(gt=0.0)]
+
+
+@dataclass(frozen=True, config=STRICT)
+class Offset:
+    """Where something is along x and y, from an origin."""
+
+    x: Millimetres
+    y: Millimetres
+
+
+@dataclass(frozen=True, config=STRICT)
+class Well:
+    """One well of a plate: round, of a diameter, or square, of a size."""
+
+    diameter: Annotated[Millimetres, Field(gt=0.0)] | None = None
+    size: Annotated[Millimetres, Field(gt=0.0)] | None = None
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> Self:
+        if (self.diameter is None) == (self.size is None):
+            raise ValueError("a well has a diameter or a size: exactly one of them")
+        return self
+
+
+@dataclass(frozen=True, config=STRICT)
+class Plate:
+    """Wells in rows (A, B, ...) and columns (1, 2, ...), a pitch apart, A1's middle at `a1`."""
+
+    rows: Annotated[StrictInt, Field(gt=0, le=26)]
+    columns: Annotated[StrictInt, Field(gt=0)]
+    pitch: Offset
+    a1: Offset
+    well: Well
+
+    def wells(self) -> dict[str, tuple[float, float]]:
+        """Every well's middle by name (``"B3"``), in millimetres from the holder's origin."""
+        return {
+            f"{chr(ord('A') + row)}{column + 1}": (
+                self.a1.x + column * self.pitch.x,
+                self.a1.y + row * self.pitch.y,
+            )
+            for row in range(self.rows)
+            for column in range(self.columns)
+        }
+
+
+@dataclass(frozen=True, config=STRICT)
+class Holder:
+    """An entry of the library of holders: what a sample is mounted on, and where its places are.
+
+    Its origin is its top left corner, x to the right and y down, as a plate's A1 is counted.
+    """
+
+    spec: Annotated[str, Field(pattern=f"^{HOLDER_SPEC}")]
+    description: str
+    kind: Literal["slide", "dish", "plate"]
+    extent: Extent
+    plate: Plate | None = None
+
+    @model_validator(mode="after")
+    def _a_plate_has_wells(self) -> Self:
+        if (self.kind == "plate") != (self.plate is not None):
+            raise ValueError("a plate has its wells (plate:), and only a plate has them")
+        return self
+
+
+@dataclass(frozen=True, config=STRICT)
+class Mount:
+    """Where a holder's origin sits on the stage of this instrument, and how far it is turned."""
+
+    x: Millimetres
+    y: Millimetres
+    rotation: Degrees = 0.0
+
+
+@dataclass(frozen=True, config=STRICT)
+class MountedHolder:
+    """A holder this instrument takes, from the library by name, and where it sits when mounted."""
+
+    holder: Annotated[Holder, BeforeValidator(_from_library("holders"))]
+    mount: Mount
+
+
+@dataclass(frozen=True, config=STRICT)
 class SampleHolder:
-    """Where the sample is, and what can be on it, by name: `Settings.simulation` picks one."""
+    """Where the sample is, and what can be on it, by name: `Settings.simulation` picks one.
+
+    `holders` are what it can be mounted on, by name; `mounted` is the one it starts with. Without
+    any, the sample's frame is the stage's.
+    """
 
     kind: Literal["sample"]
     simulations: Annotated[dict[str, Simulation], Field(min_length=1)]
+    holders: dict[str, MountedHolder] = field(default_factory=dict)
+    mounted: str | None = None
+
+    @model_validator(mode="after")
+    def _mounted_is_one_of_them(self) -> Self:
+        if self.mounted is not None and self.mounted not in self.holders:
+            raise ValueError(
+                f"mounted: {self.mounted!r} is none of the holders {sorted(self.holders)}"
+            )
+        if self.holders and self.mounted is None:
+            raise ValueError("with holders, one is mounted to start with (mounted:)")
+        return self
 
 
 @dataclass(frozen=True, config=STRICT)

@@ -1,0 +1,4 @@
+spec: newswitch/holder/v0
+description: A 35 mm dish in a holder whose square, 40 x 40 mm, has its top left corner as the origin.
+kind: dish
+extent: {x: 40 mm, y: 40 mm}

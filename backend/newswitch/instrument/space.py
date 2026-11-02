@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from newswitch.instrument.spec import Holder, Mount
 from newswitch.models.space import Position
 
 __all__ = [
@@ -36,6 +37,8 @@ __all__ = [
     "rotation_z",
     "scaling",
     "translation",
+    "holder_to_stage",
+    "places_of",
     "zyx_rows",
 ]
 
@@ -147,3 +150,22 @@ class CoordinateGraph:
     def transform(self, point: tuple[float, float, float], source: str, target: str) -> np.ndarray:
         """`point` (x, y, z) in `source`, said in `target`."""
         return (self.matrix(source, target) @ np.array([*point, 1.0]))[:3]
+
+
+def holder_to_stage(mount: Mount, offset_um: tuple[float, float] = (0.0, 0.0)) -> Matrix:
+    """Where a mounted holder's points are on the stage: the inverse of the mount, stage to sample.
+
+    Its origin sits at `mount` (shifted by `offset_um`, what really is), turned by its rotation.
+    """
+    return translation(
+        mount.x * 1000.0 + offset_um[0], mount.y * 1000.0 + offset_um[1]
+    ) @ rotation_z(mount.rotation)
+
+
+def places_of(holder: Holder) -> dict[str, tuple[float, float]]:
+    """A holder's named places (a plate's wells), by their system's name, in sample micrometres."""
+    if holder.plate is None:
+        return {}
+    return {
+        f"well:{name}": (x * 1000.0, y * 1000.0) for name, (x, y) in holder.plate.wells().items()
+    }
