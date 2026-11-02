@@ -200,9 +200,19 @@ const ChannelEditor = ({
   );
 };
 
+/** Where the detailed plan starts: what the planner chose, its channels, depth and time. */
+export type DetailedStart = {
+  channels?: Channel[];
+  planes?: number;
+  step?: number;
+  times?: number;
+  every?: number;
+};
+
 /** An acquisition, as a plan over what this microscope has: every channel, on every plane, at every
- * position, every time. It starts from what is set now, and asks only for what is here. */
-export function AcquisitionControl() {
+ * position, every time, every setting of it. It starts from `initial`, or else from what is set
+ * now, and asks only for what is here. */
+export function DetailedPlan({ initial }: { initial?: DetailedStart }) {
   const { t } = useTranslation();
   const { swaps, tunes, sources, detectors } = useVariables();
   const stage = useStage();
@@ -236,16 +246,18 @@ export function AcquisitionControl() {
 
   const [name, setName] = useState("acquisition");
   // What it starts from is what is set now, until it is edited.
-  const [editedChannels, setChannels] = useState<Channel[] | null>(null);
+  const [editedChannels, setChannels] = useState<Channel[] | null>(
+    initial?.channels ?? null,
+  );
   const [editedPlaces, setPlaces] = useState<Place[] | null>(null);
   const known = detectors.length > 0;
   const channels = editedChannels ?? (known ? [fromNow()] : null);
   const places = editedPlaces ?? (known ? [here()] : null);
-  const [planes, setPlanes] = useState(1);
-  const [step, setStep] = useState(1);
+  const [planes, setPlanes] = useState(initial?.planes ?? 1);
+  const [step, setStep] = useState(initial?.step ?? 1);
   const [focus, setFocus] = useState<string | null>(null);
-  const [times, setTimes] = useState(1);
-  const [every, setEvery] = useState(0);
+  const [times, setTimes] = useState(initial?.times ?? 1);
+  const [every, setEvery] = useState(initial?.every ?? 0);
   const [refocus, setRefocus] = useState(false);
 
   // A detector whose wire steps what focuses says how far apart the planes are.

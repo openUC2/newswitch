@@ -7,4 +7,4 @@ export { MoveControl } from "./MoveControl";
 export { SourceControl } from "./SourceControl";
 export { SwapsControl } from "./SwapsControl";
 export { VariableControl } from "./VariableControl";
-export { AcquisitionControl } from "./AcquisitionControl";
+export { AcquisitionControl } from "./AcquisitionPlanner";
