@@ -638,7 +638,7 @@ a fake lovekit client.
 | `main_fastapi.py` | Served by FastAPI: the startup hooks `provide_frame_broadcaster` (a `FrameBroadcaster` as the `FrameSink`) and `provide_no_dataset_store` (a `NoDatasetStore` as the `DatasetStore`), `create_fastapi_registry(instrument, with_mikro)` → `App` (`create_registry`, those startup hooks, or the part `mikro_app` in place of the second when asked for, `declare_ui`), `create_app` (`configure_fastapi`, auth, accounts, the routers of `newswitch/infra/http/`), the uvicorn factory `create`, `main`. |
 | `main_arkitekt.py` | Served as an arkitekt agent: `cameras_of(instrument)`, the startup hooks `provide_lovekit_sink` (a `LovekitSink` as the `FrameSink`, and `CameraStreams`) and `provide_dataset_store` (a `MikroDatasetStore` as the `DatasetStore`), `create_arkitekt_registry(instrument)` → `App` (`create_registry` with `lovekit_service` and `mikro_service`, the state `CameraStreams`, those startup hooks, `publish_camera_streams`, `declare_agent_ui`), `create(current)`, `main` (`arkitekt.run`). |
 | `newswitch/tools/` | Tools beside the servers: `check_instrument.py` (prediction, measurement and truth compared). |
-| `newswitch/settings.py` | `Settings` (`simulate`, `simulation`, `db_path`, `instrument`, `camera_recording_dir`, `camera_debug_window`, `image_dir`, `cache_dir`), the description's `settings` section, `load_settings` (`NEWSWITCH_CONFIG` names the instrument; unset or invalid, a `SpecError`) and `load_devices(config)` → `Instrument \| None`: the settings and instrument both servers start from. |
+| `newswitch/settings.py` | `Settings` (`simulate`, `db_path`, `instrument`, `camera_recording_dir`, `camera_debug_window`, `image_dir`, `cache_dir`), the description's `settings` section, `load_settings` (`NEWSWITCH_CONFIG` names the instrument; unset or invalid, a `SpecError`) and `load_devices(config)` → `Instrument \| None`: the settings and instrument both servers start from. |
 | `newswitch/microscope/registry.py` | `create_registry(instrument, services=())`: creates a fresh `App("newswitch", app_context=Run, services=services)` and merges the part registries the instrument has; no UI, no streams (the entry files add those). |
 | `newswitch/microscope/apps/` | One registry per part, an `app` each: `models`, `core` (with the contexts `FrameSink` and `DatasetStore`, which the entry file provides), `values`, `detector`, `uc2`, and what needs several: `focus`, `acquisition`. Plain module-level hooks; a part merges the parts it names things of. |
 | `newswitch/microscope/run.py` | `Run`, the app context: the settings, the instrument and the mikro of one run, and its one `build_microscope` (`Run.microscope`). |
@@ -688,7 +688,9 @@ on real hardware.
   how light connects them. A sensor's size is on its axes and nowhere else. Nothing says what impacts what, or what a
   part is for: every variable has a control, and sources and detectors are found from what the cubes hold
   (`Instrument.sources`, `Instrument.detectors`).
-- The sample holder is a cube too: its `simulations` name what can be on it, and `settings.simulation` picks one.
+- The sample holder is a cube too: its `simulations` name what can be on it, and its `simulation` says which is.
+  An instrument may hold several, each on a stage of its own, each light detector seeing one (`Instrument.samples`,
+  `Instrument.sample_of`); each is a hub of its own in the coordinate graph (`sample:<cube>`).
   Nothing declares a channel either: `Compiled.channels` reads from the tables which source reaches which detector.
 - A cube can name an entry of the components library (`newswitch/instrument/components/`) for its element and its
   hardware signals, and `drives` wires signals together; all of it is validated when the description is parsed. A

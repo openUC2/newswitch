@@ -131,7 +131,9 @@ records; the managers keep it up to date, so the frontend sees all of it.
   (`OpticsManager.scale_under`). A window is not part of what a calibration is of. The stage ends
   where it started.
 - **SpaceManager** (`services/space.py`) is the one place a pixel is placed: the coordinate graph
-  of `newswitch/instrument/space.py`, modelled on mikro's, with the **sample** as its hub. A system
+  of `newswitch/instrument/space.py`, modelled on mikro's, with each **sample** a hub of its own
+  (`sample:<cube>`, on its stage `stage:<cube>`: an instrument may have several,
+  `Instrument.samples`, each detector seeing one, `Instrument.sample_of`). A system
   has named, typed axes (`Axis`: SPACE, CHANNEL, MICROTIME, ...); an edge is one of mikro's kinds
   (`Transformation`: IDENTITY, SCALE, TRANSLATION, AFFINE, BY_DIMENSION). A BY_DIMENSION is parts
   side by side over named axes and says nothing of an axis no part names, and a route composes
@@ -139,12 +141,16 @@ records; the managers keep it up to date, so the frontend sees all of it.
   rank is walked forwards only. A detector's pixels go to the stage by that scale, where it looks
   (`where`) and where the pixel is in its window (`(x, y) -> (x, y)`, and `() -> (z)` its plane;
   its colors no part); a thermometer, which has no axes, by one part `() -> (x, y, z)`; the stage
-  goes to the sample by the **mount** (`SpaceState.mount`); an image taken is its detector's
-  placement then (`image:<id>`); a mounted plate's wells are places (`well:B3`). A `Position` is
-  coordinates by axis name. `move_to(position)` brings a place in any of those systems to the
-  middle of the image; `set_sample_origin_here`, `register_mount` and `mount_holder` set the mount.
-  `SpaceState` publishes the live graph (`systems`, `transformations`), every imaging detector's
-  placement as a 4x4, where each point detector measures (`points`), the mount and what is mounted.
+  goes to its sample by that sample's **mount** (`SpaceState.samples[cube].mount`); an image taken
+  is its detector's placement then (`image:<id>`, on its sample); a mounted plate's wells are
+  places (`well:<cube>:B3`). A `Position` is coordinates by axis name; a bare `sample`, `stage` or
+  `well:B3` is that of the sample the detector looking sees, or of the only one
+  (`SpaceManager.resolve`), and is refused when it could be either. `move_to(position)` brings a
+  place in any of those systems to the middle of the image; `set_sample_origin_here`,
+  `register_mount` and `mount_holder` set a sample's mount. `SpaceState` publishes the live graph
+  (`systems`, `transformations`), each sample's mount and what it is mounted on (`samples`), every
+  imaging detector's placement as a 4x4 and where each point detector measures (`points`), each
+  with its sample.
 - **MetadataManager** (`services/metadata.py`) places each frame by `SpaceManager.placement`;
   an acquisition keeps a record per position and detector (`AcquiredRecord`), along its own axes,
   placed by its detector's route (`SpaceManager.record_map`, as BY_DIMENSION parts: `to_parts`).

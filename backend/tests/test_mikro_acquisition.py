@@ -31,7 +31,11 @@ from main_fastapi import create_app  # noqa: E402
 from newswitch.infra.accounts.auth import AllowAllAuthenticator  # noqa: E402
 from newswitch.instrument import spec  # noqa: E402
 from newswitch.microscope.parts import Microscope, build_microscope  # noqa: E402
-from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel  # noqa: E402
+from newswitch.models.acquisition import (  # noqa: E402
+    AcquiredDataset,
+    AcquisitionChannel,
+    AcquisitionPlan,
+)
 from newswitch.routines.acquire import acquire  # noqa: E402
 from newswitch.infra.mikro.connection import MikroConnection  # noqa: E402
 from newswitch.infra.mikro.store import MikroDatasetStore  # noqa: E402
@@ -256,6 +260,42 @@ def test_a_thermometer_is_a_scalar_dataset_at_its_point(mikro: Mikro, tmp_path: 
     assert point == pytest.approx([0.0, 0.0, 30_000.0])
     labels = [a["channelLabel"]["label"] for a in anchors_of(thermometer.id) if a["channelLabel"]]
     assert labels == ["air thermometer (degC)"]
+
+
+def test_two_samples_go_to_two_sample_spaces(mikro: Mikro, tmp_path: Path) -> None:
+    """Each camera's record in the space of the sample it sees: the middle of each image read back
+    through mikro's own transforms, where that sample's stage put it."""
+    described = spec.load(INSTRUMENTS / "dual-sample")
+    m = build_microscope(run_settings(tmp_path), described)
+    channel = AcquisitionChannel(
+        detectors=["cam_a", "cam_b"], name="both", set_to={"laser_488.power": 20.0}
+    )
+    cam_a, cam_b = acquire(
+        AcquisitionPlan(channels=[channel], name=f"test {uuid.uuid4().hex[:8]}"),
+        MikroDatasetStore(mikro, described, m),
+        m.optics,
+        m.detector,
+        m.values,
+        m.space,
+        m.hooks,
+        Task.local(),
+    )
+    samples = m.space_state.samples
+    for made, sample in ((cam_a, "stage_a"), (cam_b, "stage_b")):
+        assert made.detector == ("cam_a" if sample == "stage_a" else "cam_b")
+        dataset = mikro.get_array_dataset(made.id)
+        world = space_3d(
+            mikro,
+            "sample",
+            reference=f"sample-dual-sample-{sample}-{samples[sample].mount_id}",
+        )
+        middle = np.asarray(
+            dataset.intrinsic_system.transform_points_to(
+                world, [[0, 0, 0, 255.5, 255.5]], axes=("z", "y", "x")
+            )
+        )[0]
+        # Nothing moved: the middle of each image is the middle of its slide, 37.5 by 12.5 mm.
+        assert middle[1:] == pytest.approx([12_500.0, 37_500.0], abs=1e-3)
 
 
 @pytest.mark.asyncio

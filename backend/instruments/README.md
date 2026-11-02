@@ -40,13 +40,14 @@ A source's power goes up to its `max_power`, whatever else its tune states.
 ## What is on the stage
 
 The sample holder is a cube like any other. Its `simulations` name what can be on it, at least one,
-and `settings.simulation` picks which is. That is what a simulated run draws, and what predictions
-assume on real hardware too.
+and its `simulation` says which is. That is what a simulated run draws, and what predictions assume
+on real hardware too.
 
 ```yaml
 stage:
   element:
     kind: sample
+    simulation: gfp-beads   # which of its simulations is on it
     simulations:
       gfp-beads:
         fluorophore: {excitation: 488 nm, excitation_width: 20 nm, emission: 515 nm, emission_width: 25 nm, quantum_yield: 0.02}
@@ -58,6 +59,17 @@ stage:
         reflect: 0.001
         pattern: {beads: 0, radius: 10 um, depth: 4 um}
 ```
+
+**Several samples**: an instrument may hold more than one, each a cube of `kind: sample` with a
+stage of its own (its moves) and light paths of its own (`dual-sample`). Each light detector sees
+the one sample its detection route starts at, never two (`Instrument.sample_of`); a source may light
+several. Each sample is a hub of its own in the coordinate graph (`sample:<cube>`, its stage
+`stage:<cube>`, its holder's places `well:<cube>:B3`), with its own mount and mounting; a bare
+`sample`, `stage` or `well:B3` in an action means the sample of the detector that looks, or of the
+only one, and is refused when it could be either. An acquisition covers every sample its detectors
+see: a place on "the sample" is that place on each, each sample sweeps its own focus (a named
+`stack.variable` across samples is refused), and each record lands in its own sample's mikro space.
+A thermometer beside one of several samples says which in `on_stage.stage`.
 
 **What it is mounted on**: `holders` names what the sample can be mounted on, from the library in
 `newswitch/instrument/holders` (`slide-75x25`, `dish-35`, `plate-96`), and where each sits on this
@@ -187,7 +199,6 @@ at the working directory.
 ```yaml
 settings:
   simulate: everything               # everything | unwired | nothing, see "How it reaches hardware"
-  simulation: gfp-beads              # which of the holder's `simulations` is on it
   db_path: arkitekt_agent.db         # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images   # where the file IO writes
   cache_dir: /tmp/newswitch/cache    # acquired frames; cleared on every start
@@ -226,6 +237,7 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `rgb-camera` | One color camera: every exposure gives an image per color. |
 | `cam-test` | One simulated uc2_cam_py camera and nothing else. Without that library, the optics stand in, with a warning. |
 | `he-microscope` | White light through an H&E-stained section, onto a color camera, with two objectives, and a thermometer on the stage insert 3 cm from the section. |
+| `dual-sample` | Two samples, each on a stage of its own and seen through a light path of its own: GFP beads by fluorescence onto a mono camera, an H&E section in white light onto a color camera, a thermometer beside the section. |
 | `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image, of one plane of a volume. |
 | `light-sheet` | A sheet from the side, whose positioner the camera's frames step, and a stage for x, y and z. |
 | `flim` | A point scanner on a thin section, timing each photon against a pulsed laser. |
