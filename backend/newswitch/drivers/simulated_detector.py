@@ -1,5 +1,8 @@
-"""The detectors of a simulated instrument: sessions, the live loop, binning and regions, as any
+"""The detectors of a simulated instrument: sessions, the live loop, binning and windows, as any
 detector has them, with images rendered from what its optics do under the current values.
+
+Everything is rendered whole and unbinned, then read out (`newswitch.drivers.readout`): a window
+of a scan is the part of it that is scanned, at the same step.
 """
 
 from __future__ import annotations
@@ -13,10 +16,11 @@ from typing import TYPE_CHECKING, Any, Optional
 import koil
 import numpy as np
 
+from newswitch.drivers import readout as windows_of
 from newswitch.drivers.simulator import Simulator
 from newswitch.instrument.spec import Instrument
-from newswitch.models.devices import Detector, Roi
-from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo, is_full_sensor
+from newswitch.models.devices import AxisWindow, Detector
+from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo
 from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
@@ -44,7 +48,16 @@ class Readout:
 
 def _times_photons(detector: Detector) -> bool:
     """Whether `detector` delivers when its photons arrive, as an axis of its own."""
-    return any(axis.name == "m" for axis in detector.axes)
+    return detector.has_axis("m")
+
+
+def _plane_at(detector: Detector, binning: int) -> tuple[int, int]:
+    """The (y, x) size of `detector`'s images in its windows, were it binned by `binning`."""
+    y, x = (
+        (axis.windowed() or 0) // (binning if axis.binnable else 1)
+        for axis in (detector.axis("y"), detector.axis("x"))
+    )
+    return y, x
 
 
 class SimulatedDetectorManager:
@@ -80,10 +93,7 @@ class SimulatedDetectorManager:
         self._closed = False
         for detector in detectors:
             detector.manufacturer = "simulated"
-            detector.current_binning = self._snap_binning(detector.current_binning)
-            detector.width, detector.height = self._image_size(
-                detector, detector.current_binning, detector.current_roi
-            )
+            windows_of.apply(detector, None, self._snap_binning(detector.binning()))
         self.state.detectors = list(detectors)
 
     # ------------------------------------------------------------- finding them
@@ -110,50 +120,10 @@ class SimulatedDetectorManager:
             raise ValueError(f"binning must be >= 1, got {binning}")
         return min(BINNINGS, key=lambda allowed: abs(allowed - binning))
 
-    @staticmethod
-    def _clamp_roi(detector: Detector, roi: Roi) -> Optional[list[int]]:
-        """Clamp a region to the sensor; None for the complete sensor.
-
-        Raises:
-            ValueError: A negative coordinate or size.
-        """
-        x, y, width, height = (int(value) for value in roi)
-        if min(x, y, width, height) < 0:
-            raise ValueError(f"invalid region {roi}: negative values")
-        if is_full_sensor(roi):
-            return None
-        sensor_width, sensor_height = detector.sensor_width, detector.sensor_height
-        x, y = min(x, sensor_width - 1), min(y, sensor_height - 1)
-        clamped = [x, y, min(width, sensor_width - x), min(height, sensor_height - y)]
-        return None if clamped == [0, 0, sensor_width, sensor_height] else clamped
-
-    @staticmethod
-    def _image_size(detector: Detector, binning: int, roi: Optional[Roi]) -> tuple[int, int]:
-        """Image (width, height) after cutting out `roi` and binning."""
-        width, height = detector.sensor_width, detector.sensor_height
-        if roi is not None:
-            _, _, width, height = roi
-        return width // binning, height // binning
-
-    @staticmethod
-    def _read_out(frame: np.ndarray, detector: Detector) -> np.ndarray:
-        """Cut the region out of a rendered sensor frame and bin it (block means)."""
-        if detector.current_roi is not None:
-            x, y, width, height = detector.current_roi
-            frame = frame[y : y + height, x : x + width]
-        factor = detector.current_binning
-        if factor > 1:
-            height, width = frame.shape[0] // factor, frame.shape[1] // factor
-            blocks = frame[: height * factor, : width * factor].reshape(
-                height, factor, width, factor
-            )
-            frame = blocks.mean(axis=(1, 3))
-        return np.ascontiguousarray(frame, dtype=np.dtype(detector.data_type))
-
     # ------------------------------------------------------------- what the sensor sees
 
     def _whole_sensor(self, detector: Detector) -> np.ndarray:
-        """The whole sensor, before its region is cut out and it is binned.
+        """The whole sensor as ``(y, x)``, before its windows are cut out and it is binned.
 
         What a color camera shows on its own (the live view, an autofocus) is the mean of its
         colors: everything that expects one image gets one.
@@ -173,12 +143,11 @@ class SimulatedDetectorManager:
 
     def _start_session(self, detector: Detector, readout: Readout) -> None:
         """Begin a new acquisition session of `detector`; its images count from 0 again."""
-        width, height = self._image_size(detector, detector.current_binning, detector.current_roi)
+        height, width = detector.plane()
         readout.session = DetectorSessionInfo(
             detector_id=f"simulated-{detector.name}",
-            width=width,
-            height=height,
-            channels=1,
+            dims=["y", "x"],
+            shape=[height, width],
             dtype=detector.data_type,
             frame_bytes=width * height * np.dtype(detector.data_type).itemsize,
             slot_count=1,
@@ -188,8 +157,7 @@ class SimulatedDetectorManager:
                 "exposure_time_ms": detector.current_exposure_ms,
                 "gain_db": detector.current_gain,
                 "frame_rate_per_sec": detector.current_frame_rate,
-                "binning": detector.current_binning,
-                "roi": detector.current_roi,
+                **windows_of.settings(detector),
             },
             recording_file=None,
         )
@@ -197,7 +165,7 @@ class SimulatedDetectorManager:
 
     def _next_frame(self, detector: Detector, readout: Readout) -> DetectorFrame:
         """Render the next image of the detector's current session."""
-        data = self._read_out(self._whole_sensor(detector), detector)
+        data = windows_of.read_out(self._whole_sensor(detector), detector, ("y", "x"))
         time_ns = time.monotonic_ns()
         sequence = readout.sequence
         readout.sequence += 1
@@ -242,32 +210,25 @@ class SimulatedDetectorManager:
         gain: float | None = None,
         frame_rate: float | None = None,
         binning: int | None = None,
-        roi: Roi | None = None,
+        windows: list[AxisWindow] | None = None,
     ) -> Detector:
         """Change how a detector reads out; None keeps a setting.
 
-        A new binning or region changes its image size and, while streaming, starts a new session
+        A new binning or window changes its image size and, while streaming, starts a new session
         (as a camera restarts).
 
         Raises:
-            ValueError: No such detector, a frame rate < 0, a binning < 1, or a region with negative
-                values or smaller than the binning.
+            ValueError: No such detector, a frame rate < 0, a binning < 1, or windows
+                `newswitch.drivers.readout.check_windows` refuses.
         """
         detector = self.state.get(name)
         if frame_rate is not None and frame_rate < 0:
             raise ValueError(f"frame rate must be >= 0, got {frame_rate}")
         with self._lock:
             readout = self._readout(name)
-            if binning is not None or roi is not None:
-                new_binning = (
-                    detector.current_binning if binning is None else self._snap_binning(binning)
-                )
-                new_roi = detector.current_roi if roi is None else self._clamp_roi(detector, roi)
-                width, height = self._image_size(detector, new_binning, new_roi)
-                if width == 0 or height == 0:
-                    raise ValueError(f"region {new_roi} is smaller than the binning {new_binning}")
-                detector.current_binning, detector.current_roi = new_binning, new_roi
-                detector.width, detector.height = width, height
+            if binning is not None or windows is not None:
+                snapped = None if binning is None else self._snap_binning(binning)
+                windows_of.apply(detector, windows, snapped)
                 if readout.streaming:
                     self._start_session(detector, readout)
             if exposure_ms is not None:
@@ -279,11 +240,11 @@ class SimulatedDetectorManager:
         self.on_change()
         return detector
 
-    def size_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
-        """The (width, height) of its images, at `binning` or the one it has now."""
+    def plane_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
+        """The (y, x) size of its images, at `binning` or the one it has now."""
         detector = self.state.get(name)
-        factor = detector.current_binning if binning is None else self._snap_binning(int(binning))
-        return self._image_size(detector, factor, detector.current_roi)
+        factor = detector.binning() if binning is None else self._snap_binning(int(binning))
+        return _plane_at(detector, factor)
 
     def get_detector_state(self, name: str) -> Optional[Detector]:
         """The detector called `name`, if there is one."""
@@ -324,19 +285,18 @@ class SimulatedDetectorManager:
             return self._next_frame(detector, readout)
 
     def capture_channels(self, name: str) -> np.ndarray:
-        """One exposure as ``(c, H, W)``, in the order of the detector's `colors`.
-
-        A detector timing its photons gives ``(c, m, H, W)``.
-        """
+        """One exposure along every axis but ``z``: ``(c, y, x)`` in the order of its `colors`,
+        ``(m, y, x)`` timing its photons, ``(y, x)`` otherwise."""
         detector = self.state.get(name)
         values = self.values()
         if _times_photons(detector):
             histogram = self.simulator.render_microtime(name, values)
-            return np.stack([self._read_out(plane, detector) for plane in histogram])[np.newaxis]
+            return windows_of.read_out(histogram, detector, ("m", "y", "x"))
         if not detector.colors:
-            return self.capture_image(name).data[np.newaxis]
+            return self.capture_image(name).data
         colors = self.simulator.render_colors(name, values)
-        return np.stack([self._read_out(colors[color], detector) for color in detector.colors])
+        stacked = np.stack([colors[color] for color in detector.colors])
+        return windows_of.read_out(stacked, detector, ("c", "y", "x"))
 
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """Each event of the detector steps what its wire reaches; the sweep ends on the last plane.

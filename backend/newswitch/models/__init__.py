@@ -10,7 +10,7 @@ from .acquisition import (
     ScanOrder,
 )
 from .calibration import CalibratedLightPath
-from .devices import FULL_SENSOR, Detector, DetectorAxis, Roi
+from .devices import AxisWindow, Detector, DetectorAxis
 from .frames import ArrayMetadata, Frame, Image, Metadata, Scale
 from .hooks import Hook, RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 from .io import FileFormat, FileHandle
@@ -44,7 +44,7 @@ __all__ = [
     "Detector",
     "DetectorAxis",
     "EStopChanged",
-    "FULL_SENSOR",
+    "AxisWindow",
     "FileFormat",
     "FileHandle",
     "Frame",
@@ -68,7 +68,6 @@ __all__ = [
     "NodeSeen",
     "PositionUpdate",
     "RegisteredHook",
-    "Roi",
     "STAGE_AXES",
     "Scale",
     "SoftwareAutofocusHook",

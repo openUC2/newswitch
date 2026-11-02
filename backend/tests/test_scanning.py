@@ -169,13 +169,17 @@ def test_the_server_takes_images_of_the_scans_size(tmp_path: Path, instrument) -
     """Through the same detector manager as a camera."""
     m = build_microscope(run_settings(tmp_path), instrument)
     detector = m.detector_state.detectors[0]
-    assert (detector.width, detector.height, detector.colors) == (512, 512, [])
+    assert (detector.plane(), detector.colors) == ((512, 512), [])
+    assert [(axis.name, axis.unit, axis.binnable) for axis in detector.axes] == [
+        ("y", "deg", False),
+        ("x", "deg", False),
+    ]
     assert m.optics_state.detectors["pmt"].pixel_um == pytest.approx(
         0.02 * 5_000.0 * math.pi / 180.0
     )
     m.detector.activate_detector("pmt")
     image = m.detector.capture_channels("pmt")
-    assert image.shape == (1, 512, 512) and np.issubdtype(image.dtype, np.integer)
+    assert image.shape == (512, 512) and np.issubdtype(image.dtype, np.integer)
 
 
 def edited(tmp_path: Path, change) -> Path:  # noqa: ANN001

@@ -39,8 +39,11 @@ class AcquiredPosition:
     name: str
     position: int
     data: np.ndarray
-    """``(t, c, z, y, x)``, or ``(t, c, m, z, y, x)`` from a detector timing its photons. A mirrored or inverted detector's images are flipped already, so that
-    every channel shows the sample the same way round and `to_stage` is one map for all of them."""
+    """Along `dims`. A mirrored or inverted detector's images are flipped already, so that every
+    channel shows the sample the same way round and `to_stage` is one map for all of them."""
+    dims: tuple[str, ...]
+    """The axes of `data`: ``(t, c, z, y, x)``, or ``(t, c, m, z, y, x)`` from a detector timing its
+    photons."""
     channels: tuple[AcquiredChannel, ...]
     planes: tuple[AcquiredPlane, ...]
     to_stage: tuple[tuple[float, float, float, float], ...]

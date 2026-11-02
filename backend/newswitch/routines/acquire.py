@@ -74,6 +74,7 @@ class _Merge:
     lightings: tuple[_Lighting, ...]
     channels: tuple[AcquiredChannel, ...]
     data: np.ndarray
+    dims: tuple[str, ...]  # the axes of `data`: t, c, then what the detectors deliver
     planes: list[AcquiredPlane]
     pixel_to_world: np.ndarray  # x, y pixels to x, y micrometres, every axis increasing
     calibrated: bool
@@ -227,7 +228,7 @@ def _plan_position(
         exposures: list[_Exposure] = []
         for name in channel.detectors:
             detector = _find_detector(name, detector_manager)
-            shape = detector_manager.size_under(name, under.get(f"{name}.binning"))[::-1]
+            shape = detector_manager.plane_under(name, under.get(f"{name}.binning"))
             if size is None:
                 size = shape
             elif size != shape:
@@ -273,6 +274,8 @@ def _plan_position(
 
     assert size is not None and reference is not None
     microtime = next(iter(bins))
+    # Arrival time sits before z, where mikro has its axes: (t, c, m, z, y, x).
+    dims = ("t", "c", *([] if microtime is None else ["m"]), "z", "y", "x")
     shape = (
         plan.times,
         len(channels),
@@ -288,6 +291,7 @@ def _plan_position(
         lightings=tuple(lightings),
         channels=tuple(channels),
         data=np.empty(shape, dtype=np.result_type(*types)),
+        dims=dims,
         planes=[],
         pixel_to_world=reference,
         calibrated=calibrated,
@@ -356,18 +360,20 @@ def _keep(
     started: datetime,
     store: DatasetStore,
 ) -> None:
-    """One exposure's `images`, one per channel, into the array, the way round all channels are."""
+    """One exposure's `images` (`capture_channels`), one per channel, into the array, the way round
+    all channels are."""
     ended = datetime.now(timezone.utc)
     now = store.state()
+    if not exposure.detector.has_axis("c"):
+        images = images[np.newaxis]  # one channel: what it delivers is its only image
     for offset, image in enumerate(images):
         if exposure.flip_x:
             image = image[..., ::-1]
         if exposure.flip_y:
             image = image[..., ::-1, :]
         channel = exposure.first_channel + offset
-        # Arrival time sits before z, where mikro has its axes: (t, c, m, z, y, x).
         place: tuple[Any, ...] = (time_index, channel, z_index)
-        if merge.data.ndim == 6:
+        if "m" in merge.dims:
             place = (time_index, channel, slice(None), z_index)
         merge.data[place] = image
         merge.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))
@@ -523,6 +529,7 @@ def acquire(
                     name=name,
                     position=merge.index,
                     data=merge.data,
+                    dims=merge.dims,
                     channels=merge.channels,
                     planes=tuple(merge.planes),
                     to_stage=_to_stage(merge),

@@ -2,6 +2,7 @@
 
 from newswitch import protocols
 from newswitch.protocols.frame_sink import FrameSink
+from newswitch.models.devices import AxisWindow
 from newswitch.models.frames import Frame
 from newswitch.protocols import DetectorManager
 from newswitch.states.detector import DetectorState
@@ -62,19 +63,15 @@ def deactivate_detector(detector: DetectorManager, name: str) -> str:
     return f"Detector {name} deactivated"
 
 
-def set_region(
-    detector: DetectorManager, name: str, x: int, y: int, width: int, height: int
-) -> None:
-    """Read out only a part of a detector's sensor; a width or height of 0 is all of it.
+def set_window(detector: DetectorManager, name: str, windows: list[AxisWindow]) -> None:
+    """Read out only a part of a detector's axes: of a camera its sensor, of a scan the field.
 
     Args:
         name: The detector.
-        x: Where it starts, in unbinned sensor pixels.
-        y: Where it starts, in unbinned sensor pixels.
-        width: How wide it is.
-        height: How high it is.
+        windows: From where, and how far, on each axis, in unbinned steps; an axis none names
+            is read whole, so none reads everything.
     """
-    detector.update_detector(name, roi=(x, y, width, height))
+    detector.update_detector(name, windows=windows)
 
 
 def run_detector_loop(detector: DetectorManager, sink: FrameSink) -> None:

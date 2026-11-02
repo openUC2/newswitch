@@ -249,7 +249,7 @@ ui:
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Dwell on each pixel</span>
                                     <div className="flex items-baseline gap-1.5">
-                                        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: math.div(a: math.mul(a: pmt.current_exposure_ms, b: 1000), b: math.mul(a: pmt.width, b: pmt.height)), digits: 2)}</span>
+                                        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: math.div(a: math.mul(a: pmt.current_exposure_ms, b: 1000), b: math.mul(a: list.first(value: list.pluck(value: pmt.axes, key: "delivered_size")), b: list.last(value: list.pluck(value: pmt.axes, key: "delivered_size")))), digits: 2)}</span>
                                         <span className="text-sm text-muted-foreground">µs</span>
                                     </div>
                                 </div>

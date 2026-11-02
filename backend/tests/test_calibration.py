@@ -196,7 +196,7 @@ class Bench:
 
 def calibrated_on(bench: Bench, bench_prediction: float = 1.0) -> list[list[float]]:
     """Measure on `bench` as the real routine does: it is both the stage and the camera."""
-    detector = SimpleNamespace(name="bench", width=256, height=256)
+    detector = SimpleNamespace(name="bench", plane=lambda: (256, 256))
     return _measure(bench, bench, detector, bench_prediction)  # type: ignore[arg-type]
 
 

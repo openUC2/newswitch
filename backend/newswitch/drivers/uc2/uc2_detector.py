@@ -39,8 +39,9 @@ import koil
 import numpy as np
 import uc2_cam_py
 
-from newswitch.models.devices import Detector, Roi
-from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo, is_full_sensor
+from newswitch.drivers import readout as windows_of
+from newswitch.models.devices import AxisWindow, Detector
+from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo
 from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
@@ -82,31 +83,49 @@ def _sample_type(pixel_format: str) -> str:
     return "uint8" if pixel_format.endswith("8") else "uint16"
 
 
-def _camera_roi(roi: Roi) -> tuple[int, int, int, int] | None:
-    """The region as uc2_cam_py takes it: None for the complete sensor (`FULL_SENSOR`).
+def _camera_roi(windows: list[AxisWindow], detector: Detector) -> tuple[int, int, int, int] | None:
+    """The windows of a camera's y and x as the region uc2_cam_py takes: None for all of it."""
+    if not windows:
+        return None
+    by_axis = {window.axis: window for window in windows}
+    x, y = detector.axis("x"), detector.axis("y")
+    x_window = by_axis.get("x", AxisWindow("x", 0, x.size or 0))
+    y_window = by_axis.get("y", AxisWindow("y", 0, y.size or 0))
+    return x_window.start, y_window.start, x_window.size, y_window.size
 
-    Raises:
-        ValueError: Not four values.
-    """
-    x, y, width, height = roi
-    return None if is_full_sensor(roi) else (x, y, width, height)
+
+def _windows(detector: Detector) -> list[AxisWindow]:
+    """The windows `detector` reads now."""
+    return [
+        AxisWindow(axis.name, axis.window_start, axis.window_size)
+        for axis in detector.axes
+        if axis.window_size is not None
+    ]
 
 
 def _mirror(detector: Detector, camera: uc2_cam_py.Camera) -> None:
-    """Copy the camera's current settings and recording status into its detector."""
-    width, height = camera.image_size
+    """Copy the camera's current settings and recording status into its detector: the region it
+    snapped to its grid becomes the windows of y and x."""
     exposure = camera.exposure_time_ms
     gain = camera.gain_db
     roi = camera.roi
-    detector.width, detector.height = width, height
     if exposure is not None:
         detector.current_exposure_ms = exposure
     if gain is not None:
         detector.current_gain = gain
     detector.current_frame_rate = camera.frame_rate_per_sec
-    detector.current_binning = camera.binning
-    detector.current_roi = None if roi is None else list(roi)
+    windows = (
+        [] if roi is None else [AxisWindow("x", roi[0], roi[2]), AxisWindow("y", roi[1], roi[3])]
+    )
+    windows_of.apply(detector, windows, camera.binning)
     _mirror_recording(detector, camera)
+
+
+def _plane(data: np.ndarray) -> np.ndarray:
+    """A camera's image as ``(y, x)``: a color one's mean of its colors."""
+    if data.ndim == 3:
+        return np.rint(data.mean(axis=2)).astype(data.dtype)
+    return data
 
 
 def _mirror_recording(detector: Detector, camera: uc2_cam_py.Camera) -> None:
@@ -125,7 +144,13 @@ def _describe(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     detector.buffer_size = camera.buffer_size
     detector.pixel_format = camera.pixel_format
     detector.data_type = _sample_type(camera.pixel_format)
-    detector.sensor_width, detector.sensor_height = camera.pixel_count
+    width, height = camera.pixel_count
+    described = (detector.axis("x").size, detector.axis("y").size)
+    if (width, height) != described:
+        raise ValueError(
+            f"{detector.name}: the camera has {width} x {height} pixels, its description "
+            f"{described[0]} x {described[1]}"
+        )
     _mirror(detector, camera)
 
 
@@ -241,9 +266,10 @@ class UC2DetectorManager:
         Binning first, as it may change the other ranges; the frame rate last, as its
         range may depend on the exposure time. Region and frame rate only when set.
         """
-        camera.binning = detector.current_binning
-        if detector.current_roi is not None:
-            camera.roi = _camera_roi(detector.current_roi)
+        camera.binning = detector.binning()
+        roi = _camera_roi(_windows(detector), detector)
+        if roi is not None:
+            camera.roi = roi
         camera.exposure_time_ms = detector.current_exposure_ms
         camera.gain_db = detector.current_gain
         if detector.current_frame_rate is not None:
@@ -316,12 +342,16 @@ class UC2DetectorManager:
     # ------------------------------------------------------ DetectorManager
 
     def capture_channels(self, name: str) -> np.ndarray:
-        """One exposure as ``(c, H, W)``: a color camera's ``(H, W, 3)`` moved, a mono one's kept.
+        """One exposure along every axis but ``z``: a color camera's ``(y, x, 3)`` as ``(c, y, x)``,
+        a mono one's ``(y, x)``.
 
-        A raw Bayer format comes back as one mono image: nothing here demosaics it.
+        A raw Bayer format comes back as one mono image: nothing here demosaics it. Colors a
+        detector was not described with are averaged, as its image is.
         """
-        data = self.capture_image(name).data
-        return np.moveaxis(data, -1, 0) if data.ndim == 3 else data[np.newaxis]
+        data = self._capture(name).data
+        if data.ndim == 3 and self._require_detector(name).has_axis("c"):
+            return np.moveaxis(data, -1, 0)
+        return _plane(data)
 
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """The cameras run free, so nothing here can step a stage (`parts.check_wired`)."""
@@ -345,6 +375,12 @@ class UC2DetectorManager:
             RuntimeError: The manager is closed.
             TimeoutError: No image arrived in time.
         """
+        frame = self._capture(name)
+        frame.data = _plane(frame.data)
+        return frame
+
+    def _capture(self, name: str | None) -> DetectorFrame:
+        """`capture_image`, as the camera delivers it: a color camera's ``(y, x, 3)``."""
         detector = self._get_active_detector(name)
         if detector is None:
             raise ValueError(f"No active detector {name}")
@@ -423,12 +459,12 @@ class UC2DetectorManager:
         gain: float | None = None,
         frame_rate: float | None = None,
         binning: int | None = None,
-        roi: Roi | None = None,
+        windows: list[AxisWindow] | None = None,
     ) -> Detector:
         """Update detector settings; None keeps a setting. The camera clamps to its ranges.
 
         Binning first, as it may change the other ranges; the frame rate last, as its
-        range may depend on the exposure time. While acquiring, a new binning or region
+        range may depend on the exposure time. While acquiring, a new binning or window
         restarts the camera with a new session (a new file when storing).
 
         Args:
@@ -439,28 +475,33 @@ class UC2DetectorManager:
                 limit.
             binning: New symmetric binning factor (if provided), snapped to the nearest
                 one the camera allows.
-            roi: New region of interest (if provided) in unbinned sensor pixels, clamped
-                to the sensor and snapped to its grid; `FULL_SENSOR` selects the complete
-                sensor.
+            windows: What to read of y and x (if provided) in unbinned sensor pixels,
+                snapped to the camera's grid; an axis none names is read whole.
 
         Returns:
             The detector with every value the camera applied.
 
         Raises:
             ValueError: No such detector, exposure <= 0, gain < 0, frame rate < 0,
-                binning < 1 or an invalid region.
+                binning < 1 or windows `newswitch.drivers.readout.check_windows` refuses.
         """
         detector = self._require_detector(name)
         cam = self._open_camera(name)
         camera = cam.camera
         if frame_rate is not None and frame_rate < 0:
             raise ValueError(f"frame rate must be >= 0, got {frame_rate}")
-        if binning is not None or roi is not None:
+        if binning is not None and binning < 1:
+            raise ValueError(f"binning must be >= 1, got {binning}")
+        if windows is not None:
+            windows_of.check_windows(
+                detector, windows, detector.binning() if binning is None else binning
+            )
+        if binning is not None or windows is not None:
             with cam.lock:
                 if binning is not None:
                     camera.binning = binning
-                if roi is not None:
-                    camera.roi = _camera_roi(roi)
+                if windows is not None:
+                    camera.roi = _camera_roi(windows, detector)
         if exposure_ms is not None:
             camera.exposure_time_ms = exposure_ms
         if gain is not None:
@@ -471,14 +512,12 @@ class UC2DetectorManager:
         self.on_change()
         return detector
 
-    def size_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
-        """The (width, height) of its images, at `binning` or the one it has now."""
+    def plane_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
+        """The (y, x) size of its images, at `binning` or the one it has now."""
         detector = self._require_detector(name)
-        factor = detector.current_binning if binning is None else int(binning)
-        width, height = detector.sensor_width, detector.sensor_height
-        if detector.current_roi is not None:
-            _, _, width, height = detector.current_roi
-        return width // factor, height // factor
+        factor = detector.binning() if binning is None else int(binning)
+        y, x = detector.axis("y").windowed() or 0, detector.axis("x").windowed() or 0
+        return y // factor, x // factor
 
     def get_detector_state(self, name: str) -> Detector | None:
         """Get the state of a detector: what the camera is and can do, its current settings.
@@ -509,9 +548,8 @@ class UC2DetectorManager:
             return None
         return DetectorSessionInfo(
             detector_id=meta.camera_id,
-            width=meta.width,
-            height=meta.height,
-            channels=meta.channels,
+            dims=["y", "x", "c"] if meta.channels > 1 else ["y", "x"],
+            shape=[meta.height, meta.width, *([meta.channels] if meta.channels > 1 else [])],
             dtype=meta.dtype,
             frame_bytes=meta.frame_bytes,
             slot_count=meta.slot_count,
@@ -570,7 +608,7 @@ class UC2DetectorManager:
         data = image.data.copy()
         if image.is_valid():
             last_sent[name] = image.time_ns
-            sink.broadcast_sync(name, data)
+            sink.broadcast_sync(name, _plane(data))
 
     def stop_acquire_live(self) -> None:
         """Stop the live stream: clear `DetectorState.is_acquiring` and release the cameras.

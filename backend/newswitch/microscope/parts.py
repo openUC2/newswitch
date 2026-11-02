@@ -8,7 +8,7 @@ is; what has none is simulated or refused, as ``settings.simulate`` says.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -24,6 +24,7 @@ from newswitch.instrument import parts as instrument_parts
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import Hardware
 from newswitch.instrument.spec import Instrument
+from newswitch.models.devices import Detector
 from newswitch.protocols import DetectorManager
 from newswitch.protocols.io import IOManager
 from newswitch.protocols.uc2 import UC2BusManager
@@ -48,12 +49,13 @@ from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
 logger = logging.getLogger(__name__)
 
-#: What a variable of this name on a detector is, to its detector's manager.
-_DETECTOR_TUNES = {
-    "exposure": ("exposure_ms", "current_exposure_ms"),
-    "gain": ("gain", "current_gain"),
-    "binning": ("binning", "current_binning"),
-    "frame_rate": ("frame_rate", "current_frame_rate"),
+#: What a variable of this name on a detector is, to its detector's manager: what to set, and where
+#: the detector says what it applied.
+_DETECTOR_TUNES: dict[str, tuple[str, Callable[[Detector], Any]]] = {
+    "exposure": ("exposure_ms", lambda detector: detector.current_exposure_ms),
+    "gain": ("gain", lambda detector: detector.current_gain),
+    "binning": ("binning", lambda detector: detector.binning()),
+    "frame_rate": ("frame_rate", lambda detector: detector.current_frame_rate),
 }
 
 
@@ -64,18 +66,18 @@ class DetectorTune(Simulated):
         """The variable `tune` of `detector`, through `manager`."""
         self.manager = manager
         self.detector = detector
-        self.argument, self.field = _DETECTOR_TUNES[tune]
+        self.argument, self.applied = _DETECTOR_TUNES[tune]
 
     def start(self, initial: Any) -> Any:  # noqa: ANN401 - whatever the variable holds
         """What the detector made of what it was described to start at."""
         detector = self.manager.get_detector_state(self.detector)
-        applied = None if detector is None else getattr(detector, self.field)
+        applied = None if detector is None else self.applied(detector)
         return initial if applied is None else applied
 
     def set(self, value: Any, report: Any, task: Any = None) -> None:  # noqa: ANN401
         """Apply it, and report what the detector made of it."""
         detector = self.manager.update_detector(self.detector, **{self.argument: value})
-        report(getattr(detector, self.field))
+        report(self.applied(detector))
 
 
 def _driver_config(cls: type, options: Mapping[str, Any], where: str) -> Any:  # noqa: ANN401

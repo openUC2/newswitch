@@ -18,7 +18,8 @@ from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import parts, spec
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.devices import FULL_SENSOR
+from newswitch.drivers import readout
+from newswitch.models.devices import AxisWindow
 from newswitch.protocols import DetectorManager
 from newswitch.protocols.detector import DetectorFrame
 from newswitch.services.values import Values
@@ -235,20 +236,20 @@ def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
 
 
 class TestReadout:
-    """Region of interest, binning and frame rate set by update_detector."""
+    """Windows, binning and frame rate set by update_detector."""
 
     def test_binning_averages_blocks(self, manager: SimulatedDetectorManager) -> None:
         """A binned image holds the means of the blocks of the full image."""
         sensor = np.arange(512 * 512, dtype=np.uint16).reshape(512, 512)
         detector = manager.update_detector("camera", binning=2)
 
-        binned = manager._read_out(sensor, detector)
+        binned = readout.read_out(sensor, detector, ("y", "x"))
 
         expected = sensor.reshape(256, 2, 256, 2).mean(axis=(1, 3)).astype(np.uint16)
         np.testing.assert_array_equal(binned, expected)
-        assert (detector.width, detector.height) == (256, 256)
-        assert detector.current_binning == 2
-        assert (detector.sensor_width, detector.sensor_height) == (512, 512)
+        assert detector.plane() == (256, 256)
+        assert detector.binning() == 2
+        assert (detector.axis("y").size, detector.axis("x").size) == (512, 512)
 
     def test_a_captured_image_is_binned(
         self, manager: SimulatedDetectorManager, monkeypatch: pytest.MonkeyPatch
@@ -265,7 +266,7 @@ class TestReadout:
     def test_binning_snaps_to_an_allowed_factor(self, manager: SimulatedDetectorManager) -> None:
         """Binning snaps to the nearest allowed factor; factors < 1 are rejected."""
         detector = manager.update_detector("camera", binning=3)
-        assert detector.current_binning == 2
+        assert detector.binning() == 2
         with pytest.raises(ValueError, match="binning"):
             manager.update_detector("camera", binning=0)
 
@@ -278,33 +279,51 @@ class TestReadout:
         assert values.tune_state.tunes["camera"]["binning"].value == 2
         assert manager.capture_image("camera").data.shape == (256, 256)
 
-    def test_roi_cuts_out_the_region(self, manager: SimulatedDetectorManager) -> None:
-        """The region sets the image and detector size."""
-        detector = manager.update_detector("camera", roi=(10, 20, 100, 50))
+    def test_a_window_cuts_out_part_of_each_axis(self, manager: SimulatedDetectorManager) -> None:
+        """The windows set the image and the size along each axis."""
+        detector = manager.update_detector(
+            "camera", windows=[AxisWindow("x", 10, 100), AxisWindow("y", 20, 50)]
+        )
         assert manager.capture_image("camera").data.shape == (50, 100)
-        assert (detector.width, detector.height) == (100, 50)
-        assert detector.current_roi == [10, 20, 100, 50]
+        assert detector.plane() == (50, 100)
+        assert (detector.axis("x").window_start, detector.axis("x").window_size) == (10, 100)
 
-    def test_roi_is_clamped_and_reset(self, manager: SimulatedDetectorManager) -> None:
-        """A region is clamped to the sensor; FULL_SENSOR reads the complete sensor again."""
-        detector = manager.update_detector("camera", roi=(456, 456, 100, 100))
-        assert detector.current_roi == [456, 456, 56, 56]
+    def test_the_window_is_where_the_image_comes_from(
+        self, manager: SimulatedDetectorManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The part of the sensor a window names, not just its size."""
+        sensor = np.arange(512 * 512, dtype=np.uint16).reshape(512, 512)
+        monkeypatch.setattr(manager, "_whole_sensor", lambda detector: sensor)
+        manager.update_detector("camera", windows=[AxisWindow("x", 10, 100)])
+        np.testing.assert_array_equal(manager.capture_image("camera").data, sensor[:, 10:110])
 
-        detector = manager.update_detector("camera", roi=FULL_SENSOR)
-        assert detector.current_roi is None
-        assert (detector.width, detector.height) == (512, 512)
+    def test_a_window_outside_its_axis_is_refused(self, manager: SimulatedDetectorManager) -> None:
+        """Nothing is clamped: a window that does not fit says so, and the old one stays."""
+        manager.update_detector("camera", windows=[AxisWindow("x", 0, 100)])
+        with pytest.raises(ValueError, match="not within"):
+            manager.update_detector("camera", windows=[AxisWindow("x", 456, 100)])
+        with pytest.raises(ValueError, match="not within"):
+            manager.update_detector("camera", windows=[AxisWindow("y", -1, 10)])
+        with pytest.raises(ValueError, match="no axis"):
+            manager.update_detector("camera", windows=[AxisWindow("q", 0, 10)])
+        assert manager.capture_image("camera").data.shape == (512, 100)
+
+    def test_no_window_reads_everything_again(self, manager: SimulatedDetectorManager) -> None:
+        """An axis no window names is read whole."""
+        manager.update_detector("camera", windows=[AxisWindow("x", 0, 100)])
+        detector = manager.update_detector("camera", windows=[])
+        assert detector.axis("x").window_size is None
+        assert detector.plane() == (512, 512)
         assert manager.capture_image("camera").data.shape == (512, 512)
 
-        with pytest.raises(ValueError, match="negative"):
-            manager.update_detector("camera", roi=(-1, 0, 10, 10))
-
-    def test_roi_and_binning_combine(self, manager: SimulatedDetectorManager) -> None:
-        """The region is cut out first, then binned; a region below the binning is rejected."""
-        detector = manager.update_detector("camera", binning=4, roi=(0, 0, 100, 60))
+    def test_windows_and_binning_combine(self, manager: SimulatedDetectorManager) -> None:
+        """The window is cut out first, then binned; one below the binning is refused."""
+        windows = [AxisWindow("x", 0, 100), AxisWindow("y", 0, 60)]
+        manager.update_detector("camera", binning=4, windows=windows)
         assert manager.capture_image("camera").data.shape == (15, 25)
-        with pytest.raises(ValueError, match="smaller than the binning"):
-            manager.update_detector("camera", roi=(0, 0, 2, 2))
-        assert detector.current_roi == [0, 0, 100, 60]  # unchanged
+        with pytest.raises(ValueError, match="fewer than the binning"):
+            manager.update_detector("camera", windows=[AxisWindow("x", 0, 2)])
+        assert manager.capture_image("camera").data.shape == (15, 25)  # unchanged
 
     def test_frame_rate(self, values: Values, manager: SimulatedDetectorManager) -> None:
         """A frame rate is kept in its range by its variable; 0 removes the limit, < 0 is rejected."""
@@ -331,9 +350,9 @@ class TestReadout:
         m = build_microscope(run_settings(tmp_path), spec.load(copy))
         assert m.detector is not None and m.values is not None
         (detector,) = m.detector.list_available_detectors()
-        assert detector.current_binning == 2
-        assert (detector.width, detector.height) == (256, 256)
-        assert (detector.sensor_width, detector.sensor_height) == (512, 512)
+        assert detector.binning() == 2
+        assert detector.plane() == (256, 256)
+        assert (detector.axis("y").size, detector.axis("x").size) == (512, 512)
         assert m.detector.capture_image("camera").data.shape == (256, 256)
         assert m.values["camera.binning"] == 2
         assert m.tune_state.tunes["camera"]["binning"].value == 2
@@ -355,9 +374,12 @@ class TestReadout:
             assert detector.manufacturer == "simulated"
             assert detector.connection_type is None  # no camera behind it
             assert detector.data_type == "uint16"
-            assert (detector.sensor_width, detector.sensor_height) == (512, 512)
-            assert (detector.width, detector.height) == (512, 512)
-            assert (detector.current_binning, detector.current_roi) == (1, None)
+            assert [axis.name for axis in detector.axes] == ["y", "x"]
+            assert [(axis.domain, axis.size, axis.unit) for axis in detector.axes] == [
+                ("space", 512, "um")
+            ] * 2
+            assert detector.plane() == (512, 512)
+            assert detector.binning() == 1
             assert detector.current_frame_rate == 30.0
             assert detector.current_exposure_ms == 100.0
             assert not detector.is_recording
@@ -393,7 +415,7 @@ class TestSessions:
         first = manager.capture_image("camera")
         info = manager.get_image_info("camera")
         assert info is not None
-        assert (info.width, info.height, info.channels, info.dtype) == (256, 256, 1, "uint16")
+        assert (info.dims, info.shape, info.dtype) == (["y", "x"], [256, 256], "uint16")
         assert info.recording_file is None
         assert info.settings["exposure_time_ms"] == pytest.approx(200.0)
         assert info.settings["binning"] == 2

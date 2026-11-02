@@ -15,7 +15,7 @@ from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
-from newswitch.infra.mikro.store import AXES, MICROTIME_AXES, _dataset_axes, _optical_element
+from newswitch.infra.mikro.store import _dataset_axes, _optical_element
 from tests.conftest import run_settings
 from tests.test_acquire import acquire, plan
 
@@ -115,7 +115,7 @@ def test_what_expects_one_image_gets_one(microscope: Microscope) -> None:
     assert microscope.detector is not None
     microscope.detector.activate_detector("spad")
     assert microscope.detector.capture_image("spad").data.shape == (512, 512)
-    assert microscope.detector.capture_channels("spad").shape == (1, 64, 512, 512)
+    assert microscope.detector.capture_channels("spad").shape == (64, 512, 512)
 
 
 def test_an_acquisition_has_the_arrival_time_axis(microscope: Microscope) -> None:
@@ -133,7 +133,7 @@ def test_it_is_a_microtime_axis_for_mikro(
     """Declared with its type, in mikro's order, and a pyramid can be made of it."""
     acquired = acquire(microscope, plan([stream()])).published[0]
     names, axes, types = _dataset_axes(instrument, acquired)
-    assert names == MICROTIME_AXES
+    assert names == ("t", "c", "m", "z", "y", "x")
     declared = axes[names.index("m")]
     assert declared.type == schema.AxisType.MICROTIME
     assert "200 ps" in declared.description
@@ -154,7 +154,8 @@ def test_other_datasets_keep_their_axes(tmp_path: Path) -> None:
         )
     ]
     acquired = acquire(m, plan(streams)).published[0]
-    assert _dataset_axes(instrument, acquired) == (AXES, list(AXES), {})
+    axes = ("t", "c", "z", "y", "x")
+    assert _dataset_axes(instrument, acquired) == (axes, list(axes), {})
 
 
 def test_the_new_elements_are_mikros_elements(instrument: spec.Instrument) -> None:

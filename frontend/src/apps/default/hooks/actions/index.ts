@@ -18,7 +18,7 @@ import { MoveHomeDefinition } from './moveHome';
 import { MoveOneDefinition } from './moveOne';
 import { RunAutofocusDefinition } from './runAutofocus';
 import { ScanRegionDefinition } from './scanRegion';
-import { SetRegionDefinition } from './setRegion';
+import { SetWindowDefinition } from './setWindow';
 import { StartLiveViewDefinition } from './startLiveView';
 import { StopLiveViewDefinition } from './stopLiveView';
 import { StopStageDefinition } from './stopStage';
@@ -213,12 +213,18 @@ export {
 } from './scanRegion';
 export type { ScanRegionArgs, ScanRegionReturn } from './scanRegion';
 export {
-  SetRegionArgsSchema,
-  SetRegionReturnSchema,
-  SetRegionDefinition,
-  useSetRegion,
-} from './setRegion';
-export type { SetRegionArgs, SetRegionReturn } from './setRegion';
+  AxisWindowSchema,
+  SetWindowArgsSchema,
+  SetWindowReturnSchema,
+  SetWindowDefinition,
+  useSetWindow,
+} from './setWindow';
+export type {
+  AxisWindow,
+  AxisWindowOutput,
+  SetWindowArgs,
+  SetWindowReturn,
+} from './setWindow';
 export {
   StartLiveViewArgsSchema,
   StartLiveViewReturnSchema,
@@ -282,7 +288,7 @@ export const globalActionDefinition = {
   MoveOne: MoveOneDefinition,
   RunAutofocus: RunAutofocusDefinition,
   ScanRegion: ScanRegionDefinition,
-  SetRegion: SetRegionDefinition,
+  SetWindow: SetWindowDefinition,
   StartLiveView: StartLiveViewDefinition,
   StopLiveView: StopLiveViewDefinition,
   StopStage: StopStageDefinition,

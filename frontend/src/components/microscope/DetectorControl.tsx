@@ -24,7 +24,9 @@ export function DetectorControl() {
               <Monitor className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">{detector.name}</span>
               <span className="font-mono text-xs text-muted-foreground">
-                {detector.width}×{detector.height}
+                {detector.axes
+                  .map((axis) => `${axis.name} ${axis.delivered_size ?? "…"}`)
+                  .join(" × ")}
               </span>
             </div>
             <Switch

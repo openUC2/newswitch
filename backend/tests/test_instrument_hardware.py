@@ -450,7 +450,7 @@ def test_a_detector_only_has_to_tune_its_exposure(tmp_path: Path) -> None:
     assert built.detector is not None
     (detector,) = built.detector_state.detectors
     assert (detector.current_frame_rate, detector.current_gain) == (None, None)
-    assert detector.current_binning == 1
+    assert detector.binning() == 1
     assert built.detector.capture_image("camera").data.shape == (512, 512)
 
 

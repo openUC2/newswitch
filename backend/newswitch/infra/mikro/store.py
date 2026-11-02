@@ -38,9 +38,6 @@ from newswitch.microscope.parts import Microscope
 from newswitch.models.acquisition import AcquiredDataset
 from newswitch.protocols.dataset_store import AcquiredChannel, AcquiredPlane, AcquiredPosition
 
-AXES = ("t", "c", "z", "y", "x")
-#: The axes of a dataset from a detector timing its photons: `MICROTIME` comes before space.
-MICROTIME_AXES = ("t", "c", "m", "z", "y", "x")
 #: The axes a dataset shares with the stage's space.
 SPATIAL = ("z", "y", "x")
 
@@ -48,9 +45,12 @@ SPATIAL = ("z", "y", "x")
 def _dataset_axes(
     instrument: Instrument, acquired: AcquiredPosition
 ) -> tuple[tuple[str, ...], list[Any], dict[str, Any]]:
-    """The names of a dataset's axes, as `create_array_dataset` wants them, and as a pyramid does."""
-    if acquired.data.ndim == len(AXES):
-        return AXES, list(AXES), {}
+    """The names of a dataset's axes, as `create_array_dataset` wants them, and as a pyramid does.
+
+    They are the acquisition's own; an arrival-time axis is declared, as mikro knows it by type.
+    """
+    if "m" not in acquired.dims:
+        return acquired.dims, list(acquired.dims), {}
     bins = next(
         axis for axis in instrument.detector_axes(acquired.channels[0].detector) if axis.name == "m"
     )
@@ -60,8 +60,8 @@ def _dataset_axes(
         description=f"Arrival time after the pulse, in bins of {bins.step:g} ps",
     )
     return (
-        MICROTIME_AXES,
-        [declared if name == "m" else name for name in MICROTIME_AXES],
+        acquired.dims,
+        [declared if name == "m" else name for name in acquired.dims],
         {"m": "MICROTIME"},
     )
 

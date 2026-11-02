@@ -727,14 +727,28 @@ class Drive:
         return cube, signal
 
 
+#: What an axis of a detector measures of the sample: where (``space``, placed by the coordinate
+#: graph, `newswitch.instrument.space`), which colors, when a photon arrived after its pulse, or when.
+Domain = Literal["space", "spectrum", "microtime", "time"]
+
+
 @dataclass(frozen=True)
 class DetectorAxis:
-    """One axis a logical detector delivers: a physical detector and what is wired to it."""
+    """One axis a logical detector delivers: a physical detector and what is wired to it.
+
+    It measures a domain of the sample. Which way a spatial one runs on the sample is not its to
+    say: a turned sensor's x is some of the sample's x and some of its y. The coordinate graph says.
+    """
 
     name: str
     size: int | None  # None: set per acquisition
-    step: float | None  # in the unit of what delivers it
+    step: float | None  # in `unit`, native to what delivers it: a sensor's pitch, a scan's angle
+    unit: str
+    domain: Domain
     delivered_by: str
+    binnable: bool = (
+        False  # a sensor's own pixels bin; a scan's positions and a stage's planes do not
+    )
 
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
@@ -938,26 +952,39 @@ class Instrument:
         element = self.cubes[detector].element
         found = []
         if isinstance(element, Sensor) and element.colors:
-            found.append(DetectorAxis("c", len(element.colors), None, f"{detector}.colors"))
+            found.append(
+                DetectorAxis("c", len(element.colors), None, "", "spectrum", f"{detector}.colors")
+            )
         if isinstance(element, PointDetector) and element.axes:
             bins = element.axes["microtime"]
-            found.append(DetectorAxis("m", bins.size, bins.step, detector))
+            found.append(DetectorAxis("m", bins.size, bins.step, "ps", "microtime", detector))
         stepped = self.z_drive(detector)
         if stepped is not None:
             found.append(
-                DetectorAxis("z", None, stepped.by, f"{stepped.source} -> {stepped.target}")
+                DetectorAxis(
+                    "z", None, stepped.by, "um", "space", f"{stepped.source} -> {stepped.target}"
+                )
             )
         scanner = self.scanner_of(detector)
         if scanner is None:
             assert isinstance(element, Sensor)
             found += [
-                DetectorAxis(name, element.axes[name].size, element.axes[name].pitch, detector)
+                DetectorAxis(
+                    name,
+                    element.axes[name].size,
+                    element.axes[name].pitch,
+                    "um",
+                    "space",
+                    detector,
+                    binnable=True,
+                )
                 for name in ("y", "x")
             ]
         else:
             axes = self.cubes[scanner].element.axes
             found += [
-                DetectorAxis(name, axes[name].size, axes[name].step, scanner) for name in ("y", "x")
+                DetectorAxis(name, axes[name].size, axes[name].step, "deg", "space", scanner)
+                for name in ("y", "x")
             ]
         return tuple(found)
 

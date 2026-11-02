@@ -28,8 +28,9 @@ def focus_range(depth_of_field_um: float, steps: int) -> float:
 def field_of_view(
     detector: Detector, um_per_px_x: float, um_per_px_y: float
 ) -> tuple[float, float]:
-    """The (width, height) in micrometres a detector sees at a pixel scale."""
-    return abs(um_per_px_x) * detector.width, abs(um_per_px_y) * detector.height
+    """The (width, height) in micrometres a detector sees at a pixel scale, in its windows."""
+    height, width = detector.plane()
+    return abs(um_per_px_x) * width, abs(um_per_px_y) * height
 
 
 def acquire_step(

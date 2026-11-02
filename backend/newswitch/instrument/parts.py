@@ -11,35 +11,41 @@ from newswitch.models.devices import Detector, DetectorAxis
 
 
 def detectors(instrument: Instrument) -> list[Detector]:
-    """One `Detector` per sensor or point detector, all on. Its sizes come from its axes."""
+    """One `Detector` per sensor or point detector, all on, with the axes it delivers.
+
+    Every axis reads out whole; the binnable ones at the initial binning.
+    """
     found = []
     for name in instrument.detectors():
         cube = instrument.cubes[name]
         element = cube.element
         assert element is not None
-        delivered = instrument.detector_axes(name)
-        *_, axis_y, axis_x = delivered
         binning = cube.tunes.get("binning")
         exposure = cube.tunes.get("exposure")
         gain = cube.tunes.get("gain")
         frame_rate = cube.tunes.get("frame_rate")
+        initial_binning = 1 if binning is None else int(binning.initial)
         found.append(
             Detector(
                 name=name,
-                width=axis_x.size,
-                height=axis_y.size,
-                sensor_width=axis_x.size,
-                sensor_height=axis_y.size,
                 is_active=True,
                 data_type=_data_type(element.readout.bit_depth),
                 colors=list(element.colors) if isinstance(element, Sensor) else [],
                 axes=[
-                    DetectorAxis(axis.name, axis.size, axis.step, axis.delivered_by)
-                    for axis in delivered
+                    DetectorAxis(
+                        name=axis.name,
+                        domain=axis.domain,
+                        unit=axis.unit,
+                        size=axis.size,
+                        step=axis.step,
+                        delivered_by=axis.delivered_by,
+                        binnable=axis.binnable,
+                        binning=initial_binning if axis.binnable else 1,
+                    )
+                    for axis in instrument.detector_axes(name)
                 ],
                 current_exposure_ms=None if exposure is None else exposure.initial,
                 current_gain=None if gain is None else gain.initial,
-                current_binning=1 if binning is None else binning.initial,
                 current_frame_rate=None if frame_rate is None else frame_rate.initial,
             )
         )

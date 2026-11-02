@@ -69,7 +69,7 @@ def _measure(
         return np.array(calibrate_pixel_to_stage(*frames, step_x, step_y))
 
     def sized(um_per_px: float) -> float:
-        return SHIFT_OF_FRAME * min(detector.width, detector.height) * um_per_px
+        return SHIFT_OF_FRAME * min(detector.plane()) * um_per_px
 
     problem = "the moves did not agree on it"
     for share in TRIES:

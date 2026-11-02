@@ -109,8 +109,8 @@ class OpticsManager:
         at = self.values() if values is None else values
         key = _digest(
             {
+                # Not its windows: cutting part of an image out does not change where a pixel looks.
                 "detector": path.detector,
-                "region": self.detector_state.get(path.detector).current_roi,
                 **{
                     variable: self._to_step(variable, at[variable])
                     for variable in self._influences[path.detector]
@@ -159,9 +159,14 @@ class OpticsManager:
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
-            fov_width=answer.field_of_view_um[0],
-            fov_height=answer.field_of_view_um[1],
+            fov_width=answer.field_of_view_um[0] * self._read_share(detector, "x"),
+            fov_height=answer.field_of_view_um[1] * self._read_share(detector, "y"),
         )
+
+    def _read_share(self, detector: str, axis: str) -> float:
+        """How much of its `axis` a detector reads: its window, of all of it."""
+        delivered = self.detector_state.get(detector).axis(axis)
+        return (delivered.windowed() or 1) / (delivered.size or 1)
 
     def scale_under(
         self, detector: str, values: Mapping[str, Any]

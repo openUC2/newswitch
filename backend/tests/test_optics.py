@@ -11,6 +11,7 @@ from newswitch.instrument.compiler import difference, influences
 from newswitch.instrument.predict import Answer
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.calibration import CalibratedLightPath
+from newswitch.models.devices import AxisWindow
 from newswitch.models.optics import DetectorOptics
 from newswitch.routines.autofocus import autofocus_sweep
 from newswitch.routines.common import focus_range, z_sweep
@@ -116,10 +117,8 @@ def test_a_calibration_is_published_over_the_prediction(microscope: Microscope) 
     assert (found.calibrated, found.pixel_um) == (True, 0.5)
 
 
-def test_a_region_is_what_a_calibration_depends_on_and_is_published_at_once(
-    microscope: Microscope,
-) -> None:
-    """Reading out another part of the sensor leaves the prediction, not the measurement."""
+def test_a_window_keeps_its_calibration(microscope: Microscope) -> None:
+    """Reading out part of the sensor does not change where a pixel looks: the measurement holds."""
     assert microscope.detector is not None
     path = microscope.optics.get_light_path_for_detector("camera")
     microscope.calibration.set_calibrated_state(
@@ -134,8 +133,10 @@ def test_a_region_is_what_a_calibration_depends_on_and_is_published_at_once(
         )
     )
     assert first_detector(microscope).calibrated
-    microscope.detector.update_detector("camera", roi=(0, 0, 100, 100))
-    assert not first_detector(microscope).calibrated
+    microscope.detector.update_detector(
+        "camera", windows=[AxisWindow("x", 0, 100), AxisWindow("y", 0, 100)]
+    )
+    assert first_detector(microscope).calibrated
 
 
 def test_what_a_calibration_depends_on_is_measured() -> None:

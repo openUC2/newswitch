@@ -127,7 +127,7 @@ def test_a_camera_alone_acquires(settings: Settings) -> None:
     assert len(frames) == 1
     detector = built.detector_state.detectors[0]
     assert frames[0].metadata.fov_width == pytest.approx(
-        built.optics_state.detectors["sim_cam"].pixel_um * detector.width, rel=0.01
+        built.optics_state.detectors["sim_cam"].pixel_um * detector.plane()[1], rel=0.01
     )
 
 

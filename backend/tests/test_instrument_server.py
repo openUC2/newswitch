@@ -10,6 +10,7 @@ import pytest
 from main_fastapi import create_fastapi_registry
 from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.microscope.parts import Microscope, build_microscope
+from newswitch.models.devices import AxisWindow
 from newswitch.instrument import spec
 from newswitch.routines.affine_matrix import pixel_shift
 from newswitch.routines.calibration import calibrate_light_path
@@ -96,7 +97,8 @@ def test_the_models_come_from_the_description(microscope: Microscope) -> None:
     """Sensor sizes off the axes, objectives and filters by their slots, sources by power."""
     first, second = microscope.detector_state.detectors
     assert (first.name, second.name) == ("camera_a", "camera_b")
-    assert (first.width, first.height, first.sensor_width) == (512, 512, 512)
+    assert first.plane() == (512, 512)
+    assert [(axis.name, axis.size) for axis in first.axes] == [("y", 512), ("x", 512)]
     assert first.current_exposure_ms == pytest.approx(100.0)
     swaps = microscope.swap_state.swaps
     assert [lens.label for lens in swaps["objective"]["slot"].options] == [
@@ -258,13 +260,15 @@ def test_defocus_blurs_the_image(microscope: Microscope) -> None:
     assert np.var(np.diff(blurred, axis=1)) < 0.7 * np.var(np.diff(sharp, axis=1))
 
 
-def test_binning_and_a_region_work_as_on_any_detector(microscope: Microscope) -> None:
+def test_binning_and_a_window_work_as_on_any_detector(microscope: Microscope) -> None:
     """Both are read out from the whole sensor by the manager it inherits."""
     assert microscope.detector is not None and microscope.values is not None
     laser_only(microscope)
     microscope.values.set({"camera_a.binning": 2})
     assert microscope.detector.capture_image("camera_a").data.shape == (256, 256)
-    microscope.detector.update_detector("camera_a", binning=1, roi=(10, 20, 100, 50))
+    microscope.detector.update_detector(
+        "camera_a", binning=1, windows=[AxisWindow("x", 10, 100), AxisWindow("y", 20, 50)]
+    )
     assert microscope.detector.capture_image("camera_a").data.shape == (50, 100)
 
 

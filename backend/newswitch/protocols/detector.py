@@ -4,7 +4,7 @@ Detector Manager Protocol
 Defines the protocol for detector/camera control and associated state.
 
 `DetectorManager` covers everything a detector offers: activation, exposure, gain, frame
-rate, binning, region of interest, snapshots with their timing, the metadata of the
+rate, binning, the window it reads of each axis, snapshots with their timing, the metadata of the
 acquisition session, and the live stream. `Detector` holds all of a detector's values: how
 it is configured and opened, what the device reports, its current settings and ranges.
 The dataclasses here do not depend on a camera library.
@@ -16,17 +16,12 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
 
 import numpy as np
 
-from newswitch.models.devices import Detector, Roi
+from newswitch.models.devices import AxisWindow, Detector
 from newswitch.protocols.base import Manager
 from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:
     from newswitch.protocols.frame_sink import FrameSink
-
-
-def is_full_sensor(roi: Roi) -> bool:
-    """Whether `roi` selects the complete sensor (width or height 0, see `FULL_SENSOR`)."""
-    return roi[2] == 0 or roi[3] == 0
 
 
 @dataclass(eq=False)
@@ -36,7 +31,9 @@ class DetectorFrame:
     detector: str
     """The detector the image belongs to."""
     data: np.ndarray
-    """Pixel data, an own copy: ``(H, W)`` mono or raw Bayer, ``(H, W, 3)`` color."""
+    """Pixel data, an own copy: ``(y, x)``, the detector's image. What it delivers along other
+    axes is collapsed into it, colors averaged and arrival times summed: those come from
+    `capture_channels`."""
     sequence: int
     """Frame index within the acquisition session (0, 1, 2, ...)."""
     time_ns: int
@@ -51,11 +48,10 @@ class DetectorSessionInfo:
 
     detector_id: str
     """Identifies the device, e.g. ``<model>-<serial>`` for a camera."""
-    width: int
-    """Image width after ROI and binning."""
-    height: int
-    channels: int
-    """1 for mono or raw Bayer, 3 for color."""
+    dims: list[str]
+    """The axes of an image as it is recorded, e.g. ``["y", "x"]``, ``["y", "x", "c"]``."""
+    shape: list[int]
+    """Its size along each of `dims`, after windows and binning."""
     dtype: str
     """numpy dtype of the samples, e.g. ``"uint16"``."""
     frame_bytes: int
@@ -66,7 +62,7 @@ class DetectorSessionInfo:
     start_mono_ns: int
     """Monotonic ns at the same instant."""
     settings: dict[str, Any]
-    """Detector settings at the session start (vendor, model, exposure, gain, ROI, ...)."""
+    """Detector settings at the session start (vendor, model, exposure, gain, windows, ...)."""
     recording_file: str | None
     """File the session is recorded to; None when images are not stored."""
 
@@ -89,13 +85,14 @@ class DetectorManager(Manager, Protocol):
     state: DetectorState
 
     def capture_channels(self, name: str) -> np.ndarray:
-        """Capture one exposure as ``(c, H, W)``: one image per color, one for a mono camera.
+        """Capture one exposure along every axis the detector delivers but ``z``.
 
         Args:
             name: The detector.
 
         Returns:
-            The images, in the order of the detector's `colors`.
+            One value per step of each of its `axes` but ``z``, in their order: ``(c, y, x)``,
+            ``(m, y, x)``, ...; a mono camera ``(y, x)``.
         """
         ...
 
@@ -150,12 +147,12 @@ class DetectorManager(Manager, Protocol):
         gain: Optional[float] = None,
         frame_rate: Optional[float] = None,
         binning: Optional[int] = None,
-        roi: Optional[Roi] = None,
+        windows: Optional[list[AxisWindow]] = None,
     ) -> Detector:
         """Update detector settings; None keeps a setting.
 
         The detector clamps the values to its ranges. While acquiring, a new binning or
-        region starts a new acquisition session.
+        window starts a new acquisition session.
 
         Args:
             name: The detector.
@@ -163,18 +160,18 @@ class DetectorManager(Manager, Protocol):
             gain: New gain value (if provided).
             frame_rate: New frame rate in frames per second (if provided); 0 removes the
                 limit.
-            binning: New symmetric binning factor (if provided), snapped to the nearest
-                one the detector allows.
-            roi: New region of interest (if provided) in unbinned sensor pixels;
-                `FULL_SENSOR` selects the complete sensor.
+            binning: New binning factor of its binnable axes (if provided), snapped to the
+                nearest one the detector allows.
+            windows: What to read of each axis (if provided), in unbinned steps; an axis
+                none names is read whole, so an empty list reads everything.
 
         Returns:
             The updated detector with every value the detector applied.
         """
         ...
 
-    def size_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
-        """The (width, height) of its images, at `binning` or the one it has now."""
+    def plane_under(self, name: str, binning: float | None = None) -> tuple[int, int]:
+        """The (y, x) size of its images, at `binning` or the one it has now."""
         ...
 
     def get_detector_state(self, name: str) -> Optional[Detector]:
