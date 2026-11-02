@@ -59,6 +59,22 @@ stage:
         pattern: {beads: 0, radius: 10 um, depth: 4 um}
 ```
 
+**What it is mounted on**: `holders` names what the sample can be mounted on, from the library in
+`newswitch/instrument/holders` (`slide-75x25`, `dish-35`, `plate-96`), and where each sits on this
+stage: where its top left corner is (`mount: {x, y, rotation}`). `mounted` is the one it starts on.
+The sample's frame is then the holder's, in micrometres from that corner, and a plate's wells are
+places to go (`move_to` a `well:B3`). What is mounted changes with `mount_holder`: a new sample, with
+none of the images taken. Without holders the sample's frame is the stage's. A simulated run draws
+the beads on what is mounted (in every well of a plate); `truth.yml` may say it sits beside where its
+`mount` says (`mount_offset_um`), which `register_mount` then has to correct.
+
+```yaml
+    holders:
+      slide: {holder: slide-75x25, mount: {x: -37.5 mm, y: -12.5 mm}}   # its middle on the stage's 0
+      plate: {holder: plate-96, mount: {x: -63.88 mm, y: -42.74 mm}}
+    mounted: slide
+```
+
 The compiler covers every simulation when a server starts. Calibration needs something to correlate: on an empty slide its arithmetic gives a meaningless
 pixel size, without an error. An epi source's light is drawn from the beads, also what a sample
 reflects: a mirror is predicted right, but drawn dark.
@@ -121,6 +137,14 @@ Real hardware refuses every wire for now, and any point detector: cameras run fr
 and nothing reads a point detector. All of this runs in simulation only.
 
 ## Scanners, light sheets and FLIM
+
+A detector has no width or height of its own: it delivers **axes**, each measuring a domain of the
+sample (`space`, `spectrum`, `microtime`), in the unit of what delivers it. A camera's `y` and `x` are
+its sensor's (µm of pitch, and they bin); a scan's are its scanner's (degrees, and they do not bin);
+a stepped `z` is its wire's; a color camera's `c` its colors; FLIM's `m` its arrival-time bins. Of
+every spatial axis with a size a part can be read (`set_window`): of a camera its region of interest,
+of a scan the part scanned, at the same step. Where the pixels are on the sample is not the axes' to
+say: the coordinate graph places them (`services/space.py`), so a turned sensor is turned there.
 
 **A point scanner** has a `scanner` with `axes` of `size` and `step` (the optical angle, not the
 mirror's, which is half of it), a `pinhole`, and a `point_detector` wired to the scan. The pixel size
@@ -272,15 +296,17 @@ every_s: 60.0
 A channel sets what it says, and a source it does not name is off. It is stored in mikro (`just mikro`,
 then `just dev-mikro`), not in the local cache, and is refused before anything moves when a server has
 no mikro. Each position becomes one `ArrayDataset` of `(t, c, z, y, x)`, of the type its sensors
-deliver, placed in a stage space shared by this microscope:
+deliver, placed in the space of the sample it was taken of (one per mounting, with the mount from
+this microscope's stage space beside it):
 
 - **`c`**: each detector of a channel is a channel of the dataset, and a color camera one per color. A
   detector whose image comes out mirrored (a splitter's reflected arm) is turned back, so every channel
   shows the sample the same way round.
 - **Anchors**: `c` has its label and light path; each `t, c, z` has every variable and when the image
   was taken.
-- **Placement**: the middle of the image is where the stage was. It counts as validated once every
-  detector's light path is calibrated, and as inferred from the optics until then.
+- **Placement**: the middle of the image is where the stage was, on the sample through the mount. It
+  counts as validated once every detector's light path is calibrated, and as inferred from the optics
+  until then.
 
 An array is regular, so what cannot be one is refused before anything moves: uneven planes, values out
 of a variable's range, and detectors that disagree on image size or on pixel size by more than 1% under

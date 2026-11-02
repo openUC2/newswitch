@@ -95,10 +95,20 @@ Managers are protocol implementations that mutate state and provide behavior:
   `.uc2rb` files.
 
 All implement `DetectorManager` (`protocols/detector.py`): besides activation, exposure and
-gain it covers frame rate, binning and ROI (`update_detector`; `frame_rate=0` removes the
-limit, `FULL_SENSOR` selects the complete sensor), snapshots with their timing
-(`capture_image` returns a `DetectorFrame`), the session metadata (`get_image_info`), the
-live loop (`acquire_live`, `stop_acquire_live`) and `close`. The `Detector` in
+gain it covers frame rate, binning and windows (`update_detector`; `frame_rate=0` removes the
+limit, an axis no window names is read whole), snapshots with their timing
+(`capture_image` returns a `DetectorFrame`, always the `(y, x)` image; `capture_channels` every
+axis but `z`), the session metadata (`get_image_info`), the live loop (`acquire_live`,
+`stop_acquire_live`) and `close`.
+
+A detector has no width and height: it has **axes** (`Detector.axes`, from
+`Instrument.detector_axes`), each measuring a domain of the sample (`space`, `spectrum`,
+`microtime`, `time`) in the unit of what delivers it (a sensor's µm pitch, a scan's degrees, ps).
+Of each spatial axis with a size it reads a **window** (`window_start`, `window_size`, in unbinned
+steps; `set_window`), and a sensor's own pixels bin (`binnable`); `delivered_size` is what an image
+has along it. For a camera the windows are its region of interest; for a scan the part scanned, at
+the same step: a smaller field, not a zoom. `newswitch/drivers/readout.py` checks windows and reads
+them out for every manager. The `Detector` in
 `CameraState` holds everything about a detector: how it is configured and opened, what the
 device reports (identity, sensor, ranges, capabilities), the current settings and whether it
 records; the managers keep it up to date, so the frontend sees all of it.
@@ -113,16 +123,26 @@ records; the managers keep it up to date, so the frontend sees all of it.
   appear only when configured, nothing is hardcoded. A detector-only instrument (e.g.
   `cam-test`) gets a path with just its detector, so capture works there too. The snapshot a frame carries is a `LightPathSnapshot`
   (`models/light_path.py`); the state `LightPathState` holds the paths.
-- **`calibrate_light_path`** (`routines/calibration.py`) measures the pixel→stage transform
-  of every active detector: at a fixed focus the stage moves `CALIBRATION_STEP_UM` (20 µm)
-  in x only, then in y only; the image shifts (phase correlation,
-  `routines/affine_matrix.py`: `pixel_shift`, `calibrate_pixel_to_stage`) give the 4×4 affine
-  (scale, rotation and flip included), stored per light path in `CalibrationState`. The
-  stage ends where it started.
-- **MetadataManager** (`services/metadata.py`) places each frame with the calibrated affine of
-  its light path; without a calibration it falls back to what the optics predict
-  (`instrument.parts.nominal_pixel_scale`), and without those to the nominal pixel size (the
-  detector's `pixel_size_um` / the objective's magnification).
+- **`calibrate_light_path`** (`routines/calibration.py`) measures how large every active
+  detector's pixels are on the sample: at a fixed focus the stage moves in x only, then in y only;
+  the image shifts (phase correlation, `routines/affine_matrix.py`: `pixel_shift`,
+  `calibrate_pixel_to_stage`) give pixel→sample (scale, rotation and flip included), stored per
+  light path in `CalibrationState`, as the optics predict it where nothing was measured
+  (`OpticsManager.scale_under`). A window is not part of what a calibration is of. The stage ends
+  where it started.
+- **SpaceManager** (`services/space.py`) is the one place a pixel is placed: the coordinate graph
+  of `newswitch/instrument/space.py`, with the **sample** as its hub. A detector's pixels go to
+  the stage by that scale, where it looks (`where`) and where the pixel is in its window; the
+  stage goes to the sample by the **mount** (`SpaceState.mount`); an image taken is its
+  detector's placement then (`image:<id>`); a mounted plate's wells are places (`well:B3`).
+  `move_to(position)` brings a place in any of those systems to the middle of the image;
+  `set_sample_origin_here`, `register_mount` and `mount_holder` set the mount. `SpaceState`
+  publishes every detector's placement, the mount and what is mounted.
+- **MetadataManager** (`services/metadata.py`) places each frame by `SpaceManager.placement`;
+  an acquisition's datasets are placed by the same (`AcquiredPosition.to_sample`).
+- **Holders** (`newswitch/instrument/holders/*.yml`): a slide, a dish, a 96-well plate, each a
+  frame from its top left corner. A description names the ones its sample takes and where each
+  sits on its stage (`holders`, `mounted` on the `kind: sample` element).
 
 ### Hooks
 

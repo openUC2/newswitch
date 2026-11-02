@@ -1036,10 +1036,10 @@ that grew into designs are specified in
 2. **Multi-detector paths.** → **One light path per acquisition device.**
    `LightPathState` becomes `paths: dict[DeviceRef, LightPath]`; `path_hash`
    is per-device (its inputs already include the detector). OPTIKIT-INTEGRATION §10.
-3. **Sample formats.** → **The sample becomes an optikit primitive**
-   long-term (a carrier record: well geometry, A1 offset). Until that
-   primitive exists, well-plate definitions sit in the profile as an interim
-   home, marked as such.
+3. **Sample formats.** → **Holders, from a library** (`newswitch/instrument/holders`:
+   extent, and a plate's rows, columns, pitch, A1 and well), named by the sample
+   element with where each sits on the stage; the sample's frame is the mounted
+   holder's, and its wells are places in the coordinate graph (`services/space.py`).
 4. **Fibers.** → **A fiber is a teleport.** The kube graph re-anchors the
    source (or point detector) at the far port; the fiber contributes optical
    path length but no geometric edge. `LightEdge` gains `kind: fiber`.
