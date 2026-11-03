@@ -1,7 +1,10 @@
 import { useAcquire } from "@/apps/default/hooks/actions";
 import { useDetectorState } from "@/apps/default/hooks/states/DetectorState";
 import { useMoveState } from "@/apps/default/hooks/states/MoveState";
-import { useOpticsState } from "@/apps/default/hooks/states/OpticsState";
+import {
+  useOpticsState,
+  type OpticalChannel,
+} from "@/apps/default/hooks/states/OpticsState";
 import { useSourceState } from "@/apps/default/hooks/states/SourceState";
 import { useSpaceState } from "@/apps/default/hooks/states/SpaceState";
 import { useSwapState } from "@/apps/default/hooks/states/SwapState";
@@ -18,7 +21,9 @@ import {
   estimate,
   formatBytes,
   formatDuration,
+  isChannel,
   PlanProblem,
+  swapsKey,
   stackOffsets,
   type ChannelChoice,
   type Choices,
@@ -27,7 +32,12 @@ import {
   type Time,
   type Where,
 } from "@/lib/microscope/plan";
-import { useLookingAt, deliversImages } from "@/lib/microscope/space";
+import {
+  deliversImages,
+  toMatrix4,
+  useLookingAt,
+} from "@/lib/microscope/space";
+import { useSceneSample } from "@/lib/microscope/sampleContext";
 import { entriesOf, useStage } from "@/lib/microscope/values";
 import { cn } from "@/lib/utils";
 import {
@@ -40,6 +50,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Vector3 } from "three";
 import { useTranslation } from "react-i18next";
 import { DetailedPlan, type DetailedStart } from "./AcquisitionControl";
 
@@ -318,6 +329,7 @@ const useMicroscope = () => {
   const { data: space } = useSpaceState({ subscribe: true });
   const { data: moves } = useMoveState({ subscribe: true });
   const looking = useLookingAt();
+  const sceneSample = useSceneSample();
   const stage = useStage();
 
   const sourceOf = (name: string) =>
@@ -328,6 +340,18 @@ const useMicroscope = () => {
     );
   const sampleOf = (detector: string) =>
     space?.detectors?.[detector]?.sample ?? space?.points?.[detector]?.sample;
+  /** The sample point where `sample`'s stage has it under the view: its moves through its mount. */
+  const stageLookingAt = (sample: string) => {
+    const along = (axis: string) =>
+      Object.values(moves?.moves?.[sample] ?? {})
+        .filter((move) => move.along === axis && move.does.includes("position"))
+        .reduce((total, move) => total + move.value, 0);
+    const mount = space?.samples?.[sample]?.mount;
+    if (!mount) return undefined;
+    return new Vector3(along("x"), along("y"), 0).applyMatrix4(
+      toMatrix4(mount),
+    );
+  };
   return {
     optics,
     channels: optics?.channels ?? [],
@@ -342,6 +366,8 @@ const useMicroscope = () => {
     sampleCount: Object.keys(space?.samples ?? {}).length,
     moves: entriesOf(moves?.moves),
     looking,
+    lookingSample: sceneSample,
+    stageLookingAt,
     focusMoves: stage.focus.map((move) => move.name),
     sourceOf,
     exposureOf,
@@ -349,53 +375,63 @@ const useMicroscope = () => {
   };
 };
 
+/** The swaps a channel takes, by variable. */
+const swapsOf = (channel: OpticalChannel): Record<string, number> =>
+  Object.fromEntries((channel.swaps ?? []).map((s) => [s.variable, s.slot]));
+
+/** A channel's name in the plan: its source, and what its swaps put in place. */
+const nameOf = (channel: OpticalChannel): string =>
+  [channel.source, ...(channel.swaps ?? []).map((s) => s.label)].join(" · ");
+
 type Microscope = ReturnType<typeof useMicroscope>;
 
-/** What it would image, from what is set now: the lights that are on, on the cameras that are. */
-const startingChannels = (m: Microscope): ChannelChoice[] => {
-  const choiceOf = (source: string, detector: string): ChannelChoice => {
-    const found = m.sourceOf(source);
-    const power =
-      found?.on && found.power > 0 ? found.power : found?.lit_power || 0;
-    return {
-      source,
-      detector,
-      power: power || (found?.max_power ?? 1) / 5,
-      exposure: m.exposureOf(detector)?.value,
-    };
+/** A channel the optics found, chosen: at the brightness it has now, or its preset. */
+const choiceOf = (m: Microscope, channel: OpticalChannel): ChannelChoice => {
+  const found = m.sourceOf(channel.source);
+  const power =
+    found?.on && found.power > 0 ? found.power : found?.lit_power || 0;
+  return {
+    source: channel.source,
+    detector: channel.detector,
+    power: power || (found?.max_power ?? 1) / 5,
+    exposure: m.exposureOf(channel.detector)?.value,
+    swaps: swapsOf(channel),
+    name: nameOf(channel),
   };
+};
+
+/** What it would image, from what is set now: the lights that are on, on the cameras that are,
+ * under the swaps as they are. */
+const startingChannels = (m: Microscope): ChannelChoice[] => {
   const lit = m.channels.filter(
     (c) =>
       m.sourceOf(c.source)?.on &&
-      m.detectors.find((d) => d.name === c.detector)?.is_active,
+      m.detectors.find((d) => d.name === c.detector)?.is_active &&
+      (c.swaps ?? []).every((s) => m.swaps[s.variable] === s.slot),
   );
   const first = m.channels.slice(0, 1);
-  return (lit.length > 0 ? lit : first).map((c) =>
-    choiceOf(c.source, c.detector),
-  );
+  return (lit.length > 0 ? lit : first).map((c) => choiceOf(m, c));
 };
 
 const ChannelCard = ({
   m,
-  source,
-  detector,
-  band,
+  channel,
   choice,
   onToggle,
   onChange,
 }: {
   m: Microscope;
-  source: string;
-  detector: string;
-  band?: number | null;
+  channel: OpticalChannel;
   choice?: ChannelChoice;
   onToggle: () => void;
   onChange: (choice: ChannelChoice) => void;
 }) => {
   const { t } = useTranslation();
+  const { source, detector } = channel;
+  const band = channel.band_nm;
   const found = m.sourceOf(source);
   const exposure = m.exposureOf(detector);
-  const sample = m.sampleCount > 1 ? m.sampleOf(detector) : undefined;
+  const sample = m.sampleCount > 1 ? channel.sample : undefined;
   return (
     <div
       style={tint(found?.color)}
@@ -428,6 +464,22 @@ const ChannelCard = ({
           </span>
         </span>
       </button>
+      {(channel.swaps ?? []).length > 0 && (
+        <div
+          className="mt-2 flex flex-wrap gap-1"
+          title={t("acquisition.planner.swapsHint")}
+        >
+          {(channel.swaps ?? []).map((swap) => (
+            <span
+              key={swap.variable}
+              className="rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+            >
+              <span className="font-mono">{swap.variable.split(".")[0]}</span> ·{" "}
+              {swap.label}
+            </span>
+          ))}
+        </div>
+      )}
       {choice && (
         <div className="mt-3 space-y-2">
           {found?.power_variable && (
@@ -478,16 +530,22 @@ export function AcquisitionControl() {
   const [detailed, setDetailed] = useState<DetailedStart | null>(null);
 
   const chosen = channels.map((c) => c.detector);
+  const found = channels
+    .map((c) =>
+      m.channels.find((x) => isChannel(c, x.source, x.detector, swapsOf(x))),
+    )
+    .filter((c) => c !== undefined);
+  // What every channel chosen sees, under its own swaps: a switch may be set otherwise now.
+  const field =
+    found.length > 0
+      ? {
+          width: Math.min(...found.map((c) => c.field_width_um ?? 0)),
+          height: Math.min(...found.map((c) => c.field_height_um ?? 0)),
+        }
+      : undefined;
   const fields = chosen
     .map((d) => m.optics?.detectors?.[d])
     .filter((d) => d !== undefined);
-  const field =
-    fields.length > 0
-      ? {
-          width: Math.min(...fields.map((d) => d.field_width_um)),
-          height: Math.min(...fields.map((d) => d.field_height_um)),
-        }
-      : undefined;
   const depthOfField = Math.min(
     ...fields.map((d) => d.depth_of_field_um).filter((v) => v > 0),
   );
@@ -497,9 +555,20 @@ export function AcquisitionControl() {
     .find((axis) => axis.name === "z")?.step;
   const samples = [
     ...new Set(
-      [...chosen, ...alsoRecord].map(m.sampleOf).filter((s) => s !== undefined),
+      [...found.map((c) => c.sample), ...alsoRecord.map(m.sampleOf)].filter(
+        (s) => s !== undefined && s !== "",
+      ),
     ),
   ] as string[];
+  // Where a grid goes: around where the view is, if it is of a sample imaged; else where that
+  // sample's stage has it, which no camera may see now.
+  const looking =
+    m.looking &&
+    (m.lookingSample === undefined || samples.includes(m.lookingSample))
+      ? m.looking
+      : samples.length > 0
+        ? m.stageLookingAt(samples[0])
+        : m.looking;
   const plates = m.samples.filter((s) => (s.shape?.wells.length ?? 0) > 0);
 
   const context: PlanContext = {
@@ -514,7 +583,7 @@ export function AcquisitionControl() {
         .map((d) => [d.name, m.exposureOf(d.name)?.name])
         .filter(([, variable]) => !!variable),
     ),
-    looking: m.looking ? { x: m.looking.x, y: m.looking.y } : undefined,
+    looking: looking ? { x: looking.x, y: looking.y } : undefined,
     field,
     drivenStep: drivenStep ?? undefined,
     samples,
@@ -549,26 +618,15 @@ export function AcquisitionControl() {
       })
     : undefined;
 
-  const toggle = (source: string, detector: string) => {
-    const on = channels.find(
-      (c) => c.source === source && c.detector === detector,
+  const toggle = (channel: OpticalChannel) => {
+    const on = channels.find((c) =>
+      isChannel(c, channel.source, channel.detector, swapsOf(channel)),
     );
     if (on) {
       setPicked(channels.filter((c) => c !== on));
       return;
     }
-    const found = m.sourceOf(source);
-    const power =
-      found?.on && found.power > 0 ? found.power : found?.lit_power || 0;
-    setPicked([
-      ...channels,
-      {
-        source,
-        detector,
-        power: power || (found?.max_power ?? 1) / 5,
-        exposure: m.exposureOf(detector)?.value,
-      },
-    ]);
+    setPicked([...channels, choiceOf(m, channel)]);
   };
   const here = () => {
     const set_to: Record<string, number> = {};
@@ -657,18 +715,16 @@ export function AcquisitionControl() {
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {m.channels.map((c) => {
-                const choice = channels.find(
-                  (x) => x.source === c.source && x.detector === c.detector,
+                const choice = channels.find((x) =>
+                  isChannel(x, c.source, c.detector, swapsOf(c)),
                 );
                 return (
                   <ChannelCard
-                    key={`${c.source}-${c.detector}`}
+                    key={`${c.source}-${c.detector}-${swapsKey(swapsOf(c))}`}
                     m={m}
-                    source={c.source}
-                    detector={c.detector}
-                    band={c.band_nm}
+                    channel={c}
                     choice={choice}
-                    onToggle={() => toggle(c.source, c.detector)}
+                    onToggle={() => toggle(c)}
                     onChange={(next) =>
                       setPicked(channels.map((x) => (x === choice ? next : x)))
                     }

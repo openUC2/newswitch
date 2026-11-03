@@ -69,6 +69,8 @@ export const acquisition = {
     start: "Start",
     fineTune: "Fine-tune",
     simple: "Back to simple",
+    swapsHint:
+      "What this channel puts in place: a flip mirror, a filter. Acquired, it sets them.",
     fineTuneHint:
       "Every setting of every channel, place by place. Starts from the channels, depth and time chosen here.",
   },

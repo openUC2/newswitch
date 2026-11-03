@@ -25,7 +25,13 @@ const context: PlanContext = {
 const choices = (changes: Partial<Choices> = {}): Choices => ({
   name: "run",
   channels: [
-    { source: "laser_488", detector: "cam_a", power: 20, exposure: 100 },
+    {
+      source: "laser_488",
+      detector: "cam_a",
+      power: 20,
+      exposure: 100,
+      swaps: {},
+    },
   ],
   alsoRecord: [],
   where: { kind: "here" },
@@ -127,9 +133,21 @@ describe("buildPlan", () => {
     const plan = buildPlan(
       choices({
         channels: [
-          { source: "laser_488", detector: "cam_a", power: 20, exposure: 100 },
-          { source: "laser_488", detector: "cam_b", power: 20, exposure: 50 },
-          { source: "white_led", detector: "cam_b", power: 0.01 },
+          {
+            source: "laser_488",
+            detector: "cam_a",
+            power: 20,
+            exposure: 100,
+            swaps: {},
+          },
+          {
+            source: "laser_488",
+            detector: "cam_b",
+            power: 20,
+            exposure: 50,
+            swaps: {},
+          },
+          { source: "white_led", detector: "cam_b", power: 0.01, swaps: {} },
         ],
         alsoRecord: ["thermometer"],
       }),
@@ -140,6 +158,81 @@ describe("buildPlan", () => {
       ["white_led", ["cam_b"]],
     ]);
     expect(plan.channels[0].set_to["cam_b.exposure"]).toBe(50);
+  });
+
+  it("keeps two channels of one source apart when they take other swaps, each setting its own", () => {
+    const plan = buildPlan(
+      choices({
+        channels: [
+          {
+            source: "laser_488",
+            detector: "cam",
+            power: 20,
+            swaps: { "selector.slot": 1 },
+            name: "laser_488 · arm a",
+          },
+          {
+            source: "white_led",
+            detector: "cam",
+            power: 0.01,
+            swaps: { "selector.slot": 2 },
+          },
+          {
+            source: "laser_488",
+            detector: "cam",
+            power: 20,
+            swaps: { "selector.slot": 1, "filter_wheel.slot": 3 },
+          },
+        ],
+      }),
+      context,
+    );
+    expect(
+      plan.channels.map((c) => [
+        c.name,
+        c.detectors,
+        c.set_to["selector.slot"],
+      ]),
+    ).toEqual([
+      ["laser_488 · arm a", ["cam"], 1],
+      ["white_led", ["cam"], 2],
+      ["laser_488", ["cam"], 1],
+    ]);
+    expect(plan.channels[2].set_to["filter_wheel.slot"]).toBe(3);
+    // What the channels do not decide stays as it is now.
+    expect(plan.channels[1].set_to["filter_wheel.slot"]).toBe(2);
+  });
+
+  it("exposes detectors together only under the same swaps, in any order", () => {
+    const plan = buildPlan(
+      choices({
+        channels: [
+          {
+            source: "laser_488",
+            detector: "cam_a",
+            power: 20,
+            swaps: { a: 1, b: 2 },
+          },
+          {
+            source: "laser_488",
+            detector: "cam_b",
+            power: 20,
+            swaps: { b: 2, a: 1 },
+          },
+          {
+            source: "laser_488",
+            detector: "cam_c",
+            power: 20,
+            swaps: { a: 2, b: 2 },
+          },
+        ],
+      }),
+      context,
+    );
+    expect(plan.channels.map((c) => c.detectors)).toEqual([
+      ["cam_a", "cam_b"],
+      ["cam_c"],
+    ]);
   });
 
   it("refuses what is no plan yet", () => {
@@ -170,7 +263,9 @@ describe("estimate", () => {
     ]);
     const plan = buildPlan(
       choices({
-        channels: [{ source: "laser_488", detector: "spad", power: 1 }],
+        channels: [
+          { source: "laser_488", detector: "spad", power: 1, swaps: {} },
+        ],
         depth: { kind: "stack", range: 2, step: 1 },
       }),
       context,

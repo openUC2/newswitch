@@ -71,6 +71,8 @@ export const acquisition = {
     start: "Starten",
     fineTune: "Feineinstellung",
     simple: "Zurück zur einfachen Ansicht",
+    swapsHint:
+      "Was dieser Kanal einstellt: ein Klappspiegel, ein Filter. Bei der Aufnahme werden sie gesetzt.",
     fineTuneHint:
       "Jede Einstellung jedes Kanals, Ort für Ort. Beginnt mit den hier gewählten Kanälen, Tiefe und Zeit.",
   },

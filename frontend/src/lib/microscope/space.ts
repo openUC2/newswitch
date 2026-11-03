@@ -42,14 +42,16 @@ export const useDetectorPlacement = (detector: string) => {
   return data?.detectors?.[detector];
 };
 
-/** Whether `detector` sees the scene's sample. */
+/** Whether `detector` sees the scene's sample now. One a switch sends no light to is placed
+ * nowhere, and sees none; until the server says, every one might. */
 export const useSeesScene = (): ((detector: string) => boolean) => {
   const sample = useSceneSample();
   const { data } = useSpaceState({ subscribe: true });
   return (detector: string) => {
+    if (data === undefined || data === null) return true;
     const seen =
-      data?.detectors?.[detector]?.sample ?? data?.points?.[detector]?.sample;
-    return seen === undefined || seen === "" || seen === sample;
+      data.detectors?.[detector]?.sample ?? data.points?.[detector]?.sample;
+    return seen === "" || (seen !== undefined && seen === sample);
   };
 };
 

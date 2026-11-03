@@ -11,7 +11,8 @@ import type { Detector } from "@/apps/default/hooks/states/DetectorState";
  * `buildPlan`'s plan, in the server's terms.
  */
 
-/** One channel the optics found (`OpticsState.channels`): a source, a detector it reaches. */
+/** One channel the optics found (`OpticsState.channels`): a source, a detector it reaches, and the
+ * swaps that make it (a flip mirror, a filter): set otherwise, it is another channel, or none. */
 export type ChannelChoice = {
   source: string;
   detector: string;
@@ -19,7 +20,28 @@ export type ChannelChoice = {
   power: number;
   /** The detector's exposure (ms), if it has one to set. */
   exposure?: number;
+  /** The slot of each swap it takes, by variable. */
+  swaps: Record<string, number>;
+  /** What it is called in the plan: its source, by default. */
+  name?: string;
 };
+
+/** Swaps as one text, whatever order they came in: two channels under the same are exposed at once. */
+export const swapsKey = (swaps: Record<string, number>): string =>
+  JSON.stringify(
+    Object.entries(swaps).sort(([one], [other]) => one.localeCompare(other)),
+  );
+
+/** Whether `choice` is the channel of `source`, `detector` and `swaps`. */
+export const isChannel = (
+  choice: ChannelChoice,
+  source: string,
+  detector: string,
+  swaps: Record<string, number>,
+): boolean =>
+  choice.source === source &&
+  choice.detector === detector &&
+  swapsKey(choice.swaps) === swapsKey(swaps);
 
 export type GridChoice = {
   kind: "grid";
@@ -154,20 +176,25 @@ const positionsOf = (
   }
 };
 
-/** The chosen channels as the plan's: those of one source at one brightness are one exposure, all
- * their detectors at once. */
+/** The chosen channels as the plan's: those of one source at one brightness, under the same swaps,
+ * are one exposure, all their detectors at once. Each sets the swaps it takes, over those as they
+ * are now. */
 const channelsOf = (
   choices: Choices,
   context: PlanContext,
 ): AcquisitionChannel[] => {
   const lit = new Map<string, AcquisitionChannel>();
   for (const choice of choices.channels) {
-    const key = `${choice.source}@${choice.power}`;
+    const key = `${choice.source}@${choice.power}@${swapsKey(choice.swaps)}`;
     const power = context.powerVariables[choice.source];
     const channel = lit.get(key) ?? {
-      name: choice.source,
+      name: choice.name ?? choice.source,
       detectors: [],
-      set_to: { ...context.swaps, ...(power ? { [power]: choice.power } : {}) },
+      set_to: {
+        ...context.swaps,
+        ...choice.swaps,
+        ...(power ? { [power]: choice.power } : {}),
+      },
     };
     if (!channel.detectors.includes(choice.detector))
       channel.detectors.push(choice.detector);

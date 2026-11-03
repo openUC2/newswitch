@@ -63,6 +63,7 @@ export const DetectorOpticsSchema = z
       .literal('@newswitch/detector_optics')
       .default('@newswitch/detector_optics'),
     name: z.string(),
+    sample: z.string(),
     calibrated: z.boolean(),
     pixel_to_stage: z.array(z.array(z.number())),
     pixel_um: z.number(),
@@ -108,6 +109,22 @@ export const SourceOpticsSchema = z
 export type SourceOptics = z.input<typeof SourceOpticsSchema>;
 export type SourceOpticsOutput = z.infer<typeof SourceOpticsSchema>;
 
+export const ChannelSwapSchema = z
+  .object({
+    __identifier: z
+      .literal('@newswitch/channel_swap')
+      .default('@newswitch/channel_swap'),
+    variable: z.string(),
+    slot: z.number(),
+    label: z.string(),
+  })
+  .brand('@newswitch/channel_swap')
+  .describe(
+    'A swap a channel needs in one slot: set otherwise, it is another channel, or none.',
+  );
+export type ChannelSwap = z.input<typeof ChannelSwapSchema>;
+export type ChannelSwapOutput = z.infer<typeof ChannelSwapSchema>;
+
 export const OpticalChannelSchema = z
   .object({
     __identifier: z
@@ -116,11 +133,19 @@ export const OpticalChannelSchema = z
     source: z.string(),
     detector: z.string(),
     electrons: z.number(),
+    sample: z.string(),
     band_nm: z.number().nullable().optional(),
+    swaps: z.array(
+      ChannelSwapSchema.describe(
+        'A swap a channel needs in one slot: set otherwise, it is another channel, or none.',
+      ),
+    ),
+    field_width_um: z.number(),
+    field_height_um: z.number(),
   })
   .brand('@newswitch/optical_channel')
   .describe(
-    'A source whose light gets through the sample to a detector: found, and never declared.',
+    'A source whose light gets through a sample to a detector, and the swaps that make it: found,\n    and never declared.',
   );
 export type OpticalChannel = z.input<typeof OpticalChannelSchema>;
 export type OpticalChannelOutput = z.infer<typeof OpticalChannelSchema>;
@@ -139,7 +164,7 @@ export const OpticsStateSchema = z.object({
   ),
   channels: z.array(
     OpticalChannelSchema.describe(
-      'A source whose light gets through the sample to a detector: found, and never declared.',
+      'A source whose light gets through a sample to a detector, and the swaps that make it: found,\n    and never declared.',
     ),
   ),
   elements: z.record(
