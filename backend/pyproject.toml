@@ -32,6 +32,7 @@ dependencies = [
     "pydantic-settings>=2",
     "ruamel-yaml>=0.18",
     "httpx2>=2.16.0",
+    "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]
