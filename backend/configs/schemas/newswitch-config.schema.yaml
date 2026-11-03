@@ -74,6 +74,15 @@ $defs:
         - type: 'null'
         default: null
         title: Homing Direction
+      homing_endstop_polarity:
+        anyOf:
+        - enum:
+          - -1
+          - 1
+          type: integer
+        - type: 'null'
+        default: null
+        title: Homing Endstop Polarity
       homing_required:
         default: false
         description: Axis must be homed before use
@@ -1257,6 +1266,13 @@ $defs:
         items:
           type: string
         title: Tags
+        type: array
+      registered_step_sizes:
+        items:
+          exclusiveMinimum: 0
+          type: number
+        minItems: 1
+        title: Registered Step Sizes
         type: array
       axes:
         additionalProperties:

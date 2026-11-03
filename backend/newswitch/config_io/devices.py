@@ -275,6 +275,7 @@ class AxisConfig(DeviceBase):
     homing_speed_steps: int | None = Field(default=None, gt=0)
     homing_direction: Literal[-1, 1] | None = None
     homing_timeout_ms: int | None = Field(default=None, gt=0)
+    homing_endstop_polarity: Literal[-1, 1] | None = None
     inverted: bool = Field(default=False, description="Axis runs in the opposite direction")
     homing_required: Annotated[bool, firmware_meta("Axis must be homed before use")] = False
     pos: Annotated[
@@ -311,6 +312,9 @@ class StageConfig(DeviceBase):
     """Motorized stage: axis devices grouped by direction."""
 
     type: Literal["stage"] = "stage"
+    registered_step_sizes: list[PositiveFloat] = Field(
+        default_factory=lambda: [10.0, 100.0, 1000.0, 10000.0], min_length=1
+    )
     axes: dict[str, str] = Field(
         min_length=1, description="Direction (e.g. x) -> key of an axis device"
     )

@@ -683,3 +683,37 @@ async def test_camera_selection_coexists_with_yaml_hardware(
     assert detector.state.detectors[0].manufacturer == "Simulated"
     close_detector(detector)
     assert selected[-1] == "closed"
+
+
+def test_pi_profile_four_axes_and_one_led() -> None:
+    """The physical Pi profile preserves four motor channels without a matrix."""
+    doc = yaml.safe_load((DEMOS.parent / "machines" / "openuc2-first-cord-30059.yaml").read_text())
+    bus = runtime(doc)
+    assert set(bus.axes) == {"X", "Y", "Z", "A"}
+    assert bus.axes["A"].hardware_axis == "A"
+    assert bus.axes["A"].bus.config.steps_per_deg_a == pytest.approx(1 / 0.396)
+    assert bus.stage_config.registered_step_sizes == [1, 10, 100]
+    assert len(bus.lights) == 1
+    assert bus.lights[1].pwm_max == 1023
+
+
+@pytest.mark.asyncio
+async def test_serial_home_passes_endstop_polarity() -> None:
+    """Forward the configured switch polarity to the firmware home command."""
+    doc = document("serial")
+    doc["devices"]["my-first-axis"]["homing_endstop_polarity"] = -1
+    bus = runtime(doc)
+    driver = bus.axes["X"].bus
+
+    async def call(*args: object, **kwargs: object) -> list:
+        assert kwargs["endstoppolarity"] == -1
+        driver._broker.publish(HomingChanged(axis="X", status=2))
+        return [{"return": 1}]
+
+    attach(
+        driver,
+        call=call,
+        stop=AsyncMock(),
+        sync=SimpleNamespace(home=SimpleNamespace(home=lambda: None)),
+    )
+    await asyncio.wait_for(bus.ahome_axis("X"), 1)

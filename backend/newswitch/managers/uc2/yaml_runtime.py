@@ -138,9 +138,9 @@ class YamlUC2Bus:
             raise ValueError(f"Axes are not part of the motion stage: {sorted(unused_axes)}")
         for direction, key in stage.axes.items() if stage else []:
             label = direction.upper()
-            if label not in ("X", "Y", "Z"):
+            if label not in ("X", "Y", "Z", "A"):
                 raise ValueError(
-                    f"Axis {direction}: this integration supports linear X/Y/Z; rotary units need a separate model"
+                    f"Axis {direction}: this integration supports linear X/Y/Z/A; rotary units need a separate model"
                 )
             if label in self.axes:
                 raise ValueError(f"Duplicate logical axis direction {label}")
@@ -156,6 +156,8 @@ class YamlUC2Bus:
             if any(r.bus is bus and r.hardware_axis == hardware_axis for r in self.axes.values()):
                 raise ValueError(f"Axis {key}: physical motor is already assigned")
             if isinstance(bus, UC2CanBus):
+                if axis.homing_endstop_polarity is not None:
+                    raise ValueError(f"Axis {key}: CAN homing does not accept a polarity override")
                 setattr(bus.config, f"node_{label.lower()}", entry.id)
                 setattr(bus.config, f"sub_{label.lower()}", entry.subid)
             scale_field = (
@@ -184,6 +186,7 @@ class YamlUC2Bus:
                 ]
         self.stage_config = UC2StageConfig(
             axes=list(self.axes),
+            registered_step_sizes=stage.registered_step_sizes if stage else [10.0],
             home_axes=[s.upper() for s in stage.homing_order]
             if stage and stage.homing_order is not None
             else list(self.axes),
@@ -463,6 +466,7 @@ class YamlUC2Bus:
                         else None,
                         speed_steps=cfg.homing_speed_steps,
                         direction=direction,
+                        endstop_polarity=cfg.homing_endstop_polarity,
                     )
             except BaseException:
                 await self._abort(route)

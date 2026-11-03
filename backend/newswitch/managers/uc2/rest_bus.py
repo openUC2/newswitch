@@ -291,6 +291,7 @@ class UC2RestBus:
         timeout: Optional[float] = None,
         speed_steps: Optional[int] = None,
         direction: Optional[int] = None,
+        endstop_polarity: Optional[int] = None,
     ) -> None:
         """Home one axis (blocking wait off-loop)."""
         client = await self._require_client()
@@ -318,6 +319,7 @@ class UC2RestBus:
                     isBlocking=True,
                     timeout=wait_timeout + 10,
                     endstoptimeout=int(wait_timeout * 1000),
+                    endstoppolarity=endstop_polarity,
                     speed=speed_steps,
                     direction=direction,
                 ),

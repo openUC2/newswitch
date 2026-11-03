@@ -1,0 +1,78 @@
+# Pi 192.168.0.46: migrated from the selected ImSwitch FRAME.json on 2026-11-03.
+# No matrix: the old file contains a stale matrix entry, but none is installed.
+# X/Y: 0.396 um/step; Z: 0.3125 um/step. Speeds below are conservative initial settings.
+# No automatic homing. A retains the legacy linear calibration in um.
+newswitch_version: v1.0.2
+devices:
+  serial-master:
+    type: controller
+    name: UC2 Serial controller
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0
+        baudrate: 115200
+    mapping:
+      axis-x: {type: serial-motor, id: 1}
+      axis-y: {type: serial-motor, id: 2}
+      axis-z: {type: serial-motor, id: 3}
+      axis-a: {type: serial-motor, id: 0}
+      illumination-led: {type: serial-laser, id: 1, pwm_max: 1023}
+  sample-stage:
+    type: stage
+    axes: {x: axis-x, y: axis-y, z: axis-z, a: axis-a}
+    homing_order: [z, x, y, a]
+    registered_step_sizes: [1, 10, 100]
+  axis-x:
+    type: axis
+    steps_per_um: 2.525252525252525
+    homing_required: false
+    homing_direction: -1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: 1
+    homing_timeout_ms: 20000
+    vel: {value: 1000, min: 1, max: 5940, unit: um/s}
+  axis-y:
+    type: axis
+    steps_per_um: 2.525252525252525
+    homing_required: false
+    homing_direction: -1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: -1
+    homing_timeout_ms: 20000
+    vel: {value: 1000, min: 1, max: 5940, unit: um/s}
+  axis-z:
+    type: axis
+    steps_per_um: 3.2
+    homing_required: false
+    homing_direction: 1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: -1
+    homing_timeout_ms: 20000
+    vel: {value: 500, min: 1, max: 4687.5, unit: um/s}
+  axis-a:
+    type: axis
+    steps_per_um: 2.525252525252525
+    homing_required: false
+    homing_direction: -1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: 1
+    homing_timeout_ms: 20000
+    vel: {value: 1000, min: 1, max: 5940, unit: um/s}
+  illumination-led:
+    type: lightsource
+    name: Illumination LED
+    coherence: incoherent
+  hik-camera-controller:
+    type: controller
+    connection: {protocol: usb3-vision}
+    mapping:
+      widefield-camera: {type: usb3-vision-camera, id: 0, index: 0, buffer_size: 8}
+  widefield-camera:
+    type: detector
+    name: Widefield HikRobot camera
+    manufacturer: HikRobot
+    channels: 1
+    exposure_time_ms: {value: 10, unit: ms}
+    gain_db: {value: 0, unit: dB}
