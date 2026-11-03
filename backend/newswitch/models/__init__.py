@@ -15,7 +15,7 @@ from .frames import ArrayMetadata, Frame, Image, Metadata, Scale
 from .hooks import Hook, RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 from .io import FileFormat, FileHandle
 from .light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
-from .optics import DetectorOptics, OpticalChannel, SourceOptics
+from .optics import ChannelSwap, DetectorOptics, OpticalChannel, SourceOptics
 from .values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
 from .uc2 import (
     STAGE_AXES,
@@ -52,6 +52,7 @@ __all__ = [
     "Hook",
     "Image",
     "LightPathSnapshot",
+    "ChannelSwap",
     "DetectorOptics",
     "LightEdge",
     "LightElement",

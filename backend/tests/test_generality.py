@@ -201,7 +201,7 @@ def test_an_objective_can_be_what_focuses(tmp_path: Path) -> None:
     """Nothing says what a stage is: what focuses is whatever is found to."""
     m = described(tmp_path, objective_focuses)
     assert m.values is not None
-    found = m.values.roles.found["camera_green"]["objective.z"]
+    found = m.values.roles.found["camera_green", "stage"]["objective.z"]
     assert "blur" in found
     assert [move.name for move in m.values.roles.focuses("camera_green")] == ["objective.z"]
     assert m.optics_state.detectors["camera_green"].defocus_um == 0.0

@@ -25,12 +25,49 @@ TOLERANCES = {
     "colour": 1.0,
     "light": 0.01,
     "pixels": 1.0,
+    "sample": 1.0,
 }
 
 
 def traced_answer(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> Answer:
-    """What `detector` sees under `state`, tracing it."""
+    """What `detector` sees under `state`, tracing it.
+
+    Raises:
+        Dark: The switches send no light to it under `state`.
+    """
     return assemble(instrument, detector, state, *_trace(instrument, detector, state))
+
+
+def traced_or_dark(
+    instrument: Instrument, detector: str, state: Mapping[str, Any]
+) -> Answer | None:
+    """What `detector` sees under `state`, or None where the switches send no light to it."""
+    if instrument.sample_of(detector, state) is None:
+        return None
+    return traced_answer(instrument, detector, state)
+
+
+def changes_between(
+    instrument: Instrument,
+    detector: str,
+    state: Mapping[str, Any],
+    before: Answer | None,
+    after_state: Mapping[str, Any],
+) -> dict[str, float]:
+    """What going from `state`, where `detector` saw `before`, to `after_state` changes for it.
+
+    Besides what `difference` measures, ``sample``: a switch that makes it see another sample, or
+    none, or one where it saw none.
+    """
+    after = traced_or_dark(instrument, detector, after_state)
+    if before is None and after is None:
+        return {}
+    if before is None or after is None:
+        return {"sample": 1.0}
+    found = difference(before, after)
+    if instrument.sample_of(detector, state) != instrument.sample_of(detector, after_state):
+        found["sample"] = 1.0
+    return found
 
 
 def _trace(
@@ -150,9 +187,12 @@ def impacts(instrument: Instrument, state: Mapping[str, Any]) -> list[dict[str, 
             nudges = [state[name] + variable.step]
         for nudge in nudges:
             for detector in instrument.detectors():
-                changes = difference(
-                    traced_answer(instrument, detector, state),
-                    traced_answer(instrument, detector, {**state, name: nudge}),
+                changes = changes_between(
+                    instrument,
+                    detector,
+                    state,
+                    traced_or_dark(instrument, detector, state),
+                    {**state, name: nudge},
                 )
                 rows.append(
                     {
@@ -171,7 +211,8 @@ def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
 
     A pixel's size or direction, or how many pixels there are, measured under every combination of
     swaps. Where the image lands too, for a swap: a move shifts the image by what it is for, while
-    a swap that shifts it puts the same pixel somewhere else.
+    a swap that shifts it puts the same pixel somewhere else; and which sample it is of, for a
+    switch: a calibration on one sample is none on another, however alike the two objectives.
     """
     found: dict[str, set[str]] = {detector: set() for detector in instrument.detectors()}
     on_them = {
@@ -183,17 +224,21 @@ def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
     ]
     for state in states:
         for detector in instrument.detectors():
-            before = traced_answer(instrument, detector, state)
+            before = traced_or_dark(instrument, detector, state)
             for name, variable in instrument.variables.items():
                 if variable.verb == "swaps":
                     nudges = [slot for slot in variable.slots if slot > state[name]]
-                    matter = {"scale", "pixels", "position"}
+                    matter = {"scale", "pixels", "position", "sample"}
+                elif before is None:
+                    continue
                 else:
                     nudges = [state[name] + nudge_of(variable)]
                     matter = {"scale", "pixels"}
                 for nudge in nudges:
-                    after = traced_answer(instrument, detector, {**state, name: nudge})
-                    if matter & set(difference(before, after)):
+                    changed = changes_between(
+                        instrument, detector, state, before, {**state, name: nudge}
+                    )
+                    if matter & set(changed):
                         found[detector].add(name)
     return {detector: frozenset(names) for detector, names in found.items()}
 
@@ -209,6 +254,8 @@ def compile_instrument(instrument: Instrument, errors: tracing.Errors | None = N
     for state in instrument.swap_states():
         entry = {}
         for detector in instrument.detectors():
+            if instrument.sample_of(detector, state) is None:
+                continue  # the switches send its light elsewhere: it sees nothing to trace
             imaging, coupling = _trace(instrument, detector, state, applied)
             entry[detector] = {
                 "imaging": imaging,

@@ -77,10 +77,15 @@ def _first_camera(detector: DetectorManager, values: Values) -> str:
     Raises:
         ValueError: None is on; or they see several samples, and which to focus is not said.
     """
-    cameras = [d.name for d in detector.list_active_detectors() if d.delivers_images()]
+    now = values.snapshot()
+    cameras = [
+        d.name
+        for d in detector.list_active_detectors()
+        if d.delivers_images() and values.instrument.sample_of(d.name, now) is not None
+    ]
     if not cameras:
-        raise ValueError("No camera is on to focus with")
-    seen = sorted({values.instrument.sample_of(name) for name in cameras})
+        raise ValueError("No camera is on, and gets light, to focus with")
+    seen = sorted({values.instrument.seen_sample(name, now) for name in cameras})
     if len(seen) > 1:
         raise ValueError(f"The cameras on see the samples {seen}: name the detector to focus with")
     return cameras[0]

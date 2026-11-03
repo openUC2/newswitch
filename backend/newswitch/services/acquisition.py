@@ -47,7 +47,11 @@ class AcquisitionManager:
         for detector in self.detector_manager.state.detectors:
             if names is not None and detector.name not in names:
                 continue
-            if detector.is_active and detector.delivers_images():
+            if (
+                detector.is_active
+                and detector.delivers_images()
+                and self.space.sees(detector.name)  # one a switch leaves dark images nothing
+            ):
                 image_data = self.detector_manager.capture_image(detector.name).data
 
                 light_path = self.optics_manager.get_light_path_for_detector(detector.name)

@@ -65,10 +65,12 @@ def scan_region(
         current_detector = detector_manager.state.get(detector_name)
     else:
         active_detectors = [
-            d for d in detector_manager.state.get_active_detectors() if d.delivers_images()
+            d
+            for d in detector_manager.state.get_active_detectors()
+            if d.delivers_images() and space.sees(d.name)
         ]
         if not active_detectors:
-            raise ValueError("No active detector that takes images.")
+            raise ValueError("No active detector that takes images, and gets light.")
         seen = sorted({space.sample_of(d.name) for d in active_detectors})
         if len(seen) > 1:
             raise ValueError(
@@ -138,7 +140,7 @@ def scan_region(
     names = [
         d.name
         for d in detector_manager.state.get_active_detectors()
-        if d.delivers_images() and space.sample_of(d.name) == sample
+        if d.delivers_images() and space.sees(d.name) and space.sample_of(d.name) == sample
     ]
     acquired_images: list[Frame] = []
     total = len(path_points)

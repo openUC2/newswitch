@@ -205,8 +205,8 @@ def test_in_a_volume_the_sheet_focuses_and_the_stage_goes_through(
 ) -> None:
     """Found by moving them: nothing says so."""
     roles = Roles(instrument)
-    assert sorted(roles.found["camera"]["sheet_lens.z"]) == ["blur"]
-    assert sorted(roles.found["camera"]["stage.z"]) == []
+    assert sorted(roles.found["camera", "stage"]["sheet_lens.z"]) == ["blur"]
+    assert sorted(roles.found["camera", "stage"]["stage.z"]) == []
     assert [move.name for move in roles.focuses("camera")] == ["sheet_lens.z"]
 
 
@@ -217,8 +217,8 @@ def test_in_a_thin_section_the_stage_focuses(tmp_path: Path) -> None:
         data["cubes"]["stage"]["element"]["simulation"] = "gfp-section"
 
     roles = Roles(spec.load(edited(tmp_path, change)))
-    assert {"blur", "light"} <= set(roles.found["camera"]["stage.z"])
-    assert sorted(roles.found["camera"]["sheet_lens.z"]) == ["light"]
+    assert {"blur", "light"} <= set(roles.found["camera", "stage"]["stage.z"])
+    assert sorted(roles.found["camera", "stage"]["sheet_lens.z"]) == ["light"]
     assert [move.name for move in roles.focuses("camera")] == ["stage.z"]
 
 

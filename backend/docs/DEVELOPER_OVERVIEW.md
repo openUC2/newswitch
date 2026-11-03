@@ -133,7 +133,8 @@ records; the managers keep it up to date, so the frontend sees all of it.
 - **SpaceManager** (`services/space.py`) is the one place a pixel is placed: the coordinate graph
   of `newswitch/instrument/space.py`, modelled on mikro's, with each **sample** a hub of its own
   (`sample:<cube>`, on its stage `stage:<cube>`: an instrument may have several,
-  `Instrument.samples`, each detector seeing one, `Instrument.sample_of`). A system
+  `Instrument.samples`, each detector seeing one at a time, the one the swaps on its way leave
+  open: `Instrument.sample_of(detector, state)`, none for one a flip mirror leaves dark). A system
   has named, typed axes (`Axis`: SPACE, CHANNEL, MICROTIME, ...); an edge is one of mikro's kinds
   (`Transformation`: IDENTITY, SCALE, TRANSLATION, AFFINE, BY_DIMENSION). A BY_DIMENSION is parts
   side by side over named axes and says nothing of an axis no part names, and a route composes

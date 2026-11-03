@@ -39,7 +39,9 @@ from newswitch.instrument.spec import (
     Sensor,
     ShortPass,
     Source,
+    Splitter,
     Table,
+    passes,
 )
 
 #: Planck's constant times the speed of light, in joule metres.
@@ -151,13 +153,15 @@ def transmission(element: Element, via: str | None, grid: np.ndarray) -> np.ndar
     """How much of each wavelength an element lets through, leaving the way `via` says."""
     match element:
         case Dichroic():
-            passes = curve_at(element.curve, grid)
-            return passes if via == "transmit" else 1.0 - passes
-        case Filter(curve=curve) if curve is not None:
+            through = curve_at(element.curve, grid)
+            return through if via == "transmit" else 1.0 - through
+        case Filter(curve=curve) if curve is not None and via != "reflect":
             return curve_at(curve, grid)
-    if element.kind == "splitter":
-        return np.full(grid.shape, float(element.reflect if via == "reflect" else element.transmit))
-    return np.ones(grid.shape)
+        case Splitter():
+            return np.full(
+                grid.shape, float(element.reflect if via == "reflect" else element.transmit)
+            )
+    return np.full(grid.shape, 1.0 if passes(element, via) else 0.0)
 
 
 def _route_transmission(
@@ -191,7 +195,7 @@ def collected(lens: Lens) -> float:
 
 def depth_of_field_um(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> float:
     """How deep what a detector sees sharply is: wavelength x index / NA^2."""
-    routes = instrument.routes(instrument.detection, instrument.sample_of(detector), detector)
+    routes = instrument.detection_routes(detector, state)
     lens = _objective(instrument, routes, state)
     wavelength_um = design_wavelength(instrument, detector, state) / 1000.0
     return wavelength_um * lens.index / lens.na**2
@@ -217,8 +221,8 @@ def design_wavelength(instrument: Instrument, detector: str, state: Mapping[str,
     of the spectrum.
     """
     grid = wavelengths(instrument)
-    stage = instrument.sample_of(detector)
-    for route in instrument.routes(instrument.detection, stage, detector):
+    stage = instrument.seen_sample(detector, state)
+    for route in instrument.detection_routes(detector, state):
         filters = [
             element
             for edge in route
@@ -257,9 +261,9 @@ def coupling(
     what the objective gathers goes on; what passes straight through stays in its cone.
     """
     grid = wavelengths(instrument)
-    stage = instrument.sample_of(detector)
+    stage = instrument.seen_sample(detector, state)
     sample = instrument.simulation_at(state, stage)
-    detection = instrument.routes(instrument.detection, stage, detector)
+    detection = instrument.detection_routes(detector, state)
     element = instrument.cubes[detector].element_at(state)
     colors = element.colors if isinstance(element, Sensor) else {}
     gathered = collected(_objective(instrument, detection, state))
@@ -484,14 +488,14 @@ def focus_moves(instrument: Instrument, detector: str, state: Mapping[str, Any])
             edge.target for edge in route if instrument.cubes[edge.target].element_at(state) is last
         )
     else:
-        route = instrument.routes(instrument.detection, instrument.sample_of(detector), detector)[0]
+        route = instrument.detection_routes(detector, state)[0]
         nearest = next(
             edge.target
             for edge in route
             if instrument.cubes[edge.target].element_at(state).kind == "lens"
         )
     return [
-        *(move.name for move in instrument.sample_moves(instrument.sample_of(detector))),
+        *(move.name for move in instrument.sample_moves(instrument.seen_sample(detector, state))),
         *(
             variable.name
             for variable in instrument.cubes[nearest].variables.values()
@@ -561,8 +565,8 @@ def imaging(
     scanner = instrument.scanner_of(detector)
     if scanner is not None:
         return _scan_imaging(instrument, scanner, state, errors, defocused_um)
-    stage = instrument.sample_of(detector)
-    routes = instrument.routes(instrument.detection, stage, detector)
+    stage = instrument.seen_sample(detector, state)
+    routes = instrument.detection_routes(detector, state)
     if len(routes) != 1:
         raise ValueError(f"{detector}: {len(routes)} routes from the sample; one is handled")
     route = routes[0]

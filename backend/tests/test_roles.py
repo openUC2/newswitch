@@ -86,10 +86,10 @@ def test_what_focuses_is_found(fake: Roles, detector: str) -> None:
 
 def test_a_tube_lens_that_changes_the_scale_does_not_focus(fake: Roles) -> None:
     """It blurs the image of its own camera, and makes it another size: so no focus of it."""
-    found = fake.found["camera_a"]["tube_a.dz"]
+    found = fake.found["camera_a", "stage"]["tube_a.dz"]
     assert {"blur", "scale"} <= found
     assert "tube_a.dz" not in [move.name for move in fake.focuses("camera_a")]
-    assert fake.found["camera_b"]["tube_a.dz"] == frozenset()
+    assert fake.found["camera_b", "stage"]["tube_a.dz"] == frozenset()
 
 
 def test_what_a_variable_does_is_said(fake: Roles) -> None:

@@ -1,0 +1,204 @@
+# Two samples and two cameras, and flip mirrors that decide which camera sees which sample.
+#
+#   arm a, fluorescence:  laser_488 -> stage_a (GFP beads)     -> objective_a -> filter_wheel -.
+#   arm b, brightfield:   white_led -> stage_b (an H&E section) -> objective_b ---------------- selector
+#                                                                                                 |
+#                                                       cam_color <- tube_color <- (open)  port  |
+#                                                       cam_mono  <- tube_mono  <- (mirror)  <---'
+#
+# The selector is a flip mirror where the arms meet: out of the way, what comes from arm a goes on;
+# in the way, it reflects what comes from arm b on instead. The port is another, after it: out, the
+# light goes on to cam_color; in, to cam_mono, and cam_color sees nothing.
+#
+# So which sample a camera sees is not fixed: the selector decides, and a camera moves in the
+# coordinate graph from stage_a's hub to stage_b's when it flips. Nothing here says which channel is
+# which: each source, detector and setting of the swaps that gets light through is one, found by the
+# optics, with the swaps that make it (the selector, the port, the filter it is seen through).
+#
+# Run it:      NEWSWITCH_CONFIG=instruments/switch-microscope just dev-mikro
+
+spec: newswitch/instrument/v0
+name: switch-microscope
+
+cubes:
+  # --- arm a: fluorescence
+
+  laser_488:
+    element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
+    tunes:
+      power: {actuator: laser-dac, initial: 0 mW, step: 1 mW, max: 50 mW}
+
+  stage_a:
+    element:
+      kind: sample
+      simulation: gfp-beads
+      simulations:
+        gfp-beads:
+          fluorophore: egfp
+          absorbed: 1.0e-4
+          transmit: 0.9
+          reflect: 1.0e-6
+          pattern: {beads: 3600, radius: 2 um, depth: 4 um}
+      holders:
+        slide: {holder: slide-75x25, mount: {x: -37.5 mm, y: -12.5 mm}}   # its middle on the stage's 0
+      mounted: slide
+    moves:
+      x: {actuator: a-x, along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      y: {actuator: a-y, along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      z: {actuator: a-z, along: axis, initial: 0 um, step: 1 um, min: -500 um, max: 500 um, speed: 500 um/s}
+
+  objective_a:
+    element: {kind: lens, name: 10x NA 0.25, f: 20 mm, na: 0.25, immersion: air, magnification: 10, working_distance: 10 mm}
+
+  dichroic_a:
+    element: {kind: dichroic, curve: lp_500}
+
+  filter_wheel:
+    swaps:
+      slot:
+        initial: 1
+        slots:
+          1: {kind: filter, name: BP 525/50, curve: bp_525_50}
+          2: {kind: filter, name: BP 625/50, curve: bp_625_50}
+
+  # --- arm b: brightfield, an H&E section
+
+  white_led:
+    element: {kind: source, emits: led, spectrum: {center: 540 nm, width: 500 nm}, max_power: 5 mW}
+    tunes:
+      power: {actuator: led-dac, initial: 10 uW, step: 1 uW, max: 5 mW}
+
+  condenser:
+    element: {kind: lens, f: 20 mm, na: 0.4, immersion: air}
+
+  stage_b:
+    element:
+      kind: sample
+      simulation: he-section
+      simulations:
+        he-section:
+          transmit: 0.9
+          reflect: 1.0e-6
+          pattern: {beads: 0, radius: 5 um, depth: 4 um}
+          stains:
+            eosin: {center: 525 nm, width: 100 nm, darkens: 0.55, pattern: {beads: 40000, radius: 14 um, depth: 4 um}}
+            hematoxylin: {center: 590 nm, width: 220 nm, darkens: 0.9, pattern: {beads: 50000, radius: 4 um, depth: 4 um}}
+      holders:
+        slide: {holder: slide-75x25, mount: {x: -37.5 mm, y: -12.5 mm}}
+      mounted: slide
+    moves:   # no actuator: newswitch drives one board, and its axes are stage_a's
+      x: {along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      y: {along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      z: {along: axis, initial: 0 um, step: 1 um, min: -500 um, max: 500 um, speed: 500 um/s}
+
+  objective_b:
+    element: {kind: lens, name: 20x NA 0.4, f: 10 mm, na: 0.4, immersion: air, magnification: 20, working_distance: 1 mm}
+
+  # --- where the arms meet, and where the light goes on to
+
+  selector:
+    swaps:
+      slot:
+        initial: 1
+        slots:
+          1: {kind: filter, name: arm a}   # out of the way: what comes from arm a goes on
+          2: {kind: mirror, name: arm b}   # in the way: what comes from arm b is reflected on
+
+  port:
+    swaps:
+      slot:
+        initial: 1
+        slots:
+          1: {kind: filter, name: color}   # out of the way: on to cam_color
+          2: {kind: mirror, name: mono}    # in the way: to cam_mono
+
+  tube_color:
+    element: {kind: lens, f: 200 mm}
+
+  cam_color:
+    element:
+      kind: sensor
+      axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+      readout: scmos
+      colors:
+        r: {center: 620 nm, width: 70 nm}
+        g: {center: 530 nm, width: 70 nm}
+        b: {center: 460 nm, width: 70 nm}
+    tunes:
+      frame_rate: {initial: 30 Hz, min: 1 Hz, max: 100 Hz, step: 1 Hz}
+      exposure: {initial: 20 ms, step: 1 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
+
+  tube_mono:
+    element: {kind: lens, f: 200 mm}
+
+  cam_mono:
+    element:
+      kind: sensor
+      axes: {x: {size: 512, pitch: 6.5 um}, y: {size: 512, pitch: 6.5 um}}
+      readout: scmos
+    tunes:
+      frame_rate: {initial: 30 Hz, min: 1 Hz, max: 100 Hz, step: 1 Hz}
+      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 40 dB}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
+
+illumination:
+  - {from: laser_488, to: dichroic_a}
+  - {from: dichroic_a, via: reflect, to: objective_a}
+  - {from: objective_a, to: stage_a, side: epi, field: 500 um}
+  - {from: white_led, to: condenser}
+  - {from: condenser, to: stage_b, side: transmitted, field: 2 mm}
+
+detection:
+  - {from: stage_a, to: objective_a, distance: focus}
+  - {from: objective_a, to: dichroic_a, distance: 100 mm}
+  - {from: dichroic_a, via: transmit, to: filter_wheel, distance: 30 mm}
+  - {from: filter_wheel, to: selector, distance: 30 mm}
+  - {from: stage_b, to: objective_b, distance: focus}
+  - {from: objective_b, to: selector, distance: 160 mm}
+  # The selector: what it lets through came from arm a, what it reflects from arm b.
+  - {from: selector, via: transmit, came_from: filter_wheel, to: port, distance: 30 mm}
+  - {from: selector, via: reflect, came_from: objective_b, to: port, distance: 30 mm}
+  - {from: port, via: transmit, to: tube_color, distance: 30 mm}
+  - {from: tube_color, to: cam_color, distance: focus}
+  - {from: port, via: reflect, to: tube_mono, distance: 30 mm}
+  - {from: tube_mono, to: cam_mono, distance: focus}
+
+# Example wiring: no rig stands behind this file, and the board, axes and steps_per_um are made up.
+# `simulate: everything` below never builds it; for a real rig, state what is really there.
+hardware:
+  boards:
+    uc2: {transport: canopen, interface: socketcan, channel: can0}
+  actuators:
+    a-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    a-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    a-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
+    led-dac: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
+
+settings:
+  simulate: everything
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: false
+
+ui:
+  catalog: newswitch@9
+  bloks:
+    view-switch:
+      description: 'Switches: which sample the cameras see, and which camera the light goes to.'
+      default: true
+      file: view.bsx
+    view-stage:
+      description: 'Stage: one sample at a time, picked at its top; a camera is in the scene of the sample the selector shows it.'
+      file: ../views/stage.bsx
+    view-acquire:
+      description: 'Acquire: every channel the switches make, of both samples, stored in mikro.'
+      file: ../views/acquire.bsx
+    view-minimal:
+      description: 'Minimal: the live image and the stage, nothing else.'
+      file: ../views/minimal.bsx

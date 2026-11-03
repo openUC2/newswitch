@@ -25,7 +25,7 @@ def _looking(space: SpaceManager, detector: Optional[str], sample: Optional[str]
     detectors = [
         d
         for d in space.detector_state.detectors
-        if d.delivers_images() and space.sample_of(d.name) == on
+        if d.delivers_images() and space.sees(d.name) and space.sample_of(d.name) == on
     ]
     if not detectors:
         raise ValueError(f"Nothing here looks at the sample {on}")

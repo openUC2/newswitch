@@ -61,9 +61,11 @@ def image(m: Microscope, camera: str) -> np.ndarray:
 def test_it_has_two_samples_each_seen_by_its_own_camera(instrument: spec.Instrument) -> None:
     """Every light detector is reached from one sample; a thermometer is where it says it sits."""
     assert instrument.samples() == ["stage_a", "stage_b"]
-    assert instrument.sample_of("cam_a") == "stage_a"
-    assert instrument.sample_of("cam_b") == "stage_b"
-    assert instrument.sample_of("thermometer") == "stage_b"
+    state = instrument.initial_state()
+    assert instrument.sample_of("cam_a", state) == "stage_a"
+    assert instrument.sample_of("cam_b", state) == "stage_b"
+    assert instrument.sample_of("thermometer", state) == "stage_b"
+    assert instrument.samples_of("cam_b") == ["stage_b"]
     assert instrument.sample_holder("stage_b").simulation == "he-section"
 
 

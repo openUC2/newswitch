@@ -11,6 +11,8 @@ class DetectorOptics:
     """What a detector sees: as calibrated where that was measured, else as the optics predict."""
 
     name: str
+    sample: str
+    """Which sample it sees now: the switches on its way decide."""
     calibrated: bool
     pixel_to_stage: list[list[float]]
     """The sample micrometres of a step along a column, and along a row."""
@@ -60,11 +62,28 @@ class SourceOptics:
 
 
 @dataclass
+class ChannelSwap:
+    """A swap a channel needs in one slot: set otherwise, it is another channel, or none."""
+
+    variable: str
+    slot: int
+    label: str
+    """What is in that slot, as it reads: a filter's name, "mirror", "open"."""
+
+
+@dataclass
 class OpticalChannel:
-    """A source whose light gets through the sample to a detector: found, and never declared."""
+    """A source whose light gets through a sample to a detector, and the swaps that make it: found,
+    and never declared."""
 
     source: str
     detector: str
     electrons: float
-    """At the source's full power and the detector's current exposure."""
+    """At the source's full power and the detector's current exposure, its swaps set."""
+    sample: str
+    """What it is of: which sample its light comes from."""
     band_nm: Optional[float] = None
+    swaps: list[ChannelSwap] = field(default_factory=list)
+    field_width_um: float = 0.0
+    """What the detector sees of the sample, its swaps set."""
+    field_height_um: float = 0.0

@@ -20,9 +20,12 @@ def software_autofocus_hook(hook: SoftwareAutofocusHook, context: protocols.Hook
     assert context.detector_manager is not None
     instrument = context.values.instrument
     looking: dict[str, str] = {}
+    now = context.values.snapshot()
     for found in context.detector_manager.list_active_detectors():
         if found.delivers_images():
-            looking.setdefault(instrument.sample_of(found.name), found.name)
+            sample = instrument.sample_of(found.name, now)
+            if sample is not None:  # one a switch leaves dark sees nothing to focus
+                looking.setdefault(sample, found.name)
     for detector in looking.values():
         _refocus(hook, context, detector)
 

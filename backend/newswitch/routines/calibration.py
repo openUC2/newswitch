@@ -110,6 +110,8 @@ def calibrate_light_path(
     for detector in detector_state.detectors:
         if not detector.is_active or not detector.delivers_images():
             continue
+        if values.instrument.sample_of(detector.name, values.snapshot()) is None:
+            continue  # the switches send its light elsewhere: there is nothing to see
         light_path = optics_manager.get_light_path_for_detector(detector.name)
         light_path_state = metadata_manager.get_current_state_for_light_path(light_path)
         known = metadata_manager.get_metadata_for_light_path(light_path).affine_matrix

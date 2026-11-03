@@ -38,8 +38,11 @@ def _stage_moves(
     microscope: SimulatedMicroscope, detector: str, step: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """An image, one after moving what moves its view in x, and one after moving it in y."""
-    roles = Roles(microscope.simulator.instrument)
-    move_x, move_y = roles.x(detector).name, roles.y(detector).name
+    instrument = microscope.simulator.instrument
+    roles = Roles(instrument)
+    sample = instrument.seen_sample(detector, microscope.state)
+    move_x = roles.x(detector, sample=sample).name
+    move_y = roles.y(detector, sample=sample).name
     x, y = microscope.state[move_x], microscope.state[move_y]
     reference = microscope.image(detector)
     microscope.set({move_x: x + step})
@@ -100,11 +103,13 @@ def main(argv: list[str] | None = None) -> None:
         for simulation in instrument.sample_holder(sample).simulations:
             current = {**state, instrument.simulation_key(sample): simulation}
             for channel in compiled.channels(current):
-                if instrument.sample_of(channel.detector) != sample:
+                if channel.sample != sample:
                     continue
+                swaps = ", ".join(f"{name}={slot}" for name, slot in channel.swaps.items())
                 print(
                     f"  {sample}: {simulation}: {channel.source} -> {channel.detector}, "
                     f"{channel.electrons:.4g} electrons at full power, at {channel.band_nm:.0f} nm"
+                    + (f", with {swaps}" if swaps else "")
                 )
 
     print("\n=== What each detector will see, for each combination of swaps")
@@ -119,6 +124,9 @@ def main(argv: list[str] | None = None) -> None:
             v.name: current[v.name] for v in instrument.variables.values() if v.verb == "swaps"
         }
         for detector in instrument.detectors():
+            if instrument.sample_of(detector, current) is None:
+                print(f"  {swaps} {detector}: dark, the switches send its light elsewhere")
+                continue
             answer = compiled.answer(detector, current)
             print(
                 f"  {swaps} {detector}: {_size_and_rotation(np.array(answer.pixel_to_stage))[0]:.3f} "
@@ -139,7 +147,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"\n=== Measure images with newswitch's own calibration code, under {powers[:1]}")
     print(f"  {'':22} {'predicted':>10} {'measured':>10}")
     for detector in instrument.detectors():
-        if not (roles.sideways(detector, "x") and roles.sideways(detector, "y")):
+        sample = instrument.sample_of(detector, microscope.state)
+        if sample is None:
+            print(f"  {detector}: dark, the switches send its light elsewhere")
+            continue
+        if not (roles.sideways(detector, "x", sample) and roles.sideways(detector, "y", sample)):
             print(f"  {detector}: nothing moves its view")
             continue
         predicted = _size_and_rotation(

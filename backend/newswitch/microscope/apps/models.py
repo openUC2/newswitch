@@ -48,6 +48,7 @@ for model in (
     models.SwapValue,
     models.TuneValue,
     models.SourceOptics,
+    models.ChannelSwap,
     models.OpticalChannel,
     models.Metadata,
     models.Image,

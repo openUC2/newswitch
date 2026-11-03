@@ -175,12 +175,30 @@ class SpaceManager:
         """The samples, by the cubes holding them."""
         return [] if self.instrument is None else self.instrument.samples()
 
-    def sample_of(self, detector: str) -> str:
-        """The sample `detector` sees, or sits beside."""
-        assert self.instrument is not None
-        return self.instrument.sample_of(detector)
+    def _now(self, under: Mapping[str, Any] | None) -> Mapping[str, Any]:
+        assert self.values is not None
+        return self.values.snapshot() if under is None else under
 
-    def one_sample(self, sample: str | None = None, detector: str | None = None) -> str:
+    def sample_of(self, detector: str, under: Mapping[str, Any] | None = None) -> str:
+        """The sample `detector` sees under `under` (now, by default), or sits beside.
+
+        Raises:
+            Dark: The switches send no light to it.
+        """
+        assert self.instrument is not None
+        return self.instrument.seen_sample(detector, self._now(under))
+
+    def sees(self, detector: str, under: Mapping[str, Any] | None = None) -> bool:
+        """Whether any light gets to `detector` under `under` (now, by default)."""
+        assert self.instrument is not None
+        return self.instrument.sample_of(detector, self._now(under)) is not None
+
+    def one_sample(
+        self,
+        sample: str | None = None,
+        detector: str | None = None,
+        under: Mapping[str, Any] | None = None,
+    ) -> str:
         """`sample`, or the one `detector` sees, or the only one.
 
         Raises:
@@ -192,27 +210,30 @@ class SpaceManager:
                 raise ValueError(f"No sample {sample!r}: there are {samples}")
             return sample
         if detector is not None:
-            return self.sample_of(detector)
+            return self.sample_of(detector, under)
         if len(samples) == 1:
             return samples[0]
         raise ValueError(
             f"Which sample? There are {samples}: name one, or the detector that looks at it"
         )
 
-    def resolve(self, system: str, detector: str | None = None) -> str:
+    def resolve(
+        self, system: str, detector: str | None = None, under: Mapping[str, Any] | None = None
+    ) -> str:
         """`system` as the graph names it: a bare ``sample``, ``stage`` or ``well:B3`` is that of the
-        sample `detector` sees, or of the only one; any other name is already the graph's.
+        sample `detector` sees under `under` (now, by default), or of the only one; any other name
+        is already the graph's.
 
         Raises:
             ValueError: A bare name, several samples, and no detector to say which.
         """
         head, _, rest = system.partition(":")
         if system == SAMPLE:
-            return sample_system(self.one_sample(detector=detector))
+            return sample_system(self.one_sample(detector=detector, under=under))
         if system == STAGE:
-            return stage_system(self.one_sample(detector=detector))
+            return stage_system(self.one_sample(detector=detector, under=under))
         if head == PLACE and rest and ":" not in rest:
-            return place_system(self.one_sample(detector=detector), rest)
+            return place_system(self.one_sample(detector=detector, under=under), rest)
         return system
 
     def sample_of_system(self, system: str) -> str | None:
@@ -228,7 +249,8 @@ class SpaceManager:
         if head == "image":
             return self._images[rest][0] if rest in self._images else None
         if head == "detector":
-            return self.sample_of(rest)
+            assert self.instrument is not None
+            return self.instrument.sample_of(rest, self._now(None))
         return None
 
     # ------------------------------------------------------------- the edges
@@ -257,9 +279,10 @@ class SpaceManager:
         """Where the middle of `detector`'s sensor looks, in its stage's micrometres, under `at`."""
         assert self.values is not None
         roles = self.values.roles
+        sample = self.sample_of(detector, at)
         return (
-            sum(float(at[move.name]) for move in roles.sideways(detector, "x")),
-            sum(float(at[move.name]) for move in roles.sideways(detector, "y")),
+            sum(float(at[move.name]) for move in roles.sideways(detector, "x", sample)),
+            sum(float(at[move.name]) for move in roles.sideways(detector, "y", sample)),
             roles.plane_um(detector, at),
         )
 
@@ -269,8 +292,13 @@ class SpaceManager:
         return np.array([(width - 1) / 2.0, (height - 1) / 2.0, 0.0, 1.0])
 
     def placement(self, detector: str, values: Mapping[str, Any] | None = None) -> np.ndarray:
-        """Where `detector`'s pixels (column, row, plane) are on the sample it sees."""
-        return self.mount(self.sample_of(detector)) @ self.to_stage(detector, values)
+        """Where `detector`'s pixels (column, row, plane) are on the sample it sees, under `values`
+        or as things are now.
+
+        Raises:
+            Dark: The switches send no light to it.
+        """
+        return self.mount(self.sample_of(detector, values)) @ self.to_stage(detector, values)
 
     def remember(
         self, image: str, to_sample: np.ndarray | list[list[float]], sample: str | None = None
@@ -294,7 +322,7 @@ class SpaceManager:
         """Where `detector` measures, on its sample's stage, under `values` or as things are now:
         its pixels, or the point it reads at."""
         source = detector_system(detector.name)
-        stage = stage_system(self.sample_of(detector.name))
+        stage = stage_system(self.sample_of(detector.name, values))
         if not detector.delivers_images():
             assert self.instrument is not None
             element = self.instrument.cubes[detector.name].element
@@ -344,7 +372,8 @@ class SpaceManager:
         if self.values is not None:
             for detector in self.detector_state.detectors:
                 systems.append(_system_of(detector))
-                edges.append(self._detector_edge(detector, values))
+                if self.sees(detector.name, values):  # one the switches leave dark is nowhere
+                    edges.append(self._detector_edge(detector, values))
         return systems, edges
 
     def graph(self, values: Mapping[str, Any] | None = None) -> CoordinateGraph:
@@ -369,22 +398,27 @@ class SpaceManager:
         target: str = SAMPLE,
         axes: tuple[str, ...] | None = None,
         detector: str | None = None,
+        under: Mapping[str, Any] | None = None,
     ) -> dict[str, float]:
-        """Where `position` is in `target`, by axis name: along `axes`, or all the route states.
-        Bare names are those of the sample `detector` sees, or of the only one (`resolve`).
+        """Where `position` is in `target`, by axis name: along `axes`, or all the route states;
+        the graph as it holds under `under` (now, by default). Bare names are those of the sample
+        `detector` sees, or of the only one (`resolve`).
 
         Raises:
             NoRoute: Its system is none the graph knows, or not one that leads to `target`.
             ValueError: An axis asked for depends on one the position does not give; or a bare
                 name, several samples and no detector.
         """
-        found = Position(self.resolve(position.system, detector), position.coordinates)
-        return self.graph().transform(found, self.resolve(target, detector), axes)
+        found = Position(self.resolve(position.system, detector, under), position.coordinates)
+        return self.graph(under).transform(found, self.resolve(target, detector, under), axes)
 
     # ------------------------------------------------------------- going there
 
-    def targets(self, position: Position, detector: str) -> dict[str, float]:
-        """What to set so that the middle of `detector`'s image, as read out, is at `position`.
+    def targets(
+        self, position: Position, detector: str, under: Mapping[str, Any] | None = None
+    ) -> dict[str, float]:
+        """What to set so that the middle of `detector`'s image, as read out, is at `position`, with
+        the rest as `under` sets it (as things are now, by default): which sample it sees, too.
 
         Sideways, the one move along each way (`Roles.x`, `Roles.y`). Along the axis only when the
         position has a z, by what focuses it; a z that only a light sheet's move reaches is refused,
@@ -393,34 +427,41 @@ class SpaceManager:
         Raises:
             ValueError: Nothing, or several things, move it along a way it has to go.
             NoRoute: The position's system is none the graph knows, or on another sample.
+            Dark: The switches send no light to it.
         """
         assert self.values is not None
         roles = self.values.roles
-        at = self.values.snapshot()
+        at = self._now(under)
+        sample = self.sample_of(detector, at)
         has_z = "z" in position.coordinates
         on_stage = self.transform(
-            position, STAGE, ("x", "y", "z") if has_z else ("x", "y"), detector=detector
+            position,
+            STAGE,
+            ("x", "y", "z") if has_z else ("x", "y"),
+            detector=detector,
+            under=at,
         )
         # How far the middle of the image is from where the sensor's middle looks: a window that is
         # not in the middle of its sensor looks beside it.
-        aside = (self.to_stage(detector) @ self._image_middle(detector))[:2] - np.array(
+        aside = (self.to_stage(detector, at) @ self._image_middle(detector))[:2] - np.array(
             self._looks_at(detector, at)[:2]
         )
-        x_move, y_move = roles.x(detector), roles.y(detector)
+        x_move = roles.x(detector, sample=sample)
+        y_move = roles.y(detector, sample=sample)
         found = {
             x_move.name: float(at[x_move.name])
             + on_stage["x"]
             - float(aside[0])
-            - sum(float(at[m.name]) for m in roles.sideways(detector, "x")),
+            - sum(float(at[m.name]) for m in roles.sideways(detector, "x", sample)),
             y_move.name: float(at[y_move.name])
             + on_stage["y"]
             - float(aside[1])
-            - sum(float(at[m.name]) for m in roles.sideways(detector, "y")),
+            - sum(float(at[m.name]) for m in roles.sideways(detector, "y", sample)),
         }
         if has_z:
-            focus = roles.focus(detector)
+            focus = roles.focus(detector, sample=sample)
             assert self.instrument is not None
-            if focus in self.instrument.sheet_moves(self.sample_of(detector)):
+            if focus in self.instrument.sheet_moves(sample):
                 raise ValueError(f"{focus.name} moves a light sheet: a z is not reached by it yet")
             plane = roles.plane_um(detector, at)
             found[focus.name] = float(at[focus.name]) + on_stage["z"] - plane
@@ -505,7 +546,7 @@ class SpaceManager:
         arrival times are placed nowhere.
         """
         route = self.graph(values).axis_map(
-            detector_system(detector), sample_system(self.sample_of(detector))
+            detector_system(detector), sample_system(self.sample_of(detector, values))
         )
         images = self.detector_state.get(detector).delivers_images()
         rows: dict[str, np.ndarray] = {}
@@ -544,7 +585,11 @@ class SpaceManager:
             return
         with self._refreshing:
             detectors = self.detector_state.detectors
-            placed = {d.name: self._placed(d.name) for d in detectors if d.delivers_images()}
+            placed = {
+                d.name: self._placed(d.name)
+                for d in detectors
+                if d.delivers_images() and self.sees(d.name)
+            }
             points = {d.name: self._measured(d.name) for d in detectors if not d.delivers_images()}
             systems, edges = self._live()
             text = json.dumps(

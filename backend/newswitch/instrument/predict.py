@@ -50,12 +50,33 @@ class Answer:
 
 @dataclass(frozen=True)
 class Channel:
-    """A source whose light gets through the sample to a detector: found, and never declared."""
+    """A source whose light gets through a sample to a detector, with the swaps that decide it: found,
+    and never declared."""
 
     source: str
     detector: str
     electrons: float  # at the source's full power, and the detector's exposure
     band_nm: float | None  # the mean wavelength arriving
+    sample: str  # what it is of
+    swaps: Mapping[str, Any]  # the slots that make it: set elsewhere, it is another, or none
+    field_um: tuple[float, float]  # what the detector sees of the sample, width and height
+
+
+#: How far apart two bands are before they are two channels, in nanometres.
+BAND_APART_NM = 1.0
+
+
+@dataclass(frozen=True)
+class ChannelRow:
+    """A channel as the compiler finds it, for any current values: the swaps that decide it, each
+    way of setting them that makes it, and what it is."""
+
+    source: str
+    detector: str
+    sample: str
+    band_nm: float
+    deciding: tuple[str, ...]
+    ways: tuple[Mapping[str, Any], ...]  # each sets every deciding swap
 
 
 def state_key(instrument: Instrument, state: Mapping[str, Any]) -> str:
@@ -123,7 +144,7 @@ def assemble(
     pixel_y = axis_y.step * binning / magnification
     width, height = axis_x.size // binning, axis_y.size // binning
 
-    sample = instrument.sample_of(detector)
+    sample = instrument.seen_sample(detector, state)
     stage = instrument.cubes[sample]
     centre = [0.0, 0.0]
     for variable in stage.variables.values():
@@ -205,24 +226,128 @@ class Compiled:
 
     instrument: Instrument
     states: Mapping[str, Mapping[str, Any]]
+    _rows: dict[tuple[Any, ...], list[ChannelRow]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
-    def channels(self, state: Mapping[str, Any]) -> list[Channel]:
-        """Which source reaches which detector under `state`: more than its noise, at full power."""
-        found = []
+    def _reaching(self, state: Mapping[str, Any]) -> dict[tuple[str, str], tuple[str, float]]:
+        """Which source reaches which detector under `state`, more than its noise at full power:
+        of which sample, in which band."""
+        found = {}
         for detector, entry in self.states[state_key(self.instrument, state)].items():
             readout = self.instrument.cubes[detector].element.readout
             for source, arriving in entry["coupling"].items():
                 element = self.instrument.cubes[source].element_at(state)
                 answer = self.answer(detector, {**state, f"{source}.power": element.max_power})
-                if answer.electrons_by_source[source] > max(3.0 * readout.read_noise, 1.0):
-                    found.append(
-                        Channel(
-                            source,
-                            detector,
-                            answer.electrons_by_source[source],
-                            arriving["band_mean_nm"],
-                        )
+                band = arriving["band_mean_nm"]
+                if band is not None and answer.electrons_by_source[source] > max(
+                    3.0 * readout.read_noise, 1.0
+                ):
+                    found[source, detector] = (
+                        self.instrument.seen_sample(detector, state),
+                        float(band),
                     )
+        return found
+
+    def channel_rows(self, state: Mapping[str, Any]) -> list[ChannelRow]:
+        """Every channel of the simulations in `state`, whatever the swaps say.
+
+        A swap decides a channel where setting it otherwise makes the light of its source no longer
+        reach its detector, or of another sample, or in another band: a flip mirror, a filter. One
+        that changes only how much arrives, such as an objective, does not: it stays as it is.
+        """
+        simulations = tuple(state[key] for key in self.instrument.simulation_keys())
+        if simulations in self._rows:
+            return self._rows[simulations]
+        swaps = [v for v in self.instrument.variables.values() if v.verb == "swaps"]
+        states = [
+            s
+            for s in self.instrument.swap_states()
+            if tuple(s[key] for key in self.instrument.simulation_keys()) == simulations
+        ]
+        by_key = {state_key(self.instrument, s): s for s in states}
+        reaching = {key: self._reaching(s) for key, s in by_key.items()}
+
+        def apart(one: tuple[str, float] | None, other: tuple[str, float] | None) -> bool:
+            if one is None or other is None:
+                return one is not other
+            return one[0] != other[0] or abs(one[1] - other[1]) >= BAND_APART_NM
+
+        rows: list[ChannelRow] = []
+        pairs = dict.fromkeys(pair for found in reaching.values() for pair in found)
+        for pair in pairs:
+            deciding = [
+                swap.name
+                for swap in swaps
+                if any(
+                    apart(
+                        reaching[key].get(pair),
+                        reaching[state_key(self.instrument, {**s, swap.name: slot})].get(pair),
+                    )
+                    for key, s in by_key.items()
+                    for slot in swap.slots
+                    if slot != s[swap.name]
+                )
+            ]
+            for key, s in by_key.items():
+                found = reaching[key].get(pair)
+                if found is None:
+                    continue
+                way = {name: s[name] for name in deciding}
+                row = next(
+                    (
+                        row
+                        for row in rows
+                        if (row.source, row.detector, row.sample) == (*pair, found[0])
+                        and abs(row.band_nm - found[1]) < BAND_APART_NM
+                    ),
+                    None,
+                )
+                if row is None:
+                    rows.append(ChannelRow(*pair, found[0], found[1], tuple(deciding), (way,)))
+                elif way not in row.ways:
+                    rows[rows.index(row)] = ChannelRow(
+                        row.source,
+                        row.detector,
+                        row.sample,
+                        row.band_nm,
+                        row.deciding,
+                        (*row.ways, way),
+                    )
+        self._rows[simulations] = rows
+        return rows
+
+    def channels(self, state: Mapping[str, Any]) -> list[Channel]:
+        """Every channel, set as `state` sets everything but what decides it: each source whose light
+        gets to a detector more than its noise, at full power, and the swaps that make it do.
+
+        Of the ways of setting those swaps that make one channel (two filters alike), the one
+        nearest `state`.
+        """
+        found = []
+        for row in self.channel_rows(state):
+            way = min(row.ways, key=lambda way: sum(state[k] != v for k, v in way.items()))
+            under = {**state, **way}
+            if self.instrument.sample_of(row.detector, under) != row.sample:
+                continue
+            readout = self.instrument.cubes[row.detector].element.readout
+            element = self.instrument.cubes[row.source].element_at(under)
+            answer = self.answer(row.detector, {**under, f"{row.source}.power": element.max_power})
+            electrons = answer.electrons_by_source.get(row.source, 0.0)
+            if electrons > max(3.0 * readout.read_noise, 1.0):
+                found.append(
+                    Channel(
+                        row.source,
+                        row.detector,
+                        electrons,
+                        self.states[state_key(self.instrument, under)][row.detector]["coupling"][
+                            row.source
+                        ]["band_mean_nm"],
+                        row.sample,
+                        way,
+                        answer.field_of_view_um,
+                    )
+                )
         return found
 
     def answer(self, detector: str, state: Mapping[str, Any]) -> Answer:
@@ -231,7 +356,9 @@ class Compiled:
         Moves along the optical axis are not in the table as such: each is applied through the
         sensitivities the compiler measured around the combination of swaps.
         """
-        entry = self.states[state_key(self.instrument, state)][detector]
+        entry = self.states[state_key(self.instrument, state)].get(detector)
+        if entry is None:
+            raise self.instrument.dark(detector, state)
         imaging = dict(entry["imaging"])
         focus = entry["focus"]
         blur_squared = focus["in_focus_um"] ** 2
@@ -240,7 +367,7 @@ class Compiled:
             imaging["magnification"] += sensitivity["magnification_per_um"] * moved
             if name not in focus["moves"]:
                 blur_squared += (sensitivity["blur_um_per_um"] * moved) ** 2
-        on = self.instrument.sample_of(detector)
+        on = self.instrument.seen_sample(detector, state)
         sample = {move.name for move in self.instrument.sample_moves(on)}
         lens_um = sum(float(state[name]) for name in focus["moves"] if name not in sample)
         defocus_um = self.instrument.lit_um(state, lens_um, sample=on) + lens_um

@@ -138,7 +138,8 @@ def test_the_tube_lens_aperture_darkens_the_corners_it_clips(instrument: spec.In
 
 
 def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrument) -> None:
-    """Red light through a green filter: a black image, known before taking it."""
+    """Red light through a green filter: a black image, known before taking it. So the red light
+    reaches camera_a only through the open slot: a channel of its own, which the wheel decides."""
     state = {
         **instrument.initial_state(),
         "filter_wheel.slot": 2,
@@ -147,8 +148,9 @@ def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrum
     }
     table = compile_instrument(instrument)
     assert table.answer("camera_a", state).black
-    assert ("led_625", "camera_a") not in {(c.source, c.detector) for c in table.channels(state)}
-    assert ("laser_488", "camera_a") in {(c.source, c.detector) for c in table.channels(state)}
+    found = {(c.source, c.detector): dict(c.swaps) for c in table.channels(state)}
+    assert found[("led_625", "camera_a")] == {"filter_wheel.slot": 1}
+    assert ("laser_488", "camera_a") in found
 
 
 def test_the_dichroic_keeps_the_laser_from_the_camera(instrument: spec.Instrument) -> None:

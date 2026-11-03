@@ -195,8 +195,19 @@ class Simulator:
         on_stage = matrix[:2, :2] @ np.stack([x, y]) + matrix[:2, 3:4]
         return np.stack([on_stage[1], on_stage[0], depth])
 
+    def _dark(self, detector: str) -> np.ndarray:
+        """The whole sensor of `detector` with no light on it: its offset and its read noise."""
+        *_, axis_y, axis_x = self.instrument.detector_axes(detector)
+        readout = self.instrument.cubes[detector].element.readout
+        read = self._noise.normal(0.0, readout.read_noise, (axis_y.size, axis_x.size))
+        counts = read / readout.electrons_per_count + readout.offset
+        return np.rint(counts).clip(0, 2**readout.bit_depth - 1).astype(_dtype(readout.bit_depth))
+
     def render(self, detector: str, state: Mapping[str, Any]) -> np.ndarray:
-        """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names."""
+        """The whole sensor of `detector` under `state`, as uint16; `state` is in spec names. Dark,
+        where the switches send its light elsewhere."""
+        if self.instrument.sample_of(detector, state) is None:
+            return self._dark(detector)
         answer = self._answer(detector, state)
         return self._expose(
             detector,
@@ -208,6 +219,9 @@ class Simulator:
 
     def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
         """A color camera's whole sensor: per color, what its band lets through, as uint16."""
+        if self.instrument.sample_of(detector, state) is None:
+            colors = self.instrument.cubes[detector].element_at(state).colors
+            return {color: self._dark(detector) for color in colors}
         answer = self._answer(detector, state)
         view = self._view(detector, state, answer)
         colors = self.instrument.cubes[detector].element_at(state).colors
@@ -227,15 +241,18 @@ class Simulator:
         """A detector timing its photons, as ``(m, H, W)``: each pixel's counts by arrival time.
 
         Counted, so with neither a camera's offset nor its read noise. What no fluorophore emits
-        arrives with the pulse.
+        arrives with the pulse. Nothing at all, where the switches send its light elsewhere.
         """
+        bins = next(axis for axis in self.instrument.detector_axes(detector) if axis.name == "m")
+        if self.instrument.sample_of(detector, state) is None:
+            *_, axis_y, axis_x = self.instrument.detector_axes(detector)
+            return np.zeros((bins.size, axis_y.size, axis_x.size), np.uint16)
         answer = self._answer(detector, state)
         counts = self._electrons(
             answer, answer.electrons_by_source, *self._view(detector, state, answer)
         )
-        bins = next(axis for axis in self.instrument.detector_axes(detector) if axis.name == "m")
         fluorophore = self.instrument.simulation_at(
-            state, self.instrument.sample_of(detector)
+            state, self.instrument.seen_sample(detector, state)
         ).fluorophore
         if fluorophore is None:
             shares = np.zeros(bins.size)
@@ -256,7 +273,9 @@ class Simulator:
         """What of the sample lands on each pixel, how far each is from the middle (0 to 1), where
         each is from the middle along x and y in micrometres of the sample, and how much a bead takes
         of what passes through it."""
-        pattern = self.instrument.simulation_at(state, self.instrument.sample_of(detector)).pattern
+        pattern = self.instrument.simulation_at(
+            state, self.instrument.seen_sample(detector, state)
+        ).pattern
         width, height = answer.size
         columns, rows = np.meshgrid(np.arange(width, dtype=float), np.arange(height, dtype=float))
         centred = np.stack([columns - (width - 1) / 2, rows - (height - 1) / 2])
@@ -272,7 +291,7 @@ class Simulator:
         return [
             (stain, np.minimum(self._slice(detector, state, answer, stain.pattern), 1.0))
             for stain in self.instrument.simulation_at(
-                state, self.instrument.sample_of(detector)
+                state, self.instrument.seen_sample(detector, state)
             ).stains.values()
         ]
 
@@ -305,7 +324,7 @@ class Simulator:
         )
         width, height = answer.size
         field = np.zeros((height, width))
-        sample = self.instrument.sample_of(detector)
+        sample = self.instrument.seen_sample(detector, state)
         y, x, depth = self.beads_on_stage(pattern, sample)
 
         moves = self._table.states[state_key(self.instrument, state)][detector]["focus"]["moves"]

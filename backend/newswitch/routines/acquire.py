@@ -61,6 +61,7 @@ class _Exposure:
 
     detector: Detector
     first_channel: int
+    record: str  # the record it goes into, by its key in `_Merge.records`
 
 
 @dataclass(frozen=True)
@@ -102,7 +103,7 @@ class _Merge:
     offsets: list[float]
     sweeps: dict[str, Move | None]  # what sweeps each sample's stack, by sample
     lightings: tuple[_Lighting, ...]
-    records: dict[str, _Record]  # by detector, in the order the plan first names them
+    records: dict[str, _Record]  # by `_record_key`, in the order the plan first names them
     swept: bool
     targets: dict[str, float]  # what to set to get there: its places, then what it sets
     light_sweeps: frozenset[str] = frozenset()  # the samples whose sweep moves the light
@@ -207,8 +208,8 @@ def _sweep_of(
     through = instrument.sample_moves(sample)
     if named in (move.name for move in through):
         return instrument.variables[named]
-    if values.roles.focuses(detector):
-        return values.roles.focus(detector, named)
+    if values.roles.focuses(detector, sample):
+        return values.roles.focus(detector, named, sample)
     return values.roles.one(f"what moves through the sample of {detector}", through, named)
 
 
@@ -285,6 +286,46 @@ def _check_alike(record: _Record, shape: tuple[int, int], scale: np.ndarray, nam
         )
 
 
+@dataclass(frozen=True)
+class _Look:
+    """A detector of a channel: the sample it sees under what that channel sets, and that."""
+
+    channel: int
+    detector: str
+    sample: str
+    under: Mapping[str, Any]
+
+
+def _looks_of(
+    plan: AcquisitionPlan,
+    values: Values,
+    space: SpaceManager,
+    detector_manager: protocols.DetectorManager,
+) -> list[_Look]:
+    """What every detector of every channel sees, the switches set as that channel sets them.
+
+    Raises:
+        ValueError: A channel names no detector, or one that is no detector.
+        Dark: A channel sets the switches so that no light gets to one of its detectors.
+    """
+    now = values.snapshot()
+    looks = []
+    for index, channel in enumerate(plan.channels):
+        if not channel.detectors:
+            raise ValueError(f"The channel {channel.name!r} names no detector")
+        under = {**now, **values.resolved(channel.set_to)}
+        for name in channel.detectors:
+            _find_detector(name, detector_manager)
+            looks.append(_Look(index, name, space.sample_of(name, under), under))
+    return looks
+
+
+def _record_key(look: _Look, split: frozenset[str]) -> str:
+    """Which record a look goes into: its detector's, or, where the switches show the detector
+    several samples in this plan, its detector's of that sample."""
+    return f"{look.detector}-{look.sample}" if look.detector in split else look.detector
+
+
 def _plan_position(
     plan: AcquisitionPlan,
     position: AcquisitionPosition,
@@ -295,7 +336,8 @@ def _plan_position(
     optics_manager: protocols.OpticsManager,
     values: Values,
     space: SpaceManager,
-    firsts: dict[str, str | None],
+    firsts: dict[str, _Look | None],
+    looks: list[_Look],
 ) -> _Merge:
     """Everything that can be refused about one position, and the records it will fill."""
     going = {**_going(position, firsts, space), **position.set_to}
@@ -305,21 +347,25 @@ def _plan_position(
         if sweep is not None:
             values.check({sweep.name: at[sweep.name] + offset for offset in offsets})
 
+    seen: dict[str, set[str]] = {}
+    for look in looks:
+        seen.setdefault(look.detector, set()).add(look.sample)
+    split = frozenset(name for name, samples in seen.items() if len(samples) > 1)
     records: dict[str, _Record] = {}
     lightings: list[_Lighting] = []
-    for channel in plan.channels:
-        if not channel.detectors:
-            raise ValueError(f"The channel {channel.name!r} names no detector")
+    for channel_index, channel in enumerate(plan.channels):
         targets = _lights_of(channel, values)
         values.check(targets)
         under = {**at, **targets}
         names = _sources_of(targets, values)
         exposures: list[_Exposure] = []
-        for name in channel.detectors:
+        for look in (look for look in looks if look.channel == channel_index):
+            name = look.detector
             detector = _find_detector(name, detector_manager)
+            key = _record_key(look, split)
             record = records.setdefault(
-                name,
-                _Record(detector, sample=space.sample_of(name), sets=values.resolved(targets)),
+                key,
+                _Record(detector, sample=look.sample, sets=values.resolved(targets)),
             )
             images = detector.delivers_images()
             if images:
@@ -328,12 +374,12 @@ def _plan_position(
                     record,
                     detector_manager.plane_under(name, under.get(f"{name}.binning")),
                     np.array(scale.affine_matrix, dtype=float),
-                    name,
+                    key,
                 )
                 record.calibrated = record.calibrated and measured
             else:
                 record.calibrated = False  # where it reads is described, never measured
-            exposures.append(_Exposure(detector, len(record.channels)))
+            exposures.append(_Exposure(detector, len(record.channels), key))
             record.channels.extend(
                 AcquiredChannel(
                     label=_channel_label(channel, detector, color),
@@ -377,7 +423,7 @@ def _plan_position(
 
 
 def _going(
-    position: AcquisitionPosition, firsts: dict[str, str | None], space: SpaceManager
+    position: AcquisitionPosition, firsts: dict[str, _Look | None], space: SpaceManager
 ) -> dict[str, float]:
     """What brings each sample's image to where `position` is: a place on "the sample" is that
     place on each sample, by its own stage; a place on one sample is only that one's.
@@ -403,8 +449,31 @@ def _going(
     return {
         name: value
         for first in looking.values()
-        for name, value in space.targets(position.at, first).items()
+        for name, value in space.targets(position.at, first.detector, first.under).items()
     }
+
+
+def _position_hooks(
+    plan: AcquisitionPlan,
+    merge: _Merge,
+    firsts: dict[str, _Look | None],
+    values: Values,
+    hook_manager: protocols.HookManager,
+) -> None:
+    """Run the position hooks: once, as things are; or, where the channels set the switches so that
+    the samples are seen one after the other, once under each sample's first channel, so that a
+    refocus sees, and lights, what it refocuses."""
+    hooks = plan.p_hooks or []
+    if not hooks:
+        return
+    swaps = [v.name for v in values.instrument.variables.values() if v.verb == "swaps"]
+    looks = [look for look in firsts.values() if look is not None]
+    if len({tuple(look.under[name] for name in swaps) for look in looks}) <= 1:
+        hook_manager.execute_all(hooks)
+        return
+    for look in looks:
+        values.set(merge.lightings[look.channel].targets)
+        hook_manager.execute_all(hooks)
 
 
 def _check_memory(arrays: list[np.ndarray]) -> None:
@@ -422,10 +491,10 @@ def _place(merge: _Merge, space: SpaceManager, values: Values) -> None:
     """Where every record's axes go on its sample: once at each position, where it is now (after
     its hooks), under what the record's channels set (one binning, one objective for all)."""
     now = values.snapshot()
-    for name, record in merge.records.items():
+    for record in merge.records.values():
         if record.placed is None:
             record.placed = space.record_map(
-                name,
+                record.detector.name,
                 record.dims,
                 merge.offsets,
                 record.sample in merge.light_sweeps,
@@ -470,7 +539,7 @@ def _keep(
     detector's record, as it was delivered."""
     ended = datetime.now(timezone.utc)
     now = store.state()
-    record = merge.records[exposure.detector.name]
+    record = merge.records[exposure.record]
     assert record.data is not None
     if not exposure.detector.has_axis("c"):
         images = images[np.newaxis]  # one color: what it delivers is its only one
@@ -541,10 +610,10 @@ def acquire(
     if not named:
         raise ValueError(f"The channel {plan.channels[0].name!r} names no detector")
     # Each sample the plan sees, and on each what looks: whose image's middle goes to a place,
-    # and whose focus sweeps the sample's stack.
-    for name in named:
-        _find_detector(name, detector_manager)
-    samples = list(dict.fromkeys(space.sample_of(name) for name in named))
+    # and whose focus sweeps the sample's stack. Which sample a detector sees is what its
+    # channel's switches say.
+    looks = _looks_of(plan, values, space, detector_manager)
+    samples = list(dict.fromkeys(look.sample for look in looks))
     if plan.stack.variable is not None and len(samples) > 1:
         raise ValueError(
             f"This plan sees the samples {samples}, and {plan.stack.variable} would sweep one of "
@@ -553,17 +622,24 @@ def acquire(
     firsts = {
         sample: next(
             (
-                name
-                for name in named
-                if space.sample_of(name) == sample
-                and _find_detector(name, detector_manager).delivers_images()
+                look
+                for look in looks
+                if look.sample == sample
+                and _find_detector(look.detector, detector_manager).delivers_images()
             ),
             None,
         )
         for sample in samples
     }
     sweeps = {
-        sample: _sweep_of(plan, offsets, firsts[sample], values, sample, len(samples) == 1)
+        sample: _sweep_of(
+            plan,
+            offsets,
+            None if firsts[sample] is None else firsts[sample].detector,
+            values,
+            sample,
+            len(samples) == 1,
+        )
         for sample in samples
     }
     merges = [
@@ -578,6 +654,7 @@ def acquire(
             values,
             space,
             firsts,
+            looks,
         )
         for index, position in enumerate(plan.positions)
     ]
@@ -623,7 +700,7 @@ def acquire(
                 values.set(merge.targets, task=task)
                 # Position hooks run there (an autofocus may refocus); the stacks are centred on where
                 # it is afterwards.
-                hook_manager.execute_all(plan.p_hooks or [])
+                _position_hooks(plan, merge, firsts, values, hook_manager)
                 bases = {
                     sweep.name: float(values[sweep.name])
                     for sweep in merge.sweeps.values()
@@ -679,15 +756,15 @@ def acquire(
             90 + int(10 * merge.index / len(merges)), f"Writing position {merge.index + 1}"
         )
         label = merge.position.name or f"P{merge.index + 1}"
-        for detector, record in merge.records.items():
+        for key, record in merge.records.items():
             assert record.data is not None and record.placed is not None
-            parts = [plan.name, *([] if len(merges) == 1 else [label]), detector]
+            parts = [plan.name, *([] if len(merges) == 1 else [label]), key]
             datasets.append(
                 store.publish(
                     AcquiredRecord(
                         name=" ".join(part for part in parts if part),
                         position=merge.index,
-                        detector=detector,
+                        detector=record.detector.name,
                         data=record.data,
                         axes=record.axes,
                         channels=tuple(record.channels),

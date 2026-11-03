@@ -1,0 +1,79 @@
+<Html>
+<div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-spectrum-cyan/10 via-transparent to-spectrum-violet/10 p-3">
+<ScrollArea className="h-full w-[400px] shrink-0">
+<div className="flex flex-col gap-3 pb-3 pr-3">
+<div className="flex flex-col px-1 pt-1">
+    <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-muted-foreground">Switches</span>
+    <span className="text-xl font-semibold tracking-tight">Two samples, two cameras, two flip mirrors</span>
+    <span className="mt-1 text-[11px] text-muted-foreground">The selector decides which sample the cameras see, the port which camera gets the light; the other one sees nothing. Each setting that gets light through is a channel of its own, in the planner.</span>
+</div>
+
+<div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+    <div className="flex items-center gap-2">
+        <span className="size-3 shrink-0 rounded-full bg-spectrum-cyan" />
+        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Selector · which sample</span>
+    </div>
+    <span className="mt-1 block text-sm font-medium">{self.SwapState.swaps.selector.slot.label}</span>
+    <span className="block text-[11px] text-muted-foreground">Arm a: GFP beads on stage_a, by fluorescence. Arm b: an H&amp;E section on stage_b, in white light.</span>
+    <div className="mt-3 grid grid-cols-2 gap-1.5 past:hidden">
+        <Button size="sm" variant="outline" onClick={self.swap(name: "selector.slot", slot: 1)}>Sample a</Button>
+        <Button size="sm" variant="outline" onClick={self.swap(name: "selector.slot", slot: 2)}>Sample b</Button>
+    </div>
+</div>
+
+<div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+    <div className="flex items-center gap-2">
+        <span className="size-3 shrink-0 rounded-full bg-spectrum-violet" />
+        <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Port · which camera</span>
+    </div>
+    <span className="mt-1 block text-sm font-medium">{self.SwapState.swaps.port.slot.label}</span>
+    <span className="block text-[11px] text-muted-foreground">cam_color, or cam_mono, more sensitive; the other reads out only its noise.</span>
+    <div className="mt-3 grid grid-cols-2 gap-1.5 past:hidden">
+        <Button size="sm" variant="outline" onClick={self.swap(name: "port.slot", slot: 1)}>Color</Button>
+        <Button size="sm" variant="outline" onClick={self.swap(name: "port.slot", slot: 2)}>Mono</Button>
+    </div>
+</div>
+
+<div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
+    <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Focus</span>
+    <div className="mt-2 flex items-baseline gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">stage_a</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_a.z.value, digits: 1)}</span>
+        <span className="text-sm text-muted-foreground">µm</span>
+    </div>
+    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_a.z.value} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
+    <div className="mt-3 flex items-baseline gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">stage_b</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_b.z.value, digits: 1)}</span>
+        <span className="text-sm text-muted-foreground">µm</span>
+    </div>
+    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_b.z.value} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
+</div>
+<SourceControl />
+</div>
+</ScrollArea>
+<div className="relative flex min-w-0 flex-1 flex-col gap-3">
+<div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
+    <div className="relative min-h-0 min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+        <div className="h-full past:opacity-40">
+            <LiveView detector="cam_color" className="h-full" />
+        </div>
+        <div className="pointer-events-none absolute right-3 top-12 rounded-xl border border-border/60 bg-card/80 px-3 py-1.5 backdrop-blur"><span className="text-sm font-medium">cam_color</span></div>
+    </div>
+    <div className="relative min-h-0 min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+        <div className="h-full past:opacity-40">
+            <LiveView detector="cam_mono" className="h-full" />
+        </div>
+        <div className="pointer-events-none absolute right-3 top-12 rounded-xl border border-border/60 bg-card/80 px-3 py-1.5 backdrop-blur"><span className="text-sm font-medium">cam_mono</span></div>
+    </div>
+</div>
+<div className="absolute bottom-4 right-4 z-10">
+<div className="flex gap-1 rounded-full border border-border/60 bg-card/80 p-1 backdrop-blur past:hidden">
+    <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Live</Button>
+    <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
+    <Button icon="camera" size="sm" variant="ghost" className="rounded-full" onClick={self.capture_image()}>Snap</Button>
+</div>
+</div>
+</div>
+</div>
+</Html>

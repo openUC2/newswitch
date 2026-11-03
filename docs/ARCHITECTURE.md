@@ -689,9 +689,12 @@ on real hardware.
   part is for: every variable has a control, and sources and detectors are found from what the cubes hold
   (`Instrument.sources`, `Instrument.detectors`).
 - The sample holder is a cube too: its `simulations` name what can be on it, and its `simulation` says which is.
-  An instrument may hold several, each on a stage of its own, each light detector seeing one (`Instrument.samples`,
-  `Instrument.sample_of`); each is a hub of its own in the coordinate graph (`sample:<cube>`).
-  Nothing declares a channel either: `Compiled.channels` reads from the tables which source reaches which detector.
+  An instrument may hold several, each on a stage of its own, each light detector seeing one at a time: the one the
+  swaps on its way leave open, so a flip mirror (`kind: mirror` in a swap, and `came_from` where paths meet) can show a
+  camera either (`Instrument.samples`, `Instrument.sample_of(detector, state)`); each is a hub of its own in the
+  coordinate graph (`sample:<cube>`). Nothing declares a channel either: `Compiled.channels` reads from the tables which
+  source reaches which detector, across every setting of the swaps, with the swaps that decide it (a mirror, a filter;
+  not an objective, which changes only how much arrives).
 - A cube can name an entry of the components library (`newswitch/instrument/components/`) for its element and its
   hardware signals, and `drives` wires signals together; all of it is validated when the description is parsed. A
   logical detector is a physical detector and what is wired to it: `Instrument.detector_axes` computes what it

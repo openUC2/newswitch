@@ -62,8 +62,9 @@ stage:
 
 **Several samples**: an instrument may hold more than one, each a cube of `kind: sample` with a
 stage of its own (its moves) and light paths of its own (`dual-sample`). Each light detector sees
-the one sample its detection route starts at, never two (`Instrument.sample_of`); a source may light
-several. Each sample is a hub of its own in the coordinate graph (`sample:<cube>`, its stage
+one sample at a time: the one whose detection route is open under the swaps as they are
+(`Instrument.sample_of(detector, state)`), never two at once, and every sample is seen by some
+detector, some way the swaps can be set; a source may light several. Each sample is a hub of its own in the coordinate graph (`sample:<cube>`, its stage
 `stage:<cube>`, its holder's places `well:<cube>:B3`), with its own mount and mounting; a bare
 `sample`, `stage` or `well:B3` in an action means the sample of the detector that looks, or of the
 only one, and is refused when it could be either. An acquisition covers every sample its detectors
@@ -105,11 +106,35 @@ The compiler covers every simulation when a server starts. Calibration needs som
 pixel size, without an error. An epi source's light is drawn from the beads, also what a sample
 reflects: a mirror is predicted right, but drawn dark.
 
-Channels are not declared. A channel is a source whose light gets through the sample to a detector,
+Channels are not declared. A channel is a source whose light gets through a sample to a detector,
 which the optics decide: the cubes, `illumination` and `detection` are the same for every sample, and
 the sample's numbers say what comes out. Light lost in a detector's read noise is no channel.
-`Compiled.channels` lists them for a state, and
-`newswitch.tools.check_instrument` prints them per simulation.
+Channels are found across every way the swaps can be set, each with the swaps that decide it: those
+for which another slot makes its light no longer arrive, or come from another sample, or in another
+band (a flip mirror, a filter). A swap that changes only how much arrives, an objective, decides
+none. `Compiled.channels` lists them, and `newswitch.tools.check_instrument` prints them per
+simulation; the acquisition planner offers each as a card, and a channel acquired sets its swaps.
+
+**Switches**: a `mirror` element reflects everything and lets nothing through; an edge leaving any
+element other than a splitter or dichroic `via: reflect` carries no light. So a swap with a mirror
+in one slot and an open filter in the other is a flip mirror: what goes on one way, or the other.
+Where two paths meet at one, an edge leaving it says which one it carries on, by the cube the light
+came in from (`came_from`); without that, what the mirror lets through from one path would be what
+it reflects from the other. A detector a switch sends no light to is dark: placed nowhere, its image
+only its noise, refused in a channel with a message that says what to switch.
+
+```yaml
+  selector:
+    swaps:
+      slot:
+        initial: 1
+        slots:
+          1: {kind: filter, name: arm a}   # out of the way
+          2: {kind: mirror, name: arm b}   # in the way
+detection:
+  - {from: selector, via: transmit, came_from: filter_wheel, to: port, distance: 30 mm}
+  - {from: selector, via: reflect, came_from: objective_b, to: port, distance: 30 mm}
+```
 
 ## What drives what
 
@@ -238,6 +263,7 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `cam-test` | One simulated uc2_cam_py camera and nothing else. Without that library, the optics stand in, with a warning. |
 | `he-microscope` | White light through an H&E-stained section, onto a color camera, with two objectives, and a thermometer on the stage insert 3 cm from the section. |
 | `dual-sample` | Two samples, each on a stage of its own and seen through a light path of its own: GFP beads by fluorescence onto a mono camera, an H&E section in white light onto a color camera, a thermometer beside the section. |
+| `switch-microscope` | Two samples, two cameras and two flip mirrors: the selector decides which sample the cameras see, the port which camera gets the light. Each setting that gets light through is a channel of its own. |
 | `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image, of one plane of a volume. |
 | `light-sheet` | A sheet from the side, whose positioner the camera's frames step, and a stage for x, y and z. |
 | `flim` | A point scanner on a thin section, timing each photon against a pulsed laser. |

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from dataclasses import dataclass
 
 from arkitekt import Task
@@ -108,20 +111,28 @@ class Stage:
             self.values.set(targets, task=task)
 
 
-def stage_of(values: Values, detector: str, focus: str | None = None) -> Stage:
-    """What moves `detector`'s view, and what focuses it: `focus`, if that is named.
+def stage_of(
+    values: Values,
+    detector: str,
+    focus: str | None = None,
+    under: Mapping[str, Any] | None = None,
+) -> Stage:
+    """What moves `detector`'s view, and what focuses it: `focus`, if that is named. Of the sample
+    it sees `under` a state, or now.
 
     Raises:
         ValueError: There are several of one, and it cannot be told which is meant.
+        Dark: The switches send no light to it.
     """
     roles = values.roles
-    x, y = roles.sideways(detector, "x"), roles.sideways(detector, "y")
-    z = roles.focuses(detector)
+    sample = values.instrument.seen_sample(detector, values.snapshot() if under is None else under)
+    x, y = roles.sideways(detector, "x", sample), roles.sideways(detector, "y", sample)
+    z = roles.focuses(detector, sample)
     return Stage(
         values,
-        roles.x(detector) if x else None,
-        roles.y(detector) if y else None,
-        roles.focus(detector, focus) if z or focus is not None else None,
+        roles.x(detector, sample=sample) if x else None,
+        roles.y(detector, sample=sample) if y else None,
+        roles.focus(detector, focus, sample) if z or focus is not None else None,
     )
 
 
@@ -131,8 +142,10 @@ def where(values: Values, detector: str) -> tuple[float, float, float]:
     That holds however many things do: it says where the view is, and asks none of them to go.
     """
     roles = values.roles
+    now = values.snapshot()
+    sample = values.instrument.seen_sample(detector, now)
     return (
-        sum(float(values[move.name]) for move in roles.sideways(detector, "x")),
-        sum(float(values[move.name]) for move in roles.sideways(detector, "y")),
-        roles.plane_um(detector, values),
+        sum(float(now[move.name]) for move in roles.sideways(detector, "x", sample)),
+        sum(float(now[move.name]) for move in roles.sideways(detector, "y", sample)),
+        roles.plane_um(detector, now),
     )

@@ -122,7 +122,7 @@ def test_a_thin_section_out_of_focus_blurs(instrument: spec.Instrument) -> None:
 
 def test_in_a_volume_the_stage_moves_through_it(instrument: spec.Instrument) -> None:
     """The spot sections it: a move is another plane, just as sharp, and so no focus."""
-    assert sorted(Roles(instrument).found["pmt"]["stage.z"]) == []
+    assert sorted(Roles(instrument).found["pmt", "stage"]["stage.z"]) == []
     assert Roles(instrument).focuses("pmt") == []
     table = compile_instrument(instrument)
     focused = table.answer("pmt", lit(instrument))

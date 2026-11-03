@@ -24,7 +24,7 @@ from newswitch.instrument.spec import Instrument
 from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
 from newswitch.services.element_facts import facts_of, spectrum_color
-from newswitch.models.optics import DetectorOptics, OpticalChannel, SourceOptics
+from newswitch.models.optics import ChannelSwap, DetectorOptics, OpticalChannel, SourceOptics
 from newswitch.states.calibration import CalibrationState
 from newswitch.states.detector import DetectorState
 from newswitch.states.optics import OpticsState
@@ -70,9 +70,11 @@ class OpticsManager:
         self._refreshing = threading.Lock()
 
     def _path(self, name: str, values: Mapping[str, Any]) -> LightPath:
-        """Every way light can take to the detector `name`, as the edges say."""
+        """Every way light takes to the detector `name` under `values`, as the edges say: none,
+        where the switches send it elsewhere."""
         assert self.instrument is not None
-        edges = self.instrument.edges_to(name)
+        seen = self.instrument.sample_of(name, values) is not None
+        edges = self.instrument.edges_to(name, values) if seen else []
         cubes = dict.fromkeys(cube for edge in edges for cube in (edge.source, edge.target))
         return LightPath(
             detector=name,
@@ -178,7 +180,8 @@ class OpticsManager:
         """What focuses `detector` is in focus where it is now: defocus counts from there."""
         assert self.roles is not None
         values = self.values()
-        for move in self.roles.focuses(detector):
+        sample = self.instrument.seen_sample(detector, values)
+        for move in self.roles.focuses(detector, sample):
             self._in_focus[move.name] = float(values[move.name])
         self.refresh()
 
@@ -186,9 +189,10 @@ class OpticsManager:
         """How far what focuses `name` is from where it is in focus."""
         if self.roles is None:
             return 0.0
+        sample = self.instrument.seen_sample(name, values)
         return sum(
             float(values[move.name]) - self._in_focus.get(move.name, float(move.initial))
-            for move in self.roles.focuses(name)
+            for move in self.roles.focuses(name, sample)
         )
 
     def _detector(self, name: str, values: Mapping[str, Any]) -> DetectorOptics:
@@ -200,6 +204,7 @@ class OpticsManager:
         height, width = self.detector_state.get(name).plane()
         return DetectorOptics(
             name=name,
+            sample=self.instrument.seen_sample(name, values),
             calibrated=calibrated,
             pixel_to_stage=[[matrix[0][0], matrix[0][1]], [matrix[1][0], matrix[1][1]]],
             pixel_um=float(np.hypot(matrix[0][0], matrix[1][0])),
@@ -230,7 +235,7 @@ class OpticsManager:
             (
                 (detector, entry["coupling"][name])
                 for detector, entry in entries.items()
-                if name in entry["coupling"] and self.instrument.sample_of(detector) in lit
+                if name in entry["coupling"] and self.instrument.sample_of(detector, values) in lit
             ),
             (None, {}),
         )
@@ -255,6 +260,17 @@ class OpticsManager:
         if "field_um" in arriving:
             return SourceOptics(shape="field", field_um=arriving["field_um"], **found)
         return SourceOptics(shape="spot", **found)
+
+    def _slot_label(self, name: str, slot: int) -> str:
+        """What a swap has in `slot`, as it reads: its name, an open filter as open, else its kind."""
+        assert self.instrument is not None
+        element = self.instrument.variables[name].slots[slot]
+        label = getattr(element, "name", None)
+        if label:
+            return label
+        if isinstance(element, spec.Filter) and element.curve is None:
+            return "open"
+        return element.kind
 
     def _edge_share(
         self, sheet: Mapping[str, Any], values: Mapping[str, Any], detector: str
@@ -291,6 +307,7 @@ class OpticsManager:
                     detector.name: self._detector(detector.name, values)
                     for detector in self.detector_state.detectors
                     if detector.delivers_images()
+                    and self.instrument.sample_of(detector.name, values) is not None
                 },
             )
             self._publish(
@@ -301,14 +318,27 @@ class OpticsManager:
                 {
                     name: self._element(name, values)
                     for detector in self.instrument.detectors()
-                    for edge in self.instrument.edges_to(detector)
+                    if self.instrument.sample_of(detector, values) is not None
+                    for edge in self.instrument.edges_to(detector, values)
                     for name in (edge.source, edge.target)
                 },
             )
             self._publish(
                 "channels",
                 [
-                    OpticalChannel(c.source, c.detector, c.electrons, c.band_nm)
+                    OpticalChannel(
+                        source=c.source,
+                        detector=c.detector,
+                        electrons=c.electrons,
+                        sample=c.sample,
+                        band_nm=c.band_nm,
+                        swaps=[
+                            ChannelSwap(name, slot, self._slot_label(name, slot))
+                            for name, slot in c.swaps.items()
+                        ],
+                        field_width_um=c.field_um[0],
+                        field_height_um=c.field_um[1],
+                    )
                     for c in self.table.channels(values)
                 ],
             )

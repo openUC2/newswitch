@@ -511,6 +511,15 @@ class Splitter:
 
 
 @dataclass(frozen=True, config=STRICT)
+class Mirror:
+    """Reflects all of the light and lets none through: in a swap, with an open slot beside it, a
+    flip mirror, which sends the light one way or the other."""
+
+    kind: Literal["mirror"]
+    name: str | None = None
+
+
+@dataclass(frozen=True, config=STRICT)
 class ScanAxis:
     """One direction of a scan: how many steps, and the optical angle of one.
 
@@ -593,12 +602,33 @@ Element = Annotated[
     | Filter
     | Dichroic
     | Splitter
+    | Mirror
     | Scanner
     | Pinhole
     | PointDetector
     | Thermometer,
     Field(discriminator="kind"),
 ]
+
+
+def passes(element: Element | None, via: str | None) -> bool:
+    """Whether any light leaves `element` the way `via` says: what a mirror reflects, what a
+    splitter sends either way it sends any, both ways out of a dichroic, and through anything else.
+
+    Only whether, never how much: that is the tracer's, wavelength by wavelength.
+    """
+    match element:
+        case Mirror():
+            return via == "reflect"
+        case Splitter():
+            return (element.reflect if via == "reflect" else element.transmit) > 0
+        case Dichroic():
+            return True
+    return via != "reflect"
+
+
+class Dark(ValueError):
+    """A detector that no light reaches under the state asked about: a switch sends it elsewhere."""
 
 
 #: The unit each dimension of a variable is kept in; what is stated can be in any unit of it.
@@ -843,6 +873,9 @@ class Edge:
     distance: Millimetres | Literal["focus"] | None = None  # or the lens's own focal length
     along: Literal["x", "y"] | None = None  # which way of the image a sheet travels
     field: Millimetres | None = None  # how wide the light lands on the sample; a sheet, how high
+    # Where paths meet at a switch, the cube the light leaving this way came in from: what a flip
+    # mirror lets through goes on one way, what it reflects comes from another.
+    came_from: str | None = None
 
     @model_validator(mode="after")
     def _a_sheet_travels(self) -> Self:
@@ -937,24 +970,66 @@ class Instrument:
         ]
         if problems:
             raise ValueError("; ".join(problems))
+        problems += [
+            f"{edge.source} -> {edge.target}: came_from {edge.came_from!r} sends no light into "
+            f"{edge.source}"
+            for edge in (*self.illumination, *self.detection)
+            if edge.came_from is not None
+            and not any(
+                other.source == edge.came_from and other.target == edge.source
+                for other in (*self.illumination, *self.detection)
+            )
+        ]
+        if problems:
+            raise ValueError("; ".join(problems))
+        seen_at_all: set[str] = set()
         for detector in self.detectors():
-            seen = self._seeing(detector)
-            if not seen:
+            if not self.samples_of(detector):
                 problems.append(f"no light reaches {detector}")
-            elif len(seen) > 1:
-                problems.append(
-                    f"{detector} is reached from the samples {seen}: a detector sees one sample"
-                )
+                continue
+            ever: set[str] = set()
+            for state in self.switch_states(detector):
+                seen = [
+                    sample
+                    for sample in self.samples_of(detector)
+                    if self.open_routes(self.detection, sample, detector, state)
+                ]
+                if len(seen) > 1:
+                    switches = ", ".join(
+                        f"{name}={state[name]}" for name in self.switches_of(detector)
+                    )
+                    problems.append(
+                        f"{detector} is reached from the samples {seen} at once"
+                        + (f" with {switches}" if switches else "")
+                        + ": a detector sees one sample at a time"
+                    )
+                    break
+                ever.update(seen)
+            else:
+                if not ever:
+                    problems.append(f"no light reaches {detector}, however its switches are set")
+            seen_at_all |= ever
+        if not problems:
+            problems += [
+                f"no detector sees {sample}, however the switches are set"
+                for sample in self.samples()
+                if sample not in seen_at_all
+            ]
         for detector in self.detectors():
             drive = self.z_drive(detector)
-            if drive is None or len(self._seeing(detector)) != 1:
+            if drive is None or problems:
                 continue
-            sample = self.sample_of(detector)
-            own = {move.name for move in (*self.sample_moves(sample), *self.sheet_moves(sample))}
-            if drive.target not in own:
+            owns = {
+                sample: {
+                    move.name for move in (*self.sample_moves(sample), *self.sheet_moves(sample))
+                }
+                for sample in self.samples_of(detector)
+            }
+            if not any(drive.target in own for own in owns.values()):
                 problems.append(
-                    f"{drive.source} -> {drive.target}: {detector} sees {sample}, and its planes "
-                    f"step what moves that sample or its sheet: {sorted(own)}"
+                    f"{drive.source} -> {drive.target}: {detector} sees {sorted(owns)}, and its "
+                    f"planes step what moves its sample or its sheet: "
+                    f"{sorted(set().union(*owns.values()))}"
                 )
         for thermometer in self.thermometers():
             element = self.cubes[thermometer].element
@@ -1051,30 +1126,106 @@ class Instrument:
             if cube.element is not None and cube.element.kind == "sample"
         ]
 
-    def _seeing(self, detector: str) -> list[str]:
-        """The samples light goes from to `detector`."""
-        return [
-            sample for sample in self.samples() if self.routes(self.detection, sample, detector)
-        ]
-
-    def sample_of(self, detector: str) -> str:
-        """The sample `detector` measures: the one light reaches it from; a thermometer's, the one
-        it sits beside.
-
-        Raises:
-            ValueError: No such detector, or none of the samples.
-        """
+    def samples_of(self, detector: str) -> list[str]:
+        """Every sample light can reach `detector` from, whatever the switches say; a thermometer's,
+        the one it sits beside."""
         element = self.cubes[detector].element if detector in self.cubes else None
         if isinstance(element, Thermometer):
             stage = element.on_stage.stage
             if stage is not None:
-                return stage
+                return [stage]
             (only,) = self.samples()
-            return only
-        seen = self._seeing(detector)
-        if len(seen) != 1:
-            raise ValueError(f"{detector!r} sees {len(seen)} samples, not one")
-        return seen[0]
+            return [only]
+        return [
+            sample for sample in self.samples() if self.routes(self.detection, sample, detector)
+        ]
+
+    def sample_of(self, detector: str, state: Mapping[str, Any]) -> str | None:
+        """The sample `detector` measures under `state`: the one light gets to it from, the switches
+        as `state` sets them; none, when they send its light elsewhere. A thermometer's is the one
+        it sits beside, whatever the state.
+
+        Raises:
+            ValueError: Light gets to it from several samples at once.
+        """
+        candidates = self.samples_of(detector)
+        if isinstance(self.cubes[detector].element, Thermometer):
+            return candidates[0]
+        seen = [
+            sample
+            for sample in candidates
+            if self.open_routes(self.detection, sample, detector, state)
+        ]
+        if len(seen) > 1:
+            raise ValueError(f"{detector!r} sees {seen} at once")
+        return seen[0] if seen else None
+
+    def seen_sample(self, detector: str, state: Mapping[str, Any]) -> str:
+        """The sample `detector` measures under `state`, which it must see.
+
+        Raises:
+            Dark: It sees none: the message says what to switch.
+        """
+        sample = self.sample_of(detector, state)
+        if sample is None:
+            raise self.dark(detector, state)
+        return sample
+
+    def dark(self, detector: str, state: Mapping[str, Any]) -> Dark:
+        """Why `detector` sees nothing under `state`, and what to switch so that it does."""
+        for other in self.switch_states(detector):
+            if self.sample_of(detector, other) is not None:
+                changes = ", ".join(
+                    f"{name}={other[name]}"
+                    for name in self.switches_of(detector)
+                    if other[name] != state[name]
+                )
+                return Dark(f"No light reaches {detector}; with {changes} it does")
+        return Dark(f"No light reaches {detector}")
+
+    def switches_of(self, detector: str) -> list[str]:
+        """The swaps on the way from any sample to `detector`: what can change where its light
+        comes from, or whether any does."""
+        cubes = {
+            edge.source
+            for sample in self.samples_of(detector)
+            for route in self.routes(self.detection, sample, detector)
+            for edge in route
+        }
+        return [
+            swap.name
+            for name, cube in self.cubes.items()
+            if name in cubes
+            for swap in cube.swaps.values()
+        ]
+
+    def switch_states(self, detector: str) -> Iterator[dict[str, Any]]:
+        """Every way the switches on the way to `detector` can be set, the rest as they start."""
+        names = self.switches_of(detector)
+        variables = self.variables
+        start = self.initial_state()
+        for slots in itertools.product(*(list(variables[name].slots) for name in names)):
+            yield {**start, **dict(zip(names, slots))}
+
+    def detection_routes(self, detector: str, state: Mapping[str, Any]) -> list[tuple[Edge, ...]]:
+        """The ways light goes from the sample `detector` sees under `state` to it.
+
+        Raises:
+            Dark: It sees none.
+        """
+        sample = self.seen_sample(detector, state)
+        return self.open_routes(self.detection, sample, detector, state)
+
+    def open_routes(
+        self, edges: tuple[Edge, ...], start: str, end: str, state: Mapping[str, Any]
+    ) -> list[tuple[Edge, ...]]:
+        """The ways light goes from `start` to `end` along `edges` with the switches as `state`
+        sets them: every element on the way lets it leave the way the next edge takes."""
+        return [
+            route
+            for route in self.routes(edges, start, end)
+            if all(passes(self.cubes[edge.source].element_at(state), edge.via) for edge in route)
+        ]
 
     def samples_lit_by(self, source: str) -> list[str]:
         """The samples light from `source` lands on."""
@@ -1205,14 +1356,21 @@ class Instrument:
             ]
         return tuple(found)
 
-    def edges_to(self, detector: str, sources: Iterable[str] | None = None) -> list[Edge]:
-        """Every edge light takes to `detector`: from `sources` to its sample, and on from there."""
-        sample = self.sample_of(detector)
+    def edges_to(
+        self, detector: str, state: Mapping[str, Any], sources: Iterable[str] | None = None
+    ) -> list[Edge]:
+        """Every edge light takes to `detector` under `state`: from `sources` to the sample it sees,
+        and on from there.
+
+        Raises:
+            Dark: It sees no sample under `state`.
+        """
+        sample = self.seen_sample(detector, state)
         routes = [
             route
             for source in (self.sources() if sources is None else sources)
-            for route in self.routes(self.illumination, source, sample)
-        ] + self.routes(self.detection, sample, detector)
+            for route in self.open_routes(self.illumination, source, sample, state)
+        ] + self.open_routes(self.detection, sample, detector, state)
         return list(dict.fromkeys(edge for route in routes for edge in route))
 
     def routes(self, edges: tuple[Edge, ...], start: str, end: str) -> list[tuple[Edge, ...]]:
@@ -1224,8 +1382,13 @@ class Instrument:
                 found.append(walked)
                 return
             for edge in edges:
-                if edge.source == at and edge not in walked:
-                    walk(edge.target, (*walked, edge))
+                if edge.source != at or edge in walked:
+                    continue
+                if edge.came_from is not None and (
+                    not walked or walked[-1].source != edge.came_from
+                ):
+                    continue
+                walk(edge.target, (*walked, edge))
 
         walk(start, ())
         return found
@@ -1282,7 +1445,11 @@ def _scan_problems(instrument: Instrument) -> list[str]:
         if not isinstance(_element(instrument, scanner), Scanner):
             problems.append(f"{scans[0].source}: only a scanner walks a detector through an image")
             continue
-        routes = instrument.routes(instrument.illumination, scanner, instrument.sample_of(detector))
+        routes = [
+            route
+            for sample in instrument.samples_of(detector)
+            for route in instrument.routes(instrument.illumination, scanner, sample)
+        ]
         if len(routes) != 1:
             problems.append(
                 f"{scanner}: {len(routes)} illumination routes to the sample; one is handled"
@@ -1344,9 +1511,8 @@ def _microtime_problems(instrument: Instrument) -> list[str]:
                 )
         problems += [
             f"{detector}: the simulation {name!r} needs its fluorophore's lifetime"
-            for name, simulation in instrument.sample_holder(
-                instrument.sample_of(detector)
-            ).simulations.items()
+            for sample in instrument.samples_of(detector)
+            for name, simulation in instrument.sample_holder(sample).simulations.items()
             if simulation.fluorophore is not None and simulation.fluorophore.lifetime is None
         ]
     return problems
@@ -1357,8 +1523,10 @@ def _objective_problems(instrument: Instrument) -> list[str]:
     is how bright an image is, and that takes its NA."""
     problems = set()
     for detector in instrument.detectors():
-        for route in instrument.routes(
-            instrument.detection, instrument.sample_of(detector), detector
+        for route in (
+            route
+            for sample in instrument.samples_of(detector)
+            for route in instrument.routes(instrument.detection, sample, detector)
         ):
             for edge in route:
                 cube = instrument.cubes[edge.target]
