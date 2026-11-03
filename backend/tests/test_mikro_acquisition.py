@@ -298,6 +298,52 @@ def test_two_samples_go_to_two_sample_spaces(mikro: Mikro, tmp_path: Path) -> No
         assert middle[1:] == pytest.approx([12_500.0, 37_500.0], abs=1e-3)
 
 
+def test_one_camera_through_a_switch_goes_to_both_sample_spaces(
+    mikro: Mikro, tmp_path: Path
+) -> None:
+    """The selector flips between two channels: cam_mono's record of each sample in that sample's
+    space, its middle read back through mikro's transforms where that sample's stage put it."""
+    described = spec.load(INSTRUMENTS / "switch-microscope")
+    m = build_microscope(run_settings(tmp_path), described)
+    channels = [
+        AcquisitionChannel(
+            name="gfp",
+            detectors=["cam_mono"],
+            set_to={"laser_488.power": 20.0, "selector.slot": 1, "port.slot": 2},
+        ),
+        AcquisitionChannel(
+            name="section",
+            detectors=["cam_mono"],
+            set_to={"white_led.power": 0.01, "selector.slot": 2, "port.slot": 2},
+        ),
+    ]
+    a, b = acquire(
+        AcquisitionPlan(channels=channels, name=f"test {uuid.uuid4().hex[:8]}"),
+        MikroDatasetStore(mikro, described, m),
+        m.optics,
+        m.detector,
+        m.values,
+        m.space,
+        m.hooks,
+        Task.local(),
+    )
+    samples = m.space_state.samples
+    for made, sample in ((a, "stage_a"), (b, "stage_b")):
+        assert made.detector == "cam_mono"
+        dataset = mikro.get_array_dataset(made.id)
+        world = space_3d(
+            mikro,
+            "sample",
+            reference=f"sample-switch-microscope-{sample}-{samples[sample].mount_id}",
+        )
+        middle = np.asarray(
+            dataset.intrinsic_system.transform_points_to(
+                world, [[0, 0, 0, 255.5, 255.5]], axes=("z", "y", "x")
+            )
+        )[0]
+        assert middle[1:] == pytest.approx([12_500.0, 37_500.0], abs=1e-3)
+
+
 @pytest.mark.asyncio
 async def test_a_served_agent_acquires_into_mikro(tmp_path: Path) -> None:
     """The action through a real agent: the client lives on the loop, the action on its thread."""
