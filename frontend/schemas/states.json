@@ -2314,6 +2314,38 @@
                     "provides": null
                   },
                   {
+                    "key": "name",
+                    "label": null,
+                    "kind": "STRING",
+                    "description": null,
+                    "identifier": null,
+                    "nullable": false,
+                    "effects": [],
+                    "choices": null,
+                    "referenceUnit": null,
+                    "proposedUnits": null,
+                    "dimension": null,
+                    "children": null,
+                    "widget": null,
+                    "provides": null
+                  },
+                  {
+                    "key": "description",
+                    "label": null,
+                    "kind": "STRING",
+                    "description": null,
+                    "identifier": null,
+                    "nullable": false,
+                    "effects": [],
+                    "choices": null,
+                    "referenceUnit": null,
+                    "proposedUnits": null,
+                    "dimension": null,
+                    "children": null,
+                    "widget": null,
+                    "provides": null
+                  },
+                  {
                     "key": "sample",
                     "label": null,
                     "kind": "STRING",

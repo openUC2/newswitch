@@ -115,6 +115,15 @@ band (a flip mirror, a filter). A swap that changes only how much arrives, an ob
 none. `Compiled.channels` lists them, and `newswitch.tools.check_instrument` prints them per
 simulation; the acquisition planner offers each as a card, and a channel acquired sets its swaps.
 
+Channel names are inferred too, from the light path alone, never from what is on the sample: the
+source's lines, the side its light lands from, whether it is scanned, how much of the source's own
+light the detection path lets through (next to none: fluorescence), the band it passes, and whether
+the detector is a color one or times its photons. `newswitch/instrument/channel_names.yml` says what
+that is called: its rules ("{dye} · {excitation}/{emission}" for what was emitted, "Brightfield
+RGB", ...), the dyes known by their excitation and emission windows, and what to add when two
+channels would share a name (the detector, then the sample, then the swaps). The code knows none of
+these words: edit the file, and every channel of every instrument is named anew.
+
 **Switches**: a `mirror` element reflects everything and lets nothing through; an edge leaving any
 element other than a splitter or dichroic `via: reflect` carries no light. So a swap with a mirror
 in one slot and an open filter in the other is a flip mirror: what goes on one way, or the other.

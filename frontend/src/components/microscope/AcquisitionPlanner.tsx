@@ -379,10 +379,6 @@ const useMicroscope = () => {
 const swapsOf = (channel: OpticalChannel): Record<string, number> =>
   Object.fromEntries((channel.swaps ?? []).map((s) => [s.variable, s.slot]));
 
-/** A channel's name in the plan: its source, and what its swaps put in place. */
-const nameOf = (channel: OpticalChannel): string =>
-  [channel.source, ...(channel.swaps ?? []).map((s) => s.label)].join(" · ");
-
 type Microscope = ReturnType<typeof useMicroscope>;
 
 /** A channel the optics found, chosen: at the brightness it has now, or its preset. */
@@ -396,7 +392,7 @@ const choiceOf = (m: Microscope, channel: OpticalChannel): ChannelChoice => {
     power: power || (found?.max_power ?? 1) / 5,
     exposure: m.exposureOf(channel.detector)?.value,
     swaps: swapsOf(channel),
-    name: nameOf(channel),
+    name: channel.name,
   };
 };
 
@@ -446,6 +442,7 @@ const ChannelCard = ({
         type="button"
         aria-pressed={!!choice}
         onClick={onToggle}
+        title={channel.description}
         className="flex w-full items-center gap-2.5 text-left"
       >
         <span
@@ -456,10 +453,11 @@ const ChannelCard = ({
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">
-            {source} <span className="text-muted-foreground">→</span> {detector}
+            {channel.name}
           </span>
           <span className="block truncate text-[11px] text-muted-foreground">
-            {band ? `${Math.round(band)} nm` : ""}
+            {source} → {detector}
+            {band ? ` · ${Math.round(band)} nm` : ""}
             {sample ? ` · ${sample}` : ""}
           </span>
         </span>

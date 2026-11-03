@@ -80,6 +80,10 @@ class OpticalChannel:
     detector: str
     electrons: float
     """At the source's full power and the detector's current exposure, its swaps set."""
+    name: str
+    """What it is called: inferred from its light path by `channel_names.yml`, apart from the others."""
+    description: str
+    """The whole of what its light path does, as `channel_names.yml` puts it."""
     sample: str
     """What it is of: which sample its light comes from."""
     band_nm: Optional[float] = None

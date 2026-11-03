@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image
 
 from newswitch.drivers.simulator import SimulatedMicroscope
+from newswitch.instrument.naming import channel_names
 from newswitch.instrument.compiler import compile_instrument, difference, impacts
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import load
@@ -102,12 +103,14 @@ def main(argv: list[str] | None = None) -> None:
     for sample in instrument.samples():
         for simulation in instrument.sample_holder(sample).simulations:
             current = {**state, instrument.simulation_key(sample): simulation}
-            for channel in compiled.channels(current):
+            found = compiled.channels(current)
+            named = channel_names(instrument, found, current, lambda name, slot: f"{name}={slot}")
+            for channel, (name, _) in zip(found, named):
                 if channel.sample != sample:
                     continue
                 swaps = ", ".join(f"{name}={slot}" for name, slot in channel.swaps.items())
                 print(
-                    f"  {sample}: {simulation}: {channel.source} -> {channel.detector}, "
+                    f"  {sample}: {simulation}: {name}: {channel.source} -> {channel.detector}, "
                     f"{channel.electrons:.4g} electrons at full power, at {channel.band_nm:.0f} nm"
                     + (f", with {swaps}" if swaps else "")
                 )

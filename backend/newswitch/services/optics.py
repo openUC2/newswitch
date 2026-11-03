@@ -18,6 +18,7 @@ import numpy as np
 
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument, influences
+from newswitch.instrument.naming import channel_names
 from newswitch.instrument.predict import Answer, state_key
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument
@@ -323,6 +324,8 @@ class OpticsManager:
                     for name in (edge.source, edge.target)
                 },
             )
+            channels = self.table.channels(values)
+            named = channel_names(self.instrument, channels, values, self._slot_label)
             self._publish(
                 "channels",
                 [
@@ -330,6 +333,8 @@ class OpticsManager:
                         source=c.source,
                         detector=c.detector,
                         electrons=c.electrons,
+                        name=name,
+                        description=description,
                         sample=c.sample,
                         band_nm=c.band_nm,
                         swaps=[
@@ -342,6 +347,6 @@ class OpticsManager:
                             self.instrument, c.detector, {**values, **c.swaps}
                         ),
                     )
-                    for c in self.table.channels(values)
+                    for c, (name, description) in zip(channels, named)
                 ],
             )

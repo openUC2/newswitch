@@ -133,6 +133,8 @@ export const OpticalChannelSchema = z
     source: z.string(),
     detector: z.string(),
     electrons: z.number(),
+    name: z.string(),
+    description: z.string(),
     sample: z.string(),
     band_nm: z.number().nullable().optional(),
     swaps: z.array(
