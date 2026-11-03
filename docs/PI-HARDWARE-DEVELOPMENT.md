@@ -1,0 +1,46 @@
+# Microscope Pi development deployment
+
+Host: `pi@192.168.0.46`, checkout: `/home/pi/newswitch`, branch:
+`feat/controller-mapping-runtime`. Frontend port 5473, backend port 8069.
+
+Hardware profile: `backend/configs/machines/openuc2-first-cord-30059.yaml`.
+Migrated from the selected `/home/pi/ImSwitchConfig/imcontrol_setups/FRAME.json`.
+The serial master uses 115200 baud and its stable `/dev/serial/by-id/` path.
+Motor IDs are A=0, X=1, Y=2, Z=3. X/Y/A retain 0.396 um/step;
+Z retains 0.3125 um/step. A is configured as a linear axis, matching the old file.
+One LED uses master channel 1, PWM maximum 1023. No LED matrix is installed.
+Endstop polarities and homing directions retain the old values. No startup homing.
+Initial movement speeds are reduced to 1000 um/s (X/Y/A), 500 um/s (Z);
+jog choices are 1, 10, 100 um. Travel bounds were not present and are not invented.
+The HikRobot camera uses the installed MVS SDK; no optical pixel size is guessed.
+
+Runtime files and private credentials are in `.runtime/` (excluded locally from Git).
+Frontend `.env.local` points to the Pi, not the browser computer's localhost.
+The frontend runs Vite in `--mode test` to use committed generated API hooks without
+rewriting them; this does not enable virtual hardware. Backend mode is `hardware`.
+Node 22 is installed separately inside `.runtime/`; the system Node is unchanged.
+The two services are systemd user services, initially started manually, not enabled
+at boot. The existing Docker deployment remains available for rollback.
+
+After pushing changes from the Mac, on the Pi:
+
+```sh
+cd ~/newswitch
+git pull --ff-only
+cd backend
+~/.local/bin/uv sync --locked --no-dev --extra uc2 --extra camera --python 3.12
+cd ../frontend
+PATH="$HOME/newswitch/.runtime/node-v22.21.1-linux-arm64/bin:$PATH" yarn install --frozen-lockfile --non-interactive
+systemctl --user restart newswitch-backend newswitch-frontend
+```
+
+Credentials: `cat ~/newswitch/.runtime/auth.yaml` (keep private).
+Logs: `.runtime/backend-service.log`, `.runtime/backend.log`.
+Status: `systemctl --user status newswitch-backend newswitch-frontend`.
+
+Rollback, ensuring only one application owns the serial controller:
+
+```sh
+systemctl --user stop newswitch-backend newswitch-frontend
+docker start imswitch-server-1
+```
