@@ -71,6 +71,9 @@ export const acquisition = {
     start: "Starten",
     fineTune: "Feineinstellung",
     simple: "Zurück zur einfachen Ansicht",
+    sample: "Probe",
+    sampleHint:
+      "Was der Plan aufnimmt: nur ihre Kanäle, Orte und Wells folgen.",
     swapsHint:
       "Was dieser Kanal einstellt: ein Klappspiegel, ein Filter. Bei der Aufnahme werden sie gesetzt.",
     fineTuneHint:

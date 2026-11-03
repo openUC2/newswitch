@@ -364,7 +364,18 @@ const useMicroscope = () => {
     ),
     samples: Object.values(space?.samples ?? {}),
     sampleCount: Object.keys(space?.samples ?? {}).length,
+    sampleNames: Object.keys(space?.samples ?? {}),
     moves: entriesOf(moves?.moves),
+    /** Every move but those of another sample's stage. */
+    movesFor: (sample?: string) =>
+      Object.entries(moves?.moves ?? {})
+        .filter(
+          ([cube]) =>
+            sample === undefined ||
+            cube === sample ||
+            !(cube in (space?.samples ?? {})),
+        )
+        .flatMap(([, byVariable]) => Object.values(byVariable)),
     looking,
     lookingSample: sceneSample,
     stageLookingAt,
@@ -398,14 +409,17 @@ const choiceOf = (m: Microscope, channel: OpticalChannel): ChannelChoice => {
 
 /** What it would image, from what is set now: the lights that are on, on the cameras that are,
  * under the swaps as they are. */
-const startingChannels = (m: Microscope): ChannelChoice[] => {
-  const lit = m.channels.filter(
+const startingChannels = (
+  m: Microscope,
+  offered: OpticalChannel[],
+): ChannelChoice[] => {
+  const lit = offered.filter(
     (c) =>
       m.sourceOf(c.source)?.on &&
       m.detectors.find((d) => d.name === c.detector)?.is_active &&
       (c.swaps ?? []).every((s) => m.swaps[s.variable] === s.slot),
   );
-  const first = m.channels.slice(0, 1);
+  const first = offered.slice(0, 1);
   return (lit.length > 0 ? lit : first).map((c) => choiceOf(m, c));
 };
 
@@ -427,7 +441,6 @@ const ChannelCard = ({
   const band = channel.band_nm;
   const found = m.sourceOf(source);
   const exposure = m.exposureOf(detector);
-  const sample = m.sampleCount > 1 ? channel.sample : undefined;
   return (
     <div
       style={tint(found?.color)}
@@ -458,7 +471,6 @@ const ChannelCard = ({
           <span className="block truncate text-[11px] text-muted-foreground">
             {source} → {detector}
             {band ? ` · ${Math.round(band)} nm` : ""}
-            {sample ? ` · ${sample}` : ""}
           </span>
         </span>
       </button>
@@ -518,10 +530,36 @@ export function AcquisitionControl() {
   const resume = useResumeTask();
 
   const [name, setName] = useState("");
+  const [pickedSample, setPickedSample] = useState<string | null>(null);
   const [picked, setPicked] = useState<ChannelChoice[] | null>(null);
-  const channels = picked ?? startingChannels(m);
   const [alsoRecord, setAlsoRecord] = useState<string[]>([]);
   const [where, setWhere] = useState<Where>({ kind: "here" });
+  // The sample the plan is of, where there are several: the one picked, else the one the view is
+  // of. Everything after is of it: its channels, its places, its wells.
+  const several = m.sampleNames.length > 1;
+  const sample = !several
+    ? undefined
+    : pickedSample !== null && m.sampleNames.includes(pickedSample)
+      ? pickedSample
+      : m.lookingSample !== undefined && m.sampleNames.includes(m.lookingSample)
+        ? m.lookingSample
+        : m.sampleNames[0];
+  const offered =
+    sample === undefined
+      ? m.channels
+      : m.channels.filter((c) => c.sample === sample);
+  const channels = (picked ?? startingChannels(m, offered)).filter((c) =>
+    offered.some((x) => isChannel(c, x.source, x.detector, swapsOf(x))),
+  );
+  const pointDetectors = m.pointDetectors.filter(
+    (d) => sample === undefined || m.sampleOf(d.name) === sample,
+  );
+  const chooseSample = (next: string) => {
+    setPickedSample(next);
+    setPicked(null);
+    setAlsoRecord([]);
+    setWhere({ kind: "here" });
+  };
   const [depth, setDepth] = useState<Depth>({ kind: "plane" });
   const [time, setTime] = useState<Time>({ kind: "once" });
   const [refocus, setRefocus] = useState(false);
@@ -549,13 +587,17 @@ export function AcquisitionControl() {
     .filter((d) => chosen.includes(d.name))
     .flatMap((d) => d.axes)
     .find((axis) => axis.name === "z")?.step;
-  const samples = [
-    ...new Set(
-      [...found.map((c) => c.sample), ...alsoRecord.map(m.sampleOf)].filter(
-        (s) => s !== undefined && s !== "",
-      ),
-    ),
-  ] as string[];
+  const samples =
+    sample !== undefined
+      ? [sample]
+      : ([
+          ...new Set(
+            [
+              ...found.map((c) => c.sample),
+              ...alsoRecord.map(m.sampleOf),
+            ].filter((s) => s !== undefined && s !== ""),
+          ),
+        ] as string[]);
   // Where a grid goes: around where the view is, if it is of a sample imaged; else where that
   // sample's stage has it, which no camera may see now.
   const looking =
@@ -565,7 +607,11 @@ export function AcquisitionControl() {
       : samples.length > 0
         ? m.stageLookingAt(samples[0])
         : m.looking;
-  const plates = m.samples.filter((s) => (s.shape?.wells.length ?? 0) > 0);
+  const plates = m.samples.filter(
+    (s) =>
+      (s.shape?.wells.length ?? 0) > 0 &&
+      (sample === undefined || s.sample === sample),
+  );
 
   const context: PlanContext = {
     swaps: m.swaps,
@@ -583,6 +629,7 @@ export function AcquisitionControl() {
     field,
     drivenStep: drivenStep ?? undefined,
     samples,
+    sample,
   };
   const choices: Choices = {
     name,
@@ -626,7 +673,7 @@ export function AcquisitionControl() {
   };
   const here = () => {
     const set_to: Record<string, number> = {};
-    for (const move of m.moves) {
+    for (const move of m.movesFor(sample)) {
       if (move.does.includes("position") || move.does.includes("blur")) {
         set_to[move.name] = move.value;
       }
@@ -658,6 +705,7 @@ export function AcquisitionControl() {
   }
 
   const running = isLoading || !!task;
+  const step = several ? 1 : 0;
   const stack = depth.kind === "stack" ? depth : undefined;
   const lapse = time.kind === "lapse" ? time : undefined;
 
@@ -699,8 +747,29 @@ export function AcquisitionControl() {
         </Button>
       </div>
 
-      <Step index={1} title={t("acquisition.planner.what")}>
-        {m.channels.length === 0 ? (
+      {several && sample !== undefined && (
+        <Step
+          index={1}
+          title={t("acquisition.planner.sample")}
+          aside={
+            <Segmented
+              value={sample}
+              options={m.samples.map((s) => ({
+                value: s.sample,
+                label: s.holder ? `${s.sample} · ${s.holder}` : s.sample,
+              }))}
+              onChange={chooseSample}
+            />
+          }
+        >
+          <p className="text-[11px] text-muted-foreground">
+            {t("acquisition.planner.sampleHint")}
+          </p>
+        </Step>
+      )}
+
+      <Step index={step + 1} title={t("acquisition.planner.what")}>
+        {offered.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             {t("acquisition.planner.noChannels")}
           </p>
@@ -710,7 +779,7 @@ export function AcquisitionControl() {
               {t("acquisition.planner.whatHint")}
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {m.channels.map((c) => {
+              {offered.map((c) => {
                 const choice = channels.find((x) =>
                   isChannel(x, c.source, c.detector, swapsOf(c)),
                 );
@@ -730,12 +799,12 @@ export function AcquisitionControl() {
             </div>
           </>
         )}
-        {m.pointDetectors.length > 0 && (
+        {pointDetectors.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-muted-foreground">
               {t("acquisition.planner.alsoRecord")}
             </span>
-            {m.pointDetectors.map((d) => {
+            {pointDetectors.map((d) => {
               const on = alsoRecord.includes(d.name);
               return (
                 <Button
@@ -762,7 +831,7 @@ export function AcquisitionControl() {
       </Step>
 
       <Step
-        index={2}
+        index={step + 2}
         title={t("acquisition.planner.where")}
         aside={
           <Segmented
@@ -979,7 +1048,7 @@ export function AcquisitionControl() {
       </Step>
 
       <Step
-        index={3}
+        index={step + 3}
         title={t("acquisition.planner.depth")}
         aside={
           <Segmented
@@ -1054,7 +1123,7 @@ export function AcquisitionControl() {
       </Step>
 
       <Step
-        index={4}
+        index={step + 4}
         title={t("acquisition.planner.time")}
         aside={
           <Segmented

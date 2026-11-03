@@ -93,6 +93,17 @@ describe("buildPlan", () => {
     expect(plan.positions.every((p) => p.at?.system === "sample")).toBe(true);
   });
 
+  it("lays a grid on the one sample the plan is of, so that only its stage moves", () => {
+    const plan = buildPlan(
+      choices({ where: { kind: "grid", rows: 1, columns: 2, overlap: 0 } }),
+      { ...context, samples: ["stage_b"], sample: "stage_b" },
+    );
+    expect(plan.positions.map((p) => p.at?.system)).toEqual([
+      "sample:stage_b",
+      "sample:stage_b",
+    ]);
+  });
+
   it("goes to wells by the graph's names, so a well is on its own sample", () => {
     const plan = buildPlan(
       choices({

@@ -104,6 +104,9 @@ export type PlanContext = {
   drivenStep?: number;
   /** The samples the chosen detectors see. */
   samples: string[];
+  /** The one sample the plan is of, where there are several: a grid is on its frame, so only its
+   * stage moves. */
+  sample?: string;
 };
 
 export class PlanProblem extends Error {}
@@ -124,6 +127,7 @@ export const gridPositions = (
   grid: GridChoice,
   looking: { x: number; y: number },
   field: { width: number; height: number },
+  system = "sample",
 ): AcquisitionPosition[] => {
   const share = 1 - Math.min(Math.max(grid.overlap, 0), 0.9);
   const along = (index: number, count: number, size: number) =>
@@ -136,7 +140,7 @@ export const gridPositions = (
         name: `r${row + 1}c${column + 1}`,
         set_to: {},
         at: {
-          system: "sample",
+          system,
           coordinates: {
             x: looking.x + along(column, grid.columns, field.width),
             y: looking.y + along(row, grid.rows, field.height),
@@ -159,7 +163,12 @@ const positionsOf = (
       if (!context.looking || !context.field) {
         throw new PlanProblem("Where the view is is not known yet");
       }
-      return gridPositions(where, context.looking, context.field);
+      return gridPositions(
+        where,
+        context.looking,
+        context.field,
+        context.sample ? `sample:${context.sample}` : "sample",
+      );
     case "wells":
       if (where.wells.length === 0) throw new PlanProblem("Pick a well");
       return where.wells.map((well) => ({

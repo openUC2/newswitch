@@ -69,6 +69,9 @@ export const acquisition = {
     start: "Start",
     fineTune: "Fine-tune",
     simple: "Back to simple",
+    sample: "Sample",
+    sampleHint:
+      "What the plan images: only its channels, its places and its wells follow.",
     swapsHint:
       "What this channel puts in place: a flip mirror, a filter. Acquired, it sets them.",
     fineTuneHint:
