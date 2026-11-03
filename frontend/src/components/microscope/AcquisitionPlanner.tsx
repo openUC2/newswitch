@@ -543,11 +543,9 @@ export function AcquisitionControl() {
           height: Math.min(...found.map((c) => c.field_height_um ?? 0)),
         }
       : undefined;
-  const fields = chosen
-    .map((d) => m.optics?.detectors?.[d])
-    .filter((d) => d !== undefined);
+  // Through the objective each channel's own swaps put on the way, whatever is in place now.
   const depthOfField = Math.min(
-    ...fields.map((d) => d.depth_of_field_um).filter((v) => v > 0),
+    ...found.map((c) => c.depth_of_field_um ?? 0).filter((v) => v > 0),
   );
   const drivenStep = m.detectors
     .filter((d) => chosen.includes(d.name))

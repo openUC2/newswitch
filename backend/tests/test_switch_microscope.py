@@ -328,3 +328,14 @@ def test_a_refocus_at_each_place_runs_under_each_samples_channel(m: Microscope) 
     )
     run_plan(plan, StateStore(m), m.optics, m.detector, m.values, m.space, hooks, Task.local())  # type: ignore[arg-type]
     assert hooks.ran == [(1, True, False), (2, False, True)]
+
+
+def test_each_channel_says_what_it_sees_through_its_own_swaps(m: Microscope) -> None:
+    """Whatever the selector shows now, a channel's field and depth of field are of the objective
+    its own swaps put on the way: arm a's NA 0.25 is deeper, and its 10x sees more, than arm b's."""
+    assert m.values is not None
+    m.values.set({**ARM_B, **MONO})
+    found = {(c.source, c.detector): c for c in m.optics_state.channels}
+    gfp, section = found["laser_488", "cam_color"], found["white_led", "cam_color"]
+    assert gfp.depth_of_field_um > 2 * section.depth_of_field_um > 0
+    assert gfp.field_width_um == pytest.approx(2 * section.field_width_um, rel=0.01)

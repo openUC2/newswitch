@@ -2458,6 +2458,22 @@
                     "children": null,
                     "widget": null,
                     "provides": null
+                  },
+                  {
+                    "key": "depth_of_field_um",
+                    "label": null,
+                    "kind": "FLOAT",
+                    "description": null,
+                    "identifier": null,
+                    "nullable": false,
+                    "effects": [],
+                    "choices": null,
+                    "referenceUnit": null,
+                    "proposedUnits": null,
+                    "dimension": null,
+                    "children": null,
+                    "widget": null,
+                    "provides": null
                   }
                 ],
                 "widget": null,

@@ -142,6 +142,7 @@ export const OpticalChannelSchema = z
     ),
     field_width_um: z.number(),
     field_height_um: z.number(),
+    depth_of_field_um: z.number(),
   })
   .brand('@newswitch/optical_channel')
   .describe(

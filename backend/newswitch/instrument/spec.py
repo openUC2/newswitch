@@ -1127,8 +1127,8 @@ class Instrument:
         ]
 
     def samples_of(self, detector: str) -> list[str]:
-        """Every sample light can reach `detector` from, whatever the switches say; a thermometer's,
-        the one it sits beside."""
+        """Every sample light gets to `detector` from, some way the switches can be set; a
+        thermometer's, the one it sits beside."""
         element = self.cubes[detector].element if detector in self.cubes else None
         if isinstance(element, Thermometer):
             stage = element.on_stage.stage
@@ -1136,6 +1136,15 @@ class Instrument:
                 return [stage]
             (only,) = self.samples()
             return [only]
+        states = list(self.switch_states(detector))
+        return [
+            sample
+            for sample in self._routed(detector)
+            if any(self.open_routes(self.detection, sample, detector, s) for s in states)
+        ]
+
+    def _routed(self, detector: str) -> list[str]:
+        """Every sample a detection route goes from to `detector`, open or not."""
         return [
             sample for sample in self.samples() if self.routes(self.detection, sample, detector)
         ]
@@ -1148,9 +1157,9 @@ class Instrument:
         Raises:
             ValueError: Light gets to it from several samples at once.
         """
-        candidates = self.samples_of(detector)
         if isinstance(self.cubes[detector].element, Thermometer):
-            return candidates[0]
+            return self.samples_of(detector)[0]
+        candidates = self._routed(detector)
         seen = [
             sample
             for sample in candidates
@@ -1188,7 +1197,7 @@ class Instrument:
         comes from, or whether any does."""
         cubes = {
             edge.source
-            for sample in self.samples_of(detector)
+            for sample in self._routed(detector)
             for route in self.routes(self.detection, sample, detector)
             for edge in route
         }

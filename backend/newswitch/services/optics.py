@@ -338,6 +338,9 @@ class OpticsManager:
                         ],
                         field_width_um=c.field_um[0],
                         field_height_um=c.field_um[1],
+                        depth_of_field_um=tracing.depth_of_field_um(
+                            self.instrument, c.detector, {**values, **c.swaps}
+                        ),
                     )
                     for c in self.table.channels(values)
                 ],

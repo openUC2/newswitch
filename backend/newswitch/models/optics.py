@@ -87,3 +87,5 @@ class OpticalChannel:
     field_width_um: float = 0.0
     """What the detector sees of the sample, its swaps set."""
     field_height_um: float = 0.0
+    depth_of_field_um: float = 0.0
+    """How deep what it sees sharply is, through the objective its swaps put on the way."""
