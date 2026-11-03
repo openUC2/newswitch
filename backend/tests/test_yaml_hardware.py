@@ -717,3 +717,15 @@ async def test_serial_home_passes_endstop_polarity() -> None:
         sync=SimpleNamespace(home=SimpleNamespace(home=lambda: None)),
     )
     await asyncio.wait_for(bus.ahome_axis("X"), 1)
+
+
+def test_serial_stable_symlink_resolves_for_uc2_port_lookup(tmp_path: Path) -> None:
+    """The upstream client compares enumerated device paths, not persistent symlinks."""
+    target = tmp_path / "ttyUSB0"
+    target.touch()
+    stable = tmp_path / "stable-usb"
+    stable.symlink_to(target)
+    doc = document("serial")
+    doc["devices"]["my-standalone-board"]["connection"]["transport"]["port"] = str(stable)
+    bus = runtime(doc)
+    assert bus.axes["X"].bus.config.serialport == str(target)

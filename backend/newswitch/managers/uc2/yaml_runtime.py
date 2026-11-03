@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import glob
+import os
 import logging
 import math
 from dataclasses import dataclass, replace
@@ -84,7 +85,7 @@ class LightRoute:
 def _serial_port(transport: SerialTransport) -> str:
     """Do not silently select a different board when a selector is ambiguous."""
     if transport.port:
-        return transport.port
+        return os.path.realpath(transport.port)
     if transport.port_pattern:
         matches = sorted(glob.glob(transport.port_pattern))
     else:
@@ -101,7 +102,7 @@ def _serial_port(transport: SerialTransport) -> str:
         raise ValueError(
             f"Serial selector must match exactly one port, found {matches}; use an explicit port"
         )
-    return matches[0]
+    return os.path.realpath(matches[0])
 
 
 class YamlUC2Bus:
