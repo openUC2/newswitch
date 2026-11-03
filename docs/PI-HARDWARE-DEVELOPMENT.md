@@ -46,3 +46,15 @@ Rollback, ensuring only one application owns the serial controller:
 systemctl --user stop newswitch-backend newswitch-frontend
 docker start imswitch-server-1
 ```
+
+## Network and validation on 2026-11-03
+
+The Pi firewall permits TCP 5473 and 8069 from 192.168.0.0/24 only, using
+runtime rich rules in zone nm-shared. These rules are not permanent and need
+reapplying after a firewall reload or reboot. The services are also not enabled
+at boot. This is an explicitly started hardware test deployment.
+
+Verified: frontend HTTP 200 from the Mac, backend health, authenticated state
+queries, UC2_Feather V2.0 connected over serial, and the complete API/WebSocket
+LED-off action (channel 1). No axis movement, homing, or LED-on test was run.
+The generated persistent YAML is runtime data and excluded from Git.
