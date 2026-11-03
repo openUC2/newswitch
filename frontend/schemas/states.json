@@ -3360,6 +3360,22 @@
                     "provides": null
                   },
                   {
+                    "key": "mounted_at",
+                    "label": null,
+                    "kind": "STRING",
+                    "description": null,
+                    "identifier": null,
+                    "nullable": false,
+                    "effects": [],
+                    "choices": null,
+                    "referenceUnit": null,
+                    "proposedUnits": null,
+                    "dimension": null,
+                    "children": null,
+                    "widget": null,
+                    "provides": null
+                  },
+                  {
                     "key": "holder",
                     "label": null,
                     "kind": "STRING",

@@ -74,6 +74,11 @@ export const acquisition = {
     sample: "Probe",
     sampleHint:
       "Was der Plan aufnimmt: nur ihre Kanäle, Orte und Wells folgen.",
+    ownTiming: "Eigener Takt",
+    from: "Ab",
+    off: "Aus",
+    withImages: "Mit Bildern",
+    continuously: "Durchgehend",
     swapsHint:
       "Was dieser Kanal einstellt: ein Klappspiegel, ein Filter. Bei der Aufnahme werden sie gesetzt.",
     fineTuneHint:

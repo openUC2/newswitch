@@ -108,6 +108,23 @@ class DetectorManager(Manager, Protocol):
         """
         ...
 
+    def start_stream(self, name: str) -> None:
+        """Start a probe that samples time recording without pause, in blocks.
+
+        Raises:
+            ValueError: It samples no time.
+        """
+        ...
+
+    def read_stream(self, name: str) -> list[np.ndarray]:
+        """The whole blocks it recorded since it started, or since the last read: each as
+        `capture_channels` would give it, ``(s, ...)``, one after the other with nothing between."""
+        ...
+
+    def stop_stream(self, name: str) -> None:
+        """Stop it recording: what it has not read is lost."""
+        ...
+
     def capture_image(self, name: str) -> DetectorFrame:
         """Capture a single image from a specific detector.
 

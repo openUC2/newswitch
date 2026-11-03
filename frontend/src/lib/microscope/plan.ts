@@ -24,7 +24,13 @@ export type ChannelChoice = {
   swaps: Record<string, number>;
   /** What it is called in the plan: its source, by default. */
   name?: string;
+  /** When it is taken, on the acquisition's clock, if not as the plan is: every so many seconds,
+   * from so many, so many times. */
+  timing?: Timing;
 };
+
+/** When a channel is taken: `times` times, `every_s` apart, the first `start_s` after the start. */
+export type Timing = { every_s: number; start_s: number; times: number };
 
 /** Swaps as one text, whatever order they came in: two channels under the same are exposed at once. */
 export const swapsKey = (swaps: Record<string, number>): string =>
@@ -79,8 +85,10 @@ export type Time =
 export type Choices = {
   name: string;
   channels: ChannelChoice[];
-  /** Detectors that measure at a point (a thermometer), read along with the first channel. */
+  /** Probes (a thermometer), read along with the first channel. */
   alsoRecord: string[];
+  /** Probes that sample time (an electrode array), recording without pause the whole time. */
+  streams?: string[];
   where: Where;
   depth: Depth;
   time: Time;
@@ -194,9 +202,9 @@ const channelsOf = (
 ): AcquisitionChannel[] => {
   const lit = new Map<string, AcquisitionChannel>();
   for (const choice of choices.channels) {
-    const key = `${choice.source}@${choice.power}@${swapsKey(choice.swaps)}`;
+    const key = `${choice.source}@${choice.power}@${swapsKey(choice.swaps)}@${JSON.stringify(choice.timing ?? null)}`;
     const power = context.powerVariables[choice.source];
-    const channel = lit.get(key) ?? {
+    const channel: AcquisitionChannel = lit.get(key) ?? {
       name: choice.name ?? choice.source,
       detectors: [],
       set_to: {
@@ -204,6 +212,10 @@ const channelsOf = (
         ...choice.swaps,
         ...(power ? { [power]: choice.power } : {}),
       },
+      start_s: choice.timing?.start_s ?? 0,
+      every_s: choice.timing?.every_s ?? null,
+      times: choice.timing?.times ?? null,
+      stream: false,
     };
     if (!channel.detectors.includes(choice.detector))
       channel.detectors.push(choice.detector);
@@ -219,11 +231,23 @@ const channelsOf = (
         name: "readings",
         detectors: [],
         set_to: { ...context.swaps },
+        start_s: 0,
+        stream: false,
       });
     }
     channels[0].detectors.push(...choices.alsoRecord);
   }
   if (channels.length === 0) throw new PlanProblem("Pick something to image");
+  // Each stream a channel of its own: it records from the start to the end, at its own rate.
+  for (const probe of choices.streams ?? []) {
+    channels.push({
+      name: probe,
+      detectors: [probe],
+      set_to: { ...context.swaps },
+      start_s: 0,
+      stream: true,
+    });
+  }
   return channels;
 };
 
@@ -301,11 +325,30 @@ export const estimate = (
   const planes = Math.max(1, plan.stack.offsets.length);
   const positions = plan.positions.length;
   const times = plan.times;
-  const visits = planes * positions * times;
+  const timesOf = (channel: AcquisitionChannel) => channel.times ?? times;
+  const lastOf = (channel: AcquisitionChannel) =>
+    (channel.start_s ?? 0) +
+    (timesOf(channel) - 1) * (channel.every_s ?? plan.every_s);
+  const taken = plan.channels.filter((channel) => !channel.stream);
+  // As long as the last channel is due: what streams records that long.
+  const lapseS = Math.max(0, ...taken.map(lastOf));
   let exposures = 0;
   let bytes = 0;
   let exposingS = 0;
-  for (const channel of plan.channels) {
+  for (const channel of plan.channels.filter((c) => c.stream)) {
+    for (const name of channel.detectors) {
+      const detector = byName.get(name);
+      const samples = detector?.axes.find((axis) => axis.name === "s");
+      if (!detector || !samples?.step) continue;
+      const blockS = ((samples.delivered_size ?? 1) * samples.step) / 1000;
+      bytes +=
+        Math.ceil(lapseS / blockS + 1) *
+        valuesPerExposure(detector) *
+        (BYTES[detector.data_type] ?? 2);
+    }
+  }
+  for (const channel of taken) {
+    const visits = planes * positions * timesOf(channel);
     for (const name of channel.detectors) {
       const detector = byName.get(name);
       if (!detector) continue;
@@ -321,7 +364,6 @@ export const estimate = (
         )) /
       1000;
   }
-  const lapseS = (times - 1) * plan.every_s;
   return {
     exposures,
     bytes,

@@ -72,6 +72,11 @@ export const acquisition = {
     sample: "Sample",
     sampleHint:
       "What the plan images: only its channels, its places and its wells follow.",
+    ownTiming: "Its own timing",
+    from: "From",
+    off: "Off",
+    withImages: "With images",
+    continuously: "Continuously",
     swapsHint:
       "What this channel puts in place: a flip mirror, a filter. Acquired, it sets them.",
     fineTuneHint:

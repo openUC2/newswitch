@@ -377,6 +377,24 @@ times: 10
 every_s: 60.0
 ```
 
+**When each is taken**: there is one clock, started with the acquisition. A channel is taken as the
+plan says (`times`, `every_s`), or on its own: `every_s`, `start_s` and `times` of the channel; one
+due at the same instant as another is taken in the same visit to each position. A probe that
+samples time can `stream`: it records without pause from the start to the end, in its blocks, into
+one record of its own (no position: what it reads stays under the sample wherever the stage goes).
+A detector has one record, so one time axis: its channels are all taken at the same times.
+
+```yaml
+channels:
+  - {name: gfp, detectors: [camera], set_to: {laser_488.power: 20.0}, every_s: 2.0, start_s: 4.0, times: 3}
+  - {name: voltage, detectors: [mea], stream: true}
+```
+
+Every record's `t` is placed on its sample's clock, in seconds since that mounting (the sample's
+`mounted_at`): mikro's sample space is `(t, z, y, x)` with that as its epoch, so a camera's image at
+6 s and the array's sample at 6 s are one instant, and so are records of one mounting from other
+acquisitions. A probe's own samples, `s`, are an INDEX whose time the registration states.
+
 A channel sets what it says, and a source it does not name is off. It is stored in mikro (`just mikro`,
 then `just dev-mikro`), not in the local cache, and is refused before anything moves when a server has
 no mikro. Each detector at each position becomes an `ArrayDataset` of its own, along its own axes,

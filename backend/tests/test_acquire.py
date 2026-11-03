@@ -113,6 +113,8 @@ def sample_of(acquired: AcquiredRecord, **at: float) -> dict[str, float]:
     found: dict[str, float] = {}
     for part in acquired.registration:
         assert part.kind == "AFFINE" and part.affine is not None
+        if not all(axis in at for axis in part.input_axes):
+            continue  # what is not asked about: its time, where it is not given
         point = np.array([*(at[axis] for axis in part.input_axes), 1.0])
         for axis, row in zip(part.output_axes, part.affine):
             found[axis] = float(np.dot(row, point))
@@ -253,7 +255,9 @@ def test_placement_has_the_pixel_size_and_the_middle_at_the_stage(tmp_path: Path
         ),
     )
     (acquired,) = store.published
-    (part,) = acquired.registration
+    part, when = acquired.registration
+    # its time onto its sample's clock: once, so one time, at when it was taken
+    assert (when.input_axes, when.output_axes) == (["t"], ["t"])
     assert (part.kind, part.input_axes, part.output_axes) == (
         "AFFINE",
         ["z", "y", "x"],

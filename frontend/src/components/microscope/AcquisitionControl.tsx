@@ -26,7 +26,16 @@ import { useTranslation } from "react-i18next";
 import { DetectorPicker } from "./DetectorPicker";
 
 type Values = Record<string, number>;
-type Channel = { name: string; detectors: string[]; set_to: Values };
+/** A channel of the plan; when it is taken, as the planner set it, if not as the plan is. */
+type Channel = {
+  name: string;
+  detectors: string[];
+  set_to: Values;
+  start_s?: number;
+  every_s?: number | null;
+  times?: number | null;
+  stream?: boolean;
+};
 type Place = { name: string; set_to: Values };
 
 const Section = ({
@@ -281,7 +290,11 @@ export function DetailedPlan({ initial }: { initial?: DetailedStart }) {
       {
         plan: {
           name,
-          channels,
+          channels: channels.map((channel) => ({
+            start_s: 0,
+            stream: false,
+            ...channel,
+          })),
           positions: places,
           stack: { offsets, variable: focus },
           times,

@@ -57,18 +57,20 @@ class AcquiredRecord:
     channels: tuple[AcquiredChannel, ...]
     planes: tuple[AcquiredPlane, ...]
     registration: tuple[DimensionPart, ...]
-    """Its axes onto the sample's ``z, y, x`` in micrometres, part by part (a BY_DIMENSION): an
-    axis no part names is placed nowhere."""
+    """Its axes onto the sample's ``t, z, y, x``, in seconds and micrometres, part by part (a
+    BY_DIMENSION): an axis no part names is placed nowhere."""
     calibrated: bool
     quantity: str = "intensity"
     """What its values are: intensity, temperature."""
     unit: str = ""
     """What its values are in: empty for counts."""
-    """Whether its pixel scale was measured, rather than predicted from the optics."""
     sample: str = ""
     """The sample it was taken of, by the cube holding it."""
     mount_id: str = "0"
     """Which mounting of its sample it was taken on: what its sample micrometres are of."""
+    mounted_at: str = ""
+    """When that mounting was, as ISO 8601: where its sample's clock starts, on which its ``t``
+    is."""
     mount: tuple[tuple[float, float, float, float], ...] = (
         (1.0, 0.0, 0.0, 0.0),
         (0.0, 1.0, 0.0, 0.0),

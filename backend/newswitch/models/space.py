@@ -124,6 +124,8 @@ class SampleSpace:
     """Stage micrometres to sample micrometres: where what is mounted sits."""
     mount_id: str = "0"
     """Which mounting this is: a new one is a new sample, whose images are its own."""
+    mounted_at: str = ""
+    """When it was mounted, as ISO 8601: the start of its clock, on which every record of it is."""
     holder: Optional[str] = None
     """What is mounted, by the name the description gives it; None: the sample's frame is its stage's."""
     holders: list[str] = field(default_factory=list)

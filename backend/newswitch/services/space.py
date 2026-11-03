@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from datetime import datetime, timezone
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
@@ -90,8 +91,9 @@ def _middle_offset(detector: Detector, name: str, values: Mapping[str, Any]) -> 
     return (axis.window_start + (binning - 1) / 2 - (size - 1) / 2) / binning
 
 
-#: What mikro calls an axis that measures each domain.
-AXIS_TYPES = {"space": "SPACE", "spectrum": "CHANNEL", "microtime": "MICROTIME", "time": "TIME"}
+#: What mikro calls an axis that measures each domain. A detector's own samples in time are an
+#: INDEX: a dataset has one TIME axis, its ``t``, and its registration says when each sample is.
+AXIS_TYPES = {"space": "SPACE", "spectrum": "CHANNEL", "microtime": "MICROTIME", "time": "INDEX"}
 
 
 def _system_of(detector: Detector) -> CoordinateSystem:
@@ -101,6 +103,11 @@ def _system_of(detector: Detector) -> CoordinateSystem:
         detector_system(detector.name),
         [Axis(axis.name, AXIS_TYPES[axis.domain]) for axis in detector.axes],
     )
+
+
+def _now_iso() -> str:
+    """Now, as ISO 8601 in UTC."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _new_mount_id() -> str:
@@ -159,7 +166,10 @@ class SpaceManager:
             # Every start is a mounting of its own: what is on a stage now need not be what was
             # before, and the mount lives in memory only.
             samples[sample] = SampleSpace(
-                sample=sample, mount_id=_new_mount_id(), holders=list(holder.holders)
+                sample=sample,
+                mount_id=_new_mount_id(),
+                mounted_at=_now_iso(),
+                holders=list(holder.holders),
             )
             if holder.mounted is not None:
                 self._mount(samples[sample], holder.mounted)
@@ -531,6 +541,7 @@ class SpaceManager:
             )
         space = self.state.samples[sample]
         space.mount_id = _new_mount_id()
+        space.mounted_at = _now_iso()
         self._mount(space, holder)
         self.forget_images(sample)
         self.refresh()

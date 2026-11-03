@@ -107,6 +107,8 @@ class SimulatedDetectorManager:
         self._readouts: dict[str, Readout] = {}
         self._clock0 = time.monotonic()
         """When its clock started: a probe that samples time reads the block of now on it."""
+        self._streams: dict[str, tuple[float, int]] = {}
+        """By probe streaming: when on the clock it started, and how many blocks were read."""
         self._lock = threading.RLock()
         self._closed = False
         for detector in detectors:
@@ -339,6 +341,37 @@ class SimulatedDetectorManager:
         block = self.simulator.potentials(detector.name, t0_s, self.values())
         detector.reading = round(float((block.max(axis=0) - block.min(axis=0)).max()), 3)
         return block
+
+    def _block_s(self, detector: Detector) -> float:
+        """How long a block of a probe that samples time is, in seconds."""
+        if not (detector.is_probe() and detector.has_axis("s")):
+            raise ValueError(f"Detector {detector.name} samples no time: it has nothing to stream")
+        samples = detector.axis("s")
+        return samples.size * (samples.step or 1.0) / 1000.0  # type: ignore[operator]
+
+    def start_stream(self, name: str) -> None:
+        """Start `name` recording without pause from now, on its clock, in blocks."""
+        detector = self.state.get(name)
+        self._block_s(detector)
+        with self._lock:
+            self._streams[name] = (time.monotonic() - self._clock0, 0)
+
+    def read_stream(self, name: str) -> list[np.ndarray]:
+        """The whole blocks recorded since the start, or since the last read, one after the other."""
+        detector = self.state.get(name)
+        block_s = self._block_s(detector)
+        with self._lock:
+            if name not in self._streams:
+                raise ValueError(f"Detector {name} is not streaming")
+            started, read = self._streams[name]
+            whole = int((time.monotonic() - self._clock0 - started) / block_s)
+            self._streams[name] = (started, whole)
+        return [self._block(detector, started + k * block_s) for k in range(read, whole)]
+
+    def stop_stream(self, name: str) -> None:
+        """Stop `name` recording; what was not read is lost."""
+        with self._lock:
+            self._streams.pop(name, None)
 
     def activity(self, detector: Detector) -> np.ndarray:
         """What each place of a probe on a grid saw in the last block, as an image the live view

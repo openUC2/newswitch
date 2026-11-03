@@ -25,7 +25,8 @@ from arkitekt_fastapi.testing import AsyncAgentTestClient
 
 pytest.importorskip("mikro")
 
-from mikro import Mikro, space_3d  # noqa: E402
+from mikro import Mikro, timelapse_3d  # noqa: E402
+from datetime import datetime  # noqa: E402
 
 from main_fastapi import create_app  # noqa: E402
 from newswitch.infra.accounts.auth import AllowAllAuthenticator  # noqa: E402
@@ -43,6 +44,19 @@ from tests.test_acquire import assert_same_beads, bead_pixels
 from tests.conftest import acquisition, collect_until_completed, run_settings  # noqa: E402
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
+
+
+def sample_space(mikro: Mikro, instrument: str, m: Microscope, sample: str) -> Any:  # noqa: ANN401
+    """The space a mounting's records are placed in: its time since it was mounted, and space."""
+    mounted = m.space_state.samples[sample]
+    return timelapse_3d(
+        mikro,
+        "sample",
+        epoch=datetime.fromisoformat(mounted.mounted_at),
+        reference=f"sample-{instrument}-{sample}-{mounted.mount_id}-t",
+    )
+
+
 LASER = {"laser_488.power": 40.0}
 LED = {"led_625.power": 2.5e-5}
 Quantity = pint.UnitRegistry().Quantity
@@ -196,11 +210,7 @@ def test_positions_share_a_stage_space(mikro: Mikro, tmp_path: Path) -> None:
         [AcquisitionChannel(detectors=["camera_green"], name="gfp", set_to=LASER)],
         places=((0.0, 0.0), (60.0, 40.0)),
     )
-    world = space_3d(
-        mikro,
-        "sample",
-        reference=f"sample-dual-camera-stage-{BUILT[-1].space_state.samples['stage'].mount_id}",
-    )
+    world = sample_space(mikro, "dual-camera", BUILT[-1], "stage")
 
     def beads_in_stage(made: AcquiredDataset) -> np.ndarray:
         dataset = mikro.get_array_dataset(made.id)
@@ -247,11 +257,7 @@ def test_a_thermometer_is_a_scalar_dataset_at_its_point(mikro: Mikro, tmp_path: 
     assert tuple(dataset.shape) == (1, 1, 2, 1, 1, 1)
     readings = np.asarray(dataset.data)
     assert np.all(np.abs(readings - 22.0) < 0.5)
-    world = space_3d(
-        mikro,
-        "sample",
-        reference=f"sample-he-microscope-stage-{BUILT[-1].space_state.samples['stage'].mount_id}",
-    )
+    world = sample_space(mikro, "he-microscope", BUILT[-1], "stage")
     (point,) = np.asarray(
         dataset.intrinsic_system.transform_points_to(
             world, [[0, 0, 1, 0, 0, 0]], axes=("z", "y", "x")
@@ -280,15 +286,10 @@ def test_two_samples_go_to_two_sample_spaces(mikro: Mikro, tmp_path: Path) -> No
         m.hooks,
         Task.local(),
     )
-    samples = m.space_state.samples
     for made, sample in ((cam_a, "stage_a"), (cam_b, "stage_b")):
         assert made.detector == ("cam_a" if sample == "stage_a" else "cam_b")
         dataset = mikro.get_array_dataset(made.id)
-        world = space_3d(
-            mikro,
-            "sample",
-            reference=f"sample-dual-sample-{sample}-{samples[sample].mount_id}",
-        )
+        world = sample_space(mikro, "dual-sample", m, sample)
         middle = np.asarray(
             dataset.intrinsic_system.transform_points_to(
                 world, [[0, 0, 0, 255.5, 255.5]], axes=("z", "y", "x")
@@ -327,21 +328,65 @@ def test_one_camera_through_a_switch_goes_to_both_sample_spaces(
         m.hooks,
         Task.local(),
     )
-    samples = m.space_state.samples
     for made, sample in ((a, "stage_a"), (b, "stage_b")):
         assert made.detector == "cam_mono"
         dataset = mikro.get_array_dataset(made.id)
-        world = space_3d(
-            mikro,
-            "sample",
-            reference=f"sample-switch-microscope-{sample}-{samples[sample].mount_id}",
-        )
+        world = sample_space(mikro, "switch-microscope", m, sample)
         middle = np.asarray(
             dataset.intrinsic_system.transform_points_to(
                 world, [[0, 0, 0, 255.5, 255.5]], axes=("z", "y", "x")
             )
         )[0]
         assert middle[1:] == pytest.approx([12_500.0, 37_500.0], abs=1e-3)
+
+
+def test_a_camera_and_a_stream_land_on_one_timeline(mikro: Mikro, tmp_path: Path) -> None:
+    """A camera every 0.3 s from 0.2 s, an electrode array streaming: both read back through
+    mikro's own transforms onto the sample's clock, where they were planned, and onto its space."""
+    described = spec.load(INSTRUMENTS / "mea-microscope")
+    m = build_microscope(run_settings(tmp_path), described)
+    gfp = AcquisitionChannel(
+        name="gfp",
+        detectors=["camera"],
+        set_to=LASER,
+        every_s=0.3,
+        start_s=0.2,
+        times=3,
+    )
+    voltage = AcquisitionChannel(name="voltage", detectors=["mea"], stream=True)
+    camera, mea = acquire(
+        AcquisitionPlan(channels=[gfp, voltage], name=f"test {uuid.uuid4().hex[:8]}"),
+        MikroDatasetStore(mikro, described, m),
+        m.optics,
+        m.detector,
+        m.values,
+        m.space,
+        m.hooks,
+        Task.local(),
+    )
+    world = sample_space(mikro, "mea-microscope", m, "stage")
+    images = mikro.get_array_dataset(camera.id)
+    times = np.asarray(
+        images.intrinsic_system.transform_points_to(
+            world, [[k, 0, 0, 255.5, 255.5] for k in range(3)], axes=("t",)
+        )
+    )[:, 0]
+    assert np.diff(times) == pytest.approx([0.3, 0.3], abs=1e-6)
+    voltages = mikro.get_array_dataset(mea.id)
+    assert tuple(voltages.axis_names) == ("t", "c", "s", "z", "y", "x")
+    (first, next_block, next_sample, d5) = np.asarray(
+        voltages.intrinsic_system.transform_points_to(
+            world,
+            [[0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], [0, 0, 0, 0, 3, 4]],
+            axes=("t", "y", "x"),
+        )
+    )
+    assert next_block[0] - first[0] == pytest.approx(0.05, abs=1e-9)
+    assert next_sample[0] - first[0] == pytest.approx(0.00005, abs=1e-9)
+    # the stream started before the first image, on the same clock
+    assert first[0] <= times[0]
+    # electrode D5, where the chip has it: 24.6 mm right, 24.4 mm down from its corner
+    assert d5[1:] == pytest.approx([24_400.0, 24_600.0], abs=1e-3)
 
 
 @pytest.mark.asyncio

@@ -12,10 +12,11 @@ registration edge   a BY_DIMENSION onto the sample's space, the record's parts a
 Importing this needs the extra ``mikro``.
 """
 
+from datetime import datetime
 from typing import Any, Mapping
 
 import xarray as xr
-from mikro import Mikro, dataset_arrays, space_3d
+from mikro import Mikro, dataset_arrays, space_3d, timelapse_3d
 from mikro.api import schema
 from mikro.api.schema import (
     AcquisitionWindowInput,
@@ -46,7 +47,7 @@ SPATIAL = ("z", "y", "x")
 
 #: What an axis of each type says it is, beside its name.
 _DESCRIPTIONS = {
-    "TIME": "Each time the acquisition went through its positions",
+    "TIME": "Each time it was taken, on its sample's clock: in seconds since it was mounted",
     "CHANNEL": "A channel of the plan, in a color of the detector",
     "INDEX": "The plane of the stack it was read at; what measures at a point is not placed by it",
 }
@@ -63,6 +64,8 @@ def dataset_axes(
         description = _DESCRIPTIONS.get(axis.type)
         if axis.name == "m" and "m" in steps:
             description = f"Arrival time after the pulse, in bins of {steps['m'].step:g} ps"
+        if axis.name == "s" and "s" in steps:
+            description = f"A sample of a block in time, {steps['s'].step:g} ms apart"
         declared.append(
             schema.AxisInput(
                 name=axis.name, type=schema.AxisType(axis.type), description=description
@@ -244,10 +247,12 @@ class MikroDatasetStore:
                 ),
             ],
         )
-        sample = space_3d(
+        # One space a mounting: in seconds since it was mounted, and in micrometres of what is.
+        sample = timelapse_3d(
             self.client,
             "sample",
-            reference=f"sample-{self.instrument.name}-{acquired.sample}-{acquired.mount_id}",
+            epoch=datetime.fromisoformat(acquired.mounted_at) if acquired.mounted_at else None,
+            reference=f"sample-{self.instrument.name}-{acquired.sample}-{acquired.mount_id}-t",
         )
         dataset.intrinsic_system.transform_to(
             sample,

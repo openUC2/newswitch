@@ -73,11 +73,11 @@ def test_its_registration_goes_to_mikro_part_for_part(
 ) -> None:
     """A camera's pixels and planes onto the sample; a thermometer's one place, its point."""
     _, camera, thermometer = records
-    (pixels,) = mikro_parts(camera.registration)
+    pixels, _ = mikro_parts(camera.registration)
     assert pixels.kind == schema.PartKind.AFFINE
     assert (pixels.input_axes, pixels.output_axes) == (("z", "y", "x"), ("z", "y", "x"))
     assert np.array(pixels.affine) == pytest.approx(np.array(camera.registration[0].affine))
-    (point,) = mikro_parts(thermometer.registration)
+    point, _ = mikro_parts(thermometer.registration)
     assert (point.input_axes, point.output_axes) == (("z", "y", "x"), ("z", "y", "x"))
     assert np.array(point.affine) == pytest.approx(
         np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 30_000.0]])

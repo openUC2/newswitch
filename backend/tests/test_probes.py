@@ -179,7 +179,7 @@ def test_an_acquisition_keeps_a_record_of_it_beside_the_camera(tmp_path: Path) -
     assert np.allclose(thermometer.data, 37.0, atol=0.3)
     assert [c.label for c in thermometer.channels] == ["air thermometer (degC)"]
     assert not thermometer.channels[0].light and thermometer.channels[0].sources == ()
-    (part,) = thermometer.registration
+    part, _ = thermometer.registration
     assert (part.kind, part.input_axes, part.output_axes) == (
         "AFFINE",
         ["z", "y", "x"],

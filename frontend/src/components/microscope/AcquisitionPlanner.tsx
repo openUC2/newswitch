@@ -514,6 +514,61 @@ const ChannelCard = ({
               onChange={(value) => onChange({ ...choice, exposure: value })}
             />
           )}
+          <label className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground">
+            <Switch
+              checked={choice.timing !== undefined}
+              onCheckedChange={(on) =>
+                onChange({
+                  ...choice,
+                  timing: on ? { every_s: 2, start_s: 0, times: 5 } : undefined,
+                })
+              }
+            />
+            {t("acquisition.planner.ownTiming")}
+          </label>
+          {choice.timing && (
+            <div className="grid grid-cols-3 gap-2">
+              <Amount
+                label={t("acquisition.planner.every")}
+                unit="s"
+                value={choice.timing.every_s}
+                step={0.1}
+                onChange={(every_s) =>
+                  onChange({
+                    ...choice,
+                    timing: { ...choice.timing!, every_s },
+                  })
+                }
+              />
+              <Amount
+                label={t("acquisition.planner.from")}
+                unit="s"
+                value={choice.timing.start_s}
+                step={0.1}
+                onChange={(start_s) =>
+                  onChange({
+                    ...choice,
+                    timing: { ...choice.timing!, start_s },
+                  })
+                }
+              />
+              <Amount
+                label={t("acquisition.planner.times")}
+                value={choice.timing.times}
+                min={1}
+                step={1}
+                onChange={(times) =>
+                  onChange({
+                    ...choice,
+                    timing: {
+                      ...choice.timing!,
+                      times: Math.max(1, Math.round(times)),
+                    },
+                  })
+                }
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -533,6 +588,7 @@ export function AcquisitionControl() {
   const [pickedSample, setPickedSample] = useState<string | null>(null);
   const [picked, setPicked] = useState<ChannelChoice[] | null>(null);
   const [alsoRecord, setAlsoRecord] = useState<string[]>([]);
+  const [streams, setStreams] = useState<string[]>([]);
   const [where, setWhere] = useState<Where>({ kind: "here" });
   // The sample the plan is of, where there are several: the one picked, else the one the view is
   // of. Everything after is of it: its channels, its places, its wells.
@@ -558,6 +614,7 @@ export function AcquisitionControl() {
     setPickedSample(next);
     setPicked(null);
     setAlsoRecord([]);
+    setStreams([]);
     setWhere({ kind: "here" });
   };
   const [depth, setDepth] = useState<Depth>({ kind: "plane" });
@@ -635,6 +692,7 @@ export function AcquisitionControl() {
     name,
     channels,
     alsoRecord,
+    streams,
     where,
     depth,
     time,
@@ -805,25 +863,48 @@ export function AcquisitionControl() {
               {t("acquisition.planner.alsoRecord")}
             </span>
             {pointDetectors.map((d) => {
-              const on = alsoRecord.includes(d.name);
+              // Off, read with the images, or (one that samples time) without pause throughout.
+              const how = streams.includes(d.name)
+                ? "stream"
+                : alsoRecord.includes(d.name)
+                  ? "with"
+                  : "off";
+              const samples = d.axes.some((axis) => axis.name === "s");
+              const set = (next: string) => {
+                setAlsoRecord([
+                  ...alsoRecord.filter((n) => n !== d.name),
+                  ...(next === "with" ? [d.name] : []),
+                ]);
+                setStreams([
+                  ...streams.filter((n) => n !== d.name),
+                  ...(next === "stream" ? [d.name] : []),
+                ]);
+              };
               return (
-                <Button
-                  key={d.name}
-                  type="button"
-                  size="sm"
-                  variant={on ? "default" : "outline"}
-                  className="h-7 px-2.5 text-xs"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setAlsoRecord(
-                      on
-                        ? alsoRecord.filter((n) => n !== d.name)
-                        : [...alsoRecord, d.name],
-                    )
-                  }
-                >
-                  {d.name} · {d.quantity}
-                </Button>
+                <span key={d.name} className="flex items-center gap-1.5">
+                  <span className="text-xs">
+                    {d.name} · {d.quantity}
+                  </span>
+                  <Segmented
+                    value={how}
+                    options={[
+                      { value: "off", label: t("acquisition.planner.off") },
+                      {
+                        value: "with",
+                        label: t("acquisition.planner.withImages"),
+                      },
+                      ...(samples
+                        ? [
+                            {
+                              value: "stream",
+                              label: t("acquisition.planner.continuously"),
+                            },
+                          ]
+                        : []),
+                    ]}
+                    onChange={set}
+                  />
+                </span>
               );
             })}
           </div>

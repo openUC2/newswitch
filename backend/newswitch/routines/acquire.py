@@ -20,15 +20,15 @@ import os
 import random
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
 from arkitekt import Task
 
 from newswitch import protocols
-from newswitch.instrument.space import AxisMap, to_parts, zyx_rows
+from newswitch.instrument.space import AxisMap, affine_part, to_parts, zyx_rows
 from newswitch.instrument.spec import Dark, Move
 from newswitch.models.acquisition import (
     AcquiredDataset,
@@ -38,7 +38,7 @@ from newswitch.models.acquisition import (
     PositionOrder,
 )
 from newswitch.models.devices import Detector
-from newswitch.models.space import Axis
+from newswitch.models.space import Axis, DimensionPart
 from newswitch.protocols.dataset_store import (
     AcquiredChannel,
     AcquiredPlane,
@@ -73,6 +73,53 @@ class _Lighting:
     exposures: tuple[_Exposure, ...]
 
 
+@dataclass(frozen=True)
+class _Cadence:
+    """When a channel is taken, on the acquisition's clock: `times` times, `every_s` apart, the
+    first `start_s` after it starts."""
+
+    start_s: float
+    every_s: float
+    times: int
+
+
+def _cadence_of(channel: AcquisitionChannel, plan: AcquisitionPlan) -> _Cadence:
+    """When `channel` is taken: as it says, else as the plan does.
+
+    Raises:
+        ValueError: Never, or before the start, or less than no time apart.
+    """
+    cadence = _Cadence(
+        start_s=channel.start_s,
+        every_s=plan.every_s if channel.every_s is None else channel.every_s,
+        times=plan.times if channel.times is None else channel.times,
+    )
+    if cadence.times < 1 or cadence.start_s < 0 or cadence.every_s < 0:
+        raise ValueError(
+            f"The channel {channel.name or channel.detectors[0]!r} is taken {cadence.times} times, "
+            f"every {cadence.every_s} s from {cadence.start_s} s: at least once, from 0 s on"
+        )
+    return cadence
+
+
+def _events(cadences: list[_Cadence]) -> list[tuple[float, dict[int, int]]]:
+    """When each channel is due, on the acquisition's clock: each a time and the channels due then,
+    with which of their times it is. Channels due at once are taken in one visit; one channel twice
+    at once (no time between) is two visits, one after the other."""
+    due = sorted(
+        (cadence.start_s + k * cadence.every_s, k, index)
+        for index, cadence in enumerate(cadences)
+        for k in range(cadence.times)
+    )
+    events: list[tuple[float, dict[int, int]]] = []
+    for at, k, index in due:
+        if events and abs(events[-1][0] - at) < 1e-9 and index not in events[-1][1]:
+            events[-1][1][index] = k
+        else:
+            events.append((at, {index: k}))
+    return events
+
+
 @dataclass
 class _Record:
     """What one detector acquires at one position, and what it has so far."""
@@ -88,6 +135,7 @@ class _Record:
     sample: str = ""  # the sample its detector sees
     sets: Mapping[str, float] = field(default_factory=dict)  # what its first channel sets
     placed: AxisMap | None = None  # its axes on the sample, once there
+    cadence: _Cadence | None = None  # when it is taken: as all its channels are
 
     @property
     def dims(self) -> tuple[str, ...]:
@@ -347,6 +395,7 @@ def _plan_position(
     space: SpaceManager,
     firsts: dict[str, _Look | None],
     looks: list[_Look],
+    cadences: list[_Cadence],
 ) -> _Merge:
     """Everything that can be refused about one position, and the records it will fill."""
     going = {**_going(position, firsts, space), **position.set_to}
@@ -374,8 +423,18 @@ def _plan_position(
             key = _record_key(look, split)
             record = records.setdefault(
                 key,
-                _Record(detector, sample=look.sample, sets=values.resolved(targets)),
+                _Record(
+                    detector,
+                    sample=look.sample,
+                    sets=values.resolved(targets),
+                    cadence=cadences[channel_index],
+                ),
             )
+            if record.cadence != cadences[channel_index]:
+                raise ValueError(
+                    f"{name} is taken at other times in one channel than in another: one record "
+                    "has one time axis, so give each its own detector, or the same times"
+                )
             images = detector.delivers_images()
             if images:
                 scale, measured = optics_manager.scale_under(name, under)
@@ -405,7 +464,7 @@ def _plan_position(
         detector = record.detector
         record.axes = _axes_of(detector)
         sizes = {
-            "t": plan.times,
+            "t": record.cadence.times if record.cadence is not None else plan.times,
             "c": len(record.channels),
             "z": len(offsets),
             **{a.name: a.delivered() for a in detector.axes if a.name not in ("c", "z", "y", "x")},
@@ -495,6 +554,128 @@ def _position_hooks(
     for look in looks:
         values.set(merge.lightings[look.channel].targets)
         hook_manager.execute_all(hooks)
+
+
+@dataclass
+class _Stream:
+    """A probe recording without pause through the acquisition, and the blocks it has read."""
+
+    channel: AcquisitionChannel
+    detector: Detector
+    sample: str
+    blocks: list[np.ndarray] = field(default_factory=list)
+    started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+def _streams_of(
+    channels: list[AcquisitionChannel],
+    detector_manager: protocols.DetectorManager,
+    space: SpaceManager,
+    values: Values,
+) -> list[_Stream]:
+    """What the streamed channels record: each detector of each.
+
+    Raises:
+        ValueError: One samples no time of its own, so has nothing to stream.
+        Dark: One reads a grid that what its sample is mounted on has not.
+    """
+    found = []
+    for channel in channels:
+        if not channel.detectors:
+            raise ValueError(f"The channel {channel.name!r} names no detector")
+        for name in channel.detectors:
+            detector = _find_detector(name, detector_manager)
+            if not (detector.is_probe() and detector.has_axis("s")):
+                raise ValueError(
+                    f"{name} samples no time of its own, so it has nothing to stream: take it when "
+                    "it is due instead (stream: false)"
+                )
+            if not space.sees(name, values.snapshot()):
+                raise Dark(f"{name} reads a grid that what its sample is mounted on has not")
+            found.append(_Stream(channel, detector, space.sample_of(name)))
+    return found
+
+
+def _since(mounted_at: str, then: datetime) -> float:
+    """How many seconds after a sample's mounting `then` is: where on its clock."""
+    return 0.0 if not mounted_at else (then - datetime.fromisoformat(mounted_at)).total_seconds()
+
+
+def _time_part(detector: Detector, step_s: float, offset_s: float) -> DimensionPart:
+    """A record's ``t`` onto its sample's clock, in seconds: `offset_s` and then `step_s` a time;
+    with its detector's own samples in time (``s``), each a sample further."""
+    if detector.has_axis("s"):
+        sample_s = (detector.axis("s").step or 0.0) / 1000.0
+        return affine_part(("t", "s"), ("t",), [[step_s, sample_s, offset_s]])
+    return affine_part(("t",), ("t",), [[step_s, offset_s]])
+
+
+def _stream_record(
+    plan: AcquisitionPlan, stream: _Stream, space: SpaceManager, store: DatasetStore
+) -> AcquiredRecord | None:
+    """What a stream recorded, as a record of its own: no position, since what it reads stays
+    under the sample wherever the stage goes; its blocks one after another along ``t``, each its
+    samples along ``s``. None when not one whole block was recorded."""
+    if not stream.blocks:
+        return None
+    detector = stream.detector
+    block_s = detector.axis("s").size * (detector.axis("s").step or 0.0) / 1000.0  # type: ignore[operator]
+    rows, columns = (
+        (detector.axis("y").delivered() or 1, detector.axis("x").delivered() or 1)
+        if detector.has_axis("x")
+        else (1, 1)
+    )
+    blocks = np.stack(stream.blocks)
+    data = blocks.reshape(len(stream.blocks), 1, blocks.shape[1], 1, rows, columns)
+    axes = (
+        Axis("t", "TIME"),
+        Axis("c", "CHANNEL"),
+        Axis("s", AXIS_TYPES["time"]),
+        *(Axis(name, "SPACE") for name in ("z", "y", "x")),
+    )
+    dims = tuple(axis.name for axis in axes)
+    placed = space.record_map(detector.name, dims, [0.0], False)
+    sample = space.state.samples[stream.sample]
+    state = store.state()
+    started = stream.started
+    return AcquiredRecord(
+        name=" ".join(part for part in (plan.name, detector.name) if part),
+        position=0,
+        detector=detector.name,
+        data=data.astype(detector.data_type),
+        axes=axes,
+        channels=(
+            AcquiredChannel(
+                label=_channel_label(stream.channel, detector, None),
+                detector=detector.name,
+                sources=(),
+                color=None,
+                light=False,
+            ),
+        ),
+        planes=tuple(
+            AcquiredPlane(
+                k,
+                0,
+                0,
+                started + timedelta(seconds=k * block_s),
+                started + timedelta(seconds=(k + 1) * block_s),
+                state,
+            )
+            for k in range(len(stream.blocks))
+        ),
+        registration=(
+            *to_parts(placed),
+            _time_part(detector, block_s, _since(sample.mounted_at, started)),
+        ),
+        calibrated=False,
+        quantity=detector.quantity,
+        unit=detector.unit,
+        sample=stream.sample,
+        mount_id=sample.mount_id,
+        mounted_at=sample.mounted_at,
+        mount=zyx_rows(space.mount(stream.sample)),
+    )
 
 
 def _check_memory(arrays: list[np.ndarray]) -> None:
@@ -628,6 +809,16 @@ def acquire(
         raise ValueError("An acquisition needs a channel and a position")
     if plan.times < 1:
         raise ValueError(f"An acquisition is done at least once, not {plan.times} times")
+    # What streams records alongside, the whole time; the rest is taken when it is due.
+    streamed = [channel for channel in plan.channels if channel.stream]
+    plan = replace(plan, channels=[channel for channel in plan.channels if not channel.stream])
+    if not plan.channels:
+        raise ValueError(
+            "A stream records while something is taken: add a channel that is not streamed"
+        )
+    streams = _streams_of(streamed, detector_manager, space, values)
+    cadences = [_cadence_of(channel, plan) for channel in plan.channels]
+    events = _events(cadences)
     offsets = _offsets_of(plan)
     named = list(dict.fromkeys(name for channel in plan.channels for name in channel.detectors))
     if not named:
@@ -678,6 +869,7 @@ def acquire(
             space,
             firsts,
             looks,
+            cadences,
         )
         for index, position in enumerate(plan.positions)
     ]
@@ -701,16 +893,23 @@ def acquire(
 
     hook_manager.execute_all(plan.m_hooks or [])
 
-    total = sum(plan.times * len(merge.offsets) * len(merge.lightings) for merge in merges)
+    total = sum(len(merge.offsets) * len(due) for _, due in events for merge in merges)
     done = 0
     task.progress(0, message=f"Starting acquisition: {total} exposures of all detectors")
 
+    # One clock: every channel is due on it, and every stream starts with it.
     started_at = time.monotonic()
+    started_wall = datetime.now(timezone.utc)
+    for stream in streams:
+        detector_manager.start_stream(stream.detector.name)
+        stream.started = datetime.now(timezone.utc)
     try:
-        for time_index in range(plan.times):
-            due = started_at + time_index * plan.every_s
-            if time.monotonic() < due:
-                time.sleep(due - time.monotonic())
+        for due_s, due in events:
+            wait = started_at + due_s - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            for stream in streams:
+                stream.blocks += detector_manager.read_stream(stream.detector.name)
 
             hook_manager.execute_all(plan.t_hooks or [])
 
@@ -730,10 +929,15 @@ def acquire(
                     if sweep is not None
                 }
                 _place(merge, space, values)
+                lightings = [
+                    (lighting, due[index])
+                    for index, lighting in enumerate(merge.lightings)
+                    if index in due
+                ]
 
                 if merge.swept:
                     # The detector steps what sweeps: the routine only brings it to the first plane.
-                    for lighting in merge.lightings:
+                    for lighting, time_index in lightings:
                         task.pausepoint()
                         _sweep_to(merge, bases, merge.offsets[0], values, task)
                         values.set(lighting.targets)
@@ -750,7 +954,7 @@ def acquire(
                             done += 1
                             task.progress(
                                 int(done / total * 90),
-                                f"T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}: "
+                                f"{due_s:g} s, P{position_index + 1}, Z{z_index + 1}: "
                                 f"{lighting.channel.name or 'channel'} ({done}/{total})",
                             )
                     continue
@@ -759,18 +963,23 @@ def acquire(
                     _sweep_to(merge, bases, offset, values, task)
                     hook_manager.execute_all(plan.z_hooks or [])
 
-                    for lighting in merge.lightings:
+                    for lighting, time_index in lightings:
                         task.pausepoint()
                         values.set(lighting.targets)
                         _expose(merge, lighting, time_index, z_index, store, detector_manager)
                         done += 1
                         task.progress(
                             int(done / total * 90),
-                            f"T{time_index + 1}, P{position_index + 1}, Z{z_index + 1}: "
+                            f"{due_s:g} s, P{position_index + 1}, Z{z_index + 1}: "
                             f"{lighting.channel.name or 'channel'} ({done}/{total})",
                         )
+        for stream in streams:
+            stream.blocks += detector_manager.read_stream(stream.detector.name)
     finally:
-        # However it ended: a failure leaves no sample lit for as long as nobody looks.
+        # However it ended: a failure leaves no sample lit for as long as nobody looks, and no
+        # stream recording.
+        for stream in streams:
+            detector_manager.stop_stream(stream.detector.name)
         _lights_off(values)
 
     datasets = []
@@ -781,7 +990,9 @@ def acquire(
         label = merge.position.name or f"P{merge.index + 1}"
         for key, record in merge.records.items():
             assert record.data is not None and record.placed is not None
+            assert record.cadence is not None
             parts = [plan.name, *([] if len(merges) == 1 else [label]), key]
+            mounted_at = space.state.samples[record.sample].mounted_at
             datasets.append(
                 store.publish(
                     AcquiredRecord(
@@ -792,15 +1003,28 @@ def acquire(
                         axes=record.axes,
                         channels=tuple(record.channels),
                         planes=tuple(record.planes),
-                        registration=tuple(to_parts(record.placed)),
+                        registration=(
+                            *to_parts(record.placed),
+                            _time_part(
+                                record.detector,
+                                record.cadence.every_s or 1.0,
+                                _since(mounted_at, started_wall) + record.cadence.start_s,
+                            ),
+                        ),
                         calibrated=record.calibrated,
                         quantity=record.detector.quantity,
                         unit=record.detector.unit,
                         sample=record.sample,
                         mount_id=space.state.samples[record.sample].mount_id,
+                        mounted_at=mounted_at,
                         mount=zyx_rows(space.mount(record.sample)),
                     )
                 )
             )
+    datasets += [
+        store.publish(record)
+        for record in (_stream_record(plan, stream, space, store) for stream in streams)
+        if record is not None
+    ]
     task.progress(100, message=f"Acquisition complete: {len(datasets)} datasets")
     return datasets

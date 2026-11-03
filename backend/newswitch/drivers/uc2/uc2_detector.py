@@ -357,6 +357,17 @@ class UC2DetectorManager:
         """The cameras run free, so nothing here can step a stage (`parts.check_wired`)."""
         raise ValueError(f"Detector {name} delivers no z: no camera is triggered")
 
+    def start_stream(self, name: str) -> None:
+        """A camera samples no time of its own: nothing streams here."""
+        raise ValueError(f"Detector {name} samples no time: it has nothing to stream")
+
+    def read_stream(self, name: str) -> list[np.ndarray]:
+        """Nothing streams here (`start_stream`)."""
+        raise ValueError(f"Detector {name} is not streaming")
+
+    def stop_stream(self, name: str) -> None:
+        """Nothing streams here (`start_stream`)."""
+
     def capture_image(self, name: str | None = None) -> DetectorFrame:
         """Capture one image exposed after this call.
 

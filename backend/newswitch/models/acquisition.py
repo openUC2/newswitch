@@ -40,6 +40,24 @@ class AcquisitionChannel:
         description="What to set for it, by variable (e.g., 'laser_488.power', 'filter.slot'). A "
         "source it does not name is off.",
     )
+    every_s: Optional[float] = model_field(
+        default=None,
+        description="How often it is taken, in seconds, on the acquisition's clock; none: as the "
+        "plan says (every_s).",
+    )
+    start_s: float = model_field(
+        default=0.0,
+        description="When it is first taken, in seconds after the acquisition starts.",
+    )
+    times: Optional[int] = model_field(
+        default=None,
+        description="How often it is taken in all; none: as the plan says (times).",
+    )
+    stream: bool = model_field(
+        default=False,
+        description="Its detectors record without pause from the start of the acquisition to its "
+        "end, in blocks, at their own rate: a probe that samples time (an electrode array).",
+    )
 
 
 @dataclass

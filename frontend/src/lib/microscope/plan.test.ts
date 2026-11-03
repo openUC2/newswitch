@@ -66,6 +66,10 @@ describe("buildPlan", () => {
           "laser_488.power": 20,
           "cam_a.exposure": 100,
         },
+        start_s: 0,
+        every_s: null,
+        times: null,
+        stream: false,
       },
     ]);
     expect([plan.times, plan.every_s]).toEqual([1, 0]);
@@ -246,6 +250,39 @@ describe("buildPlan", () => {
     ]);
   });
 
+  it("takes a channel on its own clock, apart from those taken as the plan is", () => {
+    const plan = buildPlan(
+      choices({
+        channels: [
+          { source: "laser_488", detector: "cam_a", power: 20, swaps: {} },
+          {
+            source: "laser_488",
+            detector: "cam_b",
+            power: 20,
+            swaps: {},
+            timing: { every_s: 2, start_s: 4, times: 3 },
+          },
+        ],
+      }),
+      context,
+    );
+    expect(
+      plan.channels.map((c) => [c.detectors, c.start_s, c.every_s, c.times]),
+    ).toEqual([
+      [["cam_a"], 0, null, null],
+      [["cam_b"], 4, 2, 3],
+    ]);
+  });
+
+  it("streams a probe without pause, in a channel of its own", () => {
+    const plan = buildPlan(choices({ streams: ["mea"] }), context);
+    expect(plan.channels.at(-1)).toMatchObject({
+      name: "mea",
+      detectors: ["mea"],
+      stream: true,
+    });
+  });
+
   it("refuses what is no plan yet", () => {
     expect(() => buildPlan(choices({ channels: [] }), context)).toThrow(
       PlanProblem,
@@ -285,6 +322,43 @@ describe("estimate", () => {
     expect(found.exposures).toBe(3);
     expect(found.bytes).toBe(3 * 64 * 512 * 512 * 2);
     expect(formatBytes(found.bytes)).toBe("101 MB");
+  });
+
+  it("counts each channel's own times, and a stream for as long as the last is due", () => {
+    const camera = detector("cam_b", [
+      ["y", 100],
+      ["x", 100],
+    ]);
+    const mea = detector(
+      "mea",
+      [
+        ["s", 1000],
+        ["y", 8],
+        ["x", 8],
+      ],
+      "float32",
+    );
+    (mea.axes[0] as { step?: number }).step = 0.05;
+    const plan = buildPlan(
+      choices({
+        channels: [
+          {
+            source: "laser_488",
+            detector: "cam_b",
+            power: 20,
+            swaps: {},
+            timing: { every_s: 2, start_s: 4, times: 3 },
+          },
+        ],
+        streams: ["mea"],
+      }),
+      context,
+    );
+    const found = estimate(plan, [camera, mea], () => 10);
+    expect(found.exposures).toBe(3);
+    expect(found.atLeastS).toBe(8);
+    // 8 s of 50 ms blocks, and one more: 161 blocks of 1000 x 8 x 8 float32
+    expect(found.bytes).toBe(3 * 100 * 100 * 2 + 161 * 1000 * 64 * 4);
   });
 
   it("takes at least the time-lapse, or every exposure one after another", () => {

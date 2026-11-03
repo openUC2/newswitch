@@ -27,6 +27,32 @@ export const AcquisitionChannelSchema = z
       .describe(
         "What to set for it, by variable (e.g., 'laser_488.power', 'filter.slot'). A source it does not name is off.",
       ),
+    /** How often it is taken, in seconds, on the acquisition's clock; none: as the plan says (every_s). */
+    every_s: z
+      .number()
+      .describe(
+        "How often it is taken, in seconds, on the acquisition's clock; none: as the plan says (every_s).",
+      )
+      .nullable()
+      .optional(),
+    /** When it is first taken, in seconds after the acquisition starts. */
+    start_s: z
+      .number()
+      .describe(
+        'When it is first taken, in seconds after the acquisition starts.',
+      ),
+    /** How often it is taken in all; none: as the plan says (times). */
+    times: z
+      .number()
+      .describe('How often it is taken in all; none: as the plan says (times).')
+      .nullable()
+      .optional(),
+    /** Its detectors record without pause from the start of the acquisition to its end, in blocks, at their own rate: a probe that samples time (an electrode array). */
+    stream: z
+      .boolean()
+      .describe(
+        'Its detectors record without pause from the start of the acquisition to its end, in blocks, at their own rate: a probe that samples time (an electrode array).',
+      ),
   })
   .superRefine((val, ctx) => {
     {

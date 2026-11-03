@@ -128,6 +128,7 @@ export const SampleSpaceSchema = z
     sample: z.string(),
     mount: z.array(z.array(z.number())),
     mount_id: z.string(),
+    mounted_at: z.string(),
     holder: z.string().nullable().optional(),
     holders: z.array(z.string()),
     /** What is mounted, in sample micrometres from its top left corner: for a view to draw. */
