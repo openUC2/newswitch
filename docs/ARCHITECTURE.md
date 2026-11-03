@@ -695,6 +695,10 @@ on real hardware.
   coordinate graph (`sample:<cube>`). Nothing declares a channel either: `Compiled.channels` reads from the tables which
   source reaches which detector, across every setting of the swaps, with the swaps that decide it (a mirror, a filter;
   not an objective, which changes only how much arrives).
+- A detector of no light is a probe (`kind: probe`): at a point of a stage insert, or reading a grid of what is mounted
+  (an electrode array's electrodes, places of the holder as a plate's wells are), sampling time in blocks if it says so.
+  An acquisition has one clock: each channel taken as the plan says or on its own, a probe that samples time streaming
+  throughout, and every record's `t` placed in seconds since its sample was mounted.
 - A cube can name an entry of the components library (`newswitch/instrument/components/`) for its element and its
   hardware signals, and `drives` wires signals together; all of it is validated when the description is parsed. A
   logical detector is a physical detector and what is wired to it: `Instrument.detector_axes` computes what it
