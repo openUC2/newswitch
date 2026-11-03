@@ -238,5 +238,5 @@ def test_an_image_of_whatever_is_on_is_never_the_thermometers(m: Microscope) -> 
 
 def test_no_driver_reads_a_real_thermometer_yet() -> None:
     """Only a simulated one reads: anything else is refused, not left out."""
-    with pytest.raises(SpecError, match="no driver reads a thermometer"):
+    with pytest.raises(SpecError, match="no driver reads a probe"):
         check_wired(spec.load(HE), "unwired")

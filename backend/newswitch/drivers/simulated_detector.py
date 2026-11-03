@@ -60,7 +60,7 @@ def _imaging(detector: Detector) -> Detector:
     """`detector`, which delivers images.
 
     Raises:
-        ValueError: It measures at one point (a thermometer): it has no image.
+        ValueError: It is a probe (a thermometer): it has no image.
     """
     if not detector.delivers_images():
         raise ValueError(f"{detector.name} measures {detector.quantity} at one point: no image")
@@ -306,7 +306,7 @@ class SimulatedDetectorManager:
 
     def capture_channels(self, name: str) -> np.ndarray:
         """One exposure along every axis but ``z``: ``(c, y, x)`` in the order of its `colors`,
-        ``(m, y, x)`` timing its photons, ``(y, x)`` of an image, ``()`` of a thermometer."""
+        ``(m, y, x)`` timing its photons, ``(y, x)`` of an image, ``()`` of a probe at a point."""
         detector = self.state.get(name)
         if not detector.delivers_images():
             return np.array(self._read(detector), dtype=detector.data_type)
@@ -322,7 +322,7 @@ class SimulatedDetectorManager:
 
     def _read(self, detector: Detector) -> float:
         """What a detector that measures at one point reads now; published as its `reading`."""
-        detector.reading = round(self.simulator.temperature(detector.name), 3)
+        detector.reading = round(self.simulator.read_point(detector.name), 3)
         return detector.reading
 
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:

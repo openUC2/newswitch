@@ -1,3 +1,4 @@
+import { deliversImages } from "@/lib/microscope/space";
 import {
   useActivateDetector,
   useDeactivateDetector,
@@ -129,15 +130,19 @@ export function DetectorControl() {
               <Monitor className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">{detector.name}</span>
               <span className="font-mono text-xs text-muted-foreground">
-                {detector.axes.length > 0
-                  ? detector.axes
-                      .map(
-                        (axis) => `${axis.name} ${axis.delivered_size ?? "…"}`,
-                      )
-                      .join(" × ")
-                  : `${detector.quantity} at a point: ${
-                      detector.reading?.toFixed(2) ?? "…"
-                    } ${detector.unit}`}
+                {[
+                  detector.axes
+                    .map((axis) => `${axis.name} ${axis.delivered_size ?? "…"}`)
+                    .join(" × "),
+                  // A probe measures something other than light: what it read last.
+                  deliversImages(detector)
+                    ? ""
+                    : `${detector.quantity}: ${
+                        detector.reading?.toFixed(2) ?? "…"
+                      } ${detector.unit}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </div>
             <Switch

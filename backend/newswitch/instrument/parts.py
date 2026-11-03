@@ -6,35 +6,57 @@ from typing import Any, Literal
 
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import CAMERA_PROTOCOLS
-from newswitch.instrument.spec import Drive, Instrument, Sensor
+from newswitch.instrument.spec import Drive, Instrument, Probe, Sensor
 from newswitch.models.devices import Detector, DetectorAxis
 
 
-#: How often a thermometer is read while live (Hz): a temperature does not change by the frame.
-THERMOMETER_RATE = 1.0
+#: How often a probe at a point is read while live (Hz): a temperature does not change by the frame.
+POINT_RATE = 1.0
 
 
 def detectors(instrument: Instrument) -> list[Detector]:
     """One `Detector` per sensor or point detector, all on, with the axes it delivers, and one per
-    thermometer, with none.
+    probe, with what it measures.
 
     Every axis reads out whole; the binnable ones at the initial binning.
     """
-    return [*_light_detectors(instrument), *_thermometers(instrument)]
+    return [*_light_detectors(instrument), *_probes(instrument)]
 
 
-def _thermometers(instrument: Instrument) -> list[Detector]:
-    """A thermometer measures at one point: no axes, a temperature, read once a second."""
-    return [
-        Detector(
-            name=name,
-            is_active=True,
-            data_type="float32",
-            quantity="temperature",
-            unit="degC",
-            current_frame_rate=THERMOMETER_RATE,
+def _probes(instrument: Instrument) -> list[Detector]:
+    """A probe measures what it says it measures, in its unit, along the axes it has."""
+    found = []
+    for name in instrument.probes():
+        element = instrument.cubes[name].element
+        assert isinstance(element, Probe)
+        found.append(
+            Detector(
+                name=name,
+                is_active=True,
+                data_type="float32",
+                quantity=element.measures.quantity,
+                unit=element.measures.unit,
+                axes=_axes(instrument, name, 1),
+                current_frame_rate=POINT_RATE,
+            )
         )
-        for name in instrument.thermometers()
+    return found
+
+
+def _axes(instrument: Instrument, name: str, binning: int) -> list[DetectorAxis]:
+    """What `name` delivers, as a `Detector` has it."""
+    return [
+        DetectorAxis(
+            name=axis.name,
+            domain=axis.domain,
+            unit=axis.unit,
+            size=axis.size,
+            step=axis.step,
+            delivered_by=axis.delivered_by,
+            binnable=axis.binnable,
+            binning=binning if axis.binnable else 1,
+        )
+        for axis in instrument.detector_axes(name)
     ]
 
 
@@ -55,19 +77,7 @@ def _light_detectors(instrument: Instrument) -> list[Detector]:
                 is_active=True,
                 data_type=_data_type(element.readout.bit_depth),
                 colors=list(element.colors) if isinstance(element, Sensor) else [],
-                axes=[
-                    DetectorAxis(
-                        name=axis.name,
-                        domain=axis.domain,
-                        unit=axis.unit,
-                        size=axis.size,
-                        step=axis.step,
-                        delivered_by=axis.delivered_by,
-                        binnable=axis.binnable,
-                        binning=initial_binning if axis.binnable else 1,
-                    )
-                    for axis in instrument.detector_axes(name)
-                ],
+                axes=_axes(instrument, name, initial_binning),
                 current_exposure_ms=None if exposure is None else exposure.initial,
                 current_gain=None if gain is None else gain.initial,
                 current_frame_rate=None if frame_rate is None else frame_rate.initial,
@@ -119,8 +129,8 @@ def check_wired(
         SpecError: Something is not wired; every one is listed.
     """
     problems = [
-        f"the thermometer {name}: no driver reads a thermometer yet, so it is simulated or nothing"
-        for name in instrument.thermometers()
+        f"the probe {name}: no driver reads a probe yet, so it is simulated or nothing"
+        for name in instrument.probes()
         if simulate != "everything"
     ]
     if simulate == "nothing":

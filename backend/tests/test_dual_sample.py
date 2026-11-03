@@ -253,7 +253,7 @@ def test_a_thermometer_without_its_stage_is_refused_beside_two_samples(tmp_path:
     shutil.copytree(DUAL, folder)
     path = folder / "microscope.yml"
     data = yaml.safe_load(path.read_text())
-    data["cubes"]["thermometer"]["element"]["on_stage"].pop("stage")
+    data["cubes"]["thermometer"]["element"]["at"].pop("stage")
     path.write_text(yaml.safe_dump(data))
     with pytest.raises(spec.SpecError, match="which of the samples"):
         spec.load(folder)

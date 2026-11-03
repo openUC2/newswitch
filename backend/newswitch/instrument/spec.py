@@ -71,8 +71,6 @@ Picoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ps"))]
 Nanoseconds = Annotated[StrictFloat, BeforeValidator(_in_unit("ns"))]
 Milliwatts = Annotated[StrictFloat, BeforeValidator(_in_unit("mW"))]
 Hertz = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("Hz"))]
-#: A temperature, as a thermometer reads it.
-Celsius = Annotated[StrictFloat, BeforeValidator(_in_unit("degC"))]
 #: How fast something moves.
 MicrometresPerSecond = Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("um/s"))]
 #: A fraction of the light: of what arrives, or of a filter's band.
@@ -581,19 +579,37 @@ class StagePoint:
 
 
 @dataclass(frozen=True, config=STRICT)
-class Thermometer:
-    """Reads the temperature at one point: a detector with no axes, placed where it measures.
+class Measures:
+    """What a probe measures, as words: the quantity and its unit (``voltage``, ``uV``)."""
 
-    `on_stage` is where it sits on the stage insert, beside the sample; light has nothing to do with
-    it. What a simulated one reads, the simulator knows (`newswitch.drivers.simulator`).
+    quantity: str
+    unit: str = ""
+
+
+@dataclass(frozen=True, config=STRICT)
+class ProbeModel:
+    """How a simulated probe reads: which of the simulator's models, and how far a reading strays,
+    in the probe's unit. A real one is read by a driver."""
+
+    kind: Literal["air", "spikes"]
+    noise: Annotated[StrictFloat, Field(ge=0.0)] = 0.0
+
+
+@dataclass(frozen=True, config=STRICT)
+class Probe:
+    """A detector of no light: it measures a quantity where it sits, light has nothing to do with it.
+
+    `at` is the point on a stage insert it sits at, beside the sample: it moves with that stage. What
+    a simulated one reads, its `model` says, and the simulator knows (`newswitch.drivers.simulator`).
     """
 
-    kind: Literal["thermometer"]
-    on_stage: StagePoint
-    noise: Annotated[StrictFloat, Field(ge=0.0)] = 0.05  # how far a reading strays, in kelvin
+    kind: Literal["probe"]
+    measures: Measures
+    model: ProbeModel
+    at: StagePoint
 
 
-#: An element: what it is, and the numbers that say what it does to light (or, a thermometer, not).
+#: An element: what it is, and the numbers that say what it does to light (or, a probe, not).
 Element = Annotated[
     Source
     | Lens
@@ -606,7 +622,7 @@ Element = Annotated[
     | Scanner
     | Pinhole
     | PointDetector
-    | Thermometer,
+    | Probe,
     Field(discriminator="kind"),
 ]
 
@@ -1031,19 +1047,17 @@ class Instrument:
                     f"planes step what moves its sample or its sheet: "
                     f"{sorted(set().union(*owns.values()))}"
                 )
-        for thermometer in self.thermometers():
-            element = self.cubes[thermometer].element
-            assert isinstance(element, Thermometer)
-            stage = element.on_stage.stage
+        for probe in self.probes():
+            element = self.cubes[probe].element
+            assert isinstance(element, Probe)
+            stage = element.at.stage
             if stage is None and len(self.samples()) > 1:
                 problems.append(
-                    f"{thermometer}: on_stage.stage says which of the samples {self.samples()} "
-                    "it sits beside"
+                    f"{probe}: at.stage says which of the samples {self.samples()} it sits beside"
                 )
             elif stage is not None and stage not in self.samples():
                 problems.append(
-                    f"{thermometer}: on_stage.stage {stage!r} is none of the samples "
-                    f"{self.samples()}"
+                    f"{probe}: at.stage {stage!r} is none of the samples {self.samples()}"
                 )
         if problems:
             raise ValueError("; ".join(problems))
@@ -1098,9 +1112,9 @@ class Instrument:
         """The cubes of the detectors of light, in the order they are described."""
         return self._holding(Sensor, PointDetector)
 
-    def thermometers(self) -> list[str]:
-        """The cubes of the thermometers: detectors too, of no light, measuring at one point."""
-        return self._holding(Thermometer)
+    def probes(self) -> list[str]:
+        """The cubes of the probes: detectors too, of no light (a thermometer, an electrode array)."""
+        return self._holding(Probe)
 
     def sources(self) -> list[str]:
         """The cubes of the light sources, in the order they are described."""
@@ -1127,11 +1141,11 @@ class Instrument:
         ]
 
     def samples_of(self, detector: str) -> list[str]:
-        """Every sample light gets to `detector` from, some way the switches can be set; a
-        thermometer's, the one it sits beside."""
+        """Every sample light gets to `detector` from, some way the switches can be set; a probe's,
+        the one it sits beside."""
         element = self.cubes[detector].element if detector in self.cubes else None
-        if isinstance(element, Thermometer):
-            stage = element.on_stage.stage
+        if isinstance(element, Probe):
+            stage = element.at.stage
             if stage is not None:
                 return [stage]
             (only,) = self.samples()
@@ -1151,13 +1165,13 @@ class Instrument:
 
     def sample_of(self, detector: str, state: Mapping[str, Any]) -> str | None:
         """The sample `detector` measures under `state`: the one light gets to it from, the switches
-        as `state` sets them; none, when they send its light elsewhere. A thermometer's is the one
+        as `state` sets them; none, when they send its light elsewhere. A probe's is the one
         it sits beside, whatever the state.
 
         Raises:
             ValueError: Light gets to it from several samples at once.
         """
-        if isinstance(self.cubes[detector].element, Thermometer):
+        if isinstance(self.cubes[detector].element, Probe):
             return self.samples_of(detector)[0]
         candidates = self._routed(detector)
         seen = [
@@ -1323,9 +1337,9 @@ class Instrument:
 
     def detector_axes(self, detector: str) -> tuple[DetectorAxis, ...]:
         """What the logical detector `detector` delivers, in the order of a dataset's axes; a
-        thermometer, which measures at a point, delivers none."""
+        probe at a point delivers none."""
         element = self.cubes[detector].element
-        if isinstance(element, Thermometer):
+        if isinstance(element, Probe):
             return ()
         found = []
         if isinstance(element, Sensor) and element.colors:

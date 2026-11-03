@@ -116,7 +116,11 @@ cubes:
 
   # Beside the section on stage_b's insert, 3 cm along x: it moves with stage_b.
   thermometer:
-    element: {kind: thermometer, on_stage: {stage: stage_b, x: 30 mm, y: 0 mm}}
+    element:
+      kind: probe
+      measures: {quantity: temperature, unit: degC}
+      at: {stage: stage_b, x: 30 mm, y: 0 mm}
+      model: {kind: air, noise: 0.05}   # in its unit: degC
 
 illumination:
   - {from: laser_488, to: dichroic_a}

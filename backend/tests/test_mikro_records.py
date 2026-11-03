@@ -15,7 +15,7 @@ from newswitch.protocols.dataset_store import AcquiredRecord
 from newswitch.microscope.parts import build_microscope
 from tests.conftest import acquisition, run_settings
 from tests.test_acquire import StateStore
-from tests.test_thermometer import he, run
+from tests.test_probes import he, run
 
 INSTRUMENTS = Path(__file__).parents[1] / "instruments"
 

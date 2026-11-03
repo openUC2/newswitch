@@ -12,7 +12,7 @@ Each sample is a hub of its own (`Instrument.samples`), on a stage of its own:
                                  (x, y) -> (x, y): T(where) · A · T(pixel from the sensor's middle)
                                  ()     -> (z):    the plane it looks at
                                its colors or arrival times: no part, nothing said
-    detector:thermometer -> stage:stage_b:  BY_DIMENSION, () -> (x, y, z): where it sits
+    detector:thermometer -> stage:stage_b:  BY_DIMENSION, () -> (x, y, z): where a probe sits
     stage:stage_a -> sample:stage_a:        AFFINE, that sample's mount
     well:stage_a:B3 -> sample:stage_a:      BY_DIMENSION, (x, y) -> (x, y): where its plate has it
     image:<id> -> sample:<its sample>:      AFFINE, its detector's placement when it was taken
@@ -59,7 +59,7 @@ from newswitch.instrument.space import (
     stage_system,
     translation,
 )
-from newswitch.instrument.spec import Instrument, MountedHolder, Thermometer
+from newswitch.instrument.spec import Instrument, MountedHolder, Probe
 from newswitch.models.devices import Detector
 from newswitch.models.space import (
     Axis,
@@ -326,8 +326,8 @@ class SpaceManager:
         if not detector.delivers_images():
             assert self.instrument is not None
             element = self.instrument.cubes[detector.name].element
-            assert isinstance(element, Thermometer), f"{detector.name} measures nowhere known"
-            at = element.on_stage
+            assert isinstance(element, Probe), f"{detector.name} measures nowhere known"
+            at = element.at
             point = [[at.x * 1000.0], [at.y * 1000.0], [at.z * 1000.0]]
             return by_dimension(source, stage, [affine_part((), SPATIAL, point)], "on stage")
         matrix = self.to_stage(detector.name, values)

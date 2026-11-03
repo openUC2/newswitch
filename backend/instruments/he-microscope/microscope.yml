@@ -75,7 +75,11 @@ cubes:
   # Beside the slide on the stage insert, 3 cm along x from where the section is: it moves with the
   # stage, so the space places it on the sample (detector:thermometer -> stage, () -> (x, y, z)).
   thermometer:
-    element: {kind: thermometer, on_stage: {x: 30 mm, y: 0 mm}}
+    element:
+      kind: probe
+      measures: {quantity: temperature, unit: degC}
+      at: {x: 30 mm, y: 0 mm}
+      model: {kind: air, noise: 0.05}   # in its unit: degC
 
 illumination:
   - {from: white_led, to: condenser}

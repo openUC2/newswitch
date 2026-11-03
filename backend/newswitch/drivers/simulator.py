@@ -19,7 +19,7 @@ from scipy import ndimage
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.predict import Answer, state_key
 from newswitch.instrument.space import holder_to_stage
-from newswitch.instrument.spec import Instrument, Pattern, Stain, Thermometer
+from newswitch.instrument.spec import Instrument, Pattern, Probe, Stain
 from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
 
 #: The hidden errors, in an instrument's folder.
@@ -141,13 +141,20 @@ class Simulator:
         )
         """Which holder each sample is mounted on: the space says (`newswitch.services.space`)."""
 
-    def temperature(self, thermometer: str) -> float:
-        """What `thermometer` reads: the air beside the sample (``air_temperature_c`` in the truth,
-        22 °C without one), strayed by its noise."""
-        element = self.instrument.cubes[thermometer].element
-        assert isinstance(element, Thermometer)
-        air = float(self.truth.get("air_temperature_c", AIR_TEMPERATURE_C))
-        return air + float(self._noise.normal(0.0, element.noise)) if element.noise else air
+    def read_point(self, probe: str) -> float:
+        """What a probe at a point reads now, as its model says, strayed by its noise.
+
+        ``air``: the air beside the sample (``air_temperature_c`` in the truth, 22 °C without one).
+        """
+        element = self.instrument.cubes[probe].element
+        assert isinstance(element, Probe)
+        match element.model.kind:
+            case "air":
+                value = float(self.truth.get("air_temperature_c", AIR_TEMPERATURE_C))
+            case kind:
+                raise ValueError(f"{probe}: a {kind} model reads no single point")
+        noise = element.model.noise
+        return value + float(self._noise.normal(0.0, noise)) if noise else value
 
     def beads_in_sample(self, pattern: Pattern, sample: str) -> np.ndarray:
         """Where `pattern`'s beads are on what `sample` is mounted on, as ``(y, x, depth)`` in its
