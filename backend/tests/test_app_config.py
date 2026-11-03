@@ -58,9 +58,14 @@ def test_shipped_base_config_loads() -> None:
     settings = ImswitchConfig()
     assert settings.config_dir == BASE_CONFIG_FILE.parent / "configs"
     assert settings.schema_dir == settings.config_dir / "schemas"
-    assert settings.static_config_path == settings.config_dir / "newswitch-config.yaml"
+    assert (
+        settings.static_config_path
+        == settings.config_dir / yaml.safe_load(BASE_CONFIG_FILE.read_text())["static_config_path"]
+    )
     assert settings.static_config_path.is_file()
     assert settings.config_file in (settings.static_config_path, settings.persistent_config_path)
+    assert settings.camera_recording_dir == BASE_CONFIG_FILE.parent / "data" / "recordings"
+    assert settings.camera_debug_window is True
 
 
 def test_values_come_from_the_file(write_base: BaseWriter) -> None:
@@ -114,6 +119,46 @@ def test_explicit_paths_are_kept(write_base: BaseWriter, tmp_path: Path) -> None
     assert settings.persistent_config_path == Path("sub/persistent.yaml")
 
 
+def test_camera_recording_dir(write_base: BaseWriter, tmp_path: Path) -> None:
+    """The recording folder is optional; relative to the base file, or absolute."""
+    base = write_base()
+    assert ImswitchConfig().camera_recording_dir is None
+    write_base(camera_recording_dir="data/recordings")
+    assert ImswitchConfig().camera_recording_dir == base.parent / "data" / "recordings"
+    write_base(camera_recording_dir=str(tmp_path / "recordings"))
+    assert ImswitchConfig().camera_recording_dir == tmp_path / "recordings"
+
+
+def test_camera_debug_window(write_base: BaseWriter) -> None:
+    """The debug window is off unless the file switches it on."""
+    write_base()
+    assert ImswitchConfig().camera_debug_window is False
+    write_base(camera_debug_window=True)
+    assert ImswitchConfig().camera_debug_window is True
+
+
+def test_logging_settings(write_base: BaseWriter) -> None:
+    """Without the keys nothing goes to the terminal and everything to backend.log."""
+    write_base()
+    settings = ImswitchConfig()
+    assert settings.log_to_terminal == "none"
+    assert settings.log_to_file == "debug"
+    assert settings.log_file_path == "backend.log"
+
+    write_base(log_to_terminal="warn", log_to_file="none", log_file_path="logs/x.log")
+    settings = ImswitchConfig()
+    assert settings.log_to_terminal == "warn"
+    assert settings.log_to_file == "none"
+    assert settings.log_file_path == "logs/x.log"
+
+
+def test_unknown_log_level_is_an_error(write_base: BaseWriter) -> None:
+    """Only fatal, error, warn, info, debug and none are accepted."""
+    write_base(log_to_terminal="warning")
+    with pytest.raises(ValidationError, match="log_to_terminal"):
+        ImswitchConfig()
+
+
 def test_unknown_key_is_an_error(write_base: BaseWriter) -> None:
     """A misspelled key is reported instead of silently ignored."""
     write_base(use_virutal_microscope=True)
@@ -143,3 +188,75 @@ def test_environment_is_ignored(write_base: BaseWriter, monkeypatch: pytest.Monk
     write_base()
     monkeypatch.setenv("DB_PATH", "from-env.db")
     assert ImswitchConfig().db_path == "agent_data.db"
+
+
+# ---------------------------------------------------------------------------
+# load_app_config: NEWSWITCH_CONFIG
+# ---------------------------------------------------------------------------
+
+
+def test_load_app_config_without_variable(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without NEWSWITCH_CONFIG, or with it empty, the base config alone applies."""
+    write_base()
+    monkeypatch.delenv("NEWSWITCH_CONFIG", raising=False)
+    assert app_module.load_app_config().use_virtual_microscope is True
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "")
+    assert app_module.load_app_config().use_virtual_microscope is True
+
+
+def test_load_app_config_relative_path(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Device YAML paths resolve from the base directory, independent of the cwd."""
+    base = write_base()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "boot/real.yaml")
+    monkeypatch.setenv("NEWSWITCH_MODE", "hardware")
+    config = app_module.load_app_config()
+    assert config.use_virtual_microscope is False
+    assert config.config_file == base.parent / "boot" / "real.yaml"
+    assert config.persistent_config_path == base.parent / "boot" / "real.persistent.yaml"
+
+
+def test_load_app_config_absolute_path(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An absolute device YAML is selected without loading it as application settings."""
+    write_base()
+    source = tmp_path / "device.yaml"
+    monkeypatch.setenv("NEWSWITCH_CONFIG", str(source))
+    assert app_module.load_app_config().config_file == source
+
+
+def test_load_app_config_missing_file(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The device loader reports missing YAML; startup never falls back silently."""
+    write_base()
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "no/such.yaml")
+    with pytest.raises(app_module.config_io.ConfigError):
+        app_module.load_app_config().open_device_config()
+
+
+def test_load_app_config_rejects_legacy_json(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """All entrypoints reject the obsolete JSON boot override path consistently."""
+    write_base()
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "configs/camTest.json")
+    with pytest.raises(ValueError, match="YAML"):
+        app_module.load_app_config()
+
+
+def test_shipped_camtest_config_loads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The camera test is selected directly as device YAML, with real mode explicit."""
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "configs/camTest_config.yaml")
+    monkeypatch.setenv("NEWSWITCH_MODE", "hardware")
+    config = app_module.load_app_config()
+    assert config.use_virtual_microscope is False
+    assert config.config_file == BASE_CONFIG_FILE.parent / "configs" / "camTest_config.yaml"
+    assert config.open_device_config().config.detectors

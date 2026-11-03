@@ -36,7 +36,10 @@ def virtual_microscope_app() -> FastAPI:
     # Authentication is bypassed rather than satisfied: AsyncAgentTestClient hardcodes
     # its websocket init payload, so there is no seam to hand it a token through.
     # config_file=None: built-in virtual devices; never writes into backend/configs
-    app = create_app(ImswitchConfig(config_file=None), authenticator=AllowAllAuthenticator())
+    app = create_app(
+        ImswitchConfig(config_file=None, use_virtual_microscope=True),
+        authenticator=AllowAllAuthenticator(),
+    )
     return app
 
 

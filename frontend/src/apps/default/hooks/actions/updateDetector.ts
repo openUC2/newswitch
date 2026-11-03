@@ -21,6 +21,31 @@ export const DetectorSchema = z
     min_gain: z.number(),
     is_acquiring: z.boolean(),
     data_type: z.string(),
+    key: z.string().nullable().optional(),
+    manufacturer: z.string().nullable().optional(),
+    model: z.string().nullable().optional(),
+    serial_number: z.string().nullable().optional(),
+    connection_type: z.string().nullable().optional(),
+    device_index: z.number().nullable().optional(),
+    buffer_size: z.number().nullable().optional(),
+    store_image_data: z.boolean().nullable().optional(),
+    pixel_format: z.string().nullable().optional(),
+    sensor_width: z.number(),
+    sensor_height: z.number(),
+    pixel_pitch_um: z.number().nullable().optional(),
+    current_frame_rate: z.number().nullable().optional(),
+    current_binning: z.number(),
+    current_roi: z.array(z.number()).nullable().optional(),
+    min_frame_rate: z.number().nullable().optional(),
+    max_frame_rate: z.number().nullable().optional(),
+    available_binnings: z.array(z.number()),
+    can_set_exposure: z.boolean(),
+    can_set_gain: z.boolean(),
+    can_set_frame_rate: z.boolean(),
+    can_set_binning: z.boolean(),
+    can_set_roi: z.boolean(),
+    is_recording: z.boolean(),
+    recording_file: z.string().nullable().optional(),
   })
   .brand('detector')
   .describe('Shared state for detector parameters.');
@@ -39,6 +64,26 @@ export const UpdateDetectorArgsSchema = z.object({
     .optional(),
   /** Gain value (optional) */
   gain: z.number().describe('Gain value (optional)').nullable().optional(),
+  /** Frame rate in frames per second, 0 removes the limit (optional) */
+  frame_rate: z
+    .number()
+    .describe('Frame rate in frames per second, 0 removes the limit (optional)')
+    .nullable()
+    .optional(),
+  /** Symmetric binning factor, snapped to an allowed one (optional) */
+  binning: z
+    .number()
+    .describe('Symmetric binning factor, snapped to an allowed one (optional)')
+    .nullable()
+    .optional(),
+  /** [x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional) */
+  roi: z
+    .array(z.number())
+    .describe(
+      '[x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional)',
+    )
+    .nullable()
+    .optional(),
 });
 export const UpdateDetectorReturnSchema = z.object({
   /** Shared state for detector parameters. */
@@ -58,14 +103,15 @@ export const UpdateDetectorDefinition: ActionDefinition<
 > = {
   name: 'update_detector',
   appKey: 'default',
-  description: 'Update detector settings.',
+  description:
+    'Update detector settings; a value left out is kept. The detector clamps to its ranges.',
   argsSchema: UpdateDetectorArgsSchema,
   returnSchema: UpdateDetectorReturnSchema,
   lockKeys: ['camera_parameters'],
 };
 
 /**
- * Update detector settings.
+ * Update detector settings; a value left out is kept. The detector clamps to its ranges.
  */
 export const useUpdateDetector = () => {
   return useAction(UpdateDetectorDefinition);

@@ -185,7 +185,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture image
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
 
         # Save using IO manager
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
@@ -206,7 +206,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Open with PIL - this will raise if invalid
@@ -227,7 +227,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Load the saved image
@@ -252,7 +252,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Load the saved image
@@ -284,7 +284,7 @@ class TestCaptureImagePNGOutput:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
 
         # Should be uint16 as per protocol
         assert image.dtype == np.uint16
@@ -311,7 +311,7 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = default_illumination_detector_with_io
 
         # This uses the default IlluminationState (no active illumination)
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Load and check
@@ -335,8 +335,8 @@ class TestCaptureImagePNGOutput:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture multiple images
-        image1 = detector.capture_image(slot=1)
-        image2 = detector.capture_image(slot=1)
+        image1 = detector.capture_image(slot=1).data
+        image2 = detector.capture_image(slot=1).data
 
         file_path1 = io_manager.save_numpy_array(image1, format=FileFormat.PNG)
         file_path2 = io_manager.save_numpy_array(image2, format=FileFormat.PNG)
@@ -368,7 +368,7 @@ class TestIOManagerFileOperations:
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
         # Capture and save
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # Stream the file
@@ -389,7 +389,7 @@ class TestIOManagerFileOperations:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         assert io_manager.file_exists(file_path) is True
@@ -405,7 +405,7 @@ class TestIOManagerFileOperations:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         # File should exist
@@ -429,7 +429,7 @@ class TestIOManagerFileOperations:
         """
         detector, io_manager, io_state, output_dir = illuminated_detector_with_io
 
-        image = detector.capture_image(slot=1)
+        image = detector.capture_image(slot=1).data
         file_path = io_manager.save_numpy_array(image, format=FileFormat.PNG)
 
         assert io_state.last_saved_file == file_path

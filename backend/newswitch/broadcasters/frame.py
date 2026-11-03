@@ -9,6 +9,7 @@ Optimized for minimal latency with:
 - Shared encoders for clients with matching configurations
 """
 
+import logging
 from typing import Optional
 import asyncio
 import threading
@@ -22,6 +23,8 @@ from newswitch.broadcasters.encoders.zstd_encoder import (
 from newswitch.broadcasters.encoders.h264_encoder import H264EncoderConfig, H264Encoder
 from newswitch.broadcasters.encoders.config import EncoderConfig
 from newswitch.broadcasters.encoders.base import EncoderSubscriptionProtocol
+
+logger = logging.getLogger(__name__)
 
 
 @context
@@ -136,6 +139,17 @@ class FrameBroadcaster:
     def _schedule_encoder_frames(self, detector_slot: int, frame: np.ndarray) -> None:
         """Schedule frame encoding for active encoders of one detector slot."""
 
+        if logger.isEnabledFor(logging.DEBUG):  # max/min of every frame are not free
+            logger.debug(
+                "Scheduling frame for detector slot %s with shape %s, dtype %s, max %s, "
+                "min %s, encoders: %d",
+                detector_slot,
+                frame.shape,
+                frame.dtype,
+                frame.max(),
+                frame.min(),
+                len(self._encoders),
+            )
         for (slot, _), encoder in self._encoders.items():
             if slot != detector_slot:
                 continue

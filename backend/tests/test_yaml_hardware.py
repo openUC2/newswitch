@@ -625,3 +625,61 @@ def test_serial_selectors_resolving_same_port_share_client(monkeypatch: pytest.M
     bus = runtime(doc)
     assert len(bus.buses) == 1
     assert bus.lights[1].bus is bus.axes["X"].bus
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_motion", [False, True])
+async def test_camera_selection_coexists_with_yaml_hardware(
+    with_motion: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Startup retains main's camera selection alongside mapped motion and illumination."""
+    import sys
+    from newswitch.app import ImswitchConfig, provide_managers, close_detector
+
+    doc = document() if with_motion else {"newswitch_version": "v1.0.2", "devices": {}}
+    doc["devices"].update(
+        {
+            "camera-controller": {
+                "type": "controller",
+                "connection": {"protocol": "usb3-vision"},
+                "mapping": {"camera": {"type": "usb3-vision-camera", "id": 0}},
+            },
+            "camera": {"type": "detector", "manufacturer": "Simulated", "pixelcount": [64, 48]},
+        }
+    )
+    selected = []
+
+    def camera_manager(**kwargs: object) -> SimpleNamespace:
+        kwargs["camera_state"].detectors = kwargs["cameras"]
+        manager = SimpleNamespace(
+            state=kwargs["camera_state"], close=lambda: selected.append("closed")
+        )
+        selected.append(kwargs)
+        return manager
+
+    monkeypatch.setitem(
+        sys.modules,
+        "newswitch.managers.uc2.uc2_detector",
+        SimpleNamespace(UC2DetectorManager=camera_manager),
+    )
+    source = tmp_path / "combined.yaml"
+    source.write_text(yaml.safe_dump(doc))
+    settings = ImswitchConfig(
+        config_file=source,
+        use_virtual_microscope=False,
+        camera_recording_dir=tmp_path / "recordings",
+        camera_debug_window=False,
+    )
+    managers = await provide_managers(settings)
+    router = next(value for value in managers if isinstance(value, YamlUC2Bus))
+    assert set(router.axes) == ({"X", "Z"} if with_motion else set())
+    assert len(router.lights) == (3 if with_motion else 0)
+    assert selected[0]["recording_dir"] == tmp_path / "recordings"
+    detector = next(
+        value
+        for value in managers
+        if isinstance(value, SimpleNamespace) and hasattr(value, "close")
+    )
+    assert detector.state.detectors[0].manufacturer == "Simulated"
+    close_detector(detector)
+    assert selected[-1] == "closed"

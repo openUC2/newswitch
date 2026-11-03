@@ -23,7 +23,7 @@ export const StopLiveViewDefinition: ActionDefinition<
   name: 'stop_live_view',
   appKey: 'default',
   description:
-    'Stop broadcasting frames to the video WebSocket endpoint.\n\nCall this to stop streaming frames captured by the detector\nto connected video clients.',
+    'Stop broadcasting frames to the video WebSocket endpoint.\n\nCall this to stop streaming frames captured by the detector\nto connected video clients. Writing to disk ends with it.',
   argsSchema: StopLiveViewArgsSchema,
   returnSchema: StopLiveViewReturnSchema,
   lockKeys: ['camera_parameters'],
@@ -33,7 +33,7 @@ export const StopLiveViewDefinition: ActionDefinition<
  * Stop broadcasting frames to the video WebSocket endpoint.
 
 Call this to stop streaming frames captured by the detector
-to connected video clients.
+to connected video clients. Writing to disk ends with it.
  */
 export const useStopLiveView = () => {
   return useAction(StopLiveViewDefinition);

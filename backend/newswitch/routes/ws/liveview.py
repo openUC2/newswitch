@@ -2,10 +2,14 @@
 WebSocket routes for live video streaming.
 """
 
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
+from rekuest_next.agents.context import get_context_name
 from newswitch.auth import Authenticator
 from newswitch.broadcasters import FrameBroadcaster, ZstdEncoderConfig, H264EncoderConfig
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -13,6 +17,12 @@ router = APIRouter()
 #: How long a client gets to send its auth frame before the socket is dropped. Short,
 #: because the frame is sent from the client's `onopen` handler.
 AUTH_FRAME_TIMEOUT = 10.0
+
+#: How long a stream waits for the agent to provide the FrameBroadcaster. The agent's
+#: startup hooks run in a task started after the app began serving, so a client that
+#: connects right after startup can arrive before the context exists - and the frontend
+#: does not reconnect when the socket is closed.
+BROADCASTER_WAIT_TIMEOUT = 10.0
 
 
 async def authenticate_stream_websocket(websocket: WebSocket) -> bool:
@@ -59,24 +69,41 @@ async def _close_unauthorized(websocket: WebSocket) -> None:
         pass
 
 
-# This is a helper function to get the broadcaster from the app state via WebSocket.
-# By default, the app agent, which is set on app.state.agent holds references
-# to all contexts, including the FrameBroadcaster context which manages video streaming.
-def get_broadcaster_from_websocket(websocket: WebSocket) -> FrameBroadcaster:
+async def await_broadcaster(websocket: WebSocket) -> FrameBroadcaster | None:
+    """Get the FrameBroadcaster from the agent's contexts, waiting until it is provided.
+
+    The agent (`app.state.agent`) keeps its contexts in a dict keyed by context name;
+    `get_context_name` gives the same key rekuest assigns when the startup hook returns
+    the broadcaster.
+
+    Returns:
+        The broadcaster, or None if it did not appear within `BROADCASTER_WAIT_TIMEOUT`.
+
+    Raises:
+        TypeError: The context under the broadcaster's name is something else.
     """
-    Get the FrameBroadcaster from the app state via WebSocket.
+    contexts = websocket.app.state.agent.contexts
+    key = get_context_name(FrameBroadcaster)
+    deadline = asyncio.get_running_loop().time() + BROADCASTER_WAIT_TIMEOUT
 
-    The broadcaster is set on app.state.agent context during startup.
-    """
-    agent = getattr(websocket.app.state, "agent", None)
-    if agent is None:
-        raise RuntimeError("Agent not available")
+    while (broadcaster := contexts.get(key)) is None:
+        if asyncio.get_running_loop().time() > deadline:
+            return None
+        await asyncio.sleep(0.1)
 
-    broadcaster = agent.get_context_for_type(FrameBroadcaster)
-    if broadcaster is None:
-        raise RuntimeError("FrameBroadcaster not available")
-
+    if not isinstance(broadcaster, FrameBroadcaster):
+        raise TypeError(
+            f"Context {key!r} is a {type(broadcaster).__name__}, not a FrameBroadcaster"
+        )
     return broadcaster
+
+
+async def _close_unavailable(websocket: WebSocket) -> None:
+    """Close with 1011, tolerating a client that already went away."""
+    try:
+        await websocket.close(code=1011, reason="frame broadcaster unavailable")
+    except RuntimeError:
+        pass
 
 
 @router.websocket("/zstd/{detector_slot}")
@@ -92,7 +119,10 @@ async def stream_zstd(websocket: WebSocket, detector_slot: int) -> None:
     if not await authenticate_stream_websocket(websocket):
         return
 
-    broadcaster = get_broadcaster_from_websocket(websocket)
+    broadcaster = await await_broadcaster(websocket)
+    if broadcaster is None:
+        await _close_unavailable(websocket)
+        return
 
     # Get subscription to shared encoder
     config = ZstdEncoderConfig(level=1, threshold=0.0, use_delta=True)
@@ -118,8 +148,8 @@ async def stream_zstd(websocket: WebSocket, detector_slot: int) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"Stream error: {e}")
+    except Exception:
+        logger.exception("Stream error")
     finally:
         await broadcaster.arelease_subscription(subscription)
 
@@ -137,7 +167,10 @@ async def stream_h264(websocket: WebSocket, detector_slot: int) -> None:
     if not await authenticate_stream_websocket(websocket):
         return
 
-    broadcaster = get_broadcaster_from_websocket(websocket)
+    broadcaster = await await_broadcaster(websocket)
+    if broadcaster is None:
+        await _close_unavailable(websocket)
+        return
 
     # Get subscription to shared encoder
     config = H264EncoderConfig()
@@ -163,7 +196,7 @@ async def stream_h264(websocket: WebSocket, detector_slot: int) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"Stream error: {e}")
+    except Exception:
+        logger.exception("Stream error")
     finally:
         await broadcaster.arelease_subscription(subscription)

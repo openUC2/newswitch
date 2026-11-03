@@ -123,10 +123,6 @@ class YamlUC2Bus:
         self._locks: dict[str, asyncio.Lock] = {}
         self._broker = UC2EventBroker()
         self._outputs: dict[tuple, set[tuple[str, int, int]]] = {}
-        if config.detectors:
-            raise ValueError(
-                "This hardware startup has no camera driver yet; use a hardware-only demo without detectors"
-            )
         if adapters.wheel_holding(config, adapters.FilterConfig) or adapters.wheel_holding(
             config, adapters.ObjectiveConfig
         ):

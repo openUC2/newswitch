@@ -71,8 +71,14 @@ class H264Encoder:
         if self._running:
             return
 
+        # Nobody reads ffmpeg's stderr, and a full pipe would block ffmpeg and freeze the
+        # stream: keep it quiet (no banner, no progress line) and discard what is left.
         command = [
             "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostats",
             "-y",
             "-f",
             "rawvideo",
@@ -115,7 +121,7 @@ class H264Encoder:
             *command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
         )
         self._running = True
         self._reader_task = asyncio.create_task(self._read_output())

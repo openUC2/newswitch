@@ -7,8 +7,9 @@ the credential check itself.
 """
 
 import base64
+import time
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 import pytest
 import yaml
@@ -43,7 +44,7 @@ def store(tmp_path: Path) -> UserStore:
 def authed_app(store: UserStore) -> FastAPI:
     """The app with a real account store, so the gate is actually exercised."""
     return create_app(
-        ImswitchConfig(config_file=None),
+        ImswitchConfig(config_file=None, use_virtual_microscope=True),
         authenticator=UserStoreAuthenticator(store),
     )
 
@@ -180,7 +181,10 @@ def test_logout_revokes_a_user_store_session(tmp_path: Path) -> None:
     """Logout invalidates exactly the session used, not every session for the account."""
     store = UserStore(tmp_path / "auth.db")
     store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
-    app = create_app(ImswitchConfig(), authenticator=UserStoreAuthenticator(store))
+    app = create_app(
+        ImswitchConfig(config_file=None, use_virtual_microscope=True),
+        authenticator=UserStoreAuthenticator(store),
+    )
     with TestClient(app) as user_client:
         login_response = user_client.post("/auth/login", headers=basic_header())
         token = login_response.json()["token"]
@@ -323,6 +327,31 @@ def test_stream_websocket_rejects_a_wrong_token(client: TestClient) -> None:
             websocket.send_json({"type": "auth", "token": "nope"})
             websocket.receive_bytes()
     assert excinfo.value.code == 1008
+
+
+def test_stream_websocket_accepts_an_in_band_token(
+    authed_app: FastAPI, client: TestClient, token: str
+) -> None:
+    """An accepted auth frame subscribes the socket to a shared encoder.
+
+    Zstd rather than H.264, so the test needs no ffmpeg. The encoder is checked rather
+    than received bytes: frames only flow while a live view runs.
+    """
+    contexts = authed_app.state.agent.contexts
+    with client.websocket_connect("/stream/zstd/1") as websocket:
+        websocket.send_json({"type": "auth", "token": token})
+        assert wait_until(lambda: "frame_broadcaster" in contexts)
+        assert wait_until(lambda: contexts["frame_broadcaster"].encoder_count == 1)
+
+
+def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> bool:
+    """Poll `condition` until it holds; the server side runs on the client's portal."""
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+    return True
 
 
 # ---------------------------------------------------------------- authenticator

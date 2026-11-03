@@ -1,31 +1,21 @@
-"""ASGI entry point. NEWSWITCH_CONFIG selects device YAML; NEWSWITCH_MODE selects hardware/virtual."""
+"""ASGI entrypoint using shared YAML/mode selection and configured logging."""
 
 import os
-from pathlib import Path
-from newswitch.app import ImswitchConfig, create_app
+from newswitch.app import create_app, load_app_config
+from newswitch.logging_setup import configure_logging
 
+# Keep the old function name available to callers; every entrypoint uses the same loader.
+load_config = load_app_config
+config = load_config()
+configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
+app = create_app(config)
 
-def load_config() -> ImswitchConfig:
-    """Use YAML device configuration without a parallel JSON hardware source."""
-    overrides = {}
-    if source := os.environ.get("NEWSWITCH_CONFIG"):
-        path = Path(source).expanduser()
-        if path.suffix.lower() not in (".yaml", ".yml"):
-            raise ValueError(
-                "NEWSWITCH_CONFIG must select a device YAML; legacy JSON startup is unsupported"
-            )
-        path = path if path.is_absolute() else Path(__file__).resolve().parent / path
-        overrides.update(
-            config_file=path,
-            static_config_path=path,
-            persistent_config_path=path.with_name(path.stem + ".persistent" + path.suffix),
-            load_from_static_config_path=True,
-        )
-    if mode := os.environ.get("NEWSWITCH_MODE"):
-        if mode not in ("hardware", "virtual"):
-            raise ValueError("NEWSWITCH_MODE must be hardware or virtual")
-        overrides["use_virtual_microscope"] = mode == "virtual"
-    return ImswitchConfig(**overrides)
+if __name__ == "__main__":
+    import uvicorn
 
-
-app = create_app(load_config())
+    uvicorn.run(
+        app,
+        host=os.environ.get("BACKEND_HOST", "0.0.0.0"),
+        port=int(os.environ.get("BACKEND_PORT", "8099")),
+        log_config=None,
+    )

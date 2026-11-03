@@ -1,3 +1,6 @@
+# ---------- General ----------
+*.zip
+
 # ---------- OS / editors ----------
 .DS_Store
 .idea/

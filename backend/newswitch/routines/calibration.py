@@ -1,11 +1,14 @@
 """Routine for calibrating the affine transformation between stage coordinates and image coordinates."""
 
+import logging
 import copy
 import numpy as np
 from newswitch import protocols
 from newswitch.logic.affine_matrix import calculate_3d_affine
 from newswitch.protocols.calibration import CalibratedLightPath
 from newswitch.protocols.core import AffineMatrix
+
+logger = logging.getLogger(__name__)
 
 
 def calibrate_light_path(
@@ -34,21 +37,21 @@ def calibrate_light_path(
         # Triangle pattern for affine calibration
         stage_manager.move(x=20, y=-20, z=0.0)
         stage_states.append(copy.copy(stage_manager.state))
-        frame = detector_manager.capture_image(slot=detector.slot)
+        frame = detector_manager.capture_image(slot=detector.slot).data
         images.append(frame)
 
         stage_manager.move(x=-40, y=0, z=20)
         stage_states.append(copy.copy(stage_manager.state))
-        frame = detector_manager.capture_image(slot=detector.slot)
+        frame = detector_manager.capture_image(slot=detector.slot).data
         images.append(frame)
 
         stage_manager.move(x=20, y=20, z=-20)
         stage_states.append(copy.copy(stage_manager.state))
-        frame = detector_manager.capture_image(slot=detector.slot)
+        frame = detector_manager.capture_image(slot=detector.slot).data
         images.append(frame)
 
         affine_matrix_x = calculate_3d_affine(images=images, stage_positions=stage_states)
-        print(f"Calculated affine matrix: {affine_matrix_x.matrix}")
+        logger.info("Calculated affine matrix: %s", affine_matrix_x.matrix)
         # Simulate the calculation of the affine transformation matrix based on the captured image
         affine_matrix: AffineMatrix = [
             [0.34, 0.0, 0.0, 0],

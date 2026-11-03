@@ -2,7 +2,7 @@
 
 # Sourced before every hook: fixes PATH for GUI/IDE commits whose minimal sh
 # cannot find uv (~/.local/bin) or yarn/node (/opt/homebrew/bin).
-rc: .lefthookrc
+rc: ./.lefthookrc
 
 commit-msg:
   commands:

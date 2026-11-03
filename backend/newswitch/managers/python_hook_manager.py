@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, Type
 
 from newswitch.protocols.hook_manager import HookContext, Hook, HookHandler
+
+logger = logging.getLogger(__name__)
 
 
 class PythonHookManager:
@@ -36,4 +39,4 @@ class PythonHookManager:
         """Execute a list of hooks in order."""
         for hook in hooks:
             # self.execute(hook)
-            print(f"Executing hook: {hook}")
+            logger.info("Executing hook: %s", hook)

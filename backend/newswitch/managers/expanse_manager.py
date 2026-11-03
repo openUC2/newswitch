@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 
+import logging
 from newswitch.protocols.expanse import ExpanseState, Image, Frame
+
+logger = logging.getLogger(__name__)
 
 
 class ExpanseManager:
@@ -20,7 +23,7 @@ class ExpanseManager:
     def add_frame(self, frame: Frame) -> None:
         """Add a new frame to the current state."""
         self.state.current_frames.append(frame)
-        print(self.state)
+        logger.debug("%s", self.state)
 
     def reset_expanse(self) -> None:
         """Reset the expanse state, clearing all current images."""

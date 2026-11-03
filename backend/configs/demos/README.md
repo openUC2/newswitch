@@ -89,10 +89,12 @@ sharing it must agree on protocol and transport settings.
 - Serial selectors must match exactly one port (explicit ports can reconnect if
   temporarily absent). Unsupported transport/request settings fail explicitly.
   Direct CAN currently supports SocketCAN and Waveshare USB-CAN-A.
-- The real path does not invent cameras, wheels or default illumination sources.
-  Configured cameras and actuated wheels are rejected in this integration step;
-  camera integration is separate work. The broad main example is not a ready-made
-  startup file for this limited hardware path.
+- Camera mappings are passed independently to Christian's `build_detector_manager`
+  and `UC2DetectorManager` (`uv sync --extra camera` on supported Linux/Python 3.12
+  systems). Its warning-and-virtual-fallback behavior when the library is absent is
+  retained. With no cameras configured the hardware path exposes no fake camera.
+  Actuated wheels and undefined Serial bridge mappings remain unsupported; the
+  broad main example still contains these and is not a ready-made startup file.
 
 ## Mixed devices and split stages
 

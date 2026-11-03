@@ -105,7 +105,7 @@ def test_affine_matrix_calculation(affine_stage_detector: DetectorWithState) -> 
     for pos in stage_position:
         stage_manager.move(x=pos.x, y=pos.y, z=pos.z)
 
-        frame = detector.capture_image()
+        frame = detector.capture_image().data
         images.append(frame)
         states.append(copy.copy(stage_manager.state))
 
