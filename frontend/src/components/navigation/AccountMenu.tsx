@@ -14,6 +14,7 @@ import {
   ScrollText,
   ShieldUser,
   KeyRound,
+  ListOrdered,
   Waypoints,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,10 @@ export function AccountMenu({
             </>
           )}
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate("/sequence")}>
+            <ListOrdered className="h-4 w-4" />
+            {t("navigation.sequence", "Sequence (prototype)")}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => navigate("/debug/space")}>
             <Waypoints className="h-4 w-4" />
             {t("navigation.coordinateSystems")}

@@ -4115,6 +4115,22 @@
                         ],
                         "widget": null,
                         "provides": null
+                      },
+                      {
+                        "key": "speed",
+                        "label": null,
+                        "kind": "FLOAT",
+                        "description": null,
+                        "identifier": null,
+                        "nullable": true,
+                        "effects": [],
+                        "choices": null,
+                        "referenceUnit": null,
+                        "proposedUnits": null,
+                        "dimension": null,
+                        "children": null,
+                        "widget": null,
+                        "provides": null
                       }
                     ],
                     "widget": null,

@@ -12,6 +12,7 @@ import {
   IndexPage,
   LoginPage,
   ReplayPage,
+  SequencePage,
   SpaceDebugPage,
   UsersPage,
 } from "./pages";
@@ -79,6 +80,16 @@ function App() {
             element={
               <ScopedRoute scope="replay">
                 <ReplayPage />
+              </ScopedRoute>
+            }
+          />
+
+          {/* A sequence editor: a timeline whose lanes are the instrument's own (a prototype). */}
+          <Route
+            path="/sequence"
+            element={
+              <ScopedRoute scope="sequence">
+                <SequencePage />
               </ScopedRoute>
             }
           />

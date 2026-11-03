@@ -246,6 +246,7 @@ class Values:
                     maximum=variable.max,
                     step=variable.step,
                     does=does,
+                    speed=variable.speed,
                 )
             elif variable.verb == "swaps":
                 swaps[variable.cube][short] = SwapValue(

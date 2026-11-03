@@ -15,6 +15,7 @@ export const MoveValueSchema = z
     maximum: z.number().nullable().optional(),
     step: z.number().nullable().optional(),
     does: z.array(z.string()),
+    speed: z.number().nullable().optional(),
   })
   .brand('@newswitch/move_value')
   .describe('A value along a direction, and what moving it does.');

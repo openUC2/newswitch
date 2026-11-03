@@ -18,6 +18,8 @@ class MoveValue:
     step: Optional[float] = None
     does: list[str] = field(default_factory=list)
     """What changing it was found to change, on any detector: position, blur, scale, colour, light."""
+    speed: Optional[float] = None
+    """How fast it moves, in its unit a second, where the description says: what a move takes."""
 
 
 @dataclass
