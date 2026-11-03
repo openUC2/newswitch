@@ -12,7 +12,9 @@ One LED uses master channel 1, PWM maximum 1023. No LED matrix is installed.
 Endstop polarities and homing directions retain the old values. No startup homing.
 Initial movement speeds are reduced to 1000 um/s (X/Y/A), 500 um/s (Z);
 jog choices are 1, 10, 100 um. Travel bounds were not present and are not invented.
-The HikRobot camera uses the installed MVS SDK; no optical pixel size is guessed.
+The HikRobot camera is omitted from this stage/LED test profile: the installed MVS
+SDK fails to compile with the pinned uc2_cam_py (MV_E_NORESPONSE missing). No
+virtual camera is substituted. Camera integration remains a separate follow-up.
 
 Runtime files and private credentials are in `.runtime/` (excluded locally from Git).
 Frontend `.env.local` points to the Pi, not the browser computer's localhost.

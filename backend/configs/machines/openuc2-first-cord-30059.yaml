@@ -2,6 +2,7 @@
 # No matrix: the old file contains a stale matrix entry, but none is installed.
 # X/Y: 0.396 um/step; Z: 0.3125 um/step. Speeds below are conservative initial settings.
 # No automatic homing. A retains the legacy linear calibration in um.
+# Camera omitted: installed MVS SDK is incompatible with the pinned camera driver.
 newswitch_version: v1.0.2
 devices:
   serial-master:
@@ -64,15 +65,3 @@ devices:
     type: lightsource
     name: Illumination LED
     coherence: incoherent
-  hik-camera-controller:
-    type: controller
-    connection: {protocol: usb3-vision}
-    mapping:
-      widefield-camera: {type: usb3-vision-camera, id: 0, index: 0, buffer_size: 8}
-  widefield-camera:
-    type: detector
-    name: Widefield HikRobot camera
-    manufacturer: HikRobot
-    channels: 1
-    exposure_time_ms: {value: 10, unit: ms}
-    gain_db: {value: 0, unit: dB}
