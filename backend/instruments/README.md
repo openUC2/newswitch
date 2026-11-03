@@ -70,7 +70,7 @@ detector, some way the swaps can be set; a source may light several. Each sample
 only one, and is refused when it could be either. An acquisition covers every sample its detectors
 see: a place on "the sample" is that place on each, each sample sweeps its own focus (a named
 `stack.variable` across samples is refused), and each record lands in its own sample's mikro space.
-A thermometer beside one of several samples says which in `on_stage.stage`.
+A probe beside one of several samples says which (`at.stage`, `reads.sample`).
 
 **What it is mounted on**: `holders` names what the sample can be mounted on, from the library in
 `newswitch/instrument/holders` (`slide-75x25`, `dish-35`, `plate-96`), and where each sits on this
@@ -88,19 +88,41 @@ the beads on what is mounted (in every well of a plate); `truth.yml` may say it 
     mounted: slide
 ```
 
-**What sits beside it**: a thermometer is a cube of its own, a detector of no light. It has no
-axes, so it measures at one point: `on_stage` is where it sits on the stage insert, in stage
-coordinates, so it moves with the stage and the sample. The coordinate graph places it there by a
-BY_DIMENSION part from no axes onto x, y and z, and `SpaceState.points` says where that is on the
-sample. A simulated one reads the air beside the sample, 22 °C unless `truth.yml` says otherwise
-(`air_temperature_c`), within its `noise`; it is read once a second while live, and published as
-its `reading`. An acquisition that names it keeps its readings as a record of its own,
-`(t, c, plane, z, y, x)`, one position along `z, y, x` at its point; no driver reads a real one yet.
+**Probes**: a detector of no light is a probe, a cube of its own that says what it `measures`
+(a quantity and its unit), where it is, and how a simulated one reads (`model`). It is either `at`
+one point of a stage insert, in stage coordinates, so it moves with the stage and the sample (a
+thermometer: placed by a BY_DIMENSION part from no axes onto x, y and z; `SpaceState.points` says
+where that is on the sample), or it `reads` a grid of what its sample is mounted on: an electrode
+array's electrodes, its `y` and `x`, placed straight onto the sample, since they are of the holder
+and no stage move finds them. With `sampling`, each reading is a block of samples in time, an
+axis `s`. A simulated one at a point reads the air (`model: air`: 22 °C unless `truth.yml` says
+`air_temperature_c`), within its `noise`, once a second while live; one on a grid with
+`model: spikes` reads the sample's cells, the beads the cameras draw, firing as its simulation's
+`electrical` says, each electrode the more the nearer a cell is, plus its noise; while live it
+streams how much each electrode swung in the last block, as an image. An acquisition that names a
+probe keeps a record of its own, `(t, c, [s], plane, z, y, x)`. No driver reads a real one yet; a
+probe whose grid is not on what is mounted reads nothing, and an acquisition of it is refused.
 
 ```yaml
   thermometer:
-    element: {kind: thermometer, on_stage: {x: 30 mm, y: 0 mm}}   # 3 cm from the section
+    element:
+      kind: probe
+      measures: {quantity: temperature, unit: degC}
+      at: {x: 30 mm, y: 0 mm}                   # 3 cm from the section
+      model: {kind: air, noise: 0.05}
+  mea:
+    element:
+      kind: probe
+      measures: {quantity: voltage, unit: uV}
+      reads: {grid: electrode}                  # of what the sample is mounted on: an mea-60
+      sampling: {rate: 20 kHz, block: 50 ms}
+      model: {kind: spikes, noise: 5}
 ```
+
+**Grids**: a holder names its places in `grids`, each rows and columns a pitch apart (`well` of a
+plate, `electrode` of an electrode array). Every place is a system of the coordinate graph,
+`<grid>:<cube>:<name>` (`well:stage:B3`, `electrode:stage:D5`), to `move_to`; a bare `electrode:D5`
+is of the sample the camera sees.
 
 The compiler covers every simulation when a server starts. Calibration needs something to correlate: on an empty slide its arithmetic gives a meaningless
 pixel size, without an error. An epi source's light is drawn from the beads, also what a sample
@@ -273,6 +295,7 @@ A blok the catalog refuses, or one naming an action this microscope does not hav
 | `he-microscope` | White light through an H&E-stained section, onto a color camera, with two objectives, and a thermometer on the stage insert 3 cm from the section. |
 | `dual-sample` | Two samples, each on a stage of its own and seen through a light path of its own: GFP beads by fluorescence onto a mono camera, an H&E section in white light onto a color camera, a thermometer beside the section. |
 | `switch-microscope` | Two samples, two cameras and two flip mirrors: the selector decides which sample the cameras see, the port which camera gets the light. Each setting that gets light through is a channel of its own. |
+| `mea-microscope` | Cells on a 60-electrode array chip, by GFP fluorescence and in white light, while the array records their voltage at 20 kHz: the cells it records are the beads the camera draws. |
 | `point-scanner` | A galvo, a pinhole and a PMT: a scan makes the image, of one plane of a volume. |
 | `light-sheet` | A sheet from the side, whose positioner the camera's frames step, and a stage for x, y and z. |
 | `flim` | A point scanner on a thin section, timing each photon against a pulsed laser. |

@@ -105,6 +105,8 @@ class SimulatedDetectorManager:
         self.values = values
         self.step = step
         self._readouts: dict[str, Readout] = {}
+        self._clock0 = time.monotonic()
+        """When its clock started: a probe that samples time reads the block of now on it."""
         self._lock = threading.RLock()
         self._closed = False
         for detector in detectors:
@@ -308,6 +310,8 @@ class SimulatedDetectorManager:
         """One exposure along every axis but ``z``: ``(c, y, x)`` in the order of its `colors`,
         ``(m, y, x)`` timing its photons, ``(y, x)`` of an image, ``()`` of a probe at a point."""
         detector = self.state.get(name)
+        if detector.is_probe() and detector.has_axis("s"):
+            return self._block(detector)
         if not detector.delivers_images():
             return np.array(self._read(detector), dtype=detector.data_type)
         values = self.values()
@@ -321,9 +325,27 @@ class SimulatedDetectorManager:
         return windows_of.read_out(stacked, detector, ("c", "y", "x"))
 
     def _read(self, detector: Detector) -> float:
-        """What a detector that measures at one point reads now; published as its `reading`."""
+        """What a probe at one point reads now; published as its `reading`."""
         detector.reading = round(self.simulator.read_point(detector.name), 3)
         return detector.reading
+
+    def _block(self, detector: Detector, t0_s: float | None = None) -> np.ndarray:
+        """A block of what a probe that samples time reads, ``(s, y, x)``: the one starting
+        `t0_s` into its clock, or the last whole one before now. Its `reading` is the largest swing
+        of any of its places in it."""
+        if t0_s is None:
+            block_s = detector.axis("s").size * (detector.axis("s").step or 1.0) / 1000.0  # type: ignore[operator]
+            t0_s = int((time.monotonic() - self._clock0) / block_s) * block_s
+        block = self.simulator.potentials(detector.name, t0_s, self.values())
+        detector.reading = round(float((block.max(axis=0) - block.min(axis=0)).max()), 3)
+        return block
+
+    def activity(self, detector: Detector) -> np.ndarray:
+        """What each place of a probe on a grid saw in the last block, as an image the live view
+        shows: its swing, in whole units of what it measures (uint16)."""
+        block = self._block(detector)
+        swing = block.max(axis=0) - block.min(axis=0)
+        return np.clip(np.rint(swing), 0, 65535).astype(np.uint16)
 
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """Each event of the detector steps what its wire reaches; the sweep ends on the last plane.
@@ -382,6 +404,11 @@ class SimulatedDetectorManager:
                     if imaging:
                         frame = self._next_frame(detector, readout)
                         sink.broadcast_sync(detector.name, frame.data)
+                    elif detector.has_axis("s") and detector.has_axis("x"):
+                        # a grid that samples time: how much each place swung, as an image
+                        sink.broadcast_sync(detector.name, self.activity(detector))
+                    elif detector.has_axis("s"):
+                        self._block(detector)
                     else:
                         self._read(detector)  # no image to stream: its reading is published
                     rate = detector.current_frame_rate

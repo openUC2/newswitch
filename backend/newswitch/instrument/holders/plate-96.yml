@@ -2,9 +2,10 @@ spec: newswitch/holder/v0
 description: An SBS/ANSI 96-well plate, 127.76 x 85.48 mm; A1's middle 14.38 mm right and 11.24 mm down from its top left corner.
 kind: plate
 extent: {x: 127.76 mm, y: 85.48 mm}
-plate:
-  rows: 8
-  columns: 12
-  pitch: {x: 9 mm, y: 9 mm}
-  a1: {x: 14.38 mm, y: 11.24 mm}
-  well: {diameter: 6.4 mm}
+grids:
+  well:
+    rows: 8
+    columns: 12
+    pitch: {x: 9 mm, y: 9 mm}
+    a1: {x: 14.38 mm, y: 11.24 mm}
+    place: {diameter: 6.4 mm}

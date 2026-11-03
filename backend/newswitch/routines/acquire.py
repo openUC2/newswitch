@@ -29,7 +29,7 @@ from arkitekt import Task
 
 from newswitch import protocols
 from newswitch.instrument.space import AxisMap, to_parts, zyx_rows
-from newswitch.instrument.spec import Move
+from newswitch.instrument.spec import Dark, Move
 from newswitch.models.acquisition import (
     AcquiredDataset,
     AcquisitionChannel,
@@ -245,13 +245,17 @@ PLANE = "plane"
 def _axes_of(detector: Detector) -> tuple[Axis, ...]:
     """A record's axes: time, its channels, what it delivers but space, the plane, its space.
 
-    A detector that measures at a point is, as mikro has a dataset of no extent, one position along
-    each of ``z, y, x``, at its point; the plane it was read at is an index of its own (`PLANE`).
+    A probe is read at every plane, which it does not move with: the plane is an index of its own
+    (`PLANE`). One at a point is, as mikro has a dataset of no extent, one position along each of
+    ``z, y, x``, at its point; one on a grid has its places along ``y, x``, and samples in time
+    along ``s`` if it samples time.
     """
     if not detector.delivers_images():
+        own = [axis for axis in detector.axes if axis.domain != "space"]
         return (
             Axis("t", "TIME"),
             Axis("c", "CHANNEL"),
+            *(Axis(a.name, AXIS_TYPES[a.domain]) for a in own),
             Axis(PLANE, "INDEX"),
             *(Axis(name, "SPACE") for name in ("z", "y", "x")),
         )
@@ -316,6 +320,11 @@ def _looks_of(
         under = {**now, **values.resolved(channel.set_to)}
         for name in channel.detectors:
             _find_detector(name, detector_manager)
+            if not space.sees(name, under):
+                assert space.instrument is not None
+                if space.instrument.sample_of(name, under) is None:
+                    raise space.instrument.dark(name, under)
+                raise Dark(f"{name} reads a grid that what its sample is mounted on has not")
             looks.append(_Look(index, name, space.sample_of(name, under), under))
     return looks
 
@@ -394,13 +403,25 @@ def _plan_position(
 
     for record in records.values():
         detector = record.detector
-        microtime = next((axis.size for axis in detector.axes if axis.name == "m"), None)
         record.axes = _axes_of(detector)
-        sizes = {"t": plan.times, "c": len(record.channels), "z": len(offsets), "m": microtime}
+        sizes = {
+            "t": plan.times,
+            "c": len(record.channels),
+            "z": len(offsets),
+            **{a.name: a.delivered() for a in detector.axes if a.name not in ("c", "z", "y", "x")},
+        }
         if record.shape is not None:
             sizes["y"], sizes["x"] = record.shape
-        else:  # at a point: read at every plane, there at one place
-            sizes.update({PLANE: len(offsets), "z": 1, "y": 1, "x": 1})
+        else:  # a probe: read at every plane, there at its places or its point
+            sizes.update(
+                {
+                    PLANE: len(offsets),
+                    "z": 1,
+                    **{
+                        a: detector.axis(a).delivered() if detector.has_axis(a) else 1 for a in "yx"
+                    },
+                }
+            )
         record.data = np.empty(
             tuple(int(sizes[name] or 0) for name in record.dims), dtype=detector.data_type
         )
@@ -548,7 +569,9 @@ def _keep(
         stack = PLANE if PLANE in record.dims else "z"
         at = {"t": time_index, "c": channel, stack: z_index}
         place: tuple[Any, ...] = tuple(at.get(name, slice(None)) for name in record.dims)
-        record.data[place] = image
+        target = record.data[place]
+        # a probe's reading has one position along what it has no extent along: as its record does
+        record.data[place] = image if image.shape == target.shape else image.reshape(target.shape)
         record.planes.append(AcquiredPlane(time_index, channel, z_index, started, ended, now))
 
 

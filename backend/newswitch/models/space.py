@@ -83,16 +83,19 @@ class Position:
     """
 
     system: str
-    """sample, stage, detector:<name>, image:<id>, well:<B3>, ..."""
+    """sample, stage, detector:<name>, image:<id>, well:B3, electrode:D5, ..."""
     coordinates: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
-class WellShape:
-    """One well of a mounted plate: its middle on the sample, and how wide it is."""
+class PlaceShape:
+    """One place of a grid of what is mounted (a well, an electrode): its middle on the sample, and
+    how wide it is."""
 
+    grid: str
+    """Which grid it is of: well, electrode."""
     name: str
-    """Its place: well:B3."""
+    """Its place: well:stage:B3."""
     x: float
     y: float
     diameter_um: Optional[float] = None
@@ -105,10 +108,10 @@ class HolderShape:
 
     name: str
     kind: str
-    """slide, dish or plate."""
+    """slide, dish, plate, mea."""
     width_um: float
     height_um: float
-    wells: list[WellShape] = field(default_factory=list)
+    places: list[PlaceShape] = field(default_factory=list)
 
 
 @dataclass

@@ -17,7 +17,7 @@ from newswitch.models.space import (
     Position,
     SampleSpace,
     Transformation,
-    WellShape,
+    PlaceShape,
 )
 from newswitch.models.hooks import RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 
@@ -35,7 +35,7 @@ for model in (
     DetectorPlacement,
     MeasuredPoint,
     SampleSpace,
-    WellShape,
+    PlaceShape,
     HolderShape,
     models.LightEdge,
     models.LightElement,

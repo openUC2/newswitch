@@ -73,7 +73,10 @@ class Detector:
     unit: str = ""
     """What its values are in: empty for counts, degC for a temperature."""
     reading: Optional[float] = None
-    """The last value of a detector that measures at one point, while live; None for an image."""
+    """The last value of a probe, while live (an electrode array's: its largest swing); None for an
+    image."""
+    measures_light: bool = True
+    """Whether light is what it measures: False for a probe (a thermometer, an electrode array)."""
 
     # --- current readout: what the device applied, which its variables then report
     current_exposure_ms: Optional[float] = None
@@ -97,8 +100,13 @@ class Detector:
         return any(axis.name == name for axis in self.axes)
 
     def delivers_images(self) -> bool:
-        """Whether it delivers images: it has a y and an x along space. A thermometer does not."""
-        return self.has_axis("y") and self.has_axis("x")
+        """Whether it images light: it measures light, along a y and an x in space. A probe does
+        not, even one whose electrodes are in rows and columns."""
+        return self.measures_light and self.has_axis("y") and self.has_axis("x")
+
+    def is_probe(self) -> bool:
+        """Whether it measures something other than light: a thermometer, an electrode array."""
+        return not self.measures_light
 
     def plane(self) -> tuple[int, int]:
         """The (y, x) size of its image, after its windows and binning."""

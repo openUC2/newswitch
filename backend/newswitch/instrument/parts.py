@@ -36,8 +36,12 @@ def _probes(instrument: Instrument) -> list[Detector]:
                 data_type="float32",
                 quantity=element.measures.quantity,
                 unit=element.measures.unit,
+                measures_light=False,
                 axes=_axes(instrument, name, 1),
-                current_frame_rate=POINT_RATE,
+                # a probe that samples time is read once a block; one at a point, once a second
+                current_frame_rate=POINT_RATE
+                if element.sampling is None
+                else 1000.0 / element.sampling.block,
             )
         )
     return found

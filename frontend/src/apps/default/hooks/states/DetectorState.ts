@@ -43,6 +43,7 @@ export const DetectorSchema = z
     quantity: z.string(),
     unit: z.string(),
     reading: z.number().nullable().optional(),
+    measures_light: z.boolean(),
     current_exposure_ms: z.number().nullable().optional(),
     current_gain: z.number().nullable().optional(),
     current_frame_rate: z.number().nullable().optional(),

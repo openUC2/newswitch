@@ -28,6 +28,21 @@ TRUTH = "truth.yml"
 AIR_TEMPERATURE_C = 22.0
 
 
+#: How long a spike lasts, and how many reaches away a cell still counts for an electrode.
+SPIKE_MS = 1.5
+SPIKE_REACHES = 5.0
+#: The seeds of the noise of an electrode array, and of when its cells fire.
+NOISE_SEED = 13
+SPIKE_SEED = 17
+
+
+def _spike(samples: int) -> np.ndarray:
+    """An extracellular spike `samples` long, its trough -1: down sharply, then up a little."""
+    t = np.linspace(0.0, 1.0, max(samples, 2))
+    wave = -np.exp(-(((t - 0.25) / 0.08) ** 2)) + 0.4 * np.exp(-(((t - 0.55) / 0.15) ** 2))
+    return wave / -wave.min()
+
+
 def load_truth(instrument: Instrument) -> dict[str, Any]:
     """The hidden errors of `instrument`; none when it has no truth file."""
     path = instrument.folder / TRUTH
@@ -156,6 +171,57 @@ class Simulator:
         noise = element.model.noise
         return value + float(self._noise.normal(0.0, noise)) if noise else value
 
+    def potentials(self, probe: str, t0_s: float, state: Mapping[str, Any]) -> np.ndarray:
+        """What a probe reading a grid samples in the block starting `t0_s` seconds into its clock,
+        as ``(samples, rows, columns)`` in its unit: its noise, and the spikes of the cells nearby.
+
+        The cells are the beads the cameras draw (`beads_in_sample`), firing at random as the
+        sample's ``electrical`` says; each electrode picks up a cell's spike the weaker the farther
+        it is. Nothing mounted that has the grid, nothing but noise; a sample that does not fire,
+        likewise. The same block is the same however often it is read, and blocks join.
+        """
+        element = self.instrument.cubes[probe].element
+        assert isinstance(element, Probe) and element.reads is not None
+        assert element.sampling is not None, f"{probe} samples no time"
+        (sample,) = self.instrument.samples_of(probe)
+        rate, n = element.sampling.rate, element.sampling.samples
+        start = round(t0_s * rate)
+        noise = np.random.default_rng([NOISE_SEED, start])
+        holder_name = self.mounted(sample)
+        holder = (
+            None
+            if holder_name is None
+            else self.instrument.sample_holder(sample).holders[holder_name].holder
+        )
+        grid = None if holder is None else holder.grids.get(element.reads.grid)
+        if grid is None:
+            rows, columns = (
+                self.instrument.grid_of(probe).rows,
+                self.instrument.grid_of(probe).columns,
+            )
+            return noise.normal(0.0, element.model.noise, (n, rows, columns)).astype(np.float32)
+        out = noise.normal(0.0, element.model.noise, (n, grid.rows, grid.columns))
+        simulation = self.instrument.simulation_at(state, sample)
+        electrical = simulation.electrical
+        if electrical is None:
+            return out.astype(np.float32)
+        y, x, depth = self.beads_in_sample(simulation.pattern, sample)
+        columns_um = (grid.a1.x + np.arange(grid.columns) * grid.pitch.x) * 1000.0
+        rows_um = (grid.a1.y + np.arange(grid.rows) * grid.pitch.y) * 1000.0
+        dy = y[:, None, None] - rows_um[None, :, None]
+        dx = x[:, None, None] - columns_um[None, None, :]
+        distance = np.sqrt(dy**2 + dx**2 + depth[:, None, None] ** 2)
+        near = np.nonzero(distance.min(axis=(1, 2)) < SPIKE_REACHES * electrical.reach)[0]
+        amplitude = electrical.amplitude * np.exp(-distance[near] / electrical.reach)
+        wave = _spike(round(SPIKE_MS * rate / 1000.0))
+        expected = electrical.rate * n / rate
+        for index, cell in enumerate(near):
+            fires = np.random.default_rng([SPIKE_SEED, int(cell), start])
+            for at in fires.integers(0, n, fires.poisson(expected)):
+                length = min(len(wave), n - at)
+                out[at : at + length] += wave[:length, None, None] * amplitude[index]
+        return out.astype(np.float32)
+
     def beads_in_sample(self, pattern: Pattern, sample: str) -> np.ndarray:
         """Where `pattern`'s beads are on what `sample` is mounted on, as ``(y, x, depth)`` in its
         sample micrometres.
@@ -169,16 +235,17 @@ class Simulator:
             beads = _beads(pattern)
             if holder_name is not None:
                 holder = self.instrument.sample_holder(sample).holders[holder_name].holder
-                if holder.plate is None:
+                wells = holder.grids.get("well")
+                if wells is None:
                     middle = (holder.extent.y * 500.0, holder.extent.x * 500.0, 0.0)
                     beads = beads + np.array(middle)[:, np.newaxis]
                 else:
-                    radius = (holder.plate.well.diameter or holder.plate.well.size or 0.0) * 500.0
+                    radius = (wells.place.diameter or wells.place.size or 0.0) * 500.0
                     inside = beads[:, np.hypot(beads[0], beads[1]) <= radius]
                     beads = np.concatenate(
                         [
                             inside + np.array([y * 1000.0, x * 1000.0, 0.0])[:, np.newaxis]
-                            for x, y in holder.plate.wells().values()
+                            for x, y in wells.places().values()
                         ],
                         axis=1,
                     )

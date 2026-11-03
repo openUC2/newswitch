@@ -1,0 +1,22 @@
+spec: newswitch/holder/v0
+description: >-
+  A 60-electrode array chip, 49 x 49 mm: 8 x 8 electrodes of 30 um, 200 um apart, in the middle of
+  one round culture chamber, 19 mm across. Cells grow on it, so its electrodes are places of the
+  sample, as a plate's wells are.
+kind: mea
+extent: {x: 49 mm, y: 49 mm}
+grids:
+  # The chamber the cells grow in: one well, in the chip's middle.
+  well:
+    rows: 1
+    columns: 1
+    pitch: {x: 19 mm, y: 19 mm}
+    a1: {x: 24.5 mm, y: 24.5 mm}
+    place: {diameter: 19 mm}
+  # The electrodes, A1 top left to H8; the whole grid centred on the chamber.
+  electrode:
+    rows: 8
+    columns: 8
+    pitch: {x: 0.2 mm, y: 0.2 mm}
+    a1: {x: 23.8 mm, y: 23.8 mm}
+    place: {diameter: 0.03 mm}

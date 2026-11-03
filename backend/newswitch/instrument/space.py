@@ -44,6 +44,7 @@ __all__ = [
     "STAGE",
     "AxisMap",
     "CoordinateGraph",
+    "NOT_PLACES",
     "NoRoute",
     "Position",
     "affine_part",
@@ -69,8 +70,9 @@ __all__ = [
 SAMPLE = "sample"
 #: Where a sample's stage is, short (``stage:<cube>`` in the graph).
 STAGE = "stage"
-#: A holder's place, short: ``well:B3`` (``well:<cube>:B3`` in the graph).
-PLACE = "well"
+#: What a system's name starts with that is no place of a holder: any other is a grid's
+#: (``well:B3``, ``electrode:D5``; ``well:<cube>:B3`` in the graph).
+NOT_PLACES = frozenset({SAMPLE, STAGE, "detector", "image"})
 
 
 def sample_system(sample: str) -> str:
@@ -83,9 +85,10 @@ def stage_system(sample: str) -> str:
     return f"{STAGE}:{sample}"
 
 
-def place_system(sample: str, place: str) -> str:
-    """A place of what `sample` is mounted on: ``"well:stage_a:B3"``."""
-    return f"{PLACE}:{sample}:{place}"
+def place_system(grid: str, sample: str, place: str) -> str:
+    """A place of a grid of what `sample` is mounted on: ``"well:stage_a:B3"``,
+    ``"electrode:stage:D5"``."""
+    return f"{grid}:{sample}:{place}"
 
 
 #: The axes of a frame in space, in the order a 4x4 has them.
@@ -472,8 +475,11 @@ def holder_to_stage(mount: Mount, offset_um: tuple[float, float] = (0.0, 0.0)) -
     ) @ rotation_z(mount.rotation)
 
 
-def places_of(holder: Holder) -> dict[str, tuple[float, float]]:
-    """A holder's named places (a plate's wells, ``B3``), in its sample's micrometres."""
-    if holder.plate is None:
-        return {}
-    return {name: (x * 1000.0, y * 1000.0) for name, (x, y) in holder.plate.wells().items()}
+def places_of(holder: Holder) -> dict[tuple[str, str], tuple[float, float]]:
+    """A holder's named places by grid (``("well", "B3")``, ``("electrode", "D5")``), in its
+    sample's micrometres."""
+    return {
+        (grid, name): (x * 1000.0, y * 1000.0)
+        for grid, places in holder.grids.items()
+        for name, (x, y) in places.places().items()
+    }

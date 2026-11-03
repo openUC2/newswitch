@@ -283,6 +283,16 @@ class Stain:
 
 
 @dataclass(frozen=True, config=STRICT)
+class Electrical:
+    """What the beads do electrically, as cells: each fires at random, `rate` times a second on
+    average, and an electrode `reach` away picks up 1/e of `amplitude` (in microvolts)."""
+
+    rate: Hertz
+    amplitude: Annotated[StrictFloat, Field(gt=0.0)]
+    reach: Annotated[Micrometres, Field(gt=0.0)]
+
+
+@dataclass(frozen=True, config=STRICT)
 class Simulation:
     """One thing that can be on the holder: without a fluorophore, it emits nothing.
 
@@ -297,6 +307,7 @@ class Simulation:
     )
     absorbed: Fraction | None = None
     stains: dict[str, Stain] = field(default_factory=dict)
+    electrical: Electrical | None = None  # whether its beads fire, as cells do
 
     @model_validator(mode="after")
     def _absorbs_what_it_emits(self) -> Self:
@@ -322,8 +333,8 @@ class Offset:
 
 
 @dataclass(frozen=True, config=STRICT)
-class Well:
-    """One well of a plate: round, of a diameter, or square, of a size."""
+class Place:
+    """One place of a grid, a well or an electrode: round, of a diameter, or square, of a size."""
 
     diameter: Annotated[Millimetres, Field(gt=0.0)] | None = None
     size: Annotated[Millimetres, Field(gt=0.0)] | None = None
@@ -331,22 +342,23 @@ class Well:
     @model_validator(mode="after")
     def _one_shape(self) -> Self:
         if (self.diameter is None) == (self.size is None):
-            raise ValueError("a well has a diameter or a size: exactly one of them")
+            raise ValueError("a place has a diameter or a size: exactly one of them")
         return self
 
 
 @dataclass(frozen=True, config=STRICT)
-class Plate:
-    """Wells in rows (A, B, ...) and columns (1, 2, ...), a pitch apart, A1's middle at `a1`."""
+class Grid:
+    """Places in rows (A, B, ...) and columns (1, 2, ...), a pitch apart, A1's middle at `a1`: a
+    plate's wells, an electrode array's electrodes."""
 
     rows: Annotated[StrictInt, Field(gt=0, le=26)]
     columns: Annotated[StrictInt, Field(gt=0)]
     pitch: Offset
     a1: Offset
-    well: Well
+    place: Place
 
-    def wells(self) -> dict[str, tuple[float, float]]:
-        """Every well's middle by name (``"B3"``), in millimetres from the holder's origin."""
+    def places(self) -> dict[str, tuple[float, float]]:
+        """Every place's middle by name (``"B3"``), in millimetres from the holder's origin."""
         return {
             f"{chr(ord('A') + row)}{column + 1}": (
                 self.a1.x + column * self.pitch.x,
@@ -361,19 +373,22 @@ class Plate:
 class Holder:
     """An entry of the library of holders: what a sample is mounted on, and where its places are.
 
-    Its origin is its top left corner, x to the right and y down, as a plate's A1 is counted.
+    Its origin is its top left corner, x to the right and y down, as a plate's A1 is counted. Its
+    `grids` name its places, by kind: a plate's ``well``, an electrode array's ``electrode``.
     """
 
     spec: Annotated[str, Field(pattern=f"^{HOLDER_SPEC}")]
     description: str
-    kind: Literal["slide", "dish", "plate"]
+    kind: Literal["slide", "dish", "plate", "mea"]
     extent: Extent
-    plate: Plate | None = None
+    grids: dict[str, Grid] = field(default_factory=dict)
 
     @model_validator(mode="after")
     def _a_plate_has_wells(self) -> Self:
-        if (self.kind == "plate") != (self.plate is not None):
-            raise ValueError("a plate has its wells (plate:), and only a plate has them")
+        if self.kind == "plate" and "well" not in self.grids:
+            raise ValueError("a plate has its wells (grids: {well: ...})")
+        if self.kind == "mea" and "electrode" not in self.grids:
+            raise ValueError("an electrode array has its electrodes (grids: {electrode: ...})")
         return self
 
 
@@ -596,17 +611,57 @@ class ProbeModel:
 
 
 @dataclass(frozen=True, config=STRICT)
+class GridRead:
+    """The places of a grid a probe reads at: `grid` of what `sample` is mounted on (an electrode
+    array's ``electrode``); `sample` may be left out when there is one."""
+
+    grid: str
+    sample: str | None = None
+
+
+@dataclass(frozen=True, config=STRICT)
+class Sampling:
+    """How a probe samples time: `rate` samples a second, read in blocks `block` long."""
+
+    rate: Hertz
+    block: Annotated[StrictFloat, Field(gt=0.0), BeforeValidator(_in_unit("ms"))]
+
+    @property
+    def samples(self) -> int:
+        """How many samples a block has."""
+        return max(1, round(self.rate * self.block / 1000.0))
+
+
+@dataclass(frozen=True, config=STRICT)
 class Probe:
     """A detector of no light: it measures a quantity where it sits, light has nothing to do with it.
 
-    `at` is the point on a stage insert it sits at, beside the sample: it moves with that stage. What
-    a simulated one reads, its `model` says, and the simulator knows (`newswitch.drivers.simulator`).
+    It sits `at` a point on a stage insert, beside the sample, and moves with that stage; or it
+    `reads` a grid of what the sample is mounted on (an electrode array's electrodes), and is where
+    those are. With `sampling`, each reading is a block of samples in time. What a simulated one
+    reads, its `model` says, and the simulator knows (`newswitch.drivers.simulator`).
     """
 
     kind: Literal["probe"]
     measures: Measures
     model: ProbeModel
-    at: StagePoint
+    at: StagePoint | None = None
+    reads: GridRead | None = None
+    sampling: Sampling | None = None
+
+    @model_validator(mode="after")
+    def _sits_somewhere(self) -> Self:
+        if (self.at is None) == (self.reads is None):
+            raise ValueError("a probe sits at a point (at:) or reads a grid (reads:): exactly one")
+        return self
+
+    @property
+    def sample(self) -> str | None:
+        """The sample it sits beside or reads, where it says."""
+        if self.at is not None:
+            return self.at.stage
+        assert self.reads is not None
+        return self.reads.sample
 
 
 #: An element: what it is, and the numbers that say what it does to light (or, a probe, not).
@@ -1050,15 +1105,13 @@ class Instrument:
         for probe in self.probes():
             element = self.cubes[probe].element
             assert isinstance(element, Probe)
-            stage = element.at.stage
+            stage = element.sample
             if stage is None and len(self.samples()) > 1:
-                problems.append(
-                    f"{probe}: at.stage says which of the samples {self.samples()} it sits beside"
-                )
+                problems.append(f"{probe}: it says which of the samples {self.samples()} it is of")
             elif stage is not None and stage not in self.samples():
-                problems.append(
-                    f"{probe}: at.stage {stage!r} is none of the samples {self.samples()}"
-                )
+                problems.append(f"{probe}: {stage!r} is none of the samples {self.samples()}")
+            elif element.reads is not None:
+                problems += self._grid_problems(probe, element.reads.grid)
         if problems:
             raise ValueError("; ".join(problems))
         problems += _hardware_problems(self)
@@ -1112,6 +1165,33 @@ class Instrument:
         """The cubes of the detectors of light, in the order they are described."""
         return self._holding(Sensor, PointDetector)
 
+    def grid_of(self, probe: str) -> Grid:
+        """The grid `probe` reads: as the holders of its sample that have it have it, alike."""
+        element = self.cubes[probe].element
+        assert isinstance(element, Probe) and element.reads is not None
+        (sample,) = self.samples_of(probe)
+        return next(
+            mounted.holder.grids[element.reads.grid]
+            for mounted in self.sample_holder(sample).holders.values()
+            if element.reads.grid in mounted.holder.grids
+        )
+
+    def _grid_problems(self, probe: str, grid: str) -> list[str]:
+        """What is wrong with the grid `probe` reads: none of its sample's holders has it, or two
+        have it otherwise (its axes would change with what is mounted)."""
+        (sample,) = self.samples_of(probe)
+        grids = {
+            name: mounted.holder.grids[grid]
+            for name, mounted in self.sample_holder(sample).holders.items()
+            if grid in mounted.holder.grids
+        }
+        if not grids:
+            return [f"{probe}: no holder of {sample} has the grid {grid!r} it reads"]
+        shapes = {(g.rows, g.columns, g.pitch) for g in grids.values()}
+        if len(shapes) > 1:
+            return [f"{probe}: the holders {sorted(grids)} of {sample} have {grid!r} grids unalike"]
+        return []
+
     def probes(self) -> list[str]:
         """The cubes of the probes: detectors too, of no light (a thermometer, an electrode array)."""
         return self._holding(Probe)
@@ -1145,7 +1225,7 @@ class Instrument:
         the one it sits beside."""
         element = self.cubes[detector].element if detector in self.cubes else None
         if isinstance(element, Probe):
-            stage = element.at.stage
+            stage = element.sample
             if stage is not None:
                 return [stage]
             (only,) = self.samples()
@@ -1340,7 +1420,25 @@ class Instrument:
         probe at a point delivers none."""
         element = self.cubes[detector].element
         if isinstance(element, Probe):
-            return ()
+            found = []
+            if element.sampling is not None:
+                found.append(
+                    DetectorAxis(
+                        "s",
+                        element.sampling.samples,
+                        1000.0 / element.sampling.rate,
+                        "ms",
+                        "time",
+                        detector,
+                    )
+                )
+            if element.reads is not None:
+                grid = self.grid_of(detector)
+                found += [
+                    DetectorAxis("y", grid.rows, grid.pitch.y * 1000.0, "um", "space", detector),
+                    DetectorAxis("x", grid.columns, grid.pitch.x * 1000.0, "um", "space", detector),
+                ]
+            return tuple(found)
         found = []
         if isinstance(element, Sensor) and element.colors:
             found.append(

@@ -12,8 +12,10 @@ import { useSceneSample } from "./sampleContext";
  * stage to sample). Nothing is placed in here.
  */
 
-/** Whether `detector` delivers images: a y and an x along space. A thermometer measures at a point. */
+/** Whether `detector` images light: it measures light, along a y and an x in space. A probe does
+ * not (a thermometer, an electrode array), however its places are laid out. */
 export const deliversImages = (detector: Detector): boolean =>
+  detector.measures_light !== false &&
   ["y", "x"].every((name) =>
     detector.axes.some((axis) => axis.name === name && axis.domain === "space"),
   );

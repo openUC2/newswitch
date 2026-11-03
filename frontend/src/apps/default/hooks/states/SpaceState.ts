@@ -79,23 +79,24 @@ export const TransformationSchema = z
 export type Transformation = z.input<typeof TransformationSchema>;
 export type TransformationOutput = z.infer<typeof TransformationSchema>;
 
-export const WellShapeSchema = z
+export const PlaceShapeSchema = z
   .object({
     __identifier: z
-      .literal('@newswitch/well_shape')
-      .default('@newswitch/well_shape'),
+      .literal('@newswitch/place_shape')
+      .default('@newswitch/place_shape'),
+    grid: z.string(),
     name: z.string(),
     x: z.number(),
     y: z.number(),
     diameter_um: z.number().nullable().optional(),
     size_um: z.number().nullable().optional(),
   })
-  .brand('@newswitch/well_shape')
+  .brand('@newswitch/place_shape')
   .describe(
-    'One well of a mounted plate: its middle on the sample, and how wide it is.',
+    'One place of a grid of what is mounted (a well, an electrode): its middle on the sample, and\n    how wide it is.',
   );
-export type WellShape = z.input<typeof WellShapeSchema>;
-export type WellShapeOutput = z.infer<typeof WellShapeSchema>;
+export type PlaceShape = z.input<typeof PlaceShapeSchema>;
+export type PlaceShapeOutput = z.infer<typeof PlaceShapeSchema>;
 
 export const HolderShapeSchema = z
   .object({
@@ -106,9 +107,9 @@ export const HolderShapeSchema = z
     kind: z.string(),
     width_um: z.number(),
     height_um: z.number(),
-    wells: z.array(
-      WellShapeSchema.describe(
-        'One well of a mounted plate: its middle on the sample, and how wide it is.',
+    places: z.array(
+      PlaceShapeSchema.describe(
+        'One place of a grid of what is mounted (a well, an electrode): its middle on the sample, and\n    how wide it is.',
       ),
     ),
   })

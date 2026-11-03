@@ -40,7 +40,7 @@ from typing import Any
 import numpy as np
 
 from newswitch.instrument.space import (
-    PLACE,
+    NOT_PLACES,
     SAMPLE,
     SPATIAL,
     STAGE,
@@ -59,7 +59,7 @@ from newswitch.instrument.space import (
     stage_system,
     translation,
 )
-from newswitch.instrument.spec import Instrument, MountedHolder, Probe
+from newswitch.instrument.spec import Grid, Instrument, MountedHolder, Probe
 from newswitch.models.devices import Detector
 from newswitch.models.space import (
     Axis,
@@ -71,7 +71,7 @@ from newswitch.models.space import (
     Position,
     SampleSpace,
     Transformation,
-    WellShape,
+    PlaceShape,
 )
 from newswitch.services.optics import OpticsManager
 from newswitch.services.values import Values
@@ -111,23 +111,24 @@ def _new_mount_id() -> str:
 def _shape_of(sample: str, name: str, mounted: MountedHolder) -> HolderShape:
     """What `sample` is mounted on as a view draws it, in its sample's micrometres."""
     holder = mounted.holder
-    plate = holder.plate
     return HolderShape(
         name=name,
         kind=holder.kind,
         width_um=holder.extent.x * 1000.0,
         height_um=holder.extent.y * 1000.0,
-        wells=[]
-        if plate is None
-        else [
-            WellShape(
-                name=place_system(sample, well),
+        places=[
+            PlaceShape(
+                grid=grid,
+                name=place_system(grid, sample, place),
                 x=x * 1000.0,
                 y=y * 1000.0,
-                diameter_um=None if plate.well.diameter is None else plate.well.diameter * 1000.0,
-                size_um=None if plate.well.size is None else plate.well.size * 1000.0,
+                diameter_um=None
+                if places.place.diameter is None
+                else places.place.diameter * 1000.0,
+                size_um=None if places.place.size is None else places.place.size * 1000.0,
             )
-            for well, (x, y) in plate.wells().items()
+            for grid, places in holder.grids.items()
+            for place, (x, y) in places.places().items()
         ],
     )
 
@@ -189,9 +190,41 @@ class SpaceManager:
         return self.instrument.seen_sample(detector, self._now(under))
 
     def sees(self, detector: str, under: Mapping[str, Any] | None = None) -> bool:
-        """Whether any light gets to `detector` under `under` (now, by default)."""
+        """Whether `detector` measures anything under `under` (now, by default): light gets to it;
+        a probe that reads a grid, the grid is on what its sample is mounted on."""
         assert self.instrument is not None
+        element = self.instrument.cubes[detector].element
+        if isinstance(element, Probe) and element.reads is not None:
+            (sample,) = self.instrument.samples_of(detector)
+            return self._grid_of(detector, sample) is not None
         return self.instrument.sample_of(detector, self._now(under)) is not None
+
+    def _grid_of(self, probe: str, sample: str) -> Grid | None:
+        """The grid `probe` reads, on what `sample` is mounted on now; None when that has none."""
+        element = self.instrument.cubes[probe].element if self.instrument else None
+        space = self.state.samples.get(sample)
+        if not isinstance(element, Probe) or element.reads is None or space is None:
+            return None
+        if space.holder is None:
+            return None
+        return self._holders[sample][space.holder].holder.grids.get(element.reads.grid)
+
+    def grid_placement(self, probe: str) -> np.ndarray:
+        """Where a grid probe's places are (column, row, sample index) on its sample: the grid's,
+        on what is mounted. Its electrodes are of the holder, so no stage move finds them.
+
+        Raises:
+            ValueError: What is mounted has no such grid.
+        """
+        (sample,) = self.instrument.samples_of(probe) if self.instrument else ("",)
+        grid = self._grid_of(probe, sample)
+        if grid is None:
+            raise ValueError(f"{probe} reads a grid that what {sample} is mounted on has not")
+        matrix = np.eye(4)
+        matrix[0, 0], matrix[1, 1] = grid.pitch.x * 1000.0, grid.pitch.y * 1000.0
+        matrix[0, 3], matrix[1, 3] = grid.a1.x * 1000.0, grid.a1.y * 1000.0
+        matrix[2, 2] = 0.0
+        return matrix
 
     def one_sample(
         self,
@@ -232,19 +265,19 @@ class SpaceManager:
             return sample_system(self.one_sample(detector=detector, under=under))
         if system == STAGE:
             return stage_system(self.one_sample(detector=detector, under=under))
-        if head == PLACE and rest and ":" not in rest:
-            return place_system(self.one_sample(detector=detector, under=under), rest)
+        if head not in NOT_PLACES and rest and ":" not in rest:
+            return place_system(head, self.one_sample(detector=detector, under=under), rest)
         return system
 
     def sample_of_system(self, system: str) -> str | None:
         """The sample `system` is a part of: ``sample:stage_a``'s, an image's, a detector's. None
         for a bare name, which is any sample's (`resolve`)."""
         head, _, rest = system.partition(":")
-        if not rest or (head == PLACE and ":" not in rest):
+        if not rest or (head not in NOT_PLACES and ":" not in rest):
             return None
         if head in (SAMPLE, STAGE):
             return rest
-        if head == PLACE:
+        if head not in NOT_PLACES:
             return rest.partition(":")[0]
         if head == "image":
             return self._images[rest][0] if rest in self._images else None
@@ -327,7 +360,20 @@ class SpaceManager:
             assert self.instrument is not None
             element = self.instrument.cubes[detector.name].element
             assert isinstance(element, Probe), f"{detector.name} measures nowhere known"
+            if element.reads is not None:  # on the holder: straight onto its sample
+                hub = sample_system(self.sample_of(detector.name, values))
+                matrix = self.grid_placement(detector.name)
+                return by_dimension(
+                    source,
+                    hub,
+                    [
+                        spatial_affine(matrix, ("x", "y"), ("x", "y")),
+                        spatial_affine(matrix, (), ("z",)),
+                    ],
+                    "on the holder",
+                )
             at = element.at
+            assert at is not None
             point = [[at.x * 1000.0], [at.y * 1000.0], [at.z * 1000.0]]
             return by_dimension(source, stage, [affine_part((), SPATIAL, point)], "on stage")
         matrix = self.to_stage(detector.name, values)
@@ -354,8 +400,9 @@ class SpaceManager:
             mount = np.array(space.mount, dtype=float)[:3].tolist()
             edges.append(Transformation(stage, hub, "AFFINE", "mount", affine=mount))
             if space.holder is not None:
-                for place, (x, y) in places_of(self._holders[sample][space.holder].holder).items():
-                    name = place_system(sample, place)
+                holder = self._holders[sample][space.holder].holder
+                for (grid, place), (x, y) in places_of(holder).items():
+                    name = place_system(grid, sample, place)
                     systems.append(spatial(name, ("x", "y")))
                     edges.append(
                         by_dimension(
@@ -516,6 +563,15 @@ class SpaceManager:
 
     def _placed(self, detector: str) -> DetectorPlacement:
         assert self.values is not None
+        if self.detector_state.get(detector).is_probe():  # a grid on the holder: never measured
+            matrix = self.grid_placement(detector)
+            return DetectorPlacement(
+                detector=detector,
+                to_sample=matrix.tolist(),
+                pixel_um=[float(np.hypot(*matrix[:2, 0])), float(np.hypot(*matrix[:2, 1]))],
+                calibrated=False,
+                sample=self.sample_of(detector),
+            )
         _, calibrated = self.optics.scale_under(detector, self.values.snapshot())
         matrix = self.placement(detector)
         return DetectorPlacement(
@@ -561,8 +617,11 @@ class SpaceManager:
                     row[dims.index(name)] = factor
             rows[axis] = row
         if not images:
+            # What has no extent along an axis has one position along it there: as mikro wants
+            # it, its row reads its own axis.
             for axis, row in rows.items():
-                row[dims.index(axis)] = 1.0
+                if not row[:-1].any():
+                    row[dims.index(axis)] = 1.0
         if images and "z" in rows:
             direction = -1.0 if light_sweep else 1.0
             step = offsets[1] - offsets[0] if len(offsets) > 1 else 1.0
@@ -588,9 +647,13 @@ class SpaceManager:
             placed = {
                 d.name: self._placed(d.name)
                 for d in detectors
-                if d.delivers_images() and self.sees(d.name)
+                if (d.delivers_images() or (d.is_probe() and d.has_axis("x"))) and self.sees(d.name)
             }
-            points = {d.name: self._measured(d.name) for d in detectors if not d.delivers_images()}
+            points = {
+                d.name: self._measured(d.name)
+                for d in detectors
+                if d.is_probe() and not d.has_axis("x")
+            }
             systems, edges = self._live()
             text = json.dumps(
                 [

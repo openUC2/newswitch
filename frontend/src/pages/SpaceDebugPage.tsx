@@ -34,9 +34,10 @@ const fmt = (value: number): string => {
 };
 
 /** A list of a holder's many places, collapsed: they are one kind of system, per sample. */
-const PLACE = /^well:/;
+/** A place of a grid of what is mounted: <grid>:<sample>:<name>, a well or an electrode. */
+const PLACE = /^(?!sample:|stage:|detector:|image:)[^:]+:[^:]+:/;
 const groupOf = (name: string) =>
-  PLACE.test(name) ? name.replace(/^(well:[^:]+):.*$/, "$1:*") : name;
+  PLACE.test(name) ? name.replace(/^([^:]+:[^:]+):.*$/, "$1:*") : name;
 
 /** Which column of the diagram a system sits in: what measures, a stage, a sample, places. */
 const columnOf = (name: string): number => {

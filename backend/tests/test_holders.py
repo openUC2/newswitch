@@ -53,9 +53,9 @@ def on_the_plate(tmp_path: Path) -> Microscope:
 def test_a_plate_has_its_wells_where_the_standard_puts_them() -> None:
     """96 wells, 9 mm apart, A1 14.38 mm right and 11.24 mm down from the corner."""
     instrument = spec.load(REFERENCE_INSTRUMENT)
-    plate = instrument.sample_holder("stage").holders["plate"].holder.plate
+    plate = instrument.sample_holder("stage").holders["plate"].holder.grids.get("well")
     assert plate is not None
-    wells = plate.wells()
+    wells = plate.places()
     assert len(wells) == 96
     assert wells["A1"] == pytest.approx((14.38, 11.24))
     assert wells["B3"] == pytest.approx((14.38 + 18.0, 11.24 + 9.0))
@@ -78,8 +78,8 @@ def test_what_cannot_be_mounted_is_refused(tmp_path: Path, change: Any, message:
 
 
 def test_a_plate_without_wells_is_no_plate() -> None:
-    """Only a plate has wells, and a plate has them."""
-    with pytest.raises(ValueError, match="only a plate"):
+    """A plate has its wells, and an electrode array its electrodes: a grid of what it is."""
+    with pytest.raises(ValueError, match="a plate has its wells"):
         spec.Holder(
             spec="newswitch/holder/v0",
             description="",
@@ -110,7 +110,7 @@ def test_mounting_is_a_new_sample(microscope: Microscope) -> None:
     mount_holder(microscope.space, microscope.expanse, "plate")
     state = microscope.space_state.samples["stage"]
     assert state.holder == "plate" and state.mount_id != before
-    assert state.shape is not None and len(state.shape.wells) == 96
+    assert state.shape is not None and len(state.shape.places) == 96
     assert microscope.expanse_state.current_frames == []
     with pytest.raises(ValueError, match="no route"):
         microscope.space.transform(at(f"image:{frame.id}", 0.0, 0.0))

@@ -609,7 +609,7 @@ export function AcquisitionControl() {
         : m.looking;
   const plates = m.samples.filter(
     (s) =>
-      (s.shape?.wells.length ?? 0) > 0 &&
+      (s.shape?.places ?? []).some((p) => p.grid === "well") &&
       (sample === undefined || s.sample === sample),
   );
 
@@ -933,7 +933,10 @@ export function AcquisitionControl() {
               {t("acquisition.planner.wellsHint")}
             </p>
             {plates.map((plate) => {
-              const wells = plate.shape?.wells.map((w) => w.name) ?? [];
+              const wells =
+                plate.shape?.places
+                  .filter((p) => p.grid === "well")
+                  .map((w) => w.name) ?? [];
               return (
                 <div key={plate.sample} className="space-y-2">
                   <div className="flex items-center gap-2">

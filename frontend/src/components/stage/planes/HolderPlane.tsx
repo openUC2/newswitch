@@ -32,7 +32,7 @@ export const HolderPlane = () => {
         color="#64748b"
         lineWidth={1.5}
       />
-      {shape.wells.map((well) => {
+      {(shape.places ?? []).map((well) => {
         const radius = (well.diameter_um ?? well.size_um ?? 1000) / 2;
         return (
           <group key={well.name} position={[well.x, well.y, DEPTH]}>
