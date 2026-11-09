@@ -6,7 +6,6 @@ test decides the content itself.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -59,7 +58,10 @@ def test_shipped_base_config_loads() -> None:
     settings = ImswitchConfig()
     assert settings.config_dir == BASE_CONFIG_FILE.parent / "configs"
     assert settings.schema_dir == settings.config_dir / "schemas"
-    assert settings.static_config_path == settings.config_dir / "newswitch-config.yaml"
+    assert (
+        settings.static_config_path
+        == settings.config_dir / yaml.safe_load(BASE_CONFIG_FILE.read_text())["static_config_path"]
+    )
     assert settings.static_config_path.is_file()
     assert settings.config_file in (settings.static_config_path, settings.persistent_config_path)
     assert settings.camera_recording_dir == BASE_CONFIG_FILE.parent / "data" / "recordings"
@@ -207,53 +209,54 @@ def test_load_app_config_without_variable(
 def test_load_app_config_relative_path(
     write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A relative path is taken from the base config's folder, not the working directory."""
+    """Device YAML paths resolve from the base directory, independent of the cwd."""
     base = write_base()
-    boot = base.parent / "boot" / "real.json"
-    boot.parent.mkdir()
-    boot.write_text(
-        json.dumps(
-            {
-                "_comment": "dropped",
-                "use_virtual_microscope": False,
-                "static_config_path": "cam.yaml",
-            }
-        ),
-        encoding="utf-8",
-    )
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
-    monkeypatch.setenv("NEWSWITCH_CONFIG", "boot/real.json")
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "boot/real.yaml")
+    monkeypatch.setenv("NEWSWITCH_MODE", "hardware")
     config = app_module.load_app_config()
     assert config.use_virtual_microscope is False
-    assert config.config_file == base.parent / "configs" / "cam.yaml"
+    assert config.config_file == base.parent / "boot" / "real.yaml"
+    assert config.persistent_config_path == base.parent / "boot" / "real.persistent.yaml"
 
 
 def test_load_app_config_absolute_path(
     write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An absolute path is used as given; its values override the base config."""
+    """An absolute device YAML is selected without loading it as application settings."""
     write_base()
-    boot = tmp_path / "boot.json"
-    boot.write_text(json.dumps({"db_path": "boot.db"}), encoding="utf-8")
-    monkeypatch.setenv("NEWSWITCH_CONFIG", str(boot))
-    assert app_module.load_app_config().db_path == "boot.db"
+    source = tmp_path / "device.yaml"
+    monkeypatch.setenv("NEWSWITCH_CONFIG", str(source))
+    assert app_module.load_app_config().config_file == source
 
 
 def test_load_app_config_missing_file(
     write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A file that does not exist is an error, not a silent fallback to the base config."""
+    """The device loader reports missing YAML; startup never falls back silently."""
     write_base()
-    monkeypatch.setenv("NEWSWITCH_CONFIG", "no/such.json")
-    with pytest.raises(FileNotFoundError):
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "no/such.yaml")
+    with pytest.raises(app_module.config_io.ConfigError):
+        app_module.load_app_config().open_device_config()
+
+
+def test_load_app_config_rejects_legacy_json(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """All entrypoints reject the obsolete JSON boot override path consistently."""
+    write_base()
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "configs/camTest.json")
+    with pytest.raises(ValueError, match="YAML"):
         app_module.load_app_config()
 
 
 def test_shipped_camtest_config_loads(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The shipped camTest boot file switches to real hardware and its own device file."""
-    monkeypatch.setenv("NEWSWITCH_CONFIG", "configs/camTest.json")
+    """The camera test is selected directly as device YAML, with real mode explicit."""
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "configs/camTest_config.yaml")
+    monkeypatch.setenv("NEWSWITCH_MODE", "hardware")
     config = app_module.load_app_config()
     assert config.use_virtual_microscope is False
     assert config.config_file == BASE_CONFIG_FILE.parent / "configs" / "camTest_config.yaml"
+    assert config.open_device_config().config.detectors

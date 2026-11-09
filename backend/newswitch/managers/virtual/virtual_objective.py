@@ -79,7 +79,8 @@ class VirtualObjectiveManager:
 
         # Initialize objectives from config
         self.objective_state.mounted_lenses = self.config.objectives
-        self._set_objective(self.config.default_slot)
+        if self.config.objectives:
+            self._set_objective(self.config.default_slot)
 
     def _set_objective(self, slot: int) -> ObjectiveLens:
         """Internal method to set the current objective."""

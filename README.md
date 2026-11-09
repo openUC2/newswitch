@@ -107,7 +107,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 
 1. `backend/base_config.yaml` is read. `camera_debug_window: true` asks for a window per camera,
    and `camera_recording_dir` sets where recordings go.
-2. `NEWSWITCH_CONFIG=configs/camTest.json` overrides two settings:
+2. `NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml` overrides two settings:
    `use_virtual_microscope: false` (cameras are only used on real hardware) and the device file
    `configs/camTest_config.yaml`.
 3. `config_io` validates that file, and `adapters.cameras()` finds the camera: a detector
@@ -150,7 +150,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 3. Start the backend with the camera configuration, from the repository root:
 
    ```bash
-   NEWSWITCH_CONFIG=configs/camTest.json just dev-backend
+   NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml just dev-backend
    ```
 
 4. A window **"uc2_cam_py debug - Simulated UC2-SIM SN SIM-0001"** opens. It shows a bright
@@ -184,7 +184,7 @@ rate, binning, ROI). It calls only the registered actions, as the frontend does:
 
 ```bash
 cd backend
-NEWSWITCH_CONFIG=configs/camTest.json BACKEND_PORT=8069 uv run -q python backend_cli.py
+NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml BACKEND_PORT=8069 uv run -q python backend_cli.py
 ```
 
 `BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099, as for

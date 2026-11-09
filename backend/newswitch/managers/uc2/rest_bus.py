@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
@@ -76,6 +77,7 @@ class UC2RestBus:
         self.config = config or UC2RestBusConfig()
         self._broker = UC2EventBroker()
         self._client: Optional["AsyncUC2Client"] = None
+        self.on_connected: Callable[[], Awaitable[None]] | None = None
         self._connected = asyncio.Event()
         self._last_position_publish: dict[str, float] = {}
 
@@ -173,17 +175,18 @@ class UC2RestBus:
             )
 
         self._client = client
-        self.state.connected = True
         self.state.transport = "rest"
         try:
-            info = await client.get_firmware_info()
-            self.state.firmware = str(info) if info else ""
-        except Exception:  # firmware info is best-effort
-            logger.debug("Could not read firmware info", exc_info=True)
-        self._connected.set()
-        logger.info("UC2 serial bus connected (port=%s)", self.config.serialport)
-
-        try:
+            try:
+                info = await client.get_firmware_info()
+                self.state.firmware = str(info) if info else ""
+            except Exception:  # firmware info is best-effort
+                logger.debug("Could not read firmware info", exc_info=True)
+            if self.on_connected is not None:
+                await self.on_connected()
+            self.state.connected = True
+            self.state.last_error = ""
+            self._connected.set()
             async for event in client.events():
                 if isinstance(event, SteppersEvent):
                     for stepper in event.steppers:
@@ -192,9 +195,24 @@ class UC2RestBus:
                         if axis is not None and position is not None:
                             self._publish_position_throttled(axis, self.to_units(axis, position))
                 elif isinstance(event, HomeEvent):
-                    axis = str(event.data.get("axis", "")).upper() or "X"
-                    is_homed = bool(event.data.get("isHomed", event.data.get("state", 0)))
-                    self._broker.publish(HomingChanged(axis=axis, status=2 if is_homed else 1))
+                    entries = event.data.get("steppers", [event.data])
+                    if isinstance(entries, dict):
+                        entries = [entries]
+                    for entry in entries:
+                        stepper_id = entry.get("stepperid")
+                        axis = (
+                            STEPPER_ID_TO_AXIS.get(stepper_id)
+                            if isinstance(stepper_id, int)
+                            else None
+                        )
+                        axis = axis or str(entry.get("axis", "")).upper()
+                        if axis not in STEPPER_ID_TO_AXIS.values():
+                            continue
+                        done = entry.get("isDone", entry.get("isHomed"))
+                        status = (
+                            (2 if done == 1 else 1) if done is not None else entry.get("state", 1)
+                        )
+                        self._broker.publish(HomingChanged(axis=axis, status=int(status)))
                 elif isinstance(event, EmergencyEvent):
                     active = bool(event.data.get("active", 1))
                     self.state.estop_active = active
@@ -233,20 +251,32 @@ class UC2RestBus:
         is_absolute: bool = False,
         speed: Optional[float] = None,
         acceleration: Optional[float] = None,
+        timeout: Optional[float] = None,
     ) -> float:
         """Move one axis; the firmware-blocking wait runs in a worker thread."""
         client = await self._require_client()
         speed_steps = int(abs((speed or self.config.default_speed) * self.scale_for_axis(axis)))
-        await client.move_axis(
-            axis=axis.upper(),
-            steps=self.to_steps(axis, target),
-            speed=max(speed_steps, 1),
-            acceleration=int(acceleration) if acceleration else None,
-            is_absolute=is_absolute,
-            is_blocking=True,
-            timeout=self.config.move_timeout_s,
+        wait_timeout = self.config.move_timeout_s if timeout is None else timeout
+        expected = target if is_absolute else await self.aget_position(axis) + target
+        response = await asyncio.wait_for(
+            client.move_axis(
+                axis=axis.upper(),
+                steps=self.to_steps(axis, target),
+                speed=max(speed_steps, 1),
+                acceleration=int(acceleration) if acceleration else None,
+                is_absolute=is_absolute,
+                is_blocking=True,
+                timeout=wait_timeout,
+            ),
+            timeout=wait_timeout,
         )
+        if not response:
+            raise RuntimeError(f"Serial movement axis {axis} returned no completion response")
         position = await self.aget_position(axis)
+        if abs(position - expected) > 1 / abs(self.scale_for_axis(axis)):
+            raise RuntimeError(
+                f"Serial movement axis {axis}: reported position {position} does not match target {expected}"
+            )
         self._broker.publish(MotionDone(axis=axis.upper(), position=position))
         return position
 
@@ -255,24 +285,65 @@ class UC2RestBus:
         client = await self._require_client()
         await client.stop(axis=axis.upper())
 
-    async def ahome_axis(self, axis: str) -> None:
+    async def ahome_axis(
+        self,
+        axis: str,
+        timeout: Optional[float] = None,
+        speed_steps: Optional[int] = None,
+        direction: Optional[int] = None,
+        endstop_polarity: Optional[int] = None,
+    ) -> None:
         """Home one axis (blocking wait off-loop)."""
         client = await self._require_client()
-        await client.home_axis(
-            axis=axis.upper(), is_blocking=True, timeout=self.config.home_timeout_s
-        )
+        wait_timeout = self.config.home_timeout_s if timeout is None else timeout
+        stepper_id = {"A": 0, "X": 1, "Y": 2, "Z": 3}[axis.upper()]
+
+        async def wait_done() -> None:
+            async for event in self.subscribe():
+                if isinstance(event, HomingChanged) and event.axis == axis.upper():
+                    if event.status == 2:
+                        return
+                    if event.status == 3:
+                        raise RuntimeError(f"Homing axis {axis} failed")
+
+        completion = asyncio.create_task(wait_done())
+        await asyncio.sleep(0)  # register the event subscriber before issuing the command
+        deadline = asyncio.get_running_loop().time() + wait_timeout + 10
+        try:
+            # The upstream Home.home implementation indexes motorAxisOrder; pass
+            # a numeric logical axis and both firmware/wait timeouts explicitly.
+            await asyncio.wait_for(
+                client.call(
+                    client.sync.home.home,
+                    axis=stepper_id,
+                    isBlocking=True,
+                    timeout=wait_timeout + 10,
+                    endstoptimeout=int(wait_timeout * 1000),
+                    endstoppolarity=endstop_polarity,
+                    speed=speed_steps,
+                    direction=direction,
+                ),
+                timeout=wait_timeout + 10,
+            )
+            await asyncio.wait_for(
+                completion, timeout=max(0, deadline - asyncio.get_running_loop().time())
+            )
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            await asyncio.shield(client.stop(axis=axis.upper()))
+            raise
+        finally:
+            completion.cancel()
+            await asyncio.gather(completion, return_exceptions=True)
 
     async def aget_position(self, axis: str) -> float:
         """Read one axis position from the firmware position table."""
         client = await self._require_client()
         axis_index = {"A": 0, "X": 1, "Y": 2, "Z": 3}[axis.upper()]
-        # get_position itself indexes the firmware reply, which degrades to
-        # non-list values on mock/absent hardware — treat any failure as 0.
+        positions = await client.get_positions()
         try:
-            positions = await client.get_positions()
             steps = positions[axis_index]
-        except (TypeError, IndexError, KeyError):
-            steps = 0.0
+        except (TypeError, IndexError, KeyError) as exc:
+            raise RuntimeError(f"Invalid position response for axis {axis}") from exc
         return self.to_units(axis, steps)
 
     # -- bus / fleet --------------------------------------------------------------

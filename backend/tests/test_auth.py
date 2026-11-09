@@ -44,7 +44,7 @@ def store(tmp_path: Path) -> UserStore:
 def authed_app(store: UserStore) -> FastAPI:
     """The app with a real account store, so the gate is actually exercised."""
     return create_app(
-        ImswitchConfig(config_file=None),
+        ImswitchConfig(config_file=None, use_virtual_microscope=True),
         authenticator=UserStoreAuthenticator(store),
     )
 
@@ -181,7 +181,10 @@ def test_logout_revokes_a_user_store_session(tmp_path: Path) -> None:
     """Logout invalidates exactly the session used, not every session for the account."""
     store = UserStore(tmp_path / "auth.db")
     store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
-    app = create_app(ImswitchConfig(), authenticator=UserStoreAuthenticator(store))
+    app = create_app(
+        ImswitchConfig(config_file=None, use_virtual_microscope=True),
+        authenticator=UserStoreAuthenticator(store),
+    )
     with TestClient(app) as user_client:
         login_response = user_client.post("/auth/login", headers=basic_header())
         token = login_response.json()["token"]

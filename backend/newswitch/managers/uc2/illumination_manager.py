@@ -23,6 +23,8 @@ class UC2IlluminationConfig:
     """Configuration for the UC2 illumination manager."""
 
     pwm_max: int = 1023  # full-scale hardware PWM (depends on firmware resolution)
+    pwm_by_slot: dict[int, int] = field(default_factory=dict)
+    logical_channels: bool = False
     sources: List[Illumination] = field(
         default_factory=lambda: [
             Illumination(slot=1, channel=1, intensity=0.0, max_intensity=100.0),
@@ -50,7 +52,9 @@ class UC2IlluminationManager:
     def _get_illumination(self, channel: int) -> Optional[Illumination]:
         """Find the illumination source configured for a channel."""
         for source in self.illumination_state.illuminations:
-            if source.channel == channel or source.slot == channel:
+            if source.slot == channel or (
+                not self.config.logical_channels and source.channel == channel
+            ):
                 return source
         return None
 
@@ -58,7 +62,8 @@ class UC2IlluminationManager:
         """Scale an abstract intensity to raw hardware PWM counts."""
         span = max(source.max_intensity - source.min_intensity, 1e-9)
         fraction = (intensity - source.min_intensity) / span
-        return int(round(max(0.0, min(1.0, fraction)) * self.config.pwm_max))
+        maximum = self.config.pwm_by_slot.get(source.slot, self.config.pwm_max)
+        return int(round(max(0.0, min(1.0, fraction)) * maximum))
 
     def set_intensity(self, intensity: float, channel: int = 1) -> float:
         """Set illumination intensity for a channel (protocol method)."""
@@ -66,7 +71,8 @@ class UC2IlluminationManager:
         if source is None:
             raise ValueError(f"No illumination configured for channel {channel}")
         intensity = max(source.min_intensity, min(source.max_intensity, intensity))
-        unkoil(self.bus.aset_laser, channel, self._to_pwm(source, intensity))
+        address = source.slot if self.config.logical_channels else channel
+        unkoil(self.bus.aset_laser, address, self._to_pwm(source, intensity))
         source.intensity = intensity
         source.is_active = intensity > source.min_intensity
         return intensity
@@ -85,7 +91,8 @@ class UC2IlluminationManager:
         source = self._get_illumination(channel)
         if source is None:
             raise ValueError(f"No illumination configured for channel {channel}")
-        unkoil(self.bus.aset_laser, channel, 0)
+        address = source.slot if self.config.logical_channels else channel
+        unkoil(self.bus.aset_laser, address, 0)
         source.is_active = False
         source.intensity = source.min_intensity
         return f"Channel {channel} off"
