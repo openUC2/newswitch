@@ -26,7 +26,8 @@ NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/demos/uc2-serial.yaml uv run uv
 `NEWSWITCH_CONFIG` selects a device YAML, not a legacy JSON settings file. Relative
 paths resolve against `backend`. The input is never overwritten; positions are
 written to a separate `<name>.persistent.yaml` next to it. Base settings still work
-without environment overrides; the shipped default remains virtual. A custom
+without environment overrides; `base_config.yaml` selects the default mode and
+device file (currently hardware mode with the simulated-camera profile). A custom
 `config_file` passed to ImswitchConfig is honored by startup and shutdown too.
 
 The old `uc2_*` hardware overrides are rejected in real mode if set to nondefault
@@ -55,7 +56,8 @@ vocabulary; no downstream addresses are inferred from device names.
 The logical stage direction does not have to match the master's physical axis:
 X may refer to a motor with master ID 2, and feedback is translated back to X.
 A logical linear axis can use master ID 0, with linear scaling supplied by its own
-AxisConfig. Angular motion/units on logical A/rx/ry/rz are not supported yet.
+AxisConfig. Logical X/Y/Z/A use linear units (um) in this YAML adapter;
+angular motion/units on A/rx/ry/rz are not supported yet.
 
 A PWM-driven LED uses the same `serial-laser` / `canopen-laser` API as a laser.
 `pwm_max` supplies the raw range for each PWM output; it is not guessed or read
