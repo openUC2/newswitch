@@ -21,7 +21,7 @@ File: newswitch/app.py
 
 Entry points: `main.py` (`uvicorn main:app`, with reload; or `python main.py`) and
 `python -m newswitch.app` (`app.main()`) both build the settings with `load_app_config()`:
-`base_config.yaml`, overridden by the JSON file named in `NEWSWITCH_CONFIG`, and serve on
+`base_config.yaml`, with device YAML selected by `NEWSWITCH_CONFIG`, and serve on
 `BACKEND_HOST`/`BACKEND_PORT` when run directly. `python -m newswitch.cli` is the
 account-database tool, no server.
 
@@ -141,7 +141,7 @@ mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section 
   every `create_camera`: uc2_cam_py shows each camera's newest image in an X11 window, and the
   manager holds the cameras from startup so the window always has an image.
 - `backend/configs/camTest_config.yaml` is a simulated camera for trying it out; boot with
-  `NEWSWITCH_CONFIG=configs/camTest.json` (real-hardware mode, own persistent file). The
+  `NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml` (real-hardware mode, own persistent file). The
   walkthrough is "End-to-end test for camera" in the root `README.md`.
 
 Managers are used in two places:

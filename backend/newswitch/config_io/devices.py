@@ -155,11 +155,18 @@ class ControllerConfig(DeviceBase):
 
     @model_validator(mode="after")
     def _unique_addresses(self) -> Self:
-        used: dict[tuple[int, int], list[str]] = {}
+        used: dict[tuple[str, int, int], list[str]] = {}
         for key, entry in self.mapping.items():
-            used.setdefault(entry.address, []).append(key)
+            namespace = "device"
+            if self.connection.protocol == "uc2-rest":
+                namespace = {
+                    "serial-motor": "stepper",
+                    "serial-laser": "laser",
+                    "serial-led-matrix": "matrix",
+                }.get(entry.type, "device")
+            used.setdefault((namespace, *entry.address), []).append(key)
         clashes = [
-            f"id {address[0]}/subid {address[1]} is used by {', '.join(keys)}"
+            f"id {address[1]}/subid {address[2]} is used by {', '.join(keys)}"
             for address, keys in used.items()
             if len(keys) > 1
         ]
@@ -264,6 +271,11 @@ class AxisConfig(DeviceBase):
     steps_per_um: Annotated[
         PositiveFloat | None, firmware_meta("Motor steps per um; null for a servo axis")
     ]
+    move_timeout_s: float = Field(default=120.0, gt=0)
+    homing_speed_steps: int | None = Field(default=None, gt=0)
+    homing_direction: Literal[-1, 1] | None = None
+    homing_timeout_ms: int | None = Field(default=None, gt=0)
+    homing_endstop_polarity: Literal[-1, 1] | None = None
     inverted: bool = Field(default=False, description="Axis runs in the opposite direction")
     homing_required: Annotated[bool, firmware_meta("Axis must be homed before use")] = False
     pos: Annotated[
@@ -300,6 +312,9 @@ class StageConfig(DeviceBase):
     """Motorized stage: axis devices grouped by direction."""
 
     type: Literal["stage"] = "stage"
+    registered_step_sizes: list[PositiveFloat] = Field(
+        default_factory=lambda: [10.0, 100.0, 1000.0, 10000.0], min_length=1
+    )
     axes: dict[str, str] = Field(
         min_length=1, description="Direction (e.g. x) -> key of an axis device"
     )

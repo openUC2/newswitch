@@ -1,7 +1,7 @@
 # Test configuration: one simulated camera through uc2_cam_py (no hardware needed).
 #
 # The camera manager is only used on real hardware, so start the backend with
-#   NEWSWITCH_CONFIG=configs/camTest.json
+#   NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml
 # (needs the extra "camera": uv sync --extra camera). Stage and illumination then look for
 # a UC2 board and keep retrying without one; the camera works regardless.
 #

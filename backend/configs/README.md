@@ -137,7 +137,7 @@ virtual microscope keeps its simulated detector.
   showing its newest image, and keeps the cameras acquiring from startup (without writing
   to disk; `stop_live_view` ends the writing even though the camera keeps acquiring).
 - `camTest_config.yaml` is a simulated camera (`manufacturer: Simulated`) for trying it
-  out without hardware: `NEWSWITCH_CONFIG=configs/camTest.json uvicorn main:app`. Walkthrough:
+  out without hardware: `NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml uvicorn main:app`. Walkthrough:
   "End-to-end test for camera" in the root `README.md`.
 
 ## Stages, axes and wheels
@@ -217,3 +217,11 @@ flow style and further keys stay; the previous file is kept as `*.bak` (git-igno
 - A physical value written as scalar or `null` becomes a mapping.
 
 The app's shutdown hook writes exposure, gain, wheel positions and stage position back.
+
+## Hardware integration demos
+
+Two [reduced test configurations](demos/README.md) isolate Serial and direct CAN
+from the main example. Mixed connections and axes on different controllers are
+already demonstrated in `newswitch-config.yaml`. The main example additionally
+contains a CAN LED-matrix mapping. The demo README documents the supported runtime
+contract, startup commands and unsupported bridge/camera/wheel cases.
