@@ -30,6 +30,7 @@ from newswitch.protocols.uc2 import (
     PositionUpdate,
     UC2Event,
     UC2State,
+    UC2TransportState,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -86,9 +87,11 @@ class UC2CanBusConfig:
 class UC2CanBus:
     """UC2BusManager implementation speaking CANopen via uc2canopen."""
 
-    state: UC2State
+    state: UC2State | UC2TransportState
 
-    def __init__(self, state: UC2State, config: Optional[UC2CanBusConfig] = None) -> None:
+    def __init__(
+        self, state: UC2State | UC2TransportState, config: Optional[UC2CanBusConfig] = None
+    ) -> None:
         """Initialize the CAN transport with shared bus state (no I/O yet)."""
         self.state = state
         self.config = config or UC2CanBusConfig()
