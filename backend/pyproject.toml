@@ -53,8 +53,8 @@ camera = [
     "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@3437793848fb57d7269edec8f34855a6e2d0e1f5 ; sys_platform == 'linux' and python_version == '3.12'",
 ]
 
-[tool.uv]
-dev-dependencies =  [
+[dependency-groups]
+dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
     "pytest>=8.3.5",
@@ -72,6 +72,7 @@ dev-dependencies =  [
     "scipy-stubs>=1.17.1.0",
 ]
 
+[tool.uv]
 # Root of the MVS SDK that uc2-cam-py (a C++ extension built from source) builds against for
 # HikRobot support. A path without a fitting SDK is no error: uc2-cam-py then builds with
 # the simulated camera only.

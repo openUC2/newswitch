@@ -16,7 +16,7 @@ schema_dir: configs/schemas
 # Device configuration; bare names are resolved against config_dir.
 # newswitch never writes static_config_path; changes always go into persistent_config_path.
 static_config_path: camTest_config.yaml
-persistent_config_path:  camTest_config.persistent.yaml
+persistent_config_path: camTest_config.persistent.yaml
 # true:  read  static_config_path; on shutdown persistent_config_path is overwritten
 #        with it plus the runtime changes
 # false: read (and write back) persistent_config_path; on first start it is created
@@ -36,7 +36,7 @@ camera_debug_window: true
 
 # Logging of the backend (the frontend logs in the browser). Each output gets records from
 # its level up: fatal | error | warn | info | debug, or none for no output at all.
-log_to_terminal: none
+log_to_terminal: warn
 log_to_file: debug
 # Log file, relative to the backend's working directory (backend/ with `just dev`). It is
 # appended to and rotated at 10 MB (backend.log.1 ... .3 are kept). Missing, or not openable

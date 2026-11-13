@@ -5,6 +5,7 @@ This module provides a FastAPI server with arkitekt_next integration
 for controlling a virtual microscope through registered functions.
 """
 
+import argparse
 import logging
 import os
 from pathlib import Path
@@ -200,6 +201,19 @@ class ImswitchConfig(BaseSettings):
             from_static=self.load_from_static_config_path,
         )
 
+    def validate_device_config(self) -> None:
+        """Reject missing/invalid YAML before serving HTTP, without writing runtime files."""
+        if self.config_file is None:
+            return
+        source = self.config_file
+        if (
+            not self.load_from_static_config_path
+            and source.resolve() == self.persistent_config_path.resolve()
+            and not source.exists()
+        ):
+            source = self.static_config_path
+        config_io.load_config(source)
+
     def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
         """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
 
@@ -254,10 +268,13 @@ class ImswitchConfig(BaseSettings):
 CONFIG_ENV_VAR = "NEWSWITCH_CONFIG"
 
 
-def load_app_config() -> ImswitchConfig:
-    """Use YAML device configuration without a parallel JSON hardware source."""
+def load_app_config(
+    config_file: str | Path | None = None, mode: str | None = None
+) -> ImswitchConfig:
+    """Select device YAML and mode; explicit arguments override environment variables."""
     overrides = {}
-    if source := os.environ.get("NEWSWITCH_CONFIG"):
+    source = config_file if config_file is not None else os.environ.get("NEWSWITCH_CONFIG")
+    if source:
         path = Path(source).expanduser()
         if path.suffix.lower() not in (".yaml", ".yml"):
             raise ValueError(
@@ -270,7 +287,8 @@ def load_app_config() -> ImswitchConfig:
             persistent_config_path=path.with_name(path.stem + ".persistent" + path.suffix),
             load_from_static_config_path=True,
         )
-    if mode := os.environ.get("NEWSWITCH_MODE"):
+    mode = mode if mode is not None else os.environ.get("NEWSWITCH_MODE")
+    if mode:
         if mode not in ("hardware", "virtual"):
             raise ValueError("NEWSWITCH_MODE must be hardware or virtual")
         overrides["use_virtual_microscope"] = mode == "virtual"
@@ -661,6 +679,8 @@ def create_app(
             cannot be switched off by a stray variable on a deployed machine.
     """
 
+    config.validate_device_config()
+
     app = FastAPI(
         title="Virtual Microscope API",  # TODO: should we load this from config?
         description="Integrated virtual microscope controller with protocol-based managers based on rekuest-next",
@@ -727,23 +747,29 @@ def create_app(
 # ====================
 
 
-def main() -> None:
-    """Main entry point to run the FastAPI server.
-
-    Host and port come from BACKEND_HOST / BACKEND_PORT (the repo's root .env, which
-    `just` and docker compose export), so they stay defined in exactly one place. The
-    settings come from `load_app_config`, so ``NEWSWITCH_CONFIG`` applies as for main.py.
-    """
-    config = load_app_config()
+def main(argv: list[str] | None = None) -> None:
+    """Run the backend with CLI overrides for YAML, mode, host and port."""
+    parser = argparse.ArgumentParser(description="Start the Newswitch backend")
+    parser.add_argument(
+        "--config",
+        help="Device YAML (relative paths resolve against backend); overrides NEWSWITCH_CONFIG",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("hardware", "virtual"),
+        help="Real hardware or simulation; overrides NEWSWITCH_MODE",
+    )
+    parser.add_argument("--host", default=os.environ.get("BACKEND_HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=os.environ.get("BACKEND_PORT", "8099"))
+    args = parser.parse_args(argv)
+    try:
+        config = load_app_config(config_file=args.config, mode=args.mode)
+        config.validate_device_config()
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
     configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
     app = create_app(config)
-    # log_config=None: uvicorn would otherwise put its own handlers back
-    uvicorn.run(
-        app,
-        host=os.environ.get("BACKEND_HOST", "0.0.0.0"),
-        port=int(os.environ.get("BACKEND_PORT", "8099")),
-        log_config=None,
-    )
+    uvicorn.run(app, host=args.host, port=args.port, log_config=None)
 
 
 if __name__ == "__main__":
