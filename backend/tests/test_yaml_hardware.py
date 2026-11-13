@@ -760,5 +760,9 @@ async def test_private_transport_updates_do_not_publish_false_connected_state() 
         await asyncio.sleep(0.12)
         assert bus.state.connected
         assert bus.state.last_error == ""
+        assert any(
+            name == "UC2State" and p.path == "/connected" and p.value is True
+            for name, p in published
+        )
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
