@@ -260,3 +260,65 @@ def test_shipped_camtest_config_loads(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.use_virtual_microscope is False
     assert config.config_file == BASE_CONFIG_FILE.parent / "configs" / "camTest_config.yaml"
     assert config.open_device_config().config.detectors
+
+
+def test_explicit_startup_options_override_environment(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLI choices win independently over inherited environment settings."""
+    base = write_base()
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "old.json")
+    monkeypatch.setenv("NEWSWITCH_MODE", "invalid")
+    config = app_module.load_app_config(config_file="new.yml", mode="virtual")
+    assert config.config_file == base.parent / "new.yml"
+    assert config.use_virtual_microscope
+    assert config.persistent_config_path == base.parent / "new.persistent.yml"
+    assert app_module.os.environ["NEWSWITCH_CONFIG"] == "old.json"
+
+
+def test_backend_cli_forwards_config_mode_and_bind_options(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI creates the selected application without starting real hardware in tests."""
+    base = write_base()
+    captured = {}
+    monkeypatch.setenv("NEWSWITCH_CONFIG", "old.json")
+    monkeypatch.setenv("NEWSWITCH_MODE", "virtual")
+    monkeypatch.setattr(app_module, "configure_logging", lambda *args: None)
+    monkeypatch.setattr(app_module, "create_app", lambda config: config)
+
+    def run(app: ImswitchConfig, **kwargs: object) -> None:
+        captured.update(config=app, **kwargs)
+
+    monkeypatch.setattr(app_module.uvicorn, "run", run)
+    app_module.main(
+        [
+            "--config",
+            "machine.yaml",
+            "--mode",
+            "hardware",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8069",
+        ]
+    )
+    assert captured["config"].config_file == base.parent / "machine.yaml"
+    assert not captured["config"].use_virtual_microscope
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 8069
+    assert captured["log_config"] is None
+
+
+def test_backend_cli_rejects_invalid_mode_before_creating_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo must not start a server or silently select another operating mode."""
+
+    def unexpected(config: object) -> None:
+        pytest.fail("Application was created for invalid CLI arguments")
+
+    monkeypatch.setattr(app_module, "create_app", unexpected)
+    with pytest.raises(SystemExit) as exc:
+        app_module.main(["--mode", "hardwar"])
+    assert exc.value.code == 2
