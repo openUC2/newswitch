@@ -1,0 +1,85 @@
+# Pi 192.168.0.46: migrated from the selected ImSwitch FRAME.json on 2026-11-03.
+# Mixed test setup 2026-11-12: Serial axes/LED plus CAN RGB LED node 20.
+# The CAN light uses the firmware LED-array interface; it is a separate USB bus.
+# X/Y: 0.396 um/step; Z: 0.3125 um/step. Speeds below are conservative initial settings.
+# No automatic homing. A retains the legacy linear calibration in um.
+# Camera omitted: installed MVS SDK is incompatible with the pinned camera driver.
+newswitch_version: v1.0.2
+devices:
+  serial-master:
+    type: controller
+    name: UC2 Serial controller
+    connection:
+      protocol: uc2-rest
+      transport:
+        type: serial
+        port: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0
+        baudrate: 115200
+    mapping:
+      axis-x: {type: serial-motor, id: 1}
+      axis-y: {type: serial-motor, id: 2}
+      axis-z: {type: serial-motor, id: 3}
+      axis-a: {type: serial-motor, id: 0}
+      illumination-led: {type: serial-laser, id: 1, pwm_max: 1023}
+  sample-stage:
+    type: stage
+    axes: {x: axis-x, y: axis-y, z: axis-z, a: axis-a}
+    homing_order: [z, x, y, a]
+    registered_step_sizes: [1, 10, 100]
+  axis-x:
+    type: axis
+    steps_per_um: 2.525252525252525
+    homing_required: false
+    homing_direction: -1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: 1
+    homing_timeout_ms: 20000
+    vel: {value: 1000, min: 1, max: 5940, unit: um/s}
+  axis-y:
+    type: axis
+    steps_per_um: 2.525252525252525
+    homing_required: false
+    homing_direction: -1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: -1
+    homing_timeout_ms: 20000
+    vel: {value: 1000, min: 1, max: 5940, unit: um/s}
+  axis-z:
+    type: axis
+    steps_per_um: 3.2
+    homing_required: false
+    homing_direction: 1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: -1
+    homing_timeout_ms: 20000
+    vel: {value: 500, min: 1, max: 4687.5, unit: um/s}
+  axis-a:
+    type: axis
+    steps_per_um: 2.525252525252525
+    homing_required: false
+    homing_direction: -1
+    homing_speed_steps: 10000
+    homing_endstop_polarity: 1
+    homing_timeout_ms: 20000
+    vel: {value: 1000, min: 1, max: 5940, unit: um/s}
+  illumination-led:
+    type: lightsource
+    name: Illumination LED
+    coherence: incoherent
+  can-led-controller:
+    type: controller
+    name: USB CAN LED controller
+    connection:
+      protocol: canopen
+      transport:
+        type: can
+        interface: waveshare
+        port: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+        bitrate: 500000
+    mapping:
+      can-illumination-led: {type: canopen-led-matrix, id: 20}
+  can-illumination-led:
+    type: lightsource
+    name: CAN RGB LED
+    coherence: incoherent
+    channels: 3

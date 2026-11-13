@@ -106,10 +106,9 @@ UC2Event = Union[
 # ---------------------------------------------------------------------------
 
 
-@state
 @dataclass
-class UC2State:
-    """Connection, identity, and safety state of the UC2 hardware bus."""
+class UC2TransportState:
+    """Private connection state of one physical transport; never publishes UI patches."""
 
     connected: bool = False
     transport: str = "virtual"
@@ -117,6 +116,12 @@ class UC2State:
     estop_active: bool = False
     nodes_online: list[int] = field(default_factory=list)
     last_error: str = ""
+
+
+@state
+@dataclass
+class UC2State(UC2TransportState):
+    """Connection, identity, and safety state of the UC2 hardware bus."""
 
 
 # ---------------------------------------------------------------------------

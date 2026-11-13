@@ -35,6 +35,7 @@ from newswitch.protocols.illumination import Illumination, IlluminationKind, Ill
 from rekuest_next.state.lock import acquired_locks
 from newswitch.protocols.uc2 import (
     UC2State,
+    UC2TransportState,
     UC2Event,
     PositionUpdate,
     MotionDone,
@@ -340,7 +341,9 @@ class YamlUC2Bus:
                 raise ValueError(
                     "UC2 Serial timing uses client defaults; configure movement/homing deadlines per axis"
                 )
-            bus = UC2RestBus(UC2State(), UC2RestBusConfig(serialport=t.port, baudrate=t.baudrate))
+            bus = UC2RestBus(
+                UC2TransportState(), UC2RestBusConfig(serialport=t.port, baudrate=t.baudrate)
+            )
         else:
             if not isinstance(t, CanTransport):
                 raise ValueError("Direct CANopen requires a CAN transport")
@@ -349,7 +352,7 @@ class YamlUC2Bus:
             if t.interface not in ("socketcan", "waveshare"):
                 raise ValueError(f"UC2 CAN runtime does not support {t.interface}")
             bus = UC2CanBus(
-                UC2State(),
+                UC2TransportState(),
                 UC2CanBusConfig(
                     interface=t.interface,
                     channel=t.channel,

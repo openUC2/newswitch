@@ -729,3 +729,40 @@ def test_serial_stable_symlink_resolves_for_uc2_port_lookup(tmp_path: Path) -> N
     doc["devices"]["my-standalone-board"]["connection"]["transport"]["port"] = str(stable)
     bus = runtime(doc)
     assert bus.axes["X"].bus.config.serialport == str(target)
+
+
+@pytest.mark.asyncio
+async def test_private_transport_updates_do_not_publish_false_connected_state() -> None:
+    """A connected Serial bus must not overwrite the aggregate when CAN is down."""
+    from rekuest_next.state.publish import BasePublisher
+
+    doc = yaml.safe_load(
+        (DEMOS.parent / "machines" / "openuc2-first-cord-30059-mixed.yaml").read_text()
+    )
+    bus = runtime(doc)
+    published = []
+    holder = SimpleNamespace(publish_patch=lambda name, patch: published.append((name, patch)))
+    with BasePublisher(holder):
+        serial, can = list(bus.buses.values())
+        serial.state.connected = True
+        serial.state.transport = "rest"
+        can.state.transport = "canopen"
+        can.state.last_error = "CAN offline"
+        assert published == []
+        assert not bus.state.connected
+        task = asyncio.create_task(bus._mirror_state())
+        await asyncio.sleep(0)
+        assert not bus.state.connected
+        assert bus.state.last_error == "CAN offline"
+        assert not any(p.path == "/connected" and p.value is True for _, p in published)
+        can.state.connected = True
+        can.state.last_error = ""
+        await asyncio.sleep(0.12)
+        assert bus.state.connected
+        assert bus.state.last_error == ""
+        assert any(
+            name == "UC2State" and p.path == "/connected" and p.value is True
+            for name, p in published
+        )
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
