@@ -282,6 +282,7 @@ def test_backend_cli_forwards_config_mode_and_bind_options(
     """The CLI creates the selected application without starting real hardware in tests."""
     base = write_base()
     captured = {}
+    (base.parent / "machine.yaml").write_text("newswitch_version: v1.0.2\ndevices: {}\n")
     monkeypatch.setenv("NEWSWITCH_CONFIG", "old.json")
     monkeypatch.setenv("NEWSWITCH_MODE", "virtual")
     monkeypatch.setattr(app_module, "configure_logging", lambda *args: None)
@@ -322,3 +323,52 @@ def test_backend_cli_rejects_invalid_mode_before_creating_app(
     with pytest.raises(SystemExit) as exc:
         app_module.main(["--mode", "hardwar"])
     assert exc.value.code == 2
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [None, "devices: [", "newswitch_version: v1.0.2\ndevices: {broken: {type: unknown}}\n"],
+)
+def test_create_app_rejects_invalid_config_before_authentication(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contents: str | None
+) -> None:
+    """Missing, malformed and schema-invalid YAML fail before any server side effects."""
+    write_base()
+    source = tmp_path / "bad-device.yaml"
+    if contents is not None:
+        source.write_text(contents)
+
+    def unexpected() -> None:
+        pytest.fail("Authentication was initialized before validating device YAML")
+
+    monkeypatch.setattr(app_module, "default_authenticator", unexpected)
+    with pytest.raises(app_module.config_io.ConfigError):
+        app_module.create_app(ImswitchConfig(config_file=source))
+    assert not source.with_name("bad-device.persistent.yaml").exists()
+
+
+def test_cli_missing_yaml_exits_with_filename_without_serving(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A mistyped --config exits immediately with a useful CLI error."""
+    write_base()
+    monkeypatch.delenv("NEWSWITCH_MODE", raising=False)
+
+    def unexpected(*args: object, **kwargs: object) -> None:
+        pytest.fail("Server started with a missing config")
+
+    monkeypatch.setattr(app_module.uvicorn, "run", unexpected)
+    with pytest.raises(SystemExit) as exc:
+        app_module.main(["--config", "mixedd.yaml", "--mode", "hardware"])
+    assert exc.value.code == 2
+    assert "mixedd.yaml" in capsys.readouterr().err
+
+
+def test_preflight_persistent_boot_checks_static_without_copying(write_base: BaseWriter) -> None:
+    """First persistent boot can validate its static seed without creating runtime files."""
+    write_base(load_from_static_config_path=False)
+    config = ImswitchConfig()
+    config.static_config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.static_config_path.write_text("newswitch_version: v1.0.2\ndevices: {}\n")
+    config.validate_device_config()
+    assert not config.persistent_config_path.exists()

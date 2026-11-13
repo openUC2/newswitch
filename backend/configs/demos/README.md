@@ -17,24 +17,31 @@ machine before connecting hardware. Automated tests use fake clients, not motors
 From `backend`:
 
 ```bash
-uv sync --extra uc2
 uv run python -m newswitch.config_io configs/demos/uc2-serial.yaml
-NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/demos/uc2-serial.yaml uv run uvicorn main:app --port 8099
+NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/demos/uc2-serial.yaml uv run --extra uc2 uvicorn main:app --port 8099
 # Or select configs/demos/uc2-canopen.yaml for direct CAN.
 ```
 
 Alternatively, pass startup options directly (from `backend`):
 
 ```bash
-uv run python main.py --config configs/demos/uc2-serial.yaml --mode hardware --port 8099
-# The same options work with: uv run python -m newswitch.app
+uv run --extra uc2 python main.py --config configs/demos/uc2-serial.yaml --mode hardware --port 8099
+# The same options work with: uv run --extra uc2 python -m newswitch.app
 ```
+
+`uv run --extra uc2` automatically prepares the Serial/CAN driver dependencies
+before startup; a separate `uv sync --extra uc2` is not required. The YAML selects
+the connections to use. From the repository root, `just dev` and `just dev-backend`
+also prepare these dependencies automatically.
 
 `--config` and `--mode` override their environment variables; omitted options
 continue to use the environment and then the base settings. `--host` and `--port`
 override `BACKEND_HOST` and `BACKEND_PORT`. Use `--help` for all options.
 These are backend CLI arguments; `uvicorn main:app` continues to use environment
-variables because uvicorn handles its own command-line arguments.
+variables because uvicorn handles its own command-line arguments. Device YAML is
+validated before HTTP startup; missing, malformed or schema-invalid files abort
+startup rather than failing later in a background task. `just dev` performs the
+same read-only preflight before launching either service.
 
 `NEWSWITCH_CONFIG` selects a device YAML, not a legacy JSON settings file. Relative
 paths resolve against `backend`. The input is never overwritten; positions are

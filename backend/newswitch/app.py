@@ -201,6 +201,19 @@ class ImswitchConfig(BaseSettings):
             from_static=self.load_from_static_config_path,
         )
 
+    def validate_device_config(self) -> None:
+        """Reject missing/invalid YAML before serving HTTP, without writing runtime files."""
+        if self.config_file is None:
+            return
+        source = self.config_file
+        if (
+            not self.load_from_static_config_path
+            and source.resolve() == self.persistent_config_path.resolve()
+            and not source.exists()
+        ):
+            source = self.static_config_path
+        config_io.load_config(source)
+
     def __init__(self, **values: Any) -> None:  # noqa: ANN401 - passed on to pydantic
         """Read `BASE_CONFIG_FILE`; keyword arguments override single values.
 
@@ -666,6 +679,8 @@ def create_app(
             cannot be switched off by a stray variable on a deployed machine.
     """
 
+    config.validate_device_config()
+
     app = FastAPI(
         title="Virtual Microscope API",  # TODO: should we load this from config?
         description="Integrated virtual microscope controller with protocol-based managers based on rekuest-next",
@@ -747,7 +762,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--host", default=os.environ.get("BACKEND_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=os.environ.get("BACKEND_PORT", "8099"))
     args = parser.parse_args(argv)
-    config = load_app_config(config_file=args.config, mode=args.mode)
+    try:
+        config = load_app_config(config_file=args.config, mode=args.mode)
+        config.validate_device_config()
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
     configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
     app = create_app(config)
     uvicorn.run(app, host=args.host, port=args.port, log_config=None)

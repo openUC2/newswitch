@@ -26,9 +26,9 @@ install:
 
 # ---------- dev ----------
 
-# Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
+# Backend only; uv ensures the Serial/CAN drivers are installed before startup.
 dev-backend:
-    cd backend && uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload
+    cd backend && uv run --extra uc2 uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload
 
 # Frontend only -> http://localhost:$FRONTEND_PORT (needs the backend up for fresh codegen)
 # Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
@@ -47,15 +47,17 @@ wait-backend url=BACKEND_HEALTH:
     echo "backend did not answer within 60s" >&2
     exit 1
 
-# Run backend + frontend together (backend first: the frontend codegen fetches its schemas)
+# Run both services; uv ensures Serial/CAN drivers, then the frontend fetches backend schemas.
 dev:
     #!/usr/bin/env bash
-    set -uo pipefail
+    set -euo pipefail
+    # Fail before launching either service if the selected YAML is missing or invalid.
+    (cd backend && uv run --extra uc2 python -c 'from newswitch.app import load_app_config; load_app_config().validate_device_config()')
     trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload) &
+    (cd backend && exec uv run --extra uc2 uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload) &
     if ! just wait-backend; then
-      echo "!! backend unreachable - vite will fall back to the COMMITTED generated hooks" >&2
-      echo "!! (see frontend/plugins/generate-app.ts: fetch failures are warnings, not errors)" >&2
+      echo "!! backend startup failed; frontend was not started" >&2
+      exit 1
     fi
     echo "frontend -> http://localhost:{{FRONTEND_PORT}}"
     (cd frontend && exec yarn dev) &

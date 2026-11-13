@@ -111,7 +111,7 @@ docs/_build/
 /site
 
 # Backups written by newswitch.config_io when saving the device config
-backend/configs/*.bak
+backend/configs/**/*.bak
 
 # Local hardware settings and generated browser-test reports
 backend/configs/*.local.json
