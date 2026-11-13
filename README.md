@@ -8,15 +8,69 @@ more web-stack-friendly, modern, and maintainable foundation for the same functi
 
 ## Quickstart
 
-You need Python 3.11+ with uv and Node 20+. The repo uses [just](https://just.systems/man/en/) for task automation. Install it, then:
+You need Python 3.11 or 3.12 with uv, Node 22+, Yarn 1.x and
+[just](https://just.systems/man/en/). Run these commands from the repository root:
 
 ```bash
-just install     # uv sync + yarn install
-just dev         # backend , then frontend (will autocodegen)-> http://localhost:5173
+just install
+just dev         # backend, then frontend: http://localhost:5473
 ```
 
-Run `just` on its own to see every recipe. Both ports come from the committed root `.env` — see
-[Environment](#environment).
+`just dev` uses `backend/base_config.yaml`. Ports come from the root `.env`:
+backend 8069, frontend 5473. To run with simulated devices, use
+`NEWSWITCH_MODE=virtual just dev`.
+
+### Start with a device YAML
+
+```bash
+NEWSWITCH_CONFIG=configs/machines/openuc2-first-cord-30059.yaml \
+NEWSWITCH_MODE=hardware \
+just dev
+```
+
+This starts both services. `uv` installs any missing Serial/CAN Python dependencies
+before the backend starts; no separate `uv sync` is needed. Offline startup needs
+those packages installed or cached. Camera packages and manufacturer SDKs are separate.
+
+The YAML is validated before either service starts. A missing or invalid file
+stops the command. Hardware connections are established afterwards; an HTTP health
+check alone does not confirm they are connected.
+
+The example is our Pi's four-axis Serial setup with one LED output. The mixed
+Serial/CAN profile is `openuc2-first-cord-30059-mixed.yaml` in the same folder.
+Adapt ports, addresses and calibration for other instruments. Paths in the YAML
+refer to the machine running the backend, not the browser's computer.
+See the [configuration examples](backend/configs/demos/README.md).
+
+### Start the backend separately
+
+From `backend/`:
+
+```bash
+uv run --extra uc2 python main.py \
+  --config configs/machines/openuc2-first-cord-30059.yaml \
+  --mode hardware \
+  --port 8069
+```
+
+`--config` selects the device YAML; relative paths resolve against `backend/`.
+`--mode` accepts `hardware` or `virtual`. `--host` and `--port` set the listening
+address and port. Explicit arguments override the corresponding environment
+variables; otherwise the environment and base settings apply.
+
+```bash
+uv run python main.py --help
+```
+
+The same options work with `uv run --extra uc2 python -m newswitch.app`.
+They belong to the Python entrypoint, not to uvicorn or `just dev`.
+
+For this separate-start variant, run `just dev-frontend` in another terminal from
+the repository root. If you change the backend port, pass it there too:
+`BACKEND_PORT=9000 just dev-frontend`.
+
+Run `just` to list the available recipes. See [Environment](#environment) for port
+and frontend URL settings.
 
 ## The one rule: the backend comes up first
 
