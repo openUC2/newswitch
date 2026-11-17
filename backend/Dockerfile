@@ -1,6 +1,7 @@
-FROM python:3.12-slim
-
-COPY --from=ghcr.io/astral-sh/uv:0.8.3 /uv /usr/local/bin/uv
+# Development image (bind-mounted source, --reload; see docker-compose.yml in the repo root).
+# Same base image as the production image (../Dockerfile), so both use the same Python and uv;
+# it already contains uv at /usr/local/bin/uv. Update tag and digest together.
+FROM ghcr.io/astral-sh/uv:0.12.24-python3.13-trixie-slim@sha256:adb723cc75f8a5fa33fa1928af0e032d9199694599c77ffeea5527a76e37a512
 
 # pystackreg ships no aarch64 wheel and must compile its C++ extension on Raspberry Pi.
 RUN apt-get update \

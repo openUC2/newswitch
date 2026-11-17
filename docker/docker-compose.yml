@@ -1,0 +1,46 @@
+# Runs the newswitch container image on a Raspberry Pi (or any Linux host with the hardware
+# attached). Modelled on ImSwitch's Forklift deployment (os-rpi:
+# deployments/imswitch.pkg/deployment.compose.yml): no `privileged`, but device cgroup rules
+# and groups. Guide: docs/INSTALL-RPI.md. Development setup: ../docker-compose.yml (`just up`).
+#
+#   docker compose -f docker/docker-compose.yml pull
+#   docker compose -f docker/docker-compose.yml up -d          (or: just prod-up)
+#
+# `up --build` builds this checkout instead (needs the MVS packages in backend/external).
+#
+# Settings come from docker/.env (read automatically, git-ignored; template docker/.env.example)
+# or from the shell environment.
+name: newswitch-prod
+
+services:
+  server:
+    image: ${NEWSWITCH_IMAGE:-ghcr.io/openuc2/newswitch:edge}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8069:8069" # frontend (/newswitch/), HTTP API, WebSockets
+    volumes:
+      - /etc/machine-id:/etc/machine-id:ro
+      - /run/udev:/run/udev:ro # udev database: stable names such as /dev/serial/by-id/...
+      - /dev:/dev
+    device_cgroup_rules:
+      - 'a 188:* rwm' # USB serial devices (CP2102, CH340, ...), e.g. /dev/ttyUSB0
+      - 'a 166:* rwm' # USB serial devices (CDC ACM, e.g. XIAO), e.g. /dev/ttyACM0
+      # Not in ImSwitch's deployment: raw USB access for HikRobot USB3 Vision cameras
+      # (/dev/bus/usb/...); OpenPoints_installChain.md #8
+      - 'a 189:* rwm'
+    group_add:
+      - tty
+      - dialout
+      - video
+      - plugdev
+    environment:
+      NEWSWITCH_MODE: ${NEWSWITCH_MODE:-hardware}
+      # Device YAML, relative to the backend folder of the image
+      NEWSWITCH_CONFIG: ${NEWSWITCH_CONFIG:-configs/machines/openuc2-first-cord-30059-mixed.yaml}
+    # No data volumes, on purpose for now: the runtime files stay where they are, relative to
+    # the backend folder (auth.db, agent_data.db, configs/*.persistent.yaml, backend.log,
+    # data/recordings). They survive restarts and reboots, but NOT a re-created container,
+    # i.e. an image update: OpenPoints_installChain.md #5, docs/INSTALL-RPI.md "Updating".
+    restart: always

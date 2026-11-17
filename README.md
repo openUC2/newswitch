@@ -8,7 +8,7 @@ more web-stack-friendly, modern, and maintainable foundation for the same functi
 
 ## Quickstart
 
-You need Python 3.11 or 3.12 with uv, Node 22+, Yarn 1.x and
+You need Python 3.13 with uv, Node 22+, Yarn 1.x and
 [just](https://just.systems/man/en/). Run these commands from the repository root:
 
 ```bash
@@ -173,7 +173,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 **Prerequisites:**
 
 - Linux with a graphical session (X11, or Wayland with XWayland: `DISPLAY` must be set).
-- Python 3.12 and a C++ compiler: uc2_cam_py is built from source.
+- Python 3.13 and a C++ compiler: uc2_cam_py is built from source.
 - For HikRobot cameras only: the MVS SDK at the path `MVS_ROOT` names in `backend/pyproject.toml`
   (`[tool.uv] config-settings-package`, `/opt/MVS`). Without it uc2_cam_py builds with the
   simulated camera only, which is all this guide needs.
@@ -291,6 +291,22 @@ just logs
 Compose is the one path with **no schema race**: the frontend's `depends_on` waits on a backend
 healthcheck. The probe hits `/health`, which is public and needs no credentials; because uvicorn
 serves nothing until startup completes, a healthy backend is also one whose schema endpoints answer.
+
+That setup is for development (bind-mounted sources, `--reload`, Vite dev server). The
+**production image** is separate: `Dockerfile` in the repository root builds backend, built
+frontend and the HikRobot camera driver into one image, served on port 8069 (UI under
+`/newswitch/`). GitHub Actions (`build-container.yml`) publishes it as
+`ghcr.io/openuc2/newswitch` for `linux/amd64` and `linux/arm64`.
+
+```bash
+just prod-build  # build it locally as newswitch:local (needs backend/external/*.deb)
+just prod-up     # run it with docker/docker-compose.yml (settings: docker/.env)
+just prod-logs
+just prod-down
+```
+
+Installing it on a Raspberry Pi: [docs/INSTALL-RPI.md](docs/INSTALL-RPI.md). Open points:
+[OpenPoints_installChain.md](OpenPoints_installChain.md).
 
 
 ## Authentication

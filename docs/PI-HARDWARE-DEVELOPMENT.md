@@ -30,7 +30,7 @@ After pushing changes from the Mac, on the Pi:
 cd ~/newswitch
 git pull --ff-only
 cd backend
-~/.local/bin/uv sync --locked --no-dev --extra uc2 --extra camera --python 3.12
+~/.local/bin/uv sync --locked --no-dev --extra uc2 --extra camera --python 3.13
 cd ../frontend
 PATH="$HOME/newswitch/.runtime/node-v22.21.1-linux-arm64/bin:$PATH" yarn install --frozen-lockfile --non-interactive
 systemctl --user restart newswitch-backend newswitch-frontend

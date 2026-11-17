@@ -170,6 +170,25 @@ down-hard:
 logs:
     docker compose logs -f
 
+# ---------- production image (Dockerfile, docker/docker-compose.yml) ----------
+
+PROD_COMPOSE := "docker compose -f docker/docker-compose.yml"
+
+# Build the production image for this machine's platform as newswitch:local.
+# Needs the MVS packages in backend/external (backend/external/README.md).
+prod-build tag="newswitch:local":
+    docker buildx build --load -t {{tag}} .
+
+# Run the production image (settings: docker/.env, see docker/.env.example)
+prod-up:
+    {{PROD_COMPOSE}} up -d
+
+prod-down:
+    {{PROD_COMPOSE}} down
+
+prod-logs:
+    {{PROD_COMPOSE}} logs -f
+
 # ---------- release ----------
 
 # Dry-run the unified release locally (no push, no tag)

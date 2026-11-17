@@ -97,6 +97,7 @@ from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
 from newswitch.routes.http.users import router as users_router
+from newswitch.routes.http.frontend import frontend_dir_from_env, mount_frontend
 
 from newswitch.managers.python_hook_manager import PythonHookManager
 
@@ -668,6 +669,7 @@ default_app_registry = get_default_app_registry()
 def create_app(
     config: ImswitchConfig,
     authenticator: Authenticator | None = None,
+    frontend_dir: Path | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -677,6 +679,12 @@ def create_app(
             `AllowAllAuthenticator()`; production leaves this unset. Injected as an
             argument rather than read from the environment so that authentication
             cannot be switched off by a stray variable on a deployed machine.
+        frontend_dir: Built frontend to serve under ``/newswitch/`` (see
+            `routes.http.frontend`). None: the folder ``NEWSWITCH_FRONTEND_DIR`` names
+            (set in the container image); unset, no frontend is served.
+
+    Raises:
+        FileNotFoundError: The frontend folder holds no ``index.html``.
     """
 
     config.validate_device_config()
@@ -738,6 +746,11 @@ def create_app(
 
     # Mount Cache routes for serving cached data
     app.include_router(cache_router)
+
+    # The built frontend, same origin as the API (container image only)
+    frontend_dir = frontend_dir if frontend_dir is not None else frontend_dir_from_env()
+    if frontend_dir is not None:
+        mount_frontend(app, frontend_dir)
 
     return app
 

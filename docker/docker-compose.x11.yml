@@ -1,0 +1,25 @@
+# Optional override: shows uc2_cam_py's camera debug window (camera_debug_window in
+# backend/base_config.yaml) on an X server. X11 is only needed for the debug window; remove
+# this file later (OpenPoints_installChain.md #4).
+#
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.x11.yml up -d
+#
+# - Over SSH, window on your own computer: log in with `ssh -Y pi@<pi>` (the Pi needs xauth,
+#   docker/rpi-host-setup.sh installs it) and start from that shell.
+# - On a host with a desktop session: start from a terminal of that session (DISPLAY and
+#   XAUTHORITY are set there).
+#
+# Host networking: an SSH X11 forwarding listens on the host's localhost (DISPLAY such as
+# localhost:10.0), which a container on the bridge network cannot reach. The backend then
+# listens on the host's port 8069 directly, so the port mapping is dropped.
+services:
+  server:
+    network_mode: host
+    ports: !reset []
+    environment:
+      DISPLAY: ${DISPLAY:?DISPLAY is not set - log in with ssh -Y, or start from a desktop session}
+      XAUTHORITY: /home/pi/.Xauthority
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # The X cookie of the user who starts compose (container user pi, uid 1000)
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/home/pi/.Xauthority:ro

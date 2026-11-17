@@ -11,8 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 # The backend syncs leave out the extra "camera" (uc2_cam_py, a C++ extension built from
-# source); its tests skip without it. Since uc2_cam_py 1.0.1 it also builds without the MVS
-# SDK (simulated camera only), so it could be enabled - not tried on the runners yet.
+# source); its tests skip without it. It also builds without the MVS SDK (simulated camera
+# only), so it could be enabled - not tried on the runners yet. The container image builds it
+# with the SDK (build-container.yml).
 
 jobs:
   changes:
@@ -39,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.13"]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
@@ -66,7 +67,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "latest"
-          python-version: "3.12"
+          python-version: "3.13"
       - run: uv sync --all-extras --no-extra camera --dev
 
       # Lint/format only need one platform, so they live here rather than in the OS matrix.
@@ -123,7 +124,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "latest"
-          python-version: "3.12"
+          python-version: "3.13"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -162,7 +163,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "latest"
-          python-version: "3.12"
+          python-version: "3.13"
       - uses: actions/setup-node@v4
         with:
           node-version: 22

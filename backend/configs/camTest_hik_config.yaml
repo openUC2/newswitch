@@ -1,0 +1,55 @@
+# Test configuration: one real HikRobot USB3 camera through uc2_cam_py, no UC2 board needed.
+#
+# The counterpart of camTest_config.yaml (simulated camera) for the real camera, e.g. to test
+# the container image or a Pi:
+#   NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_hik_config.yaml
+# It needs the extra "camera" built against the MVS SDK (as in the container image, or
+# `uv sync --extra camera` with the SDK at /opt/MVS). Stage and illumination then look for a
+# UC2 board and keep retrying without one; the camera works regardless.
+#
+# No serial_number: the first HikRobot USB3 camera found is used. To pin one, add e.g.
+#   serial_number: "00DA7175291"
+# to the mapping entry. Camera data: MV-CA023-10UM (1920 x 1200 mono, USB3 Vision).
+
+newswitch_version: v1.0.2
+devices:
+
+  hik-camera-controller:
+    type: controller
+    name: HikRobot-USB3-Camera-Controller
+    connection:
+      protocol: usb3-vision
+    mapping:
+      hik-cam:
+        type: usb3-vision-camera
+        id: 0
+        buffer_size: 8
+
+  hik-cam:
+    type: detector
+    name: MV-CA023-10UM
+    # vendor as the camera library (uc2_cam_py) names it; case does not matter
+    manufacturer: HikRobot
+    tags:
+      - monochrome
+      - global-shutter
+      - usb3
+    pixelcount: [1920, 1200]
+    pixelpitch_um: 5.86
+    channels: 1
+    exposure_time_ms:
+      value: 10.0
+      min: 0.024
+      max: 10000.0
+      unit: ms
+    framerate_per_sec:
+      value: 30.0
+      min: 0.5
+      max: 163.0
+      unit: Hz
+    gain_db:
+      value: 0.0
+      min: 0.0
+      max: 23.98
+      unit: dB
+    binning: 1
