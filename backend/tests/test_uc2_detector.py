@@ -20,7 +20,7 @@ from rekuest_next.state.lock import acquired_locks
 uc2_cam_py = pytest.importorskip("uc2_cam_py")
 
 from newswitch.broadcasters import FrameBroadcaster  # noqa: E402
-from newswitch.managers.uc2.uc2_detector import UC2DetectorManager, _pixels  # noqa: E402
+from newswitch.managers.uc2.detector_manager import UC2DetectorManager, _pixels  # noqa: E402
 from newswitch.protocols import CameraState, DetectorManager  # noqa: E402
 from newswitch.protocols.detector import FULL_SENSOR, Colormap, Detector  # noqa: E402
 

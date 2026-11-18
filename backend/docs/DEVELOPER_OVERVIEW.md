@@ -98,7 +98,7 @@ Managers are protocol implementations that mutate state and provide behavior:
 - **VirtualDetectorManager** produces frames based on `CameraState`, `StageState`, `ObjectiveState`, and `IlluminationState`, and publishes them via `FrameBroadcaster`. It simulates
   the camera readout too: region of interest, binning (block means), frame rate (paces the
   live stream) and acquisition sessions.
-- **UC2DetectorManager** (`managers/uc2/uc2_detector.py`) drives real cameras through the
+- **UC2DetectorManager** (`managers/uc2/detector_manager.py`) drives real cameras through the
   camera library uc2_cam_py (extra `camera`, see below); acquisition sessions are recorded to
   `.uc2rb` files.
 

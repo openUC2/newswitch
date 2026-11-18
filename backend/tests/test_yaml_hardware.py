@@ -659,7 +659,7 @@ async def test_camera_selection_coexists_with_yaml_hardware(
 
     monkeypatch.setitem(
         sys.modules,
-        "newswitch.managers.uc2.uc2_detector",
+        "newswitch.managers.uc2.detector_manager",
         SimpleNamespace(UC2DetectorManager=camera_manager),
     )
     source = tmp_path / "combined.yaml"

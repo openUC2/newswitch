@@ -148,7 +148,7 @@ class ImswitchConfig(BaseSettings):
     `config_io.open_config`). None keeps the built-in virtual devices."""
 
     camera_recording_dir: Optional[Path] = None
-    """Folder the cameras record into (see `managers.uc2.uc2_detector`). None: the default of
+    """Folder the cameras record into (see `managers.uc2.detector_manager`). None: the default of
     uc2_cam_py (``~/UC2_recordings``)."""
 
     camera_debug_window: bool = False
@@ -324,7 +324,7 @@ def build_detector_manager(
     if found:
         cameras, vendor_options = found
         try:
-            from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
+            from newswitch.managers.uc2.detector_manager import UC2DetectorManager
         except ImportError as exc:
             logger.warning(
                 "%d camera(s) configured, but uc2_cam_py cannot be imported (%s); "

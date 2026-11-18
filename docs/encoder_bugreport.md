@@ -173,7 +173,7 @@ mit dem Mausrad herauszoomen. Erscheint dann das ganze Bild, ist das die Ursache
 
 **Beschreibung.**
 Die Live-Loop pausiert nach jeder Runde mit `koil.sleep(LIVE_INTERVAL_S)` = 10 ms
-([`uc2_detector.py:628`](../backend/newswitch/managers/uc2/uc2_detector.py#L628)). koil plant
+([`detector_manager.py:639`](../backend/newswitch/managers/uc2/detector_manager.py#L639)). koil plant
 den Timer mit `loop.call_later` aus dem Worker-Thread ein. Das ist nicht thread-sicher und weckt
 den Event-Loop nicht auf, der Timer läuft also erst beim nächsten Aufwachen aus einem anderen
 Grund ab. Unter uvicorn ist das dessen 100-ms-Takt (`Server.main_loop`). Gemessen:

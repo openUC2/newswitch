@@ -203,7 +203,7 @@ Where they live:
 
 | Class | File |
 | --- | --- |
-| `UC2DetectorManager`, `_OpenCamera` | `backend/newswitch/managers/uc2/uc2_detector.py` |
+| `UC2DetectorManager`, `_OpenCamera` | `backend/newswitch/managers/uc2/detector_manager.py` |
 | `Camera`, `ImgData` | uc2_cam_py (`camera.py`, `data.py`), extra `camera` |
 | `CameraState`, `Detector` | `backend/newswitch/protocols/detector.py` |
 | `FrameBroadcaster` | `backend/newswitch/broadcasters/frame.py` |
@@ -337,7 +337,7 @@ stateDiagram-v2
 ```
 
 With `camera_debug_window: true` (default in `backend/base_config.yaml`), every camera is held
-from startup on (`uc2_detector.py:243`). It acquires before anyone logs in, independent of
+from startup on (`detector_manager.py:252`). It acquires before anyone logs in, independent of
 the live view.
 
 ### Encoder
@@ -361,8 +361,8 @@ Because encoders exist only between the first subscription and the last release,
 | # | Stage | Code | Format afterwards | Rate / buffering |
 | --- | --- | --- | --- | --- |
 | 1 | Acquisition | uc2_cam_py C++ thread | ring buffer slots, `(H, W)` mono or raw Bayer, `(H, W, 3)` color; `uint8` for 8-bit pixel formats, else `uint16` | camera frame rate; the ring overwrites the oldest slot |
-| 2 | Pick-up | `UC2DetectorManager._send_new_image` (`uc2_detector.py:630`) | own copy of the newest image (`data.copy()`), sent only if `is_valid()` after the copy and if its `time_ns` was not sent before | one image per detector per loop round; images between two rounds are skipped |
-| 3 | Loop pacing | `acquire_live` (`uc2_detector.py:596`) | – | `koil.sleep(LIVE_INTERVAL_S = 0.01)` while streaming, `IDLE_INTERVAL_S = 0.1` otherwise, `RETRY_INTERVAL_S = 1.0` after an error; in practice koil oversleeps (about 140 ms, see OP #3) |
+| 2 | Pick-up | `UC2DetectorManager._send_new_image` (`detector_manager.py:641`) | own copy of the newest image (`data.copy()`), sent only if `is_valid()` after the copy and if its `time_ns` was not sent before | one image per detector per loop round; images between two rounds are skipped |
+| 3 | Loop pacing | `acquire_live` (`detector_manager.py:607`) | – | `koil.sleep(LIVE_INTERVAL_S = 0.01)` while streaming, `IDLE_INTERVAL_S = 0.1` otherwise, `RETRY_INTERVAL_S = 1.0` after an error; in practice koil oversleeps (about 140 ms, see OP #3) |
 | 4 | Fan-out | `FrameBroadcaster.broadcast_sync` → `_schedule_encoder_frames` (`frame.py:136`) | same array, to each running encoder of the slot | synchronous, in the worker thread |
 | 5a | H.264 pre-processing | `H264Encoder._preprocess_frame` (`h264_encoder.py:152`) | resized to 640×480, gray → BGR, `uint16` → `uint8` by `/256` | – |
 | 5b | H.264 encoding | ffmpeg: `-f rawvideo -pix_fmt bgr24 -s 640x480 -r 30 -i -`, `libx264 -profile baseline -preset ultrafast -tune zerolatency -g 30 -b:v 1M`, `-f h264 -` | H.264 Annex B byte stream | keyframe every 30 frames; ffmpeg assumes 30 fps |

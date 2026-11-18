@@ -53,7 +53,7 @@ CAMERA_DOC: dict[str, Any] = {
 #: Modules that import uc2_cam_py; removed so a test can make the import fail.
 CAMERA_MODULES = (
     "uc2_cam_py",
-    "newswitch.managers.uc2.uc2_detector",
+    "newswitch.managers.uc2.detector_manager",
 )
 
 
@@ -134,7 +134,7 @@ def test_missing_camera_library_falls_back(
 def test_real_hardware_opens_the_cameras(tmp_path: Path, camera_devices: NewswitchConfig) -> None:
     """On real hardware configured cameras open through uc2_cam_py; shutdown closes them."""
     pytest.importorskip("uc2_cam_py")
-    from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
+    from newswitch.managers.uc2.detector_manager import UC2DetectorManager
 
     manager = _build(_settings(tmp_path, virtual=False), camera_devices)
     try:
@@ -158,7 +158,7 @@ def test_camera_debug_window_is_passed_on(
     Without a display, so uc2_cam_py only logs an error instead of opening the window.
     """
     pytest.importorskip("uc2_cam_py")
-    from newswitch.managers.uc2.uc2_detector import UC2DetectorManager
+    from newswitch.managers.uc2.detector_manager import UC2DetectorManager
 
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
