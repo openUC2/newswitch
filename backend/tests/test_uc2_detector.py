@@ -254,10 +254,70 @@ def test_configured_detector_keeps_its_presets(make_manager: ManagerFactory) -> 
     assert (detector.width, detector.height) == (400, 200)
 
 
-def test_unknown_vendor_fails(make_manager: ManagerFactory) -> None:
-    """A manufacturer the camera library does not know is an error at startup."""
-    with pytest.raises(ValueError, match="unknown vendor"):
-        make_manager(camera(manufacturer="NoSuchVendor"))
+def test_unknown_vendor_is_skipped(
+    make_manager: ManagerFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A vendor this uc2_cam_py build lacks is skipped with a warning; the rest keep running."""
+    with caplog.at_level(logging.WARNING, logger="newswitch.managers.uc2.detector_manager"):
+        manager = make_manager(
+            camera(slot=1, key="missing", manufacturer="NoSuchVendor"),
+            camera(slot=2, key="sim"),
+        )
+    assert "camera 'missing' skipped: vendor 'NoSuchVendor' is not available" in caplog.text
+    assert "Simulated" in caplog.text  # the warning names the vendors that are available
+    assert [detector.slot for detector in manager.state.detectors] == [2]
+    assert manager.get_detector_state(1) is None
+    assert manager.capture_image(slot=2).data.shape == (200, 400)
+
+
+def test_camera_not_found_is_skipped(
+    make_manager: ManagerFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A camera that is not connected (index beyond the cameras) is skipped with a warning."""
+    with caplog.at_level(logging.WARNING, logger="newswitch.managers.uc2.detector_manager"):
+        manager = make_manager(
+            camera(slot=1, key="sim"), camera(slot=2, key="gone", device_index=7)
+        )
+    assert "camera 'gone' skipped" in caplog.text
+    assert "out of range" in caplog.text  # uc2_cam_py's reason is passed on
+    assert [detector.slot for detector in manager.state.detectors] == [1]
+    assert manager.capture_image(slot=1).data.shape == (200, 400)
+
+
+def test_camera_that_cannot_be_opened_is_skipped(
+    make_manager: ManagerFactory, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """uc2_cam_py's RuntimeError (no matching camera, cannot be opened) skips the camera."""
+    real_open = UC2DetectorManager._open
+
+    def open_or_fail(detector: Detector, *args: Any) -> Any:  # noqa: ANN401
+        if detector.key == "busy":
+            raise RuntimeError("camera is opened by another process")
+        return real_open(detector, *args)
+
+    monkeypatch.setattr(UC2DetectorManager, "_open", staticmethod(open_or_fail))
+    with caplog.at_level(logging.WARNING, logger="newswitch.managers.uc2.detector_manager"):
+        manager = make_manager(camera(slot=1, key="busy"), camera(slot=2, key="sim"))
+    assert "camera 'busy' skipped: camera is opened by another process" in caplog.text
+    assert [detector.slot for detector in manager.state.detectors] == [2]
+
+
+def test_no_camera_available_starts_without_detectors(
+    make_manager: ManagerFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Without any available camera the manager still starts, with no detectors."""
+    with caplog.at_level(logging.WARNING, logger="newswitch.managers.uc2.detector_manager"):
+        manager = make_manager(camera(manufacturer="NoSuchVendor"))
+    assert "none of the 1 configured cameras could be opened" in caplog.text
+    assert manager.state.detectors == []
+    assert manager.list_available_detectors() == []
+    manager.close()
+
+
+def test_invalid_camera_settings_still_fail(make_manager: ManagerFactory) -> None:
+    """A configuration error (serial and index together) is not skipped: startup fails."""
+    with pytest.raises(ValueError, match="either serial or index"):
+        make_manager(camera(serial_number="X", device_index=0))
 
 
 def test_unknown_slot(manager: UC2DetectorManager) -> None:

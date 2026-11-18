@@ -144,7 +144,10 @@ mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section 
 - `camera_debug_window` (`base_config.yaml`, shipped `true`) passes `debug_window=True` to
   every `create_camera`: uc2_cam_py shows each camera's newest image in an X11 window, and the
   manager holds the cameras from startup so the window always has an image.
-- `backend/configs/camTest_config.yaml` is a simulated camera for trying it out; boot with
+- A camera that is not available (its vendor not in this uc2_cam_py build, not connected) is
+  skipped with a warning; the others keep their slots, invalid settings still fail the start.
+- `backend/configs/camTest_config.yaml` has a simulated camera for trying it out and the first
+  HikRobot camera found; boot with
   `NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml` (real-hardware mode, own persistent file). The
   walkthrough is "End-to-end test for camera" in the root `README.md`.
 

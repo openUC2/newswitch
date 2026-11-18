@@ -178,6 +178,10 @@ to the image in a debug window; no camera hardware and no frontend are needed.
    `uc2_cam_py.create_camera(..., debug_window=True)`.
 5. The debug window keeps the camera acquiring, so the window shows the live image from startup.
 
+`camTest_config.yaml` also lists the first HikRobot USB3 camera found (slot 2). Without the MVS SDK
+in the uc2_cam_py build, or without a connected camera, it is skipped with a warning
+(`camera 'hik-cam' skipped: ...`) and only the simulated camera runs.
+
 **Prerequisites:**
 
 - Linux with a graphical session (X11, or Wayland with XWayland: `DISPLAY` must be set).

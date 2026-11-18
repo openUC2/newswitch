@@ -7,7 +7,7 @@ newswitch reads **one** YAML file describing every device. The code lives in
 | --- | --- |
 | `configs/newswitch-config.yaml` | Static device configuration (example setup); newswitch never writes it |
 | `configs/newswitch-config.persistent.yaml` | Persistent configuration: receives every change (git-ignored) |
-| `configs/camTest_config.yaml`, `configs/camTest.json` | One simulated uc2_cam_py camera and the base-config overrides to boot it (see "Cameras") |
+| `configs/camTest_config.yaml`, `configs/camTest.json` | A simulated uc2_cam_py camera plus the first HikRobot camera found (skipped if not available), and the base-config overrides to boot it (see "Cameras") |
 | `configs/schemas/newswitch-config.schema.yaml` | JSON Schema (Draft 2020-12) as YAML, generated from the dataclasses |
 | `newswitch/config_io/devices.py` | One dataclass per device type — the source of truth |
 | `newswitch/config_io/values.py` | `PhysVal`, `Trigger`, `Firmware` |
@@ -136,8 +136,9 @@ virtual microscope keeps its simulated detector.
 - `camera_debug_window: true` in `base_config.yaml` opens a uc2_cam_py window per camera
   showing its newest image, and keeps the cameras acquiring from startup (without writing
   to disk; `stop_live_view` ends the writing even though the camera keeps acquiring).
-- `camTest_config.yaml` is a simulated camera (`manufacturer: Simulated`) for trying it
-  out without hardware: `NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml uvicorn main:app`. Walkthrough:
+- `camTest_config.yaml` has a simulated camera (`manufacturer: Simulated`, slot 1) for trying
+  it out without hardware, and the first HikRobot USB3 camera found (slot 2; without the MVS
+  SDK in the uc2_cam_py build or without a connected camera it is skipped with a warning): `NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml uvicorn main:app`. Walkthrough:
   "End-to-end test for camera" in the root `README.md`.
 
 ## Stages, axes and wheels

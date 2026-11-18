@@ -277,7 +277,13 @@ def test_shipped_camtest_config_loads(monkeypatch: pytest.MonkeyPatch) -> None:
     config = app_module.load_app_config()
     assert config.use_virtual_microscope is False
     assert config.config_file == BASE_CONFIG_FILE.parent / "configs" / "camTest_config.yaml"
-    assert config.open_device_config().config.detectors
+    found = app_module.adapters.cameras(config.open_device_config().config)
+    assert found is not None
+    sim, hik = found[0]
+    assert (sim.slot, sim.key, sim.manufacturer) == (1, "sim-cam", "Simulated")
+    # the first HikRobot camera found: neither serial number nor index
+    assert (hik.slot, hik.key, hik.manufacturer) == (2, "hik-cam", "HikRobot")
+    assert (hik.serial_number, hik.device_index) == (None, None)
 
 
 def test_explicit_startup_options_override_environment(

@@ -17,6 +17,10 @@ for it with ``save_to_disk``; the first request switches it on (a new file from 
 image on), the last one switches it off. uc2_cam_py switches it without restarting the
 acquisition.
 
+A camera that is not available on this machine (its vendor not supported by the uc2_cam_py
+build, or not connected) is skipped with a warning instead of stopping the startup; the
+other cameras keep their slots.
+
 With ``debug_window`` uc2_cam_py shows each camera's newest image in a window of its own
 (debugging without the frontend); the cameras are then held from the start, so the window
 always has an image.
@@ -227,10 +231,15 @@ class UC2DetectorManager:
                 the cameras acquiring until `close`. Without an X11 display uc2_cam_py
                 only logs an error.
 
+        A camera that is not available here is skipped with a warning (see
+        `_open_if_available`): it is left out of the state, the others keep their slots. If
+        none is available, the manager starts without detectors, so stage and illumination
+        stay usable.
+
         Raises:
             TypeError, ValueError: Invalid camera settings.
-            IndexError, RuntimeError: A camera cannot be found or opened. Cameras opened
-                before are closed again.
+            MemoryError, OSError: uc2_cam_py's buffer or disk checks failed. Cameras opened
+                before are closed again, as for every error raised here.
         """
         self.state = camera_state
         self.broadcaster = broadcaster
@@ -243,21 +252,62 @@ class UC2DetectorManager:
         options = vendor_options or {}
         try:
             for detector in cameras:
-                camera = self._open(
+                camera = self._open_if_available(
                     detector, options.get(detector.slot, {}), recording_dir, debug_window
                 )
+                if camera is None:
+                    continue
                 self._cameras[detector.slot] = _OpenCamera(detector=detector, camera=camera)
                 self._apply(detector, camera)
                 _describe(detector, camera)
+            if cameras and not self._cameras:
+                logger.warning(
+                    "none of the %d configured cameras could be opened; starting without cameras",
+                    len(cameras),
+                )
             if debug_window:  # the window shows the newest image: keep images coming
                 for cam in self._cameras.values():
                     self._hold(cam, DEBUG)
         except BaseException:
             self.close()
             raise
-        self.state.detectors = list(cameras)
+        self.state.detectors = [detector for detector in cameras if detector.slot in self._cameras]
 
     # ------------------------------------------------------------------ setup
+
+    @classmethod
+    def _open_if_available(
+        cls,
+        detector: Detector,
+        vendor_options: dict[str, Any],
+        recording_dir: Path | None,
+        debug_window: bool,
+    ) -> uc2_cam_py.Camera | None:
+        """Open the camera, or return None (with a warning) if it is not available here.
+
+        Not available: uc2_cam_py does not support its vendor in this build (e.g. built
+        without that vendor's SDK; a misspelt ``manufacturer`` looks the same), or no
+        matching camera is connected or it cannot be opened (uc2_cam_py's ``RuntimeError``
+        and ``IndexError``). Everything else uc2_cam_py raises (invalid settings, buffer or
+        disk checks) is a configuration or system error and propagates.
+        """
+        name = detector.key or f"slot {detector.slot}"
+        vendors = uc2_cam_py.vendors()
+        vendor = detector.manufacturer
+        if vendor is not None and vendor.lower() not in {known.lower() for known in vendors}:
+            logger.warning(
+                "camera %r skipped: vendor %r is not available in this uc2_cam_py build "
+                "(available: %s)",
+                name,
+                vendor,
+                ", ".join(vendors),
+            )
+            return None
+        try:
+            return cls._open(detector, vendor_options, recording_dir, debug_window)
+        except (RuntimeError, IndexError) as exc:
+            logger.warning("camera %r skipped: %s", name, exc)
+            return None
 
     @staticmethod
     def _open(

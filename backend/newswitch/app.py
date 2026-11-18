@@ -341,8 +341,10 @@ def build_detector_manager(
     Cameras are used on real hardware only (``use_virtual_microscope: false``) and when
     the device configuration maps a detector to a camera controller (see
     `adapters.cameras`). Without the extra "camera" (uc2_cam_py not importable) the
-    virtual detector stands in, with a warning. A camera that cannot be opened is an
-    error: startup fails. ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
+    virtual detector stands in, with a warning. A camera that is not available (vendor not
+    in this uc2_cam_py build, not connected) is skipped with a warning; invalid camera
+    settings still make startup fail. ``camera_debug_window`` opens uc2_cam_py's debug
+    window per camera.
     """
     found = None
     if not config.use_virtual_microscope and devices is not None:
