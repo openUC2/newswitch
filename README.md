@@ -56,7 +56,15 @@ uv run --extra uc2 python main.py \
 `--config` selects the device YAML; relative paths resolve against `backend/`.
 `--mode` accepts `hardware` or `virtual`. `--host` and `--port` set the listening
 address and port. Explicit arguments override the corresponding environment
-variables; otherwise the environment and base settings apply.
+variables; otherwise the environment and base settings apply. Host and port not given
+come from the root `.env`, as with `just`; a variable exported in the shell wins.
+
+`main.py` prints, whatever `log_to_terminal` says, the files in use (base settings, the
+device YAML read and the one saved on exit, the log file) and, once the backend listens, the
+backend URL, the command that starts the frontend (`just dev-frontend` from the repository
+root) with its URL, and how to stop both: the frontend with Ctrl+C in its terminal, the
+backend with Ctrl+C **once**, then wait for `newswitch backend stopped`. A second Ctrl+C
+aborts without saving the device configuration.
 
 ```bash
 uv run python main.py --help
@@ -241,8 +249,8 @@ cd backend
 NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml BACKEND_PORT=8069 uv run -q python backend_cli.py
 ```
 
-`BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099, as for
-`python main.py`). The login is asked for, or taken from `NEWSWITCH_CLI_USER` /
+`BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099; unlike
+`python main.py`, `backend_cli.py` does not read the root `.env`). The login is asked for, or taken from `NEWSWITCH_CLI_USER` /
 `NEWSWITCH_CLI_PASSWORD`. Everything the backend itself prints goes to
 `backend/data/backend_cli.log` (follow it with `tail -f`); `--verbose` shows it in the terminal
 instead. `-q` keeps uv's own warnings out.
@@ -366,7 +374,7 @@ It propagates everywhere from there:
 | `docker compose` | interpolation for the published ports, plus an `environment:` block so the value also reaches inside each container |
 | `frontend/.env`, `.env.docker` | `${BACKEND_PORT:-8099}` in the URLs; an exported value wins, the fallback keeps a bare `yarn dev` working |
 | `vite.config.ts` | `server.port` / `preview.port` from `FRONTEND_PORT` |
-| backend | `os.environ` in `newswitch.app:main` and `backend/test.py`; the Dockerfile sets matching `ENV` defaults |
+| backend | `newswitch.app:main` (`python main.py`) loads the file itself, exported values win; `backend/test.py` reads `os.environ`; the Dockerfile sets matching `ENV` defaults |
 | CI | a "Load the ports from .env" step exports them into `$GITHUB_ENV` |
 
 To change a port for one run, export it — a shell variable beats the file in all of the above:

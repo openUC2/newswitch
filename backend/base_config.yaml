@@ -2,7 +2,8 @@
 # This file belongs to newswitch. Do not delete it: the backend does not start without it.
 #
 # Host and port are not set here. They come from BACKEND_HOST / BACKEND_PORT in the
-# repository's root .env (deployment via docker is still an open point).
+# repository's root .env: `just` exports it, `uv run main.py` loads it itself; a variable
+# exported in the shell wins. In Docker, backend/Dockerfile and docker-compose.yml set them.
 
 use_virtual_microscope: false
 # SQLite file of the rekuest agent (state history); relative to the working directory
