@@ -25,7 +25,9 @@ To decide:
 - Licence: may images that contain the SDK be published (public GHCR package)? The
   uc2_cam_py README says not to publish wheels with the MVS libraries before HikRobot's terms
   are clarified; the same applies to images and to a public release asset. ImSwitch already
-  ships MVS 3.0.1 this way.
+  ships MVS 3.0.1 this way. Note: the pre-release `mvs-sdk-5.1.1` and the package
+  `ghcr.io/openuc2/newswitch` (tags `pr-11`, `sha-92e9507`) are already public - an anonymous
+  pull works (checked 2026-11-18).
 
 ## 2 · 2026-11-17 · [OTHER REPO: UC2_cam_py] Make bundling the MVS SDK into the wheel optional
 
@@ -101,8 +103,9 @@ updatecli. `node:22-slim` (frontend stage) is a floating tag; pin it too.
 `docker/docker-compose.yml` follows ImSwitch's Forklift compose (cgroup rules 188 and 166 for
 USB serial, groups tty/dialout/video/plugdev) and adds `a 189:* rwm` for raw USB, which
 HikRobot USB3 Vision cameras need. Verified on an amd64 host (2026-11-17, MV-CA023-10UM): the
-container finds and opens the camera and grabs frames. Still to verify on the Pi. Not
-covered yet:
+container finds and opens the camera and grabs frames. On the Pi 5 (arm64, image `pr-11`,
+2026-11-18) the container finds the camera too (`list_cameras()`), but no images reach the
+frontend (to debug natively first: `.claude/OpenPoints.md` #43). Not covered yet:
 - GigE cameras: discovery by broadcast needs `network_mode: host` (or macvlan), plus the
   sysctl settings of `docker/host/80-hikrobot-cameras.conf`;
 - CAN over socketcan (`can0` of a CAN HAT lives in the host's network namespace): needs
@@ -129,18 +132,21 @@ The Pi profiles (`backend/configs/machines/openuc2-first-cord-30059*.yaml`) leav
 out because the old MVS SDK did not fit uc2_cam_py. With MVS 5.1.1 in the image the camera
 can be added (see `backend/configs/camTest_hik_config.yaml` for the camera entries).
 
-## 11 · 2026-11-17 · Visibility of the GHCR package
-
-After the first push, `ghcr.io/openuc2/newswitch` is private by default; a Pi then needs
-`docker login ghcr.io` with a token (`read:packages`). To pull without a login, an
-organisation admin sets the package to public (package settings). Depends on the licence
-question in #1.
-
 ## 12 · 2026-11-17 · CI is red independently of the install chain
 
-`ci.yml` and `release.yml` now run Python 3.13 only. The jobs that were red before (see
-`.claude/OpenPoints.md` #15-#19, #38, e.g. the autofocus test) are unrelated to the image
-build, and 3.13 may show further failures. `build-container.yml` does not depend on them.
+`ci.yml` and `release.yml` now run Python 3.13 only. `build-container.yml` does not depend on
+them and is green (PR #11: amd64 272 s, arm64 189 s). The red `CI` jobs of PR #11 (run
+44193921885, 2026-11-17) all have known causes (job logs need a login; the first, third and
+fourth were reproduced locally):
+- `backend-test (ubuntu)`, `backend-coverage`: pytest - only
+  `test_autofocus_sweep_finds_focus_on_virtual_microscope` fails in the CI configuration
+  (`.claude/OpenPoints.md` #15); macOS passes.
+- `backend-test (windows)`: `uv sync` fails - most likely #17 (uc2-rest README encoding).
+- `e2e`: `user-management.spec.ts` expects role text `admin`, the UI shows `Administrator`
+  (#19); the other three e2e tests pass.
+- `codegen-drift`: the drift check passes; only the post step of `setup-uv` fails (#41).
+Also: `actions/checkout@v4`, `setup-uv@v6`, `setup-node@v4` and `upload-artifact@v4` in
+`ci.yml` / `release.yml` run on the deprecated Node.js 20 (GitHub warns); bump them.
 
 ## 13 · 2026-11-17 · [OTHER REPO: os-rpi] Forklift package for newswitch
 

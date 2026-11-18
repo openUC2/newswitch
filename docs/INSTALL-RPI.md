@@ -62,13 +62,39 @@ sudo bash docker/rpi-host-setup.sh
 exit                 # log out and in again, so the new groups (docker, dialout, plugdev) apply
 ```
 
-Until the install chain is merged into `main`, clone the branch that holds it
-(`--branch buildChain`).
+If `docker/rpi-host-setup.sh` is missing (`main` before the install chain is merged into it),
+continue with section 4a.
 
 `docker/rpi-host-setup.sh` makes the settings a container cannot make itself: udev rules for
 HikRobot cameras, network buffers for GigE cameras, the USB buffer memory for USB3 cameras
 (`usbfs_memory_mb = 2000`), the groups of `pi`, and `xauth` for the debug window. Running it
 again is harmless.
+
+## 4a. Optional: deploy a branch other than `main`
+
+Needed as long as the install chain is not merged into `main` (`main` then has no `docker/`
+folder yet), or to try a pull request. The example uses the branch `buildChain`; replace it
+with yours.
+
+The clone of section 4 (`--depth 1 --branch main`) knows only `main`, so fetch the branch first:
+
+```bash
+cd ~/newswitch-deploy
+git remote set-branches --add origin buildChain
+git fetch --depth 1 origin buildChain
+git switch buildChain
+ls docker                            # docker-compose.yml, install-drivers.sh, rpi-host-setup.sh, ...
+sudo bash docker/rpi-host-setup.sh   # if section 4 could not run it (running it again is harmless)
+exit                                 # log out and in again, so the new groups apply
+```
+
+Or clone the branch right away instead of section 4's clone:
+`git clone --depth 1 --branch buildChain https://github.com/openUC2/newswitch.git ~/newswitch-deploy`.
+
+From then on `git pull --ff-only` follows that branch. In section 5 pick the matching image:
+`edge` exists only after a merge into `main`. Before that, take the build of the pull request,
+`ghcr.io/openuc2/newswitch:pr-<number>` (rebuilt with every push to the branch), or
+`:sha-<commit>` (one fixed commit).
 
 ## 5. Configure
 
@@ -79,7 +105,8 @@ nano docker/.env
 ```
 
 - `NEWSWITCH_IMAGE`: which image to run. `ghcr.io/openuc2/newswitch:edge` is the latest
-  `main`; `:sha-<commit>` pins one commit; `:pr-<number>` is the build of a pull request.
+  `main` (only after a merge into `main`, see section 4a); `:sha-<commit>` pins one commit;
+  `:pr-<number>` is the build of a pull request.
   Available tags: <https://github.com/openUC2/newswitch/pkgs/container/newswitch>.
 - `NEWSWITCH_CONFIG`: the device YAML of this microscope, relative to `backend/` of the
   repository (it is in the image), e.g.
@@ -103,7 +130,53 @@ docker compose -f docker/docker-compose.yml up -d
 docker compose -f docker/docker-compose.yml ps     # "healthy" after about 30 s
 ```
 
-The container starts again by itself after a reboot (`restart: always`).
+From now on newswitch starts by itself with every boot of the Pi (section 6a).
+
+## 6a. Stopping, autostart and shutting down
+
+**Autostart.** Section 6 is only needed once. Afterwards newswitch comes up with every boot
+of the Pi: Docker starts at boot (the default on openUC2 OS and after get.docker.com), and the
+compose file sets `restart: always`, as ImSwitch's deployment does. This holds even after
+`docker compose ... stop`: a stopped container is started again at the next boot.
+
+```bash
+cd ~/newswitch-deploy
+C="docker compose -f docker/docker-compose.yml"
+$C ps                                   # is it running?
+```
+
+| Goal | Commands | Runtime data (accounts, persistent YAML, recordings) |
+|---|---|---|
+| Pause until the next boot | `$C stop`, back with `$C start` | kept |
+| Off for good, also after reboots | `docker update --restart=no newswitch-prod-server-1` then `$C stop` | kept |
+| Back on, with autostart | `docker update --restart=always newswitch-prod-server-1` then `$C start` | kept |
+| Remove the container | `$C down` (the image stays; `$C up -d` creates a new one) | **lost** (section 8) |
+
+After `docker update --restart=no`, `$C up -d` alone does not bring the autostart back: compose
+keeps the existing container as long as its configuration is unchanged. Use
+`docker update --restart=always` as in the table.
+
+**Before running something else on the hardware**, switch the container off for good:
+for example newswitch natively for debugging (`just dev`, `docs/PI-HARDWARE-DEVELOPMENT.md`),
+the camera tools of uc2_cam_py, or ImSwitch. Only one application may use the camera and the
+serial controller. A plain `$C stop` is not enough, because the container comes back at the
+next boot and then holds both again.
+
+```bash
+docker update --restart=no newswitch-prod-server-1
+$C stop
+# afterwards, back to the container: docker update --restart=always newswitch-prod-server-1 && $C start
+```
+
+**Stop cleanly.** When newswitch stops, it writes the runtime values (exposure, gain, wheel
+and stage positions) into the persistent device YAML and closes running camera recordings.
+`$C stop`, `$C down` and shutting the Pi down give it time for that: Docker sends SIGTERM and
+waits 10 s before killing the process. Pulling the power plug does not, and these values
+are lost.
+
+```bash
+sudo poweroff            # shut the Pi down; newswitch is stopped cleanly first
+```
 
 ## 7. Check
 
@@ -121,6 +194,48 @@ docker compose -f docker/docker-compose.yml exec server tail -f backend.log   # 
 
 In a browser on another computer: `http://<pi>:8069/` (it forwards to `/newswitch/`). Log in
 with **admin / admin** and change the password right away (account menu).
+
+## 7a. Optional: measure how fast camera images are written to disk
+
+uc2_cam_py's example `Examples/MeasureSaveTime.py` records images from the first HikRobot
+camera with the package's own disk writer. It prints the write time and readout time per
+image, the frame interval, the disk throughput and the camera's data rate.
+
+The script is not in the image (the package is installed without its examples). Fetch it from
+the uc2_cam_py commit the image is built from, and run it in a one-off container of the same
+service, with the same devices and groups. Only one process can open the camera, so stop
+newswitch for the measurement.
+
+```bash
+cd ~/newswitch-deploy
+C="docker compose -f docker/docker-compose.yml"
+
+# Create the folder yourself: one that Docker creates belongs to root
+mkdir -p ~/newswitch-measure
+# The script, from the uc2_cam_py commit pinned in backend/pyproject.toml
+sha=$(grep -o 'UC2_cam_py.git@[0-9a-f]*' backend/pyproject.toml | cut -d@ -f2)
+curl -fsSL -o ~/newswitch-measure/MeasureSaveTime.py \
+  "https://raw.githubusercontent.com/openUC2/UC2_cam_py/$sha/Examples/MeasureSaveTime.py"
+
+$C stop                                   # frees the camera
+$C run --rm --no-deps -v ~/newswitch-measure:/measure server \
+  python /measure/MeasureSaveTime.py --output /measure/SampleData.uc2rb --images 1000
+$C start
+```
+
+- The checkout and the image should be the same commit (section 4a), so that the script
+  matches the uc2_cam_py in the image.
+- It measures the disk that `--output` lies on: here the Pi's home folder, i.e. the SD card.
+  For a USB drive or an NVMe disk, mount a folder on it instead, e.g.
+  `-v /media/<drive>/measure:/measure`.
+- The writes land in the page cache first. With few images (the script's default is 100)
+  the throughput shows the speed of the memory, not of the disk; 1000 images or more show
+  the sustained speed.
+- Further options: `--frame-rate`, `--buffer-size`, `--simulated` (no camera needed), `--help`.
+  `--debug-window` also needs the X11 override of section 9
+  (`$C -f docker/docker-compose.x11.yml run ...`).
+- The recording stays in `~/newswitch-measure` (`SampleData.uc2rb` plus `.json`, about 2.2 MiB
+  per image at 1920 x 1200 Mono8). Delete it afterwards.
 
 ## 8. Updating
 
@@ -195,6 +310,9 @@ docker compose -f docker/docker-compose.yml up -d
 
 ## 11. Back to ImSwitch
 
+`down` removes the newswitch container together with its runtime data. To keep that data,
+switch it off for good instead (section 6a, "Before running something else on the hardware").
+
 ```bash
 cd ~/newswitch-deploy
 docker compose -f docker/docker-compose.yml down
@@ -225,6 +343,6 @@ forklift plt enable-depl imswitch && forklift plt apply      # openUC2 OS
   `https://github.com/openUC2/newswitch/releases/download/mvs-sdk-5.1.1/`, or from the base
   URL in the repository variable `MVS_SDK_BASE_URL`. One-time setup: create the pre-release
   `mvs-sdk-5.1.1` and attach both `.deb` files (backend/external/README.md).
-- A new package on GHCR is private; an organisation admin can make it public
-  (OpenPoints_installChain.md #11).
+- The package `ghcr.io/openuc2/newswitch` is public: a Pi pulls it without `docker login`
+  (whether that may stay so: licence question in OpenPoints_installChain.md #1).
 - To try a change before merging, open a pull request: its image is `:pr-<number>`.
