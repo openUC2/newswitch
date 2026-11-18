@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import koil
+import numpy as np
 import uc2_cam_py
 from rekuest_next.state.lock import acquired_locks
 
@@ -86,6 +87,16 @@ class _OpenCamera:
     holders: set[object] = field(default_factory=set)
     storers: set[object] = field(default_factory=set)
     """Who currently needs every image written to disk."""
+
+
+def _pixels(data: np.ndarray) -> np.ndarray:
+    """A uc2_cam_py image as newswitch passes it on: (H, W) for mono, (H, W, 3) for colour.
+
+    uc2_cam_py (>= 2.0) always delivers (H, W, C). This drops C for mono (C = 1) as a view,
+    without a copy; only the channel axis is squeezed, so a one-pixel-high region keeps its
+    row axis. The caller still copies once (the view points into the ring buffer).
+    """
+    return np.squeeze(data, axis=-1) if data.ndim == 3 and data.shape[-1] == 1 else data
 
 
 def _sample_type(pixel_format: str) -> str:
@@ -439,7 +450,7 @@ class UC2DetectorManager:
         while time.monotonic() < deadline:
             image = camera.get_last_image()
             if image is not None and image.time_before_ns >= earliest_ns:
-                data = image.data.copy()
+                data = _pixels(image.data).copy()
                 if image.is_valid():
                     session = camera.get_image_info()
                     return DetectorFrame(
@@ -634,7 +645,7 @@ class UC2DetectorManager:
         image = camera.get_last_image()
         if image is None or last_sent.get(slot) == image.time_ns:
             return
-        data = image.data.copy()
+        data = _pixels(image.data).copy()
         if image.is_valid():
             last_sent[slot] = image.time_ns
             self.broadcaster.broadcast_sync(slot, data)

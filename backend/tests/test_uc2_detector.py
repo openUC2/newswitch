@@ -20,7 +20,7 @@ from rekuest_next.state.lock import acquired_locks
 uc2_cam_py = pytest.importorskip("uc2_cam_py")
 
 from newswitch.broadcasters import FrameBroadcaster  # noqa: E402
-from newswitch.managers.uc2.uc2_detector import UC2DetectorManager  # noqa: E402
+from newswitch.managers.uc2.uc2_detector import UC2DetectorManager, _pixels  # noqa: E402
 from newswitch.protocols import CameraState, DetectorManager  # noqa: E402
 from newswitch.protocols.detector import FULL_SENSOR, Colormap, Detector  # noqa: E402
 
@@ -175,6 +175,25 @@ def images_in(recording: Path) -> int:
 def test_satisfies_the_protocol(manager: UC2DetectorManager) -> None:
     """The manager is a DetectorManager."""
     assert isinstance(manager, DetectorManager)
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected"),
+    [
+        ((200, 400, 1), (200, 400)),  # mono from uc2_cam_py >= 2
+        ((1, 400, 1), (1, 400)),  # one-pixel-high region: the row axis stays
+        ((200, 400), (200, 400)),  # mono from uc2_cam_py 1.x
+        ((200, 400, 3), (200, 400, 3)),  # colour
+    ],
+)
+def test_pixels_drops_only_the_mono_channel_axis(
+    shape: tuple[int, ...], expected: tuple[int, ...]
+) -> None:
+    """Images keep their shape apart from a single channel, as a view into the same buffer."""
+    data = np.zeros(shape, dtype=np.uint16)
+    pixels = _pixels(data)
+    assert pixels.shape == expected
+    assert np.shares_memory(pixels, data)
 
 
 def test_detector_mirrors_the_camera(manager: UC2DetectorManager) -> None:
