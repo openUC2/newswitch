@@ -319,6 +319,7 @@ def test_backend_cli_forwards_config_mode_and_bind_options(
             host=options.host,
             port=options.port,
             log_config=options.log_config,
+            graceful=options.timeout_graceful_shutdown,
         )
         server.started = True
 
@@ -340,6 +341,8 @@ def test_backend_cli_forwards_config_mode_and_bind_options(
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 8069
     assert captured["log_config"] is None
+    # open live views must not keep the backend from stopping (OpenPoints #39)
+    assert captured["graceful"] == app_module.GRACEFUL_SHUTDOWN_S == 5
 
 
 def _fake_server(monkeypatch: pytest.MonkeyPatch, *, starts: bool = True) -> dict[str, object]:

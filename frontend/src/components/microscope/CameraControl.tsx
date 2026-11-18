@@ -6,6 +6,13 @@ import {
   useUpdateDetector,
 } from "@/apps/default/hooks/actions";
 import { useCameraState } from "@/apps/default/hooks/states";
+import {
+  EXPOSURE_SLIDER_STEPS,
+  exposureToSlider,
+  formatExposure,
+  isActivePreset,
+  sliderToExposure,
+} from "@/lib/exposure";
 import { cn } from "@/lib/utils";
 import { Gauge, MonitorUp, Timer } from "lucide-react";
 import { useState } from "react";
@@ -29,9 +36,13 @@ export function CameraControl() {
     useDeactivateDetector();
   const { call: updateDetector, isLoading: isUpdating } = useUpdateDetector();
 
-  // Local state for slider dragging. Exposure no longer needs it: that slider commits
-  // through OptimisticSlider's onSave. Gain still uses the change/commit pair below.
+  // Local state for slider dragging. The exposure slider commits through OptimisticSlider's
+  // onSave; its local value (seconds) only shows the dragged time until the server answers.
+  // Gain still uses the change/commit pair below.
   const [localGains, setLocalGains] = useState<Record<number, number>>({});
+  const [draggedExposures, setDraggedExposures] = useState<
+    Record<number, number>
+  >({});
   const [selectedDetectorSlot, setSelectedDetectorSlot] = useState<
     number | null
   >(null);
@@ -43,6 +54,23 @@ export function CameraControl() {
       activateDetector({ slot });
     } else {
       deactivateDetector({ slot });
+    }
+  };
+
+  // Exposure times are seconds in the backend; the slider moves on a logarithmic scale
+  // over the detector's range (lib/exposure).
+  const handleExposureSave = async (
+    slot: number,
+    exposureSeconds: number,
+  ): Promise<unknown> => {
+    try {
+      return await updateDetector({ slot, exposure_time: exposureSeconds });
+    } finally {
+      setDraggedExposures((prev) => {
+        const next = { ...prev };
+        delete next[slot];
+        return next;
+      });
     }
   };
 
@@ -74,6 +102,14 @@ export function CameraControl() {
           const isActive = detector.is_active;
           const currentExposure =
             detector.current_exposure_time ?? detector.min_exposure_time;
+          const shownExposure =
+            draggedExposures[detector.slot] ?? currentExposure;
+          const toExposure = (position: number) =>
+            sliderToExposure(
+              position,
+              detector.min_exposure_time,
+              detector.max_exposure_time,
+            );
           const currentGain =
             localGains[detector.slot] ??
             detector.current_gain ??
@@ -112,8 +148,11 @@ export function CameraControl() {
                   <div className="flex items-center justify-between gap-2 @[280px]:justify-end">
                     {isActive && (
                       <span className="hidden text-xs font-mono text-muted-foreground @[340px]:inline">
-                        {formatNumber(detector.current_exposure_time, 0)} ms /{" "}
-                        {formatNumber(detector.current_gain)}×
+                        {formatExposure(
+                          detector.current_exposure_time,
+                          i18n.resolvedLanguage,
+                        )}{" "}
+                        / {formatNumber(detector.current_gain)}×
                       </span>
                     )}
                     <Switch
@@ -154,20 +193,32 @@ export function CameraControl() {
                         </span>
                       </div>
                       <span className="text-xs font-mono">
-                        {formatNumber(currentExposure)} ms
+                        {formatExposure(shownExposure, i18n.resolvedLanguage)}
                       </span>
                     </div>
                     <OptimisticSlider
-                      value={[currentExposure]}
-                      onSave={(v) =>
-                        updateDetector({
-                          slot: detector.slot,
-                          exposure_time: v[0],
-                        })
+                      // the dragged value while dragging: OptimisticSlider resets its
+                      // thumb to `value` on every render, and the panel re-renders on
+                      // each move (it shows the dragged time)
+                      value={[
+                        exposureToSlider(
+                          shownExposure,
+                          detector.min_exposure_time,
+                          detector.max_exposure_time,
+                        ),
+                      ]}
+                      onValueChange={(v) =>
+                        setDraggedExposures((prev) => ({
+                          ...prev,
+                          [detector.slot]: toExposure(v[0]),
+                        }))
                       }
-                      min={detector.min_exposure_time}
-                      max={detector.max_exposure_time}
-                      step={0.1}
+                      onSave={(v) =>
+                        handleExposureSave(detector.slot, toExposure(v[0]))
+                      }
+                      min={0}
+                      max={EXPOSURE_SLIDER_STEPS}
+                      step={1}
                       className="flex-1"
                       disabled={isUpdating}
                     />
@@ -180,9 +231,10 @@ export function CameraControl() {
                               key={val}
                               size="sm"
                               variant={
-                                Math.abs(
-                                  (detector.current_exposure_time ?? 0) - val,
-                                ) < 0.5
+                                isActivePreset(
+                                  detector.current_exposure_time ?? 0,
+                                  val,
+                                )
                                   ? "default"
                                   : "outline"
                               }
@@ -195,7 +247,7 @@ export function CameraControl() {
                               className="h-6 text-xs px-2"
                               disabled={isUpdating}
                             >
-                              {val >= 1000 ? `${val / 1000}s` : `${val}ms`}
+                              {formatExposure(val, i18n.resolvedLanguage)}
                             </Button>
                           ))}
                       </div>

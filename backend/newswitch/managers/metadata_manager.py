@@ -155,7 +155,8 @@ class MetadataManager:
                     light_kube_states.append(
                         DetectorKubeState(
                             gain=detector.current_gain,
-                            exposure_time=detector.current_exposure_time,
+                            # the detector keeps seconds, the kube state milliseconds
+                            exposure_time=detector.current_exposure_time * 1000.0,
                             **with_kube_metadata(kube),
                         )
                     )

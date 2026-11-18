@@ -28,7 +28,7 @@ install:
 
 # Backend only; uv ensures the Serial/CAN drivers are installed before startup.
 dev-backend:
-    cd backend && uv run --extra uc2 uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload
+    cd backend && uv run --extra uc2 uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 5
 
 # Frontend only -> http://localhost:$FRONTEND_PORT (needs the backend up for fresh codegen)
 # Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
@@ -54,7 +54,7 @@ dev:
     # Fail before launching either service if the selected YAML is missing or invalid.
     (cd backend && uv run --extra uc2 python -c 'from newswitch.app import load_app_config; load_app_config().validate_device_config()')
     trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run --extra uc2 uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload) &
+    (cd backend && exec uv run --extra uc2 uvicorn main:app --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 5) &
     if ! just wait-backend; then
       echo "!! backend startup failed; frontend was not started" >&2
       exit 1

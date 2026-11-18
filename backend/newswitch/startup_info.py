@@ -56,7 +56,14 @@ def starting_message(config: ImswitchConfig, base_config: Path, log_path: Path |
     return _block(f"newswitch backend starting (mode: {mode})", rows)
 
 
-def ready_message(host: str, port: int, pid: int, frontend_port: int | str, repo_root: Path) -> str:
+def ready_message(
+    host: str,
+    port: int,
+    pid: int,
+    frontend_port: int | str,
+    repo_root: Path,
+    graceful_shutdown_s: int | None = None,
+) -> str:
     """The URLs, how to start the frontend and how to stop both, printed once the backend listens.
 
     The frontend is the Vite dev server of ``just dev-frontend``: only `just` exports the root
@@ -69,8 +76,15 @@ def ready_message(host: str, port: int, pid: int, frontend_port: int | str, repo
         pid: The process id, for stopping from another terminal.
         frontend_port: Port of the Vite dev server (``FRONTEND_PORT``).
         repo_root: The repository, where ``just dev-frontend`` is run.
+        graceful_shutdown_s: How long a stop waits for open connections (live views) before
+            it cuts them; None: no limit, not mentioned.
     """
     backend = f"http://{_browser_host(host)}:{port}"
+    cut = (
+        ""
+        if graceful_shutdown_s is None
+        else f"\n          open live views are cut after {graceful_shutdown_s} s;"
+    )
     rows = [
         ("backend", f"{backend}   (health: {backend}/health)"),
         (
@@ -83,7 +97,7 @@ def ready_message(host: str, port: int, pid: int, frontend_port: int | str, repo
             "stop",
             "frontend: Ctrl+C in its terminal\n"
             f'backend:  Ctrl+C here, once, and wait for "{STOPPED_MESSAGE}"\n'
-            "          (saves the device configuration, closes the cameras);\n"
+            f"          (saves the device configuration, closes the cameras);{cut}\n"
             f"          a second Ctrl+C aborts without saving. Same as Ctrl+C: kill {pid}",
         ),
     ]

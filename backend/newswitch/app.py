@@ -779,6 +779,11 @@ def create_app(
 #: `just` and docker compose use. Missing in the container image, which sets them itself.
 ROOT_ENV_FILE = BASE_CONFIG_FILE.parent.parent / ".env"
 
+#: On Ctrl+C uvicorn waits this long for open connections, then cuts them and runs the
+#: shutdown hooks. Without a limit it waits forever: a live-view stream handler only ends
+#: with its stream (OpenPoints #39), so an open browser tab kept the backend running.
+GRACEFUL_SHUTDOWN_S = 5
+
 
 class _AnnouncingServer(uvicorn.Server):
     """uvicorn's server, printing `ready` once it listens and a line once it has stopped."""
@@ -839,10 +844,18 @@ def main(argv: list[str] | None = None) -> None:
         os.getpid(),
         frontend_port=os.environ.get("FRONTEND_PORT", "5173"),
         repo_root=BASE_CONFIG_FILE.parent.parent,
+        graceful_shutdown_s=GRACEFUL_SHUTDOWN_S,
     )
     # What uvicorn.run does without reload and workers, with the announcing server
     server = _AnnouncingServer(
-        uvicorn.Config(app, host=args.host, port=args.port, log_config=None), ready
+        uvicorn.Config(
+            app,
+            host=args.host,
+            port=args.port,
+            log_config=None,
+            timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S,
+        ),
+        ready,
     )
     try:
         server.run()

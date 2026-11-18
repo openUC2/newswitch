@@ -80,6 +80,17 @@ def test_ready_message_says_how_to_start_and_stop(tmp_path: Path) -> None:
     assert _row(text, "stop") == "frontend: Ctrl+C in its terminal"
     assert f'backend:  Ctrl+C here, once, and wait for "{STOPPED_MESSAGE}"' in text
     assert "a second Ctrl+C aborts without saving. Same as Ctrl+C: kill 4242" in text
+    assert "cut after" not in text  # no limit given
+
+
+def test_ready_message_names_the_shutdown_limit(tmp_path: Path) -> None:
+    """With a limit, the stop hint says that open live views are cut after it."""
+    text = ready_message(
+        "0.0.0.0", 8069, 1, frontend_port=5473, repo_root=tmp_path, graceful_shutdown_s=5
+    )
+    lines = [line.strip() for line in text.splitlines()]
+    at = lines.index("(saves the device configuration, closes the cameras);")
+    assert lines[at + 1] == "open live views are cut after 5 s;"
 
 
 def test_ready_message_quotes_the_repository_path(tmp_path: Path) -> None:

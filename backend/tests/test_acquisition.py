@@ -39,6 +39,7 @@ from newswitch.protocols import (
     StageState,
 )
 from newswitch.protocols.calibration import CalibratedLightPath
+from newswitch.protocols.core import DetectorKubeState
 from newswitch.protocols.illumination import Illumination as IlluminationProto
 from newswitch.protocols.objective import ObjectiveState
 from newswitch.routines.multidimensional_acquisition import (
@@ -373,3 +374,18 @@ def test_small_timeseries_acquisition(
         assert frame.array_metadata.max_value >= frame.array_metadata.min_value
         assert frame.metadata.fov_width > 0
         assert frame.metadata.fov_height > 0
+
+
+def test_light_path_metadata_has_the_exposure_in_ms(
+    acquisition_setup: tuple[Any, ...],
+) -> None:
+    """`DetectorKubeState.exposure_time` is in milliseconds; the detector keeps seconds."""
+    detector, *_, light_path_manager, _, metadata_manager = acquisition_setup
+    detector.update_detector(1, exposure_time=0.02)
+    seconds = detector.get_detector_state(1).current_exposure_time
+    state = metadata_manager.get_current_state_for_light_path(
+        light_path_manager.get_light_path_for_detector(1)
+    )
+    (kube,) = [kube for kube in state.kubes if isinstance(kube, DetectorKubeState)]
+    assert seconds == pytest.approx(0.02)
+    assert kube.exposure_time == pytest.approx(seconds * 1000.0)
