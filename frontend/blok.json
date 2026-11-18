@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T00:07:13.444Z",
+  "generatedAt": "2026-11-17T22:15:29.878Z",
   "app": {
     "description": "",
     "name": "newswitch",
@@ -5415,7 +5415,7 @@
                     ],
                     "choices": null,
                     "default": null,
-                    "description": "Configuration for a single optical filter.\n\n    Attributes:\n        slot: Filter wheel slot number.\n        name: Human-readable filter name.\n        center_wavelength: Center wavelength of the filter passband (nm).\n        bandwidth: Full width at half maximum of the passband (nm).\n        transmission: Peak transmission efficiency (0.0 to 1.0).\n        is_active: Whether this filter is currently in the light path.\n    ",
+                    "description": "Configuration for a single optical filter.\n\nAttributes:\n    slot: Filter wheel slot number.\n    name: Human-readable filter name.\n    center_wavelength: Center wavelength of the filter passband (nm).\n    bandwidth: Full width at half maximum of the passband (nm).\n    transmission: Peak transmission efficiency (0.0 to 1.0).\n    is_active: Whether this filter is currently in the light path.\n",
                     "dimension": null,
                     "effects": [],
                     "identifier": "filter",
@@ -5737,7 +5737,7 @@
                     ],
                     "choices": null,
                     "default": null,
-                    "description": "Shared state for illumination parameters.\n\n    Note: intensity is divided by 1000 in the detector for actual scaling,\n    so 10000.0 gives an effective intensity of 10.0.\n    ",
+                    "description": "Shared state for illumination parameters.\n\nNote: intensity is divided by 1000 in the detector for actual scaling,\nso 10000.0 gives an effective intensity of 10.0.\n",
                     "dimension": null,
                     "effects": [],
                     "identifier": "illumination",

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import pytest
+import uvicorn
 import yaml
 from pydantic import ValidationError
 
@@ -51,6 +52,23 @@ def write_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BaseWriter:
         return path
 
     return _write
+
+
+@pytest.fixture(autouse=True)
+def no_root_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep `main` from loading the repository's .env into the environment of later tests."""
+    monkeypatch.setattr(app_module, "ROOT_ENV_FILE", tmp_path / "missing.env")
+
+
+def _unset_env(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
+    """Remove `names` from the environment and restore them after the test.
+
+    Set first, so monkeypatch also removes what `load_dotenv` adds later (a plain `delenv`
+    of an absent variable records nothing to undo).
+    """
+    for name in names:
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
 
 
 def test_shipped_base_config_loads() -> None:
@@ -288,10 +306,17 @@ def test_backend_cli_forwards_config_mode_and_bind_options(
     monkeypatch.setattr(app_module, "configure_logging", lambda *args: None)
     monkeypatch.setattr(app_module, "create_app", lambda config: config)
 
-    def run(app: ImswitchConfig, **kwargs: object) -> None:
-        captured.update(config=app, **kwargs)
+    def run(server: uvicorn.Server) -> None:
+        options = server.config
+        captured.update(
+            config=options.app,
+            host=options.host,
+            port=options.port,
+            log_config=options.log_config,
+        )
+        server.started = True
 
-    monkeypatch.setattr(app_module.uvicorn, "run", run)
+    monkeypatch.setattr(app_module._AnnouncingServer, "run", run)
     app_module.main(
         [
             "--config",
@@ -309,6 +334,81 @@ def test_backend_cli_forwards_config_mode_and_bind_options(
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 8069
     assert captured["log_config"] is None
+
+
+def _fake_server(monkeypatch: pytest.MonkeyPatch, *, starts: bool = True) -> dict[str, object]:
+    """Let `main` run without hardware or a socket; returns what the server was given."""
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(app_module, "configure_logging", lambda *args: None)
+    monkeypatch.setattr(app_module, "create_app", lambda config: config)
+
+    def run(server: uvicorn.Server) -> None:
+        assert isinstance(server, app_module._AnnouncingServer)
+        captured.update(port=server.config.port, ready=server._ready)
+        server.started = starts
+
+    monkeypatch.setattr(app_module._AnnouncingServer, "run", run)
+    return captured
+
+
+def test_main_takes_ports_from_the_root_env_file(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`uv run main.py` uses the ports of the root .env, as `just` and the frontend do."""
+    base = write_base()
+    (base.parent / "machine.yaml").write_text("newswitch_version: v1.0.2\ndevices: {}\n")
+    env_file = tmp_path / ".env"
+    env_file.write_text("BACKEND_PORT=9123\nFRONTEND_PORT=5999\n")
+    monkeypatch.setattr(app_module, "ROOT_ENV_FILE", env_file)
+    _unset_env(monkeypatch, "BACKEND_HOST", "BACKEND_PORT", "FRONTEND_PORT")
+    captured = _fake_server(monkeypatch)
+    app_module.main(["--config", "machine.yaml", "--mode", "virtual"])
+    assert captured["port"] == 9123
+    assert "http://localhost:5999" in str(captured["ready"])
+    assert "http://localhost:9123/health" in str(captured["ready"])
+
+
+def test_shell_variable_beats_the_root_env_file(
+    write_base: BaseWriter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A port exported in the shell wins over the root .env, as with `just`."""
+    base = write_base()
+    (base.parent / "machine.yaml").write_text("newswitch_version: v1.0.2\ndevices: {}\n")
+    env_file = tmp_path / ".env"
+    env_file.write_text("BACKEND_PORT=9123\n")
+    monkeypatch.setattr(app_module, "ROOT_ENV_FILE", env_file)
+    monkeypatch.setenv("BACKEND_PORT", "9200")
+    captured = _fake_server(monkeypatch)
+    app_module.main(["--config", "machine.yaml", "--mode", "virtual"])
+    assert captured["port"] == 9200
+
+
+def test_main_prints_the_files_before_starting(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The overview goes to stdout before the server starts, whatever log_to_terminal says."""
+    base = write_base(log_to_terminal="none")
+    device = base.parent / "machine.yaml"
+    device.write_text("newswitch_version: v1.0.2\ndevices: {}\n")
+    _fake_server(monkeypatch)
+    app_module.main(["--config", "machine.yaml", "--mode", "virtual", "--port", "8069"])
+    out = capsys.readouterr().out
+    assert "newswitch backend starting (mode: virtual)" in out
+    assert str(base.resolve()) in out
+    assert str(device.resolve()) in out
+    assert str(device.with_name("machine.persistent.yaml").resolve()) in out
+
+
+def test_main_exits_when_the_server_does_not_start(
+    write_base: BaseWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed startup (startup hook, port in use) ends with uvicorn's failure code."""
+    base = write_base()
+    (base.parent / "machine.yaml").write_text("newswitch_version: v1.0.2\ndevices: {}\n")
+    _fake_server(monkeypatch, starts=False)
+    with pytest.raises(SystemExit) as exc:
+        app_module.main(["--config", "machine.yaml", "--mode", "virtual", "--port", "8069"])
+    assert exc.value.code == app_module.STARTUP_FAILURE
 
 
 def test_backend_cli_rejects_invalid_mode_before_creating_app(
@@ -357,7 +457,7 @@ def test_cli_missing_yaml_exits_with_filename_without_serving(
     def unexpected(*args: object, **kwargs: object) -> None:
         pytest.fail("Server started with a missing config")
 
-    monkeypatch.setattr(app_module.uvicorn, "run", unexpected)
+    monkeypatch.setattr(app_module._AnnouncingServer, "run", unexpected)
     with pytest.raises(SystemExit) as exc:
         app_module.main(["--config", "mixedd.yaml", "--mode", "hardware"])
     assert exc.value.code == 2

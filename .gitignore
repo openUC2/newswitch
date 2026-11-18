@@ -106,6 +106,13 @@ frontend/.auth/
 # ---------- Release artifacts ----------
 /blok.zip
 
+# ---------- Container image ----------
+# HikRobot MVS SDK packages for the image build: each is over GitHub's 100 MB file limit
+# (backend/external/README.md says where they come from)
+backend/external/*.deb
+# Personal settings of docker/docker-compose.yml (template: docker/.env.example)
+docker/.env
+
 # ---------- Docs ----------
 docs/_build/
 /site

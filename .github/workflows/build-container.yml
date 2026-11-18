@@ -1,0 +1,194 @@
+name: build-container
+
+# Builds the production image (Dockerfile) for linux/amd64 and linux/arm64 (Raspberry Pi 5)
+# and pushes it to ghcr.io/<owner>/newswitch. Adapted from ImSwitch's
+# .github/workflows/build-docker-server.yaml (same push rules and tags). Differences:
+# - The frontend is built inside the Dockerfile (stage "frontend"), so there is no separate
+#   frontend workflow to wait for.
+# - The HikRobot MVS packages are not in git (> 100 MB); they are downloaded into
+#   backend/external first (backend/external/README.md). docker/install-drivers.sh checks
+#   their checksums.
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+env:
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  IMAGE_NAME: newswitch
+  MAIN_BRANCH: 'main' # pushing to this branch will update the "edge" tag on the image
+  BETA_BRANCH: 'beta' # pushing to this branch will update the "beta" tag on the image
+  STABLE_BRANCH: 'stable' # pushing to this branch will update the "stable" tag on the image
+  TAG_PREFIX: 'v' # pushing tags with this prefix will add a version tag to the image
+  PUSH_IMAGE: ${{ (github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork) || github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+  # Where the MVS packages are downloaded from (the location is still to be discussed:
+  # OpenPoints_installChain.md #1). Override with the repository variable MVS_SDK_BASE_URL.
+  MVS_SDK_BASE_URL: ${{ vars.MVS_SDK_BASE_URL || 'https://github.com/openUC2/newswitch/releases/download/mvs-sdk-5.1.1' }}
+
+concurrency:
+  group: build-container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ctr-img:
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - docker-platform: linux/amd64
+            gha-runner: ubuntu-24.04
+            mvs-cpu: x86_64
+          - docker-platform: linux/arm64
+            gha-runner: ubuntu-24.04-arm # native ARM runner: no QEMU for the C++ builds
+            mvs-cpu: aarch64
+    runs-on: ${{ matrix.gha-runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The PR's HEAD commit instead of its merge commit, so that the image's SHA tag
+          # matches a git commit even before the merge
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch the HikRobot MVS SDK
+        run: |
+          deb="MVS-5.1.1_${{ matrix.mvs-cpu }}_20261016.deb"
+          curl --fail --location --silent --show-error --retry 3 --create-dirs \
+            --output "backend/external/$deb" "$MVS_SDK_BASE_URL/$deb"
+          ls -l backend/external
+
+      # Capital letters in the owner (openUC2) are not allowed in GHCR image names
+      - name: Lowercase image registry and owner
+        id: image_registry_case
+        uses: ASzc/change-string-case-action@v8
+        with:
+          string: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Get Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image_registry_case.outputs.lowercase }}
+          tags: |
+            type=sha
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver: docker-container
+
+      - name: Log in to GitHub container registry
+        if: env.PUSH_IMAGE == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          pull: true
+          platforms: ${{ matrix.docker-platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=build-${{ matrix.docker-platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.docker-platform }}
+          outputs: type=image,name=${{ steps.image_registry_case.outputs.lowercase }},push-by-digest=true,name-canonical=true,push=${{ env.PUSH_IMAGE }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Determine digest name
+        run: |
+          platform=${{ matrix.docker-platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-ctr-imgs:
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    needs:
+      - build-ctr-img
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Lowercase image registry and owner
+        id: image_registry_case
+        uses: ASzc/change-string-case-action@v8
+        with:
+          string: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Get Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: true
+          IS_MAIN_BRANCH: ${{ github.ref == format('refs/heads/{0}', env.MAIN_BRANCH) }}
+          IS_BETA_BRANCH: ${{ github.ref == format('refs/heads/{0}', env.BETA_BRANCH) }}
+          IS_STABLE_BRANCH: ${{ github.ref == format('refs/heads/{0}', env.STABLE_BRANCH) }}
+        with:
+          images: ${{ steps.image_registry_case.outputs.lowercase }}
+          # Version tags (v*) only arrive here once a tag push starts this workflow; tags that
+          # semantic-release pushes with GITHUB_TOKEN do not (OpenPoints_installChain.md #6)
+          tags: |
+            type=match,pattern=${{ env.TAG_PREFIX }}(.*),group=1
+            type=raw,value=stable,enable=${{ env.IS_STABLE_BRANCH }},priority=702
+            type=raw,value=beta,enable=${{ env.IS_BETA_BRANCH }},priority=701
+            type=edge,branch=${{ env.MAIN_BRANCH }}
+            type=ref,event=pr
+            type=sha,priority=100
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUSH_IMAGE == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest list and push
+        if: env.PUSH_IMAGE == 'true'
+        working-directory: /tmp/digests
+        run: |
+          # Word splitting is intended: one "-t <tag>" per tag, one source per digest file
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ steps.image_registry_case.outputs.lowercase }}@sha256:%s ' *)
+
+      - name: Inspect image
+        if: env.PUSH_IMAGE == 'true'
+        run: |
+          docker buildx imagetools inspect \
+            ${{ steps.image_registry_case.outputs.lowercase }}:${{ steps.meta.outputs.version }}

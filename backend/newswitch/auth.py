@@ -54,9 +54,11 @@ DEFAULT_PASSWORD = "admin"
 
 #: Reachable without a token. `/schemas/*` stays public because the frontend's build
 #: -time codegen reads it before any user could log in, and it exposes only the shape
-#: of the API - no data and no control.
-PUBLIC_PATHS = frozenset({"/health", "/auth/login"})
-PUBLIC_PATH_PREFIXES = ("/schemas/",)
+#: of the API - no data and no control. `/`, `/newswitch` and `/newswitch/*` are the built
+#: frontend the container image serves (`routes.http.frontend`): static files the browser
+#: needs before it can log in; the API they call stays gated.
+PUBLIC_PATHS = frozenset({"/health", "/auth/login", "/", "/newswitch"})
+PUBLIC_PATH_PREFIXES = ("/schemas/", "/newswitch/")
 
 
 class Credentials(BaseModel):

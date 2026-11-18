@@ -22,8 +22,10 @@ File: newswitch/app.py
 Entry points: `main.py` (`uvicorn main:app`, with reload; or `python main.py`) and
 `python -m newswitch.app` (`app.main()`) both build the settings with `load_app_config()`:
 `base_config.yaml`, with device YAML selected by `NEWSWITCH_CONFIG`, and serve on
-`BACKEND_HOST`/`BACKEND_PORT` when run directly. `python -m newswitch.cli` is the
-account-database tool, no server.
+`BACKEND_HOST`/`BACKEND_PORT` when run directly. `app.main()` loads them from the root `.env`
+(exported values win) and prints the overview of `newswitch/startup_info.py`: files in use
+before the start, URLs and how to stop once uvicorn listens (`_AnnouncingServer`).
+`python -m newswitch.cli` is the account-database tool, no server.
 
 ### Key pieces
 
@@ -62,7 +64,8 @@ are written back; comments stay intact. Details: `backend/configs/README.md`.
 
 The backend does not print; every module logs through `logging.getLogger(__name__)` (ruff
 rule T20; only the command-line tools `newswitch/cli.py`, `newswitch/config_io/__main__.py`
-and `scripts/` print their results). `base_config.yaml` sets one level for the terminal
+and `scripts/` print their results, and `newswitch/startup_info.py` the startup overview of
+`app.main`). `base_config.yaml` sets one level for the terminal
 (`log_to_terminal`) and one for the log file (`log_to_file`): `fatal`, `error`, `warn`,
 `info`, `debug` or `none`. The file (`log_file_path`, relative to the working directory) is
 appended to and rotated at 10 MB; if it cannot be opened, `backend.log` is used with a
@@ -125,7 +128,7 @@ is the detector's `manufacturer`, passed on unchanged; vendor-specific options c
 mapping entry's `vendor_options`. Details: `backend/configs/README.md`, section "Cameras".
 
 - uc2_cam_py (https://github.com/openUC2/UC2_cam_py, pinned to a commit in the extra
-  `camera`) is a C++ extension built from source, for Python 3.12: `uv sync --extra camera`.
+  `camera`) is a C++ extension built from source, for Python 3.13: `uv sync --extra camera`.
   With the MVS SDK at `MVS_ROOT` (`[tool.uv] config-settings-package` in `pyproject.toml`,
   `/opt/MVS`) it supports HikRobot cameras; without it, only the simulated camera. CI leaves
   the extra out; the camera tests skip there.

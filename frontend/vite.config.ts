@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => {
   const frontendPort = Number(env.FRONTEND_PORT) || 5173;
 
   return {
+    // The container image serves the bundle from the backend under /newswitch/
+    // (backend/newswitch/routes/http/frontend.py); `vite build --mode container` builds it
+    // for that path. Every other mode (dev server, tests, release bundle) stays at the root.
+    base: mode === "container" ? "/newswitch/" : "/",
     plugins: [
       react(),
       ...(isTest

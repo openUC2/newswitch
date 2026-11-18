@@ -32,7 +32,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "latest"
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install frontend deps
         run: yarn --cwd frontend install --frozen-lockfile

@@ -12,6 +12,7 @@ from newswitch import logging_setup
 from newswitch.logging_setup import (
     UVICORN_LOGGERS,
     configure_logging,
+    log_file,
     log_prints,
     route_to_root,
 )
@@ -120,6 +121,22 @@ def test_unusable_path_falls_back(tmp_path: Path, file_path: str) -> None:
     written = (tmp_path / "backend.log").read_text(encoding="utf-8")
     assert f"log_file_path '{file_path}' cannot be used" in written
     assert not (tmp_path / "missing").exists()
+
+
+@pytest.mark.parametrize(
+    ("file_level", "file_path", "expected"),
+    [
+        ("debug", "out.log", "out.log"),
+        ("debug", "missing/out.log", "backend.log"),
+        ("none", "out.log", None),
+    ],
+)
+def test_log_file_names_the_file_written(
+    tmp_path: Path, file_level: str, file_path: str, expected: str | None
+) -> None:
+    """`log_file` gives the absolute path actually written, after a fallback too."""
+    configure_logging("none", file_level, file_path)  # type: ignore[arg-type]
+    assert log_file() == (tmp_path / expected if expected else None)
 
 
 def test_the_file_is_appended_and_rotated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

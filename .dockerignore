@@ -1,0 +1,44 @@
+# Build context of the production image (Dockerfile in this folder).
+# backend/external stays in: the MVS packages are bind-mounted from there during the build
+# (they are never copied into the image).
+
+# ---------- repository / tooling ----------
+.git
+.github
+.claude
+.vscode
+**/.vscode
+.runtime
+docs
+blok.zip
+schemas
+agent_data.db
+
+# ---------- personal overrides (e.g. a VITE_BACKEND_URL pointing at a lab machine) ----------
+**/*.local
+**/.env.local
+docker/.env
+
+# ---------- Python ----------
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+
+# ---------- backend runtime files ----------
+**/*.db
+**/*.log
+**/*.log.*
+backend/data
+backend/auth.yaml
+backend/configs/**/*.persistent.yaml
+backend/configs/**/*.bak
+
+# ---------- frontend ----------
+**/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
+frontend/.auth

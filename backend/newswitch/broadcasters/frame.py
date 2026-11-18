@@ -138,7 +138,9 @@ class FrameBroadcaster:
 
     def _schedule_encoder_frames(self, detector_slot: int, frame: np.ndarray) -> None:
         """Schedule frame encoding for active encoders of one detector slot."""
-
+        print(
+            f"Scheduling frame for detector slot {detector_slot} with shape {frame.shape}, dtype {frame.dtype}, min {frame.min()}, max {frame.max()}  min {frame.min()} max {frame.max()} "
+        )
         if logger.isEnabledFor(logging.DEBUG):  # max/min of every frame are not free
             logger.debug(
                 "Scheduling frame for detector slot %s with shape %s, dtype %s, max %s, "

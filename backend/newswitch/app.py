@@ -8,9 +8,13 @@ for controlling a virtual microscope through registered functions.
 import argparse
 import logging
 import os
+import socket
+import sys
 from pathlib import Path
 from typing import Any, Optional, Tuple
 import uvicorn
+from uvicorn.config import STARTUP_FAILURE
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import Field, ValidationInfo, field_validator, model_validator
@@ -47,7 +51,14 @@ from newswitch.managers.uc2.dispatch import dispatch_uc2_events
 from newswitch.protocols.autofocus import AutofocusState
 from newswitch.protocols.uc2 import UC2BusManager, UC2State
 from newswitch import registers  # noqa: F401  (registration side effects: every action)
-from newswitch.logging_setup import LogLevel, configure_logging
+from newswitch.logging_setup import LogLevel, configure_logging, log_file
+from newswitch.startup_info import (
+    FORCED_STOP_MESSAGE,
+    STOPPED_MESSAGE,
+    announce,
+    ready_message,
+    starting_message,
+)
 from newswitch.managers.expanse_manager import ExpanseManager
 from newswitch.managers.metadata_manager import MetadataManager
 from newswitch.protocols import (
@@ -97,6 +108,7 @@ from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
 from newswitch.routes.http.users import router as users_router
+from newswitch.routes.http.frontend import frontend_dir_from_env, mount_frontend
 
 from newswitch.managers.python_hook_manager import PythonHookManager
 
@@ -182,8 +194,16 @@ class ImswitchConfig(BaseSettings):
     uc2_objective: dict[str, Any] = {}
     uc2_filter_bank: dict[str, Any] = {}
 
-    def open_device_config(self) -> config_io.ConfigFile | None:
-        """Honor an explicit file and always write to a separate persistent YAML."""
+    def device_config_files(self) -> tuple[Path, Path, bool] | None:
+        """The device configuration files: static, persistent and whether static is read.
+
+        These are the arguments of `config_io.open_config`. An explicit `config_file` that is
+        neither of the two configured files is read, and saved next to itself as
+        ``<name>.persistent.yaml``.
+
+        Returns:
+            (static, persistent, from_static), or None without a device configuration.
+        """
         if self.config_file is None:
             return None
         selected = (
@@ -193,13 +213,20 @@ class ImswitchConfig(BaseSettings):
         )
         if self.config_file.resolve() != selected.resolve():
             source = self.config_file
-            target = source.with_name(source.stem + ".persistent" + source.suffix)
-            return config_io.open_config(source, target, from_static=True)
-        return config_io.open_config(
+            return source, source.with_name(source.stem + ".persistent" + source.suffix), True
+        return (
             self.static_config_path,
             self.persistent_config_path,
-            from_static=self.load_from_static_config_path,
+            self.load_from_static_config_path,
         )
+
+    def open_device_config(self) -> config_io.ConfigFile | None:
+        """Honor an explicit file and always write to a separate persistent YAML."""
+        files = self.device_config_files()
+        if files is None:
+            return None
+        static, persistent, from_static = files
+        return config_io.open_config(static, persistent, from_static=from_static)
 
     def validate_device_config(self) -> None:
         """Reject missing/invalid YAML before serving HTTP, without writing runtime files."""
@@ -668,6 +695,7 @@ default_app_registry = get_default_app_registry()
 def create_app(
     config: ImswitchConfig,
     authenticator: Authenticator | None = None,
+    frontend_dir: Path | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -677,6 +705,12 @@ def create_app(
             `AllowAllAuthenticator()`; production leaves this unset. Injected as an
             argument rather than read from the environment so that authentication
             cannot be switched off by a stray variable on a deployed machine.
+        frontend_dir: Built frontend to serve under ``/newswitch/`` (see
+            `routes.http.frontend`). None: the folder ``NEWSWITCH_FRONTEND_DIR`` names
+            (set in the container image); unset, no frontend is served.
+
+    Raises:
+        FileNotFoundError: The frontend folder holds no ``index.html``.
     """
 
     config.validate_device_config()
@@ -739,6 +773,11 @@ def create_app(
     # Mount Cache routes for serving cached data
     app.include_router(cache_router)
 
+    # The built frontend, same origin as the API (container image only)
+    frontend_dir = frontend_dir if frontend_dir is not None else frontend_dir_from_env()
+    if frontend_dir is not None:
+        mount_frontend(app, frontend_dir)
+
     return app
 
 
@@ -747,8 +786,43 @@ def create_app(
 # ====================
 
 
+#: The repository's .env with BACKEND_HOST / BACKEND_PORT / FRONTEND_PORT, the same values
+#: `just` and docker compose use. Missing in the container image, which sets them itself.
+ROOT_ENV_FILE = BASE_CONFIG_FILE.parent.parent / ".env"
+
+
+class _AnnouncingServer(uvicorn.Server):
+    """uvicorn's server, printing `ready` once it listens and a line once it has stopped."""
+
+    def __init__(self, config: uvicorn.Config, ready: str) -> None:
+        """Serve as configured by `config`; `ready` is printed after startup."""
+        super().__init__(config)
+        self._ready = ready
+
+    async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+        """Start up (startup hooks, then bind the port); print `ready` if that succeeded."""
+        await super().startup(sockets)
+        if self.started:
+            announce(self._ready)
+
+    async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
+        """Shut down, then say whether the shutdown hooks had their turn.
+
+        Printed here, not after `run`: after a SIGTERM uvicorn re-raises it, and its default
+        handler ends the process before `run` returns.
+        """
+        await super().shutdown(sockets)
+        announce(FORCED_STOP_MESSAGE if self.force_exit else STOPPED_MESSAGE)
+
+
 def main(argv: list[str] | None = None) -> None:
-    """Run the backend with CLI overrides for YAML, mode, host and port."""
+    """Run the backend with CLI overrides for YAML, mode, host and port.
+
+    Prints the files in use before the start, and the URLs and how to stop once the backend
+    listens (`startup_info`). Exits with uvicorn's startup failure code if it does not start.
+    """
+    # Same ports as with `just`; a variable set in the shell wins over the file
+    load_dotenv(ROOT_ENV_FILE, override=False)
     parser = argparse.ArgumentParser(description="Start the Newswitch backend")
     parser.add_argument(
         "--config",
@@ -768,8 +842,25 @@ def main(argv: list[str] | None = None) -> None:
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
     configure_logging(config.log_to_terminal, config.log_to_file, config.log_file_path)
+    announce(starting_message(config, BASE_CONFIG_FILE, log_file()))
     app = create_app(config)
-    uvicorn.run(app, host=args.host, port=args.port, log_config=None)
+    ready = ready_message(
+        args.host,
+        args.port,
+        os.getpid(),
+        frontend_served=frontend_dir_from_env() is not None,
+        frontend_port=os.environ.get("FRONTEND_PORT", "5173"),
+    )
+    # What uvicorn.run does without reload and workers, with the announcing server
+    server = _AnnouncingServer(
+        uvicorn.Config(app, host=args.host, port=args.port, log_config=None), ready
+    )
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        pass
+    if not server.started:
+        sys.exit(STARTUP_FAILURE)
 
 
 if __name__ == "__main__":

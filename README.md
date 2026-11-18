@@ -8,7 +8,7 @@ more web-stack-friendly, modern, and maintainable foundation for the same functi
 
 ## Quickstart
 
-You need Python 3.11 or 3.12 with uv, Node 22+, Yarn 1.x and
+You need Python 3.13 with uv, Node 22+, Yarn 1.x and
 [just](https://just.systems/man/en/). Run these commands from the repository root:
 
 ```bash
@@ -56,7 +56,13 @@ uv run --extra uc2 python main.py \
 `--config` selects the device YAML; relative paths resolve against `backend/`.
 `--mode` accepts `hardware` or `virtual`. `--host` and `--port` set the listening
 address and port. Explicit arguments override the corresponding environment
-variables; otherwise the environment and base settings apply.
+variables; otherwise the environment and base settings apply. Host and port not given
+come from the root `.env`, as with `just`; a variable exported in the shell wins.
+
+`main.py` prints, whatever `log_to_terminal` says, the files in use (base settings, the
+device YAML read and the one saved on exit, the log file) and, once the backend listens,
+the frontend and backend URLs and how to stop it: press Ctrl+C **once** and wait for
+`newswitch backend stopped`. A second Ctrl+C aborts without saving the device configuration.
 
 ```bash
 uv run python main.py --help
@@ -173,7 +179,7 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 **Prerequisites:**
 
 - Linux with a graphical session (X11, or Wayland with XWayland: `DISPLAY` must be set).
-- Python 3.12 and a C++ compiler: uc2_cam_py is built from source.
+- Python 3.13 and a C++ compiler: uc2_cam_py is built from source.
 - For HikRobot cameras only: the MVS SDK at the path `MVS_ROOT` names in `backend/pyproject.toml`
   (`[tool.uv] config-settings-package`, `/opt/MVS`). Without it uc2_cam_py builds with the
   simulated camera only, which is all this guide needs.
@@ -241,8 +247,8 @@ cd backend
 NEWSWITCH_MODE=hardware NEWSWITCH_CONFIG=configs/camTest_config.yaml BACKEND_PORT=8069 uv run -q python backend_cli.py
 ```
 
-`BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099, as for
-`python main.py`). The login is asked for, or taken from `NEWSWITCH_CLI_USER` /
+`BACKEND_PORT=8069` lets `just dev-frontend` connect at the same time (without it: 8099; unlike
+`python main.py`, `backend_cli.py` does not read the root `.env`). The login is asked for, or taken from `NEWSWITCH_CLI_USER` /
 `NEWSWITCH_CLI_PASSWORD`. Everything the backend itself prints goes to
 `backend/data/backend_cli.log` (follow it with `tail -f`); `--verbose` shows it in the terminal
 instead. `-q` keeps uv's own warnings out.
@@ -291,6 +297,22 @@ just logs
 Compose is the one path with **no schema race**: the frontend's `depends_on` waits on a backend
 healthcheck. The probe hits `/health`, which is public and needs no credentials; because uvicorn
 serves nothing until startup completes, a healthy backend is also one whose schema endpoints answer.
+
+That setup is for development (bind-mounted sources, `--reload`, Vite dev server). The
+**production image** is separate: `Dockerfile` in the repository root builds backend, built
+frontend and the HikRobot camera driver into one image, served on port 8069 (UI under
+`/newswitch/`). GitHub Actions (`build-container.yml`) publishes it as
+`ghcr.io/openuc2/newswitch` for `linux/amd64` and `linux/arm64`.
+
+```bash
+just prod-build  # build it locally as newswitch:local (needs backend/external/*.deb)
+just prod-up     # run it with docker/docker-compose.yml (settings: docker/.env)
+just prod-logs
+just prod-down
+```
+
+Installing it on a Raspberry Pi: [docs/INSTALL-RPI.md](docs/INSTALL-RPI.md). Open points:
+[OpenPoints_installChain.md](OpenPoints_installChain.md).
 
 
 ## Authentication
@@ -366,7 +388,7 @@ It propagates everywhere from there:
 | `docker compose` | interpolation for the published ports, plus an `environment:` block so the value also reaches inside each container |
 | `frontend/.env`, `.env.docker` | `${BACKEND_PORT:-8099}` in the URLs; an exported value wins, the fallback keeps a bare `yarn dev` working |
 | `vite.config.ts` | `server.port` / `preview.port` from `FRONTEND_PORT` |
-| backend | `os.environ` in `newswitch.app:main` and `backend/test.py`; the Dockerfile sets matching `ENV` defaults |
+| backend | `newswitch.app:main` (`python main.py`) loads the file itself, exported values win; `backend/test.py` reads `os.environ`; the Dockerfile sets matching `ENV` defaults |
 | CI | a "Load the ports from .env" step exports them into `$GITHUB_ENV` |
 
 To change a port for one run, export it — a shell variable beats the file in all of the above:

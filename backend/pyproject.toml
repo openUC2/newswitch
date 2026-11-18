@@ -6,7 +6,7 @@ readme-content-type = "text/markdown"
 homepage = "https://arkitekt.live"
 description = "A better openuc2 backend"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
-requires-python = ">=3.11, <3.13"
+requires-python = "==3.13.*"
 license = "GPL-3.0-or-later"
 dependencies = [
     "aiosqlite>=0.22.1",
@@ -33,6 +33,7 @@ dependencies = [
     "ruamel-yaml>=0.18",
     "httpx2>=2.16.0",
     "httpx>=0.28.1",
+    "python-dotenv>=1.2",
 ]
 
 [project.optional-dependencies]
@@ -47,10 +48,11 @@ uc2 = [
 ]
 # Cameras through uc2_cam_py (newswitch.managers.uc2.uc2_detector), pinned to a commit;
 # to update, enter the new SHA and run `uv lock`. A C++ extension built from source, for
-# Python 3.12 only - hence the markers. With the MVS SDK (MVS_ROOT, see [tool.uv] below) it
-# supports HikRobot cameras, without it only the simulated camera. CI leaves this extra out.
+# Linux and Python 3.13 only - hence the marker. With the MVS SDK (MVS_ROOT, see [tool.uv]
+# below) it supports HikRobot cameras, without it only the simulated camera. CI leaves this
+# extra out; the container image (Dockerfile) builds it with HIK_MVS=ON.
 camera = [
-    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@3437793848fb57d7269edec8f34855a6e2d0e1f5 ; sys_platform == 'linux' and python_version == '3.12'",
+    "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@174eaa6778f266e07fe746dba3e4e9c82a2e11d5 ; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
@@ -88,6 +90,8 @@ extend-select = ["ANN", "D1", "F401", "T20"]
 "newswitch/cli.py" = ["T20"]
 "newswitch/config_io/__main__.py" = ["T20"]
 "scripts/*" = ["T20"]
+# The overview `uv run main.py` prints whatever log_to_terminal says
+"newswitch/startup_info.py" = ["T20"]
 
 [tool.ruff]
 

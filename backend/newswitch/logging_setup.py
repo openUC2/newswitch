@@ -103,6 +103,18 @@ def configure_logging(terminal: LogLevel, file: LogLevel, file_path: str | None)
         logger.log(level, "%s", message)
 
 
+def log_file() -> Path | None:
+    """The log file `configure_logging` writes to, including its fallback.
+
+    Returns:
+        The absolute path, or None if no log file is written (``none``, or not openable).
+    """
+    for handler in _installed:
+        if isinstance(handler, logging.FileHandler):
+            return Path(handler.baseFilename)
+    return None
+
+
 def _open_log_file(
     file_path: str | None, problems: list[tuple[int, str]]
 ) -> logging.Handler | None:
