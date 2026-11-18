@@ -12,6 +12,9 @@ export const LivePlane = (props: { detector: Detector }) => {
     detector: props.detector,
   });
   const affine = useCurrentAffineTransform();
+  // The plane keeps the detector's aspect ratio (the stream itself is 640 x 480)
+  const { width, height } = props.detector;
+  const aspect = width > 0 && height > 0 ? height / width : 1;
 
   const stageMatrix = useMemo(() => {
     // Ensure we are reading the 4x4 array correctly.
@@ -42,11 +45,11 @@ export const LivePlane = (props: { detector: Detector }) => {
     const liveTextureSizeUm = 1024;
     const scaleM = new Matrix4().makeScale(
       liveTextureSizeUm,
-      liveTextureSizeUm,
+      liveTextureSizeUm * aspect,
       1,
     );
     return m.multiply(scaleM);
-  }, [affine]);
+  }, [affine, aspect]);
 
   // NOTE: the per-frame `needsUpdate` flag for the video texture now lives inside
   // useH264LiveTexture, which owns the texture.
@@ -60,7 +63,8 @@ export const LivePlane = (props: { detector: Detector }) => {
   return (
     <mesh ref={meshRef} matrixAutoUpdate={false}>
       <planeGeometry args={[1, 1]} />
-      <meshStandardMaterial
+      {/* unlit: the image shows as streamed, not darkened by the scene's lights */}
+      <meshBasicMaterial
         map={liveTexture}
         side={DoubleSide}
         toneMapped={false}

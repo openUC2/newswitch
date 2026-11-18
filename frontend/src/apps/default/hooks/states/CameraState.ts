@@ -13,6 +13,7 @@ export const DetectorSchema = z
     current_exposure_time: z.number(),
     current_gain: z.number(),
     current_colormap: z.string(),
+    auto_contrast: z.boolean(),
     pixel_size_um: z.number(),
     preset_exposure_times: z.array(z.number()),
     max_exposure_time: z.number(),

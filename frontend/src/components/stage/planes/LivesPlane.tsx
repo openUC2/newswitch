@@ -9,8 +9,12 @@ export const LivesPlane = () => {
 
   const { data: cameraState } = useCameraState({ subscribe: true });
 
+  // Only active detectors: every plane sits at the same place, so the empty plane of a
+  // switched-off detector would cover the live image of an active one.
   const renderableDetectors = useMemo(() => {
-    return cameraState?.detectors?.map((x) => x).slice(0, MAX_DISPLAYABLE);
+    return cameraState?.detectors
+      ?.filter((detector) => detector.is_active)
+      .slice(0, MAX_DISPLAYABLE);
   }, [cameraState?.detectors]);
 
   if (!cameraState) return null;

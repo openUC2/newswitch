@@ -559,6 +559,7 @@ class UC2DetectorManager:
         frame_rate: float | None = None,
         binning: int | None = None,
         roi: Roi | None = None,
+        auto_contrast: bool | None = None,
     ) -> Detector:
         """Update detector settings; None keeps a setting. The camera clamps to its ranges.
 
@@ -577,6 +578,8 @@ class UC2DetectorManager:
             roi: New region of interest (if provided) in unbinned sensor pixels, clamped
                 to the sensor and snapped to its grid; `FULL_SENSOR` selects the complete
                 sensor.
+            auto_contrast: Stretch the live view's contrast (if provided); display only,
+                the camera is not touched.
 
         Returns:
             The detector with every value the camera applied.
@@ -602,6 +605,8 @@ class UC2DetectorManager:
             camera.gain_db = gain
         if frame_rate is not None:
             camera.frame_rate_per_sec = frame_rate or None
+        if auto_contrast is not None:
+            detector.auto_contrast = auto_contrast
         _mirror(detector, camera)
         return detector
 
@@ -698,7 +703,9 @@ class UC2DetectorManager:
         data = _pixels(image.data).copy()
         if image.is_valid():
             last_sent[slot] = image.time_ns
-            self.broadcaster.broadcast_sync(slot, data)
+            opened = self._cameras.get(slot)
+            auto_contrast = opened.detector.auto_contrast if opened is not None else True
+            self.broadcaster.broadcast_sync(slot, data, auto_contrast=auto_contrast)
 
     def _store_for_live(self, cam: _OpenCamera) -> None:
         """Let a camera joining the live stream write to disk; if that fails, it only streams."""

@@ -14,7 +14,7 @@ import {
   sliderToExposure,
 } from "@/lib/exposure";
 import { cn } from "@/lib/utils";
-import { Gauge, MonitorUp, Timer } from "lucide-react";
+import { Contrast, Gauge, MonitorUp, Timer } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { OptimisticSlider } from "../ui/optimistic_slider";
@@ -252,6 +252,27 @@ export function CameraControl() {
                           ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* Live view contrast: display only, the data is not changed */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Contrast className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {t("microscope.autoContrast")}
+                      </span>
+                    </div>
+                    <Switch
+                      aria-label={t("microscope.autoContrast")}
+                      checked={detector.auto_contrast ?? true}
+                      onCheckedChange={(checked) =>
+                        updateDetector({
+                          slot: detector.slot,
+                          auto_contrast: checked,
+                        })
+                      }
+                      disabled={isUpdating}
+                    />
                   </div>
 
                   {/* Gain Control */}

@@ -13,6 +13,7 @@ export const DetectorSchema = z
     current_exposure_time: z.number(),
     current_gain: z.number(),
     current_colormap: z.string(),
+    auto_contrast: z.boolean(),
     pixel_size_um: z.number(),
     preset_exposure_times: z.array(z.number()),
     max_exposure_time: z.number(),
@@ -81,6 +82,14 @@ export const UpdateDetectorArgsSchema = z.object({
     .array(z.number())
     .describe(
       '[x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional)',
+    )
+    .nullable()
+    .optional(),
+  /** Stretch the live view's contrast; display only, the data is not changed (optional) */
+  auto_contrast: z
+    .boolean()
+    .describe(
+      "Stretch the live view's contrast; display only, the data is not changed (optional)",
     )
     .nullable()
     .optional(),

@@ -59,6 +59,7 @@ vi.mock("@/apps/default/hooks/states", () => ({
           min_exposure_time: MIN,
           max_exposure_time: MAX,
           preset_exposure_times: [0.01, 0.1],
+          auto_contrast: true,
           current_gain: 0,
           min_gain: 0,
           max_gain: 24,
@@ -134,5 +135,21 @@ describe("CameraControl exposure slider", () => {
       exposure_time: expected,
     });
     expect(container.textContent).toContain(formatExposure(expected, "en"));
+  });
+
+  it("switches the live view's auto contrast", () => {
+    renderExpanded();
+    const toggle = container.querySelector<HTMLElement>(
+      '[aria-label="microscope.autoContrast"]',
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle!.getAttribute("aria-checked")).toBe("true");
+
+    act(() => toggle!.click());
+
+    expect(updateDetector).toHaveBeenCalledWith({
+      slot: 2,
+      auto_contrast: false,
+    });
   });
 });

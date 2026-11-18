@@ -66,10 +66,14 @@ class RecordingBroadcaster(FrameBroadcaster):
         """Start with nothing sent."""
         super().__init__()
         self.sent: list[tuple[int, np.ndarray]] = []
+        self.auto_contrast: list[bool] = []
 
-    def broadcast_sync(self, detector_slot: int, frame: np.ndarray) -> None:
-        """Keep the frame."""
+    def broadcast_sync(
+        self, detector_slot: int, frame: np.ndarray, *, auto_contrast: bool = False
+    ) -> None:
+        """Keep the frame and whether the live view stretches its contrast."""
         self.sent.append((detector_slot, frame))
+        self.auto_contrast.append(auto_contrast)
 
 
 def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
@@ -459,6 +463,22 @@ def test_recording(make_manager: ManagerFactory, recording_dir: Path) -> None:
     assert recordings(recording_dir) == [recording]
     assert images_in(recording) >= 3
     assert recording.with_suffix(".json").is_file()
+
+
+def test_live_view_follows_auto_contrast(make_manager: ManagerFactory) -> None:
+    """The live stream passes the detector's auto_contrast (on by default); it can be switched."""
+    broadcaster = RecordingBroadcaster()
+    manager = make_manager(broadcaster=broadcaster)
+    assert manager.state.get_detector_for_slot(1).auto_contrast is True
+    start_live(manager)
+    wait_until(lambda: len(broadcaster.sent) >= 2)
+    assert broadcaster.auto_contrast[-1] is True
+    detector = manager.update_detector(1, auto_contrast=False)
+    assert detector.auto_contrast is False
+    sent = len(broadcaster.sent)
+    wait_until(lambda: len(broadcaster.sent) >= sent + 2)
+    assert broadcaster.auto_contrast[-1] is False
+    manager.stop_acquire_live()
 
 
 def test_live_without_saving_writes_nothing(

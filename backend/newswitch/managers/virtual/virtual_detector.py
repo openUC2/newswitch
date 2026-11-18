@@ -761,6 +761,7 @@ class VirtualDetectorManager:
         frame_rate: Optional[float] = None,
         binning: Optional[int] = None,
         roi: Optional[Roi] = None,
+        auto_contrast: Optional[bool] = None,
     ) -> Detector:
         """
         Update detector settings; None keeps a setting. Values are clamped to the ranges.
@@ -777,6 +778,7 @@ class VirtualDetectorManager:
             binning: New binning factor (if provided), snapped to the nearest of `BINNINGS`.
             roi: New region of interest (if provided) in unbinned sensor pixels, clamped to
                 the sensor; `FULL_SENSOR` selects the complete sensor.
+            auto_contrast: Stretch the live view's contrast (if provided); display only.
 
         Returns:
             The updated detector with every value applied.
@@ -818,6 +820,9 @@ class VirtualDetectorManager:
                 detector.current_frame_rate = (
                     None if frame_rate == 0 else self._clamp(frame_rate, *FRAME_RATE_RANGE)
                 )
+
+            if auto_contrast is not None:
+                detector.auto_contrast = auto_contrast
 
         return detector
 
@@ -1004,7 +1009,9 @@ class VirtualDetectorManager:
                 now_ns = time.monotonic_ns()
                 if now_ns >= readout.next_due_ns:
                     frame = self._next_frame(detector, readout)
-                    self.broadcaster.broadcast_sync(detector.slot, frame.data)
+                    self.broadcaster.broadcast_sync(
+                        detector.slot, frame.data, auto_contrast=detector.auto_contrast
+                    )
                     rate = detector.current_frame_rate
                     period_ns = 0 if rate is None else int(1e9 / rate)
                     readout.next_due_ns = now_ns + period_ns

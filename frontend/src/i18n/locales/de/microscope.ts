@@ -9,6 +9,7 @@ export const microscope = {
   snap: "Aufnehmen",
   exposure: "Belichtungszeit",
   gain: "Verstärkung",
+  autoContrast: "Auto-Kontrast",
   noLightSources: "Keine Lichtquellen verfügbar",
   turnOffAll: "Alle ausschalten",
   noFilters: "Keine Filter verfügbar",

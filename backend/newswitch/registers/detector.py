@@ -122,6 +122,7 @@ def update_detector(
     frame_rate: float | None = None,
     binning: int | None = None,
     roi: list[int] | None = None,
+    auto_contrast: bool | None = None,
 ) -> Detector:
     """
     Update detector settings; a value left out is kept. The detector clamps to its ranges.
@@ -133,5 +134,8 @@ def update_detector(
         frame_rate: Frame rate in frames per second, 0 removes the limit (optional)
         binning: Symmetric binning factor, snapped to an allowed one (optional)
         roi: [x, y, width, height] in unbinned sensor pixels, [0, 0, 0, 0] = full sensor (optional)
+        auto_contrast: Stretch the live view's contrast; display only, the data is not changed (optional)
     """
-    return detector.update_detector(slot, exposure_time, gain, frame_rate, binning, roi)
+    return detector.update_detector(
+        slot, exposure_time, gain, frame_rate, binning, roi, auto_contrast
+    )

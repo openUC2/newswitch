@@ -61,6 +61,10 @@ class Detector:
     current_exposure_time: float = 0.1  # seconds
     current_gain: float = 1.0
     current_colormap: Colormap = Colormap.RED
+    auto_contrast: bool = True
+    """Stretch the live view's contrast (robust minimum to maximum) before it is reduced to
+    8 bit; False shows the raw values, so the exposure shows as brightness. Display only:
+    captured images, recordings and their data are never changed."""
 
     pixel_size_um: float = 6.5
     """Photosensitive pixel width (x) in um."""
@@ -260,6 +264,7 @@ class DetectorManager(Manager, Protocol):
         frame_rate: Optional[float] = None,
         binning: Optional[int] = None,
         roi: Optional[Roi] = None,
+        auto_contrast: Optional[bool] = None,
     ) -> Detector:
         """Update detector settings; None keeps a setting.
 
@@ -276,6 +281,8 @@ class DetectorManager(Manager, Protocol):
                 one the detector allows.
             roi: New region of interest (if provided) in unbinned sensor pixels;
                 `FULL_SENSOR` selects the complete sensor.
+            auto_contrast: Stretch the live view's contrast (if provided); display only,
+                see `Detector.auto_contrast`.
 
         Returns:
             The updated detector with every value the detector applied.

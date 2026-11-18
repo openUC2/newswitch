@@ -23,6 +23,7 @@ from newswitch.broadcasters.encoders.zstd_encoder import (
 from newswitch.broadcasters.encoders.h264_encoder import H264EncoderConfig, H264Encoder
 from newswitch.broadcasters.encoders.config import EncoderConfig
 from newswitch.broadcasters.encoders.base import EncoderSubscriptionProtocol
+from newswitch.broadcasters.contrast import stretch_to_uint8
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +137,15 @@ class FrameBroadcaster:
             with self._encoder_lock:
                 self._encoders.pop(key, None)
 
-    def _schedule_encoder_frames(self, detector_slot: int, frame: np.ndarray) -> None:
-        """Schedule frame encoding for active encoders of one detector slot."""
+    def _schedule_encoder_frames(
+        self, detector_slot: int, frame: np.ndarray, auto_contrast: bool = False
+    ) -> None:
+        """Schedule frame encoding for active encoders of one detector slot.
+
+        With `auto_contrast` the H.264 encoders (the live view) get the frame stretched to
+        8 bit (`stretch_to_uint8`, computed at most once per frame); the Zstd encoders always
+        get the raw frame.
+        """
 
         if logger.isEnabledFor(logging.DEBUG):  # max/min of every frame are not free
             logger.debug(
@@ -150,23 +158,33 @@ class FrameBroadcaster:
                 frame.min(),
                 len(self._encoders),
             )
-        for (slot, _), encoder in self._encoders.items():
-            if slot != detector_slot:
+        stretched: Optional[np.ndarray] = None
+        for (slot, config), encoder in self._encoders.items():
+            if slot != detector_slot or not encoder.is_running:
                 continue
-            if encoder.is_running:
+            if auto_contrast and isinstance(config, H264EncoderConfig):
+                if stretched is None:
+                    stretched = stretch_to_uint8(frame)
+                encoder.encode_frame(stretched)
+            else:
                 encoder.encode_frame(frame)
 
-    def broadcast_sync(self, detector_slot: int, frame: np.ndarray) -> None:
+    def broadcast_sync(
+        self, detector_slot: int, frame: np.ndarray, *, auto_contrast: bool = False
+    ) -> None:
         """
         Synchronous broadcast for use from detector/camera thread.
 
         Sends frames to all active shared encoders.
 
         Args:
+            detector_slot: The detector the frame comes from.
             frame: The numpy array frame to broadcast (uint16 typically).
+            auto_contrast: Stretch the contrast of the live view (H.264); the detector's
+                ``auto_contrast``. Display only: the frame itself is not changed.
         """
 
-        self._schedule_encoder_frames(detector_slot, frame)
+        self._schedule_encoder_frames(detector_slot, frame, auto_contrast)
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
         """

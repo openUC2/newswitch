@@ -363,13 +363,13 @@ Because encoders exist only between the first subscription and the last release,
 | 1 | Acquisition | uc2_cam_py C++ thread | ring buffer slots, `(H, W)` mono or raw Bayer, `(H, W, 3)` color; `uint8` for 8-bit pixel formats, else `uint16` | camera frame rate; the ring overwrites the oldest slot |
 | 2 | Pick-up | `UC2DetectorManager._send_new_image` (`detector_manager.py:641`) | own copy of the newest image (`data.copy()`), sent only if `is_valid()` after the copy and if its `time_ns` was not sent before | one image per detector per loop round; images between two rounds are skipped |
 | 3 | Loop pacing | `acquire_live` (`detector_manager.py:607`) | – | `koil.sleep(LIVE_INTERVAL_S = 0.01)` while streaming, `IDLE_INTERVAL_S = 0.1` otherwise, `RETRY_INTERVAL_S = 1.0` after an error; in practice koil oversleeps (about 140 ms, see OP #3) |
-| 4 | Fan-out | `FrameBroadcaster.broadcast_sync` → `_schedule_encoder_frames` (`frame.py:136`) | same array, to each running encoder of the slot | synchronous, in the worker thread |
-| 5a | H.264 pre-processing | `H264Encoder._preprocess_frame` (`h264_encoder.py:152`) | resized to 640×480, gray → BGR, `uint16` → `uint8` by `/256` | – |
+| 4 | Fan-out | `FrameBroadcaster.broadcast_sync` → `_schedule_encoder_frames` (`frame.py`) | same array to each running encoder of the slot; with the detector's `auto_contrast` (default on) the H.264 encoders get it stretched to `uint8` between its 0.1/99.9 % percentiles (`broadcasters/contrast.py`, once per frame), Zstd always the raw array | synchronous, in the worker thread |
+| 5a | H.264 pre-processing | `H264Encoder._preprocess_frame` (`h264_encoder.py`) | resized to 640×480, gray → BGR; without auto contrast `uint16` → `uint8` by `/256` and `uint8` unchanged (raw values) | – |
 | 5b | H.264 encoding | ffmpeg: `-f rawvideo -pix_fmt bgr24 -s 640x480 -r 30 -i -`, `libx264 -profile baseline -preset ultrafast -tune zerolatency -g 30 -b:v 1M`, `-f h264 -` | H.264 Annex B byte stream | keyframe every 30 frames; ffmpeg assumes 30 fps |
 | 6 | Chunking | `H264Encoder._read_output` (`h264_encoder.py:123`) | 4096-byte pieces of the byte stream, not aligned to frames | reader task on the event loop |
 | 7 | Queue | `EncoderSubscription.push_chunk` (`subscription.py`) | – | `asyncio.Queue(maxsize=1)`; when full, the oldest chunk is dropped |
 | 8 | Send | `stream_h264` (`liveview.py:128`) | one binary WebSocket message per chunk | waits up to 1 s per chunk, then waits again; idles while `is_broadcasting` is false (set once when `acquire_live` starts, never cleared) |
-| 9 | Display | `useH264LiveTexture` (`frontend/src/components/stage/hooks/useH264LiveTexture.tsx`) | JMuxer (MSE, `fps: 30`) → `<video>` → three.js `VideoTexture` on a plane of 1024 µm | – |
+| 9 | Display | `useH264LiveTexture` (`frontend/src/components/stage/hooks/useH264LiveTexture.tsx`) | JMuxer (MSE, `fps: 30`) → `<video>` → three.js `VideoTexture` on an unlit plane (`meshBasicMaterial`) 1024 µm wide, with the detector's aspect ratio; only active detectors get a plane | – |
 
 **Zstd instead of H.264** (`/stream/zstd/{slot}`, config `level=1, threshold=0.0,
 use_delta=True`): `ZstdEncoder.encode_frame` works synchronously in the worker thread. It
@@ -411,9 +411,12 @@ stderr pipe froze the H.264 stream after a few minutes (ffmpeg now runs with
      notices a closed connection only when `send_bytes` fails. If the client leaves after the
      frames stopped (live view stopped), the subscription, the encoder and ffmpeg stay until
      frames flow again.
-   - Aspect ratio. Every frame is resized to 640×480, regardless of the sensor or ROI.
-   - Dark 10/12-bit images. `uint16` → `uint8` divides by 256, which suits 16-bit data.
-     Mono10/Mono12 values (≤ 1023/4095) end up at ≤ 3/15.
+   - Aspect ratio. Every frame is resized to 640×480, regardless of the sensor or ROI (the
+     plane in the frontend restores the detector's aspect ratio since 2026-11-18).
+   - Dark images. Without auto contrast, `uint16` → `uint8` divides by 256 (Mono10/Mono12
+     values end up at ≤ 3/15) and dark 8-bit frames stay dark (HikRobot at 10 ms in the lab:
+     maximum ≈ 24 of 255). Auto contrast (per detector, switch in `CameraControl`, default on)
+     stretches the live view only; the debug window of uc2_cam_py stretches min…max as well.
    - Zstd format mismatch. The backend sends `float32` deltas; `useLiveZstdTexture` expects
      `uint8` full frames (unused today).
    - Dead frontend code. `components/microscope/LiveView.tsx` is not mounted anywhere; its

@@ -451,10 +451,14 @@ class RecordingBroadcaster(FrameBroadcaster):
         """Start with nothing sent."""
         super().__init__()
         self.sent: list[tuple[int, np.ndarray]] = []
+        self.auto_contrast: list[bool] = []
 
-    def broadcast_sync(self, detector_slot: int, frame: np.ndarray) -> None:
-        """Keep the frame."""
+    def broadcast_sync(
+        self, detector_slot: int, frame: np.ndarray, *, auto_contrast: bool = False
+    ) -> None:
+        """Keep the frame and whether the live view stretches its contrast."""
         self.sent.append((detector_slot, frame))
+        self.auto_contrast.append(auto_contrast)
 
 
 def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
@@ -684,6 +688,21 @@ class TestLiveStream:
         snapshot = manager.capture_image(slot=1)  # part of the live session
         assert snapshot.sequence >= 3
         assert manager.get_image_info(1) is info
+
+    def test_live_view_follows_auto_contrast(
+        self, live: tuple[VirtualDetectorManager, RecordingBroadcaster]
+    ) -> None:
+        """The stream passes the detector's auto_contrast (on by default) to the broadcaster."""
+        manager, broadcaster = live
+        assert manager.state.get_detector_for_slot(1).auto_contrast is True
+        manager.state.is_acquiring = True
+        wait_until(lambda: len(broadcaster.sent) >= 2)
+        assert broadcaster.auto_contrast[-1] is True
+        manager.update_detector(1, auto_contrast=False)
+        assert manager.state.get_detector_for_slot(1).auto_contrast is False
+        sent = len(broadcaster.sent)
+        wait_until(lambda: len(broadcaster.sent) >= sent + 2)
+        assert broadcaster.auto_contrast[-1] is False
 
     def test_frame_rate_paces_the_stream(
         self, live: tuple[VirtualDetectorManager, RecordingBroadcaster]
