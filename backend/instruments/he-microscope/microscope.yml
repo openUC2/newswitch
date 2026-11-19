@@ -111,7 +111,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-slide:
       description: 'Slide: the section, its stains, the objectives and the focus.'

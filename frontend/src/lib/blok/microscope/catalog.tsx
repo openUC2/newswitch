@@ -1,6 +1,6 @@
 /**
  * The newswitch blok catalog: the standard components, plus the microscope's
- * own. A blok the backend declares with `module="newswitch"` is rendered
+ * own. A blok written for `<Blok catalog="newswitch">` is rendered
  * against it; `catalogManifest` publishes the microscope part to the backend
  * as the `newswitch` module, which the backend validates those bloks with.
  */
@@ -29,7 +29,7 @@ export const NEWSWITCH_CATALOG_NAME = "newswitch";
  * changes (a component or prop added, removed or changed);
  * `yarn catalog:export` refuses a changed module under the same version.
  */
-export const NEWSWITCH_CATALOG_VERSION = 9;
+export const NEWSWITCH_CATALOG_VERSION = 10;
 
 /** The components newswitch adds to the standard catalog. */
 export const newswitchBlokComponents: BlokComponentDefinition[] = [

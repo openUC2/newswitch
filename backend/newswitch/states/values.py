@@ -1,7 +1,7 @@
 """What can change on a microscope, by what it does, in the description's names.
 
 Each is keyed by cube, then by variable, so that a view can bind it by name:
-``self.MoveState.moves.stage.z.value``. Nothing here has a default: it all comes from the description.
+``self.MoveState.moves.stage.z.current``. Nothing here has a default: it all comes from the description.
 """
 
 from dataclasses import dataclass, field

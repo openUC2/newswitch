@@ -3,11 +3,11 @@
  * `blok-catalog.json` shape, which `arkitekt_spec.declare.catalogs.parse_ui_catalog`
  * parses, and the backend declares with `app.ui_catalog("newswitch", ...)`.
  *
- * A v2 blok is drawn with base, the standard catalogs (`ui@1`, `scene@1`, ...)
- * and the Orkestrator's module, which the spec ships, plus one module of the
- * app's own. This is that module: the components this frontend draws that none
- * of those hold (the microscope's, the stage's). Functions are the vocabulary's,
- * so it adds no operations.
+ * A blok is drawn with one catalog: the base catalog, which every renderer
+ * draws whole, or an app catalog that extends it. This is newswitch's app
+ * catalog: the components this frontend draws that the base does not hold (the
+ * microscope's, the stage's). Functions are the vocabulary's, so it adds no
+ * operations.
  */
 import type * as z from "zod";
 import type {
@@ -15,7 +15,7 @@ import type {
   BlokComponentContext,
   BlokComponentDefinition,
 } from "@arkitektio/bsx/renderer/runtime/index";
-import { baseCatalog, standardCatalogs } from "@arkitektio/bsx/spec/catalogs";
+import { baseCatalog } from "@arkitektio/bsx/spec/catalogs";
 import { isActionSchema } from "@arkitektio/bsx/renderer/runtime/schemas";
 
 type ValueKind =
@@ -165,7 +165,7 @@ const shapeOf = (schema: z.ZodType): Record<string, z.ZodType> =>
     : {};
 
 const contextName = (context: BlokComponentContext | undefined) =>
-  (context ?? "html").toUpperCase();
+  (context ?? "panel").toUpperCase();
 
 export const toUiCatalogComponent = (
   definition: BlokComponentDefinition,
@@ -192,10 +192,7 @@ export const toUiCatalogComponent = (
   };
 };
 
-/**
- * The module: every component of `catalog` that base and the global catalogs
- * (shadcn@1 among them) do not hold, by name.
- */
+/** The app catalog: every component of `catalog` that the base catalog does not hold, by name. */
 export const toModuleJson = (
   name: string,
   version: number,
@@ -203,9 +200,7 @@ export const toModuleJson = (
   catalog: BlokCatalog,
 ): UiCatalogJson => {
   const provided = new Set(
-    [baseCatalog(), ...standardCatalogs()].flatMap((source) =>
-      source.components.map((component) => component.name),
-    ),
+    baseCatalog().components.map((component) => component.name),
   );
   return {
     name,

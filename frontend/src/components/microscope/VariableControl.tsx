@@ -27,7 +27,7 @@ const SwapRow = ({ variable }: { variable: SwapValue }) => {
           <Button
             key={option.slot}
             size="sm"
-            variant={option.slot === variable.value ? "default" : "outline"}
+            variant={option.slot === variable.current ? "default" : "outline"}
             disabled={isLoading}
             onClick={() => assign({ name: variable.name, slot: option.slot })}
             className="h-7 px-2 text-xs"
@@ -60,11 +60,11 @@ const NumberRow = ({
       <span className="text-xs text-muted-foreground">
         {short(variable.name)}
       </span>
-      <Reading value={variable.value} unit={variable.unit} />
+      <Reading value={variable.current} unit={variable.unit} />
     </div>
     {variable.minimum != null && variable.maximum != null && (
       <OptimisticSlider
-        value={[variable.value]}
+        value={[variable.current]}
         onSave={(v) => save(v[0])}
         min={variable.minimum}
         max={variable.maximum}

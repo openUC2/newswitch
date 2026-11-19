@@ -276,7 +276,7 @@ class TestReadout:
         """The variable reports the factor the detector snapped to, and the image has its size."""
         values.set({"camera.binning": 3})
         assert values["camera.binning"] == 2
-        assert values.tune_state.tunes["camera"]["binning"].value == 2
+        assert values.tune_state.tunes["camera"]["binning"].current == 2
         assert manager.capture_image("camera").data.shape == (256, 256)
 
     def test_a_window_cuts_out_part_of_each_axis(self, manager: SimulatedDetectorManager) -> None:
@@ -355,7 +355,7 @@ class TestReadout:
         assert (detector.axis("y").size, detector.axis("x").size) == (512, 512)
         assert m.detector.capture_image("camera").data.shape == (256, 256)
         assert m.values["camera.binning"] == 2
-        assert m.tune_state.tunes["camera"]["binning"].value == 2
+        assert m.tune_state.tunes["camera"]["binning"].current == 2
 
         pixel = m.optics_state.detectors["camera"].pixel_um
         m.values.set({"camera.binning": 2})

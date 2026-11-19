@@ -202,12 +202,12 @@ def test_set_clamps_to_the_range_a_variable_states(values: Values) -> None:
     """On both sides, for what moves as for what is tuned; what it got to is published."""
     values.set({"stage.z": 99999.0})
     assert values["stage.z"] == 5000.0
-    assert values.move_state.moves["stage"]["z"].value == 5000.0
+    assert values.move_state.moves["stage"]["z"].current == 5000.0
     values.set({"stage.z": -99999.0})
     assert values["stage.z"] == -5000.0
     values.set({"camera.gain": 200.0})
     assert values["camera.gain"] == 40.0
-    assert values.tune_state.tunes["camera"]["gain"].value == 40.0
+    assert values.tune_state.tunes["camera"]["gain"].current == 40.0
 
 
 def test_set_refuses_an_unknown_variable_before_anything_moves(values: Values) -> None:
@@ -291,7 +291,7 @@ def test_what_is_published_is_a_new_copy(values: Values) -> None:
     moves, sources = values.move_state.moves, values.source_state.sources
     values.set({"stage.x": 5.0})
     assert values.move_state.moves is not moves
-    assert moves["stage"]["x"].value == 0.0
+    assert moves["stage"]["x"].current == 0.0
     values.set({"laser_488.power": 1.0})
     assert values.source_state.sources is not sources
     assert sources["laser_488"].power == 20.0
@@ -309,11 +309,11 @@ def test_every_variable_is_published_by_what_it_does(values: Values) -> None:
     )
     assert x.does == ["position"]
     objective = values.swap_state.swaps["objective"]["slot"]
-    assert (objective.value, objective.label) == (1, "f20 NA 0.25")
+    assert (objective.current, objective.label) == (1, "f20 NA 0.25")
     assert objective.options[1].kind == "lens"
     assert "scale" in objective.does
     exposure = values.tune_state.tunes["camera"]["exposure"]
-    assert (exposure.value, exposure.unit) == (100.0, "ms")
+    assert (exposure.current, exposure.unit) == (100.0, "ms")
 
 
 # --- the actions, which are that one way

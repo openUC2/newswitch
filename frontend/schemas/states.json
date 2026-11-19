@@ -3988,7 +3988,7 @@
                         "provides": null
                       },
                       {
-                        "key": "value",
+                        "key": "current",
                         "label": null,
                         "kind": "FLOAT",
                         "description": null,
@@ -4210,7 +4210,7 @@
                         "provides": null
                       },
                       {
-                        "key": "value",
+                        "key": "current",
                         "label": null,
                         "kind": "INT",
                         "description": null,
@@ -4467,7 +4467,7 @@
                         "provides": null
                       },
                       {
-                        "key": "value",
+                        "key": "current",
                         "label": null,
                         "kind": "FLOAT",
                         "description": null,

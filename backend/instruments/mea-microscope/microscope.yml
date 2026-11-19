@@ -117,7 +117,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-mea:
       description: 'Cells on an electrode array: the camera beside what each electrode picks up.'

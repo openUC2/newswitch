@@ -4,12 +4,20 @@ import dataclasses
 from pathlib import Path
 
 import pytest
-from arkitekt import App
+from arkitekt import ORKESTRATOR_CATALOG_ID, App
 
 from main_fastapi import create_fastapi_registry
-from newswitch.infra.ui import CATALOG_NAME, PublishedCatalog, check_catalog, load_catalog
+from newswitch.infra.ui import (
+    AGENT_CATALOGS,
+    CATALOG_NAME,
+    UI_TOLERATED,
+    PublishedCatalog,
+    check_catalog,
+    declare_bloks,
+    load_catalog,
+)
 from newswitch.instrument import spec
-from newswitch.instrument.ui import UiConfig
+from newswitch.instrument.ui import BlokEntry, UiConfig
 from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
@@ -18,8 +26,18 @@ CAM_TEST = INSTRUMENTS / "cam-test"
 
 
 def bloks_of(app: App) -> dict[str, list]:
-    """Name -> [module, default] of every blok declared on `app`."""
-    return {k: [b.module, b.default] for k, b in app.registry.get_declared_bloks().items()}
+    """Name -> [catalog, default] of every blok declared on `app`."""
+    return {k: [b.catalog, b.default] for k, b in app.registry.get_declared_bloks().items()}
+
+
+def newswitch_blok(content: str) -> str:
+    """`content` as a panel blok written for the newswitch catalog."""
+    return f'<Blok kind="agent" context="panel" catalog="newswitch">{content}</Blok>'
+
+
+def orkestrator_blok(content: str) -> str:
+    """`content` as a panel blok written for Orkestrator's catalog."""
+    return f'<Blok kind="agent" context="panel" catalog="{ORKESTRATOR_CATALOG_ID}">{content}</Blok>'
 
 
 def test_the_bloks_are_the_ones_its_description_holds() -> None:
@@ -58,22 +76,46 @@ def test_a_description_without_bloks_has_none() -> None:
 @pytest.mark.parametrize(
     "tree, finding",
     [
-        ("<Html><StageView><NoSuchThing /></StageView></Html>", "NoSuchThing"),
+        ("<StageView><NoSuchThing /></StageView>", "NoSuchThing"),
         # A scene layer draws into a canvas: it only stands inside a StageScene.
-        ("<Html><div><FramesLayer /></div></Html>", "FramesLayer"),
-        ('<Html><SettingsPanel colour="red" /></Html>', "colour"),
+        ("<div><FramesLayer /></div>", "FramesLayer"),
+        ('<SettingsPanel colour="red" />', "colour"),
         # A blok picks a colour role, never a palette colour.
-        ('<Html><div className="bg-red-500" /></Html>', "bg-red-500"),
-        # Orkestrator's module is part of every view (the spec draws a module over it), so
-        # a component only Orkestrator renders (MikroScene) is not refused here.
+        ('<div className="bg-red-500" />', "bg-red-500"),
+        # The newswitch catalog extends the base alone: what only Orkestrator draws is not in it.
+        ("<MikroScene />", "MikroScene"),
     ],
 )
 def test_a_blok_the_frontend_cannot_render_is_refused(tree: str, finding: str) -> None:
     """Strict checking refuses unknown components and props, and misplaced scene layers."""
     app = create_fastapi_registry(None)
     with pytest.raises(ValueError, match=finding):
-        app.blok("broken", tree, module=CATALOG_NAME, mode="strict")
+        declare_bloks(
+            app, "ui", {"broken": BlokEntry(bsx=newswitch_blok(tree))}, {CATALOG_NAME}, UI_TOLERATED
+        )
     assert "broken" not in app.registry.get_declared_bloks()
+
+
+def test_a_ui_blok_may_use_any_tailwind_class() -> None:
+    """The frontend compiles Tailwind: a class beyond the portable subset is not refused."""
+    app = create_fastapi_registry(None)
+    view = BlokEntry(bsx=newswitch_blok('<div className="[&_svg]:size-4" />'))
+    declare_bloks(app, "ui", {"view": view}, {CATALOG_NAME}, UI_TOLERATED)
+    assert "view" in app.registry.get_declared_bloks()
+
+
+@pytest.mark.parametrize(
+    "bsx",
+    [
+        '<Blok kind="agent" context="panel"><div /></Blok>',
+        orkestrator_blok("<div />"),
+    ],
+)
+def test_a_ui_blok_names_the_newswitch_catalog(bsx: str) -> None:
+    """The frontend draws the newswitch catalog: a ui blok written for another is refused."""
+    app = create_fastapi_registry(None)
+    with pytest.raises(ValueError, match="ui.bloks.view is written for"):
+        declare_bloks(app, "ui", {"view": BlokEntry(bsx=bsx)}, {CATALOG_NAME})
 
 
 def published(version: int) -> PublishedCatalog:
@@ -122,7 +164,10 @@ def test_agent_mode_shows_the_agent_ui(instrument: Path) -> None:
 
     declared = create_arkitekt_registry(spec.load(instrument)).registry.get_declared_bloks()
     assert set(declared) == {"view-microscope"}
-    assert declared["view-microscope"].module is None
+    # Written for the base catalog: it runs wherever bloks are drawn, Orkestrator among them.
+    assert declared["view-microscope"].catalog == (
+        None if instrument == FAKE else ORKESTRATOR_CATALOG_ID
+    )
     assert declared["view-microscope"].default
 
 
@@ -141,13 +186,14 @@ def test_agent_mode_refuses_a_newswitch_component() -> None:
     from main_arkitekt import create_arkitekt_registry
 
     app = create_arkitekt_registry(None)
+    broken = BlokEntry(bsx=orkestrator_blok("<StageControl />"))
     with pytest.raises(ValueError, match="StageControl"):
-        app.blok("broken", "<Html><StageControl /></Html>", mode="strict")
+        declare_bloks(app, "agent_ui", {"broken": broken}, AGENT_CATALOGS)
 
 
-def test_the_agent_ui_names_orkestrators_catalog() -> None:
-    """An agent_ui written against the newswitch catalog is refused."""
-    from newswitch.infra.ui import check_agent_catalog
-
-    with pytest.raises(ValueError, match="orkestrator"):
-        check_agent_catalog(UiConfig(catalog="newswitch@1", bloks={}))
+def test_the_agent_ui_is_not_written_for_the_newswitch_catalog() -> None:
+    """Orkestrator does not hold the newswitch catalog: a blok written for it is refused."""
+    app = create_fastapi_registry(None)
+    view = BlokEntry(bsx=newswitch_blok("<div />"))
+    with pytest.raises(ValueError, match="agent_ui.bloks.view is written for 'newswitch'"):
+        declare_bloks(app, "agent_ui", {"view": view}, AGENT_CATALOGS)

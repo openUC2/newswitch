@@ -26,7 +26,7 @@ import { VariableControl } from "./VariableControl";
 const percent = (move: MoveValue) => {
   if (move.minimum == null || move.maximum == null) return null;
   const range = move.maximum - move.minimum;
-  return range > 0 ? ((move.value - move.minimum) / range) * 100 : null;
+  return range > 0 ? ((move.current - move.minimum) / range) * 100 : null;
 };
 
 const Readout = ({ move }: { move: MoveValue }) => (
@@ -39,7 +39,7 @@ const Readout = ({ move }: { move: MoveValue }) => (
     )}
     <div className="truncate text-xs text-muted-foreground">{move.name}</div>
     <div className="font-mono text-sm font-bold">
-      {Number(move.value.toFixed(2))}
+      {Number(move.current.toFixed(2))}
     </div>
     <div className="text-xs text-muted-foreground">{move.unit}</div>
   </div>

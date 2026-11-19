@@ -1,14 +1,17 @@
 """The server running on an instrument: its description is all it needs."""
 
 import time
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from arkitekt_spec.declare.catalogs import CatalogWarning
 
 from main_fastapi import create_fastapi_registry
 from newswitch.infra.streaming import FrameBroadcaster
+from newswitch.infra.ui import UI_TOLERATED
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.devices import AxisWindow
 from newswitch.instrument import spec
@@ -360,21 +363,41 @@ def test_an_uncalibrated_image_is_placed_by_what_the_design_predicts(
     ids=lambda path: path.name,
 )
 def test_every_instruments_bloks_can_be_served(folder: Path) -> None:
-    """Checked strictly only here: a refused blok drops the frontend to its built-in view."""
+    """Checked strictly only here: what a blok reads of the microscope is checked when it is
+    built, and a refused blok drops the frontend to its built-in view. A shipped one warns of
+    nothing there either."""
     registry = create_fastapi_registry(spec.load(folder)).registry
-    assert registry.snapshot().get_declared_bloks() is not None
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", CatalogWarning)
+        for code in UI_TOLERATED:
+            warnings.filterwarnings("ignore", message=rf".*\[{code}\]$", category=CatalogWarning)
+        assert registry.snapshot().get_declared_bloks() is not None
+
+
+def edited_light_sheet(tmp_path: Path, old: str, new: str) -> Path:
+    """The light-sheet's description with `old` written as `new`."""
+    description = (BACKEND / "instruments" / "light-sheet" / spec.DESCRIPTION).read_text()
+    assert old in description
+    path = tmp_path / spec.DESCRIPTION
+    path.write_text(description.replace(old, new))
+    return path
 
 
 def test_a_blok_that_cannot_be_served_is_caught_by_that_check(tmp_path: Path) -> None:
-    """A loop over objects with no key passes when a server starts, and fails when it is served."""
-    folder = BACKEND / "instruments" / "light-sheet"
-    description = (folder / spec.DESCRIPTION).read_text()
-    keyed = 'items={camera.axes} let="dim" key={dim.name}'
-    assert keyed in description
-    path = tmp_path / spec.DESCRIPTION
-    path.write_text(description.replace(keyed, 'items={camera.axes} let="dim"'))
+    """A blok calling an action this microscope lacks passes when a server starts, and fails
+    when it is served."""
+    path = edited_light_sheet(tmp_path, "self.capture_image(", "self.capture_no_image(")
     registry = create_fastapi_registry(spec.load(path)).registry
-    with pytest.raises(ValueError, match="has no key"):
+    with pytest.raises(ValueError, match="no action 'capture_no_image'"):
+        registry.snapshot().get_declared_bloks()
+
+
+def test_a_loop_without_a_key_is_flagged_by_that_check(tmp_path: Path) -> None:
+    """A loop over objects with no key is served, keyed by position, with a warning."""
+    keyed = 'items={camera.axes} let="dim" key={dim.name}'
+    path = edited_light_sheet(tmp_path, keyed, 'items={camera.axes} let="dim"')
+    registry = create_fastapi_registry(spec.load(path)).registry
+    with pytest.warns(CatalogWarning, match="has no key"):
         registry.snapshot().get_declared_bloks()
 
 

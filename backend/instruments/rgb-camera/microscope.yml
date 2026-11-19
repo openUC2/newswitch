@@ -91,7 +91,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-color:
       description: 'Color: the three bands of one camera, and where it is focused.'
@@ -110,9 +110,8 @@ ui:
       description: 'Minimal: the live image and the stage, nothing else.'
       file: ../views/minimal.bsx
 agent_ui:
-  catalog: orkestrator@v4.2.1
   bloks:
     view-microscope:
-      description: 'Microscope: the camera streams, live view and acquiring.'
+      description: 'Microscope: drive the stage on its map or with the pad, and run the cameras, lights and optics.'
       default: true
       file: ../views/agent-microscope.bsx

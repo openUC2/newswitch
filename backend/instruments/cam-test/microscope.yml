@@ -67,7 +67,7 @@ hardware:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, its sensor and its settings.'
@@ -75,13 +75,12 @@ ui:
       file: view.bsx
 
 agent_ui:
-  catalog: orkestrator@v4.2.1
   bloks:
     view-microscope:
       description: 'Microscope: the camera streams, live view and acquiring.'
       default: true
       bsx: |
-        <Html>
+        <Blok kind="agent" context="panel" catalog="https://arkitekt.live/catalogs/orkestrator/v1">
         <div className="flex flex-col gap-4 p-4">
             <Card>
                 <CardHeader><CardTitle>Cameras</CardTitle></CardHeader>
@@ -97,4 +96,4 @@ agent_ui:
                 <Button icon="camera" onClick={self.capture_image()}>Acquire</Button>
             </div>
         </div>
-        </Html>
+        </Blok>

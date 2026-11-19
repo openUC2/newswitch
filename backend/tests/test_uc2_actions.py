@@ -82,4 +82,4 @@ async def test_run_autofocus_action(virtual_microscope_app: FastAPI) -> None:
         assert abs(best_z) <= 1.0
 
         moves = (await client.get("/states/MoveState")).json()["state"]["moves"]
-        assert moves["stage"]["z"]["value"] == pytest.approx(best_z)
+        assert moves["stage"]["z"]["current"] == pytest.approx(best_z)

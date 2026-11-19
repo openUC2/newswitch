@@ -11,18 +11,18 @@ license = "GPL-3.0-or-later"
 dependencies = [
     "aiosqlite>=0.22.1",
     "fastapi>=0.128.0",
-    "kaffine==1.1.0",
+    "kaffine==3.0.0",
     "lz4>=4.4.5",
     "numpy>=2.4.1",
     "pillow>=12.1.0",
     "pint>=0.25.2",
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
-    "arkitekt==11.6.1",
-    "arkitekt-fastapi==3.0.0",
-    "arkitekt-runtime==8.0.1",
-    "arkitekt-spec==6.3.1",
-    "koil>=3.3.7",
+    "arkitekt==18.2.0",
+    "arkitekt-fastapi==4.1.0",
+    "arkitekt-runtime==10.5.0",
+    "arkitekt-spec==12.6.0",
+    "koil>=3.4.1",
     "pyyaml>=6",
     "scipy>=1.17.0",
     "tifffile>=2026.1.28",
@@ -54,13 +54,13 @@ uc2 = [
 # server through rekuest, the cameras streamed through lovekit (newswitch.infra.streaming), its images
 # and their metadata in the mikro that server provides.
 agent = [
-    "arkitekt[rekuest,lovekit]==11.6.1",
-    "mikro==12.2.0",
+    "arkitekt[rekuest,lovekit]==18.2.0",
+    "mikro==14.0.1",
 ]
 # Talking to a mikro in FastAPI mode (`newswitch.infra.mikro.connection`), where nothing
 # provides one: where it is comes from MIKRO_URL and friends.
 mikro = [
-    "mikro==12.2.0",
+    "mikro==14.0.1",
 ]
 camera = [
     "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@ccfb0e9dd00930d959e918a6a7dd6635c31ef142 ; sys_platform == 'linux' and python_version == '3.12'",

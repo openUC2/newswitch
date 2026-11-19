@@ -518,12 +518,9 @@ export function BundleProvider({ children }: BundleProviderProps) {
                   // Recorded for replay and workflow resumption; nothing to show.
                   return;
                 case StateEventType.STATE_UPDATE:
-                  stateStore.setState(message.state, message.value);
-                  return;
-                case StateEventType.STATE_PATCH:
-                  stateStore.applyPatch(
+                  stateStore.applyUpdate(
                     message,
-                    definitions[getScopedStateKey(appKey, message.state_name)]
+                    definitions[getScopedStateKey(appKey, message.state)]
                       ?.schema,
                   );
                   return;

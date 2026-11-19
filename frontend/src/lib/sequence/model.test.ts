@@ -16,7 +16,7 @@ const states: States = {
     stage: {
       x: {
         name: "stage.x",
-        value: 0,
+        current: 0,
         unit: "um",
         along: "x",
         speed: 1000,
@@ -24,7 +24,7 @@ const states: States = {
       },
       y: {
         name: "stage.y",
-        value: 0,
+        current: 0,
         unit: "um",
         along: "y",
         speed: 1000,
@@ -32,7 +32,7 @@ const states: States = {
       },
       z: {
         name: "stage.z",
-        value: 0,
+        current: 0,
         unit: "um",
         along: "axis",
         speed: 100,
@@ -44,7 +44,7 @@ const states: States = {
     wheel: {
       slot: {
         name: "wheel.slot",
-        value: 1,
+        current: 1,
         label: "green",
         options: [
           { slot: 1, label: "green" },
@@ -54,8 +54,8 @@ const states: States = {
     },
   },
   tunes: {
-    lamp: { power: { name: "lamp.power", value: 0, unit: "mW" } },
-    cam: { exposure: { name: "cam.exposure", value: 100, unit: "ms" } },
+    lamp: { power: { name: "lamp.power", current: 0, unit: "mW" } },
+    cam: { exposure: { name: "cam.exposure", current: 100, unit: "ms" } },
   },
   sources: {
     lamp: {

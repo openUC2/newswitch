@@ -1,18 +1,267 @@
-<Html>
-<div className="flex flex-col gap-4 p-4">
-    <Card>
-        <CardHeader><CardTitle>Cameras</CardTitle></CardHeader>
-        <CardContent>
-            <foreach items={self.CameraStreams.streams} let="stream">
-                <StructureDisplay value={stream} />
+<Blok kind="agent" context="panel">
+<local name="xy_step" kind="STRING" default="100" persist />
+<local name="z_step" kind="STRING" default="10" persist />
+<local name="go_x" kind="STRING" default="" />
+<local name="go_y" kind="STRING" default="" />
+<local name="go_z" kind="STRING" default="" />
+<foreach items={list.compact(value: [{
+    x: self.MoveState.moves.stage.x,
+    y: self.MoveState.moves.stage.y,
+    z: self.MoveState.moves.stage.z,
+    fx: math.div(math.sub(self.MoveState.moves.stage.x.current, self.MoveState.moves.stage.x.minimum), math.sub(self.MoveState.moves.stage.x.maximum, self.MoveState.moves.stage.x.minimum)),
+    fy: math.div(math.sub(self.MoveState.moves.stage.y.current, self.MoveState.moves.stage.y.minimum), math.sub(self.MoveState.moves.stage.y.maximum, self.MoveState.moves.stage.y.minimum)),
+    ox: math.div(math.neg(self.MoveState.moves.stage.x.minimum), math.sub(self.MoveState.moves.stage.x.maximum, self.MoveState.moves.stage.x.minimum)),
+    oy: math.div(math.neg(self.MoveState.moves.stage.y.minimum), math.sub(self.MoveState.moves.stage.y.maximum, self.MoveState.moves.stage.y.minimum)),
+    moving: self.tasks.move_one.running == true || self.tasks.move.running == true || self.tasks.home_stage.running == true || self.tasks.move_home.running == true
+}])} let="stage" key={"stage"}>
+<div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-start">
+
+    <!-- cameras -->
+    <Card className="min-w-0 flex-1 gap-0 overflow-hidden py-0">
+        <Tabs defaultValue="0">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-2 py-1.5">
+                <TabsList>
+                    <foreach items={list.range(start: 0, end: list.len(value: self.CameraStreams.streams))} let="i" key={i}>
+                        <TabsTrigger value={val.to_string(value: i)} icon="video">{list.at(value: self.CameraStreams.titles, index: i)}</TabsTrigger>
+                    </foreach>
+                    <if when={list.len(value: self.CameraStreams.streams) > 1}>
+                        <TabsTrigger value="all" icon="grid">All</TabsTrigger>
+                    </if>
+                </TabsList>
+                <div className="flex items-center gap-1">
+                    <if when={self.DetectorState.is_acquiring}>
+                        <Badge variant="secondary" icon="activity">Acquiring</Badge>
+                    </if>
+                    <Button size="sm" icon="play" onClick={self.start_live_view()}>Live</Button>
+                    <Button size="icon-sm" variant="ghost" icon="pause" onClick={self.stop_live_view()} />
+                    <Button size="sm" variant="ghost" icon="camera" onClick={self.capture_image()}>Snap</Button>
+                </div>
+            </div>
+
+            <foreach items={list.range(start: 0, end: list.len(value: self.CameraStreams.streams))} let="i" key={i}>
+                <TabsContent value={val.to_string(value: i)} className="m-0">
+                    <foreach items={list.compact(value: [{
+                        name: list.at(value: self.CameraStreams.titles, index: i),
+                        exposure: obj.get(value: self.TuneState.tunes, key: str.concat(values: [list.at(value: self.CameraStreams.titles, index: i), ".exposure"])),
+                        gain: obj.get(value: self.TuneState.tunes, key: str.concat(values: [list.at(value: self.CameraStreams.titles, index: i), ".gain"]))
+                    }])} let="camera" key={camera.name}>
+                        <div>
+                            <StructureDisplay value={list.at(value: self.CameraStreams.streams, index: i)} variant="card" />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
+                            <if when={camera.exposure}>
+                                <div className="flex min-w-48 flex-1 items-center gap-2">
+                                    <Icon name="clock" size={14} className="text-muted-foreground" />
+                                    <Slider className="flex-1" value={camera.exposure.current} min={camera.exposure.minimum} max={math.min(values: [camera.exposure.maximum, 1000])} step={1} onCommit={self.tune(name: camera.exposure.name, to: event.value)} />
+                                    <Text size="xs" mono className="w-16 text-right">{str.concat(values: [fmt.number(value: camera.exposure.current, digits: 0), " ms"])}</Text>
+                                </div>
+                            </if>
+                            <if when={camera.gain}>
+                                <div className="flex min-w-48 flex-1 items-center gap-2">
+                                    <Icon name="sliders" size={14} className="text-muted-foreground" />
+                                    <Slider className="flex-1" value={camera.gain.current} min={camera.gain.minimum} max={camera.gain.maximum} step={camera.gain.step} onCommit={self.tune(name: camera.gain.name, to: event.value)} />
+                                    <Text size="xs" mono className="w-16 text-right">{str.concat(values: [fmt.number(value: camera.gain.current, digits: 0), " dB"])}</Text>
+                                </div>
+                            </if>
+                        </div>
+                    </foreach>
+                </TabsContent>
             </foreach>
-        </CardContent>
+
+            <TabsContent value="all" className="m-0">
+                <Grid columns={2} gap="2px">
+                    <foreach items={self.CameraStreams.streams} let="stream" key={stream}>
+                        <StructureDisplay value={stream} variant="card" />
+                    </foreach>
+                </Grid>
+            </TabsContent>
+        </Tabs>
+        <if when={list.len(value: self.CameraStreams.streams) == 0}>
+            <div className="flex h-48 items-center justify-center gap-2 text-muted-foreground">
+                <Spinner />
+                <Text size="sm" tone="muted">Waiting for the camera streams</Text>
+            </div>
+        </if>
     </Card>
-    <div className="flex gap-2">
-        <Button icon="play" onClick={self.start_live_view()}>Start live view</Button>
-        <Button icon="square" onClick={self.stop_live_view()}>Stop</Button>
-        <Button icon="camera" onClick={self.capture_image()}>Acquire</Button>
-        <Button icon="home" onClick={self.move_home()}>Home stage</Button>
+
+    <div className="flex w-full flex-col gap-3 lg:w-80 lg:shrink-0">
+
+        <!-- stage -->
+        <Card className="gap-3 py-3">
+            <div className="flex items-center justify-between px-3">
+                <div className="flex items-center gap-2">
+                    <Icon name="move" size={16} className="text-primary" />
+                    <Text size="sm" weight="semibold">Stage</Text>
+                    <if when={stage.moving}>
+                        <Spinner className="size-3.5" />
+                    </if>
+                </div>
+                <Button size="xs" variant="destructive" icon="square" onClick={self.stop_stage()}>Stop</Button>
+            </div>
+
+            <div className="px-3">
+                <Grid columns={3} gap="0.375rem">
+                    <foreach items={list.compact(value: [
+                        {key: "x", label: "X", move: stage.x},
+                        {key: "y", label: "Y", move: stage.y},
+                        {key: "z", label: "Z", move: stage.z}
+                    ])} let="axis" key={axis.key}>
+                        <div className="flex items-baseline justify-between gap-1 rounded-md bg-muted/60 px-2 py-1">
+                            <Text size="xs" tone="muted" weight="medium">{axis.label}</Text>
+                            <Text size="sm" mono weight="semibold">{fmt.number(value: axis.move.current, digits: 1)}</Text>
+                        </div>
+                    </foreach>
+                </Grid>
+            </div>
+
+            <div className="flex items-center gap-3 px-3">
+                <div className="size-32 shrink-0 overflow-hidden rounded-lg border bg-muted/30">
+                    <Logo viewBox="0 0 200 200" width="100%" height="100%" title="Stage map">
+                        <foreach items={list.range(start: 1, end: 8)} let="line" key={line}>
+                            <Line x1={math.mul(line, 25)} y1={0} x2={math.mul(line, 25)} y2={200} stroke="muted" strokeOpacity={0.25} strokeWidth={1} />
+                            <Line x1={0} y1={math.mul(line, 25)} x2={200} y2={math.mul(line, 25)} stroke="muted" strokeOpacity={0.25} strokeWidth={1} />
+                        </foreach>
+                        <Line x1={math.mul(stage.ox, 200)} y1={0} x2={math.mul(stage.ox, 200)} y2={200} stroke="muted" strokeOpacity={0.7} strokeDasharray="4 4" />
+                        <Line x1={0} y1={math.sub(200, math.mul(stage.oy, 200))} x2={200} y2={math.sub(200, math.mul(stage.oy, 200))} stroke="muted" strokeOpacity={0.7} strokeDasharray="4 4" />
+                        <foreach items={obj.values(value: self.OpticsState.detectors)} let="seen" key={seen.name}>
+                            <Rect
+                                x={math.sub(math.mul(stage.fx, 200), math.div(math.mul(200, math.div(seen.field_width_um, math.sub(stage.x.maximum, stage.x.minimum))), 2))}
+                                y={math.sub(math.sub(200, math.mul(stage.fy, 200)), math.div(math.mul(200, math.div(seen.field_height_um, math.sub(stage.y.maximum, stage.y.minimum))), 2))}
+                                width={math.mul(200, math.div(seen.field_width_um, math.sub(stage.x.maximum, stage.x.minimum)))}
+                                height={math.mul(200, math.div(seen.field_height_um, math.sub(stage.y.maximum, stage.y.minimum)))}
+                                fill="spectrum-green" fillOpacity={0.1} stroke="spectrum-green" strokeOpacity={0.8} strokeWidth={1.5} rx={2} />
+                        </foreach>
+                        <if when={stage.moving}>
+                            <Circle cx={math.mul(stage.fx, 200)} cy={math.sub(200, math.mul(stage.fy, 200))} r={14} fill="brand" fillOpacity={0.2} animate="pulse" />
+                        </if>
+                        <Circle cx={math.mul(stage.fx, 200)} cy={math.sub(200, math.mul(stage.fy, 200))} r={6} fill="brand" stroke="surface" strokeWidth={2.5} />
+                        <foreach items={list.range(start: 0, end: 8)} let="row" key={row}>
+                            <foreach items={list.range(start: 0, end: 8)} let="col" key={col}>
+                                <foreach items={list.compact(value: [{
+                                    tx: math.round(value: math.add(stage.x.minimum, math.mul(math.div(math.add(col, 0.5), 8), math.sub(stage.x.maximum, stage.x.minimum)))),
+                                    ty: math.round(value: math.sub(stage.y.maximum, math.mul(math.div(math.add(row, 0.5), 8), math.sub(stage.y.maximum, stage.y.minimum))))
+                                }])} let="cell" key={"cell"}>
+                                    <Rect x={math.mul(col, 25)} y={math.mul(row, 25)} width={25} height={25} fill="brand" fillOpacity={0} title={str.concat(values: [fmt.number(value: cell.tx, digits: 0), ", ", fmt.number(value: cell.ty, digits: 0)])} onClick={self.move(targets: {"stage.x": cell.tx, "stage.y": cell.ty})} />
+                                </foreach>
+                            </foreach>
+                        </foreach>
+                    </Logo>
+                </div>
+
+                <div className="flex flex-1 flex-col items-center gap-2">
+                    <Grid columns={3} gap="0.25rem">
+                        <div />
+                        <Button variant="outline" size="icon-sm" icon="chevron-up" disabled={stage.moving} onClick={self.move_one(name: "stage.y", by: val.to_number(value: xy_step))} />
+                        <div />
+                        <Button variant="outline" size="icon-sm" icon="chevron-left" disabled={stage.moving} onClick={self.move_one(name: "stage.x", by: math.neg(val.to_number(value: xy_step)))} />
+                        <Button variant="ghost" size="icon-sm" icon="circle-dot" disabled={stage.moving} onClick={self.move(targets: {"stage.x": 0, "stage.y": 0})} />
+                        <Button variant="outline" size="icon-sm" icon="chevron-right" disabled={stage.moving} onClick={self.move_one(name: "stage.x", by: val.to_number(value: xy_step))} />
+                        <div />
+                        <Button variant="outline" size="icon-sm" icon="chevron-down" disabled={stage.moving} onClick={self.move_one(name: "stage.y", by: math.neg(val.to_number(value: xy_step)))} />
+                        <div />
+                    </Grid>
+                    <div className="flex items-center gap-1">
+                        <Button variant="outline" size="icon-sm" icon="minus" disabled={stage.moving} onClick={self.move_one(name: "stage.z", by: math.neg(val.to_number(value: z_step)))} />
+                        <Text size="xs" tone="muted" weight="medium" className="w-6 text-center">Z</Text>
+                        <Button variant="outline" size="icon-sm" icon="plus" disabled={stage.moving} onClick={self.move_one(name: "stage.z", by: val.to_number(value: z_step))} />
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 px-3">
+                <div className="flex items-center justify-between gap-2">
+                    <Text size="xs" tone="muted" className="w-8">XY</Text>
+                    <ToggleGroup bind={xy_step} variant="outline" size="sm" className="flex-1">
+                        <ToggleGroupItem value="1" className="flex-1">1</ToggleGroupItem>
+                        <ToggleGroupItem value="10" className="flex-1">10</ToggleGroupItem>
+                        <ToggleGroupItem value="100" className="flex-1">100</ToggleGroupItem>
+                        <ToggleGroupItem value="1000" className="flex-1">1k</ToggleGroupItem>
+                    </ToggleGroup>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                    <Text size="xs" tone="muted" className="w-8">Z</Text>
+                    <ToggleGroup bind={z_step} variant="outline" size="sm" className="flex-1">
+                        <ToggleGroupItem value="1" className="flex-1">1</ToggleGroupItem>
+                        <ToggleGroupItem value="10" className="flex-1">10</ToggleGroupItem>
+                        <ToggleGroupItem value="50" className="flex-1">50</ToggleGroupItem>
+                        <ToggleGroupItem value="100" className="flex-1">100</ToggleGroupItem>
+                    </ToggleGroup>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-1 border-t px-3 pt-3">
+                <Popover>
+                    <PopoverTrigger icon="send" className="h-7 rounded-md border px-2 text-xs">Go to</PopoverTrigger>
+                    <PopoverContent align="start" className="w-64">
+                        <div className="flex flex-col gap-2">
+                            <Grid columns={3} gap="0.375rem">
+                                <Input type="number" bind={go_x} placeholder={str.concat(values: ["x ", fmt.number(value: stage.x.current, digits: 0)])} />
+                                <Input type="number" bind={go_y} placeholder={str.concat(values: ["y ", fmt.number(value: stage.y.current, digits: 0)])} />
+                                <Input type="number" bind={go_z} placeholder={str.concat(values: ["z ", fmt.number(value: stage.z.current, digits: 0)])} />
+                            </Grid>
+                            <Button size="sm" icon="send" fullWidth disabled={stage.moving} onClick={self.move(targets: {
+                                "stage.x": val.to_number(value: go_x) ?? stage.x.current,
+                                "stage.y": val.to_number(value: go_y) ?? stage.y.current,
+                                "stage.z": val.to_number(value: go_z) ?? stage.z.current
+                            })}>Go</Button>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+                <Button size="xs" variant="ghost" icon="zoom-in" disabled={self.AutofocusState.running || stage.moving} onClick={self.run_autofocus()}>Focus</Button>
+                <Button size="xs" variant="ghost" icon="home" disabled={stage.moving} onClick={self.home_stage()}>Home</Button>
+                <Button size="xs" variant="ghost" icon="flag" disabled={stage.moving} onClick={self.set_sample_origin_here()}>Zero</Button>
+            </div>
+        </Card>
+
+        <!-- lights -->
+        <Card className="gap-2 py-3">
+            <div className="flex items-center gap-2 px-3">
+                <Icon name="zap" size={16} className="text-primary" />
+                <Text size="sm" weight="semibold">Lights</Text>
+            </div>
+            <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+                <div className="flex flex-col gap-1.5 px-3 py-1">
+                    <div className="flex items-center gap-2">
+                        <div className="size-2.5 shrink-0">
+                            <Logo viewBox="0 0 10 10" width="100%" height="100%" title={light.name}>
+                                <Circle cx={5} cy={5} r={5} fill={str.concat(values: ["spectrum-", light.color])} fillOpacity={light.on ? 1 : 0.3} />
+                            </Logo>
+                        </div>
+                        <Text size="sm" weight="medium" className="flex-1" truncate>{light.name}</Text>
+                        <Text size="xs" tone="muted" mono>{str.concat(values: [fmt.number(value: light.wavelength, digits: 0), " nm"])}</Text>
+                        <if when={light.power_variable}>
+                            <Switch checked={light.on} onChange={self.tune(name: light.power_variable, to: light.on ? 0 : light.lit_power)} />
+                        </if>
+                    </div>
+                    <if when={light.power_variable}>
+                        <Slider className="pl-4.5" value={light.power} min={0} max={light.max_power} step={math.div(light.max_power, 100)} disabled={light.on == false} onCommit={self.tune(name: light.power_variable, to: event.value)} />
+                    </if>
+                </div>
+            </foreach>
+        </Card>
+
+        <!-- optics -->
+        <if when={list.len(value: obj.keys(value: self.SwapState.swaps)) > 0}>
+            <Card className="gap-2 py-3">
+                <div className="flex items-center gap-2 px-3">
+                    <Icon name="layers" size={16} className="text-primary" />
+                    <Text size="sm" weight="semibold">Optics</Text>
+                </div>
+                <foreach items={obj.keys(value: self.SwapState.swaps)} let="part" key={part}>
+                    <foreach items={obj.values(value: obj.get(value: self.SwapState.swaps, key: part))} let="swap" key={swap.name}>
+                        <div className="flex items-center gap-2 px-3">
+                            <Text size="xs" tone="muted" className="w-20 shrink-0" truncate>{part}</Text>
+                            <div className="flex flex-1 flex-wrap gap-1">
+                                <foreach items={swap.options} let="option" key={option.slot}>
+                                    <Button size="xs" variant={option.slot == swap.current ? "default" : "outline"} onClick={self.swap(name: swap.name, slot: option.slot)}>{option.label}</Button>
+                                </foreach>
+                            </div>
+                        </div>
+                    </foreach>
+                </foreach>
+            </Card>
+        </if>
     </div>
 </div>
-</Html>
+</foreach>
+</Blok>

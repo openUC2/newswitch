@@ -345,7 +345,7 @@ const useMicroscope = () => {
     const along = (axis: string) =>
       Object.values(moves?.moves?.[sample] ?? {})
         .filter((move) => move.along === axis && move.does.includes("position"))
-        .reduce((total, move) => total + move.value, 0);
+        .reduce((total, move) => total + move.current, 0);
     const mount = space?.samples?.[sample]?.mount;
     if (!mount) return undefined;
     return new Vector3(along("x"), along("y"), 0).applyMatrix4(
@@ -360,7 +360,7 @@ const useMicroscope = () => {
       (d) => !deliversImages(d),
     ),
     swaps: Object.fromEntries(
-      entriesOf(swaps?.swaps).map((s) => [s.name, s.value]),
+      entriesOf(swaps?.swaps).map((s) => [s.name, s.current]),
     ),
     samples: Object.values(space?.samples ?? {}),
     sampleCount: Object.keys(space?.samples ?? {}).length,
@@ -401,7 +401,7 @@ const choiceOf = (m: Microscope, channel: OpticalChannel): ChannelChoice => {
     source: channel.source,
     detector: channel.detector,
     power: power || (found?.max_power ?? 1) / 5,
-    exposure: m.exposureOf(channel.detector)?.value,
+    exposure: m.exposureOf(channel.detector)?.current,
     swaps: swapsOf(channel),
     name: channel.name,
   };
@@ -713,7 +713,7 @@ export function AcquisitionControl() {
         const variable = context.exposureVariables[detector];
         return (
           (variable && channel.set_to[variable]) ||
-          m.exposureOf(detector)?.value ||
+          m.exposureOf(detector)?.current ||
           0
         );
       })
@@ -733,7 +733,7 @@ export function AcquisitionControl() {
     const set_to: Record<string, number> = {};
     for (const move of m.movesFor(sample)) {
       if (move.does.includes("position") || move.does.includes("blur")) {
-        set_to[move.name] = move.value;
+        set_to[move.name] = move.current;
       }
     }
     return set_to;

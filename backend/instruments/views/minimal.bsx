@@ -1,4 +1,4 @@
-<Html>
+<Blok kind="agent" context="panel" catalog="newswitch">
 <Resizable direction="row" className="h-full w-full">
     <ResizablePanel defaultSize={70}>
         <div className="flex h-full flex-col gap-3 p-4">
@@ -33,5 +33,5 @@
         </ScrollArea>
     </ResizablePanel>
 </Resizable>
-</Html>
+</Blok>
 

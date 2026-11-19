@@ -187,7 +187,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-switch:
       description: 'Switches: which sample the cameras see, and which camera the light goes to.'

@@ -126,7 +126,7 @@ def test_a_turret_drives_the_bus_and_says_what_is_in_place() -> None:
         swap = values.swap_state.swaps["objective"]
 
         values.set({"objective.slot": 2})
-        assert values.swap_state.swaps["objective"]["slot"].value == 2
+        assert values.swap_state.swaps["objective"]["slot"].current == 2
         assert values.swap_state.swaps["objective"]["slot"].label == "f10 NA 0.4"
         assert swap["slot"].options[1].facts["magnification"] == "20x"
         assert unkoil(bus.aobjective_status)["slot"] == 2
@@ -149,7 +149,7 @@ def test_a_wheel_moves_its_axis() -> None:
         values = reference_with(filter_wheel__slot=wheel)
 
         values.set({"filter_wheel.slot": 2})
-        assert values.swap_state.swaps["filter_wheel"]["slot"].value == 2
+        assert values.swap_state.swaps["filter_wheel"]["slot"].current == 2
         assert unkoil(bus.aget_position, "A") == pytest.approx(120.0)
 
         values.set({"filter_wheel.slot": 1})

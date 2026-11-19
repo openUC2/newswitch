@@ -147,7 +147,7 @@ settings:
 # against; the blok marked default is shown first. A blok naming an action this microscope does not
 # have is refused at startup.
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-bench:
       description: 'Bench: both arms, the swaps, and what calibrating has measured.'
@@ -165,9 +165,8 @@ ui:
 # What Orkestrator shows in agent mode (just agent): bloks drawn with the spec's catalogs and
 # Orkestrator's module, the cameras as lovekit streams.
 agent_ui:
-  catalog: orkestrator@v4.2.1
   bloks:
     view-microscope:
-      description: 'Microscope: the camera streams, live view and acquiring.'
+      description: 'Microscope: drive the stage on its map or with the pad, and run the cameras, lights and optics.'
       default: true
       file: ../views/agent-microscope.bsx

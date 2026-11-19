@@ -23,7 +23,7 @@ export const SwapValueSchema = z
       .literal('@newswitch/swap_value')
       .default('@newswitch/swap_value'),
     name: z.string(),
-    value: z.number(),
+    current: z.number(),
     label: z.string(),
     options: z.array(
       SwapOptionSchema.describe('One thing a swap can put in place.'),

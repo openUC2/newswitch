@@ -6,7 +6,6 @@ from typing import Any
 
 import numpy as np
 import pytest
-import xarray as xr
 import yaml
 from mikro import dataset_arrays
 from mikro.api import schema
@@ -137,10 +136,8 @@ def test_it_is_a_microtime_axis_for_mikro(
     declared = axes[names.index("m")]
     assert declared.type == schema.AxisType.MICROTIME
     assert "200 ps" in declared.description
-    level_zero, _ = dataset_arrays(
-        xr.DataArray(acquired.data, dims=names), levels=1, method="mean", types=types
-    )
-    assert level_zero.sizes["m"] == 64
+    level_zero, _ = dataset_arrays(acquired.data, levels=1, method="mean", dims=names, types=types)
+    assert level_zero.shape[names.index("m")] == 64
 
 
 def test_other_datasets_are_typed_by_their_own_axes(tmp_path: Path) -> None:

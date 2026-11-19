@@ -19,6 +19,9 @@ import { locksOf } from "./microscope/locks";
 import { newswitchBlokCatalog } from "./microscope/catalog";
 import { lockedActionKey } from "@arkitektio/bsx/renderer/runtime/index";
 import { type BlokDispatchActionHandler } from "@arkitektio/bsx/renderer/runtime/index";
+import { createBlokComponent } from "@arkitektio/bsx/renderer/runtime/index";
+import { parseBsx } from "@arkitektio/bsx/bsx/parse";
+import { addBlokComponents } from "./catalog";
 
 // The jonda blok exactly as the backend serves it at /schemas/bloks (blok language v2).
 const jonda = jondaPayload as unknown as NewswitchBlokDeclaration;
@@ -189,6 +192,36 @@ describe("locked controls", () => {
     expect(
       screen.getByRole("button", { name: "40x" }).closest("[data-locked]"),
     ).toBeNull();
+  });
+});
+
+describe("a blok written for the newswitch catalog", () => {
+  it("draws what only newswitch draws, not a placeholder", () => {
+    // A component the base catalog lacks, as the microscope's are.
+    const undo = addBlokComponents(
+      [
+        createBlokComponent(
+          { name: "NewswitchProbe", schema: z.object({}).describe("A probe.") },
+          () => <span>drawn by newswitch</span>,
+        ),
+      ],
+      newswitchBlokCatalog,
+    );
+    try {
+      const source =
+        '<Blok kind="agent" context="panel" catalog="newswitch"><NewswitchProbe /></Blok>';
+      render(
+        <BlokRenderer
+          catalog={newswitchBlokCatalog}
+          uiComponents={[parseBsx(source).tree]}
+          initialState={{}}
+        />,
+      );
+      expect(screen.getByText("drawn by newswitch")).toBeTruthy();
+      expect(screen.queryByText(/Unknown component/)).toBeNull();
+    } finally {
+      undo();
+    }
   });
 });
 

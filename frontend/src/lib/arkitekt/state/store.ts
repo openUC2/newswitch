@@ -6,8 +6,8 @@ import { createStore, type StateCreator, type StoreApi } from "zustand/vanilla";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type {
-  StatePatchEvent,
   StateSegmentsResponse,
+  StateUpdateEvent,
 } from "@/lib/arkitekt/transport/types";
 
 export interface StateSnapshot {
@@ -57,7 +57,7 @@ export interface GlobalStateStore {
     snapshots: Record<string, { value: unknown; revision: number }>,
   ) => void;
   upsertSegments: (segments: StateSegmentsResponse[]) => void;
-  applyPatch: (envelope: StatePatchEvent, schema?: ZodType) => void;
+  applyUpdate: (update: StateUpdateEvent, schema?: ZodType) => void;
   replaceLatestPatches: (patches: LatestPatchEntry[]) => void;
   setLoading: (key: string, loading: boolean) => void;
   setGlobalRevision: (revision: string | number | null) => void;
@@ -219,47 +219,44 @@ export const createGlobalStateStore = ({
         });
       },
 
-      applyPatch: (message, schema) => {
-        const currentState = get().states[message.state_name];
+      applyUpdate: (update, schema) => {
+        const currentState = get().states[update.state];
 
         if (currentState === undefined) {
           console.error(
-            `[StateStore] ${message.state_name} is not hydrated; dropping patch at global revision ${message.global_rev}`,
+            `[StateStore] ${update.state} is not hydrated; dropping update at global revision ${update.global_rev}`,
           );
           return;
         }
 
-        console.log(
-          `[StateStore] Applying patch to ${message.state_name} at global revision ${message.global_rev}:`,
-          message,
-        );
-
         set((state) => {
-          const nextEntry: LatestPatchEntry = {
-            stateName: message.state_name,
-            path: message.path,
-            revision: message.global_rev,
-            ts: message.ts,
-          };
+          const ts =
+            update.agent_ts !== undefined ? update.agent_ts * 1000 : Date.now();
+          const entries: LatestPatchEntry[] = update.ops.map((operation) => ({
+            stateName: update.state,
+            path: operation.path,
+            revision: update.global_rev,
+            ts,
+          }));
 
-          state.latestPatches = [...state.latestPatches, nextEntry].slice(
+          state.latestPatches = [...state.latestPatches, ...entries].slice(
             -latestPatchesBufferSize,
           );
         });
 
         try {
           const clonedState = JSON.parse(JSON.stringify(currentState));
-          // The patch event *is* a JSON-Patch operation (op/path/value) plus transport
-          // metadata (state_name, global_rev, ts, ...) that fast-json-patch ignores.
-          // It can't be narrowed structurally: `op` is the full union while `Operation`
-          // is a discriminated union whose `move`/`copy` members require a `from` field
-          // that StatePatchEvent doesn't carry, so no exhaustive switch can produce one.
-          const operation = message as unknown as Operation;
-          const { newDocument } = applyPatch(clonedState, [operation]);
+          // An update's operations are applied together: nobody sees the state between two
+          // of them. `StateOp` can't be narrowed to fast-json-patch's `Operation`, whose
+          // `move`/`copy` members require a `from` the wire doesn't carry.
+          const { newDocument } = applyPatch(
+            clonedState,
+            update.ops as unknown as Operation[],
+          );
 
-          // A patch value arrives in wire form, so re-validating decodes it the same way the
-          // initial snapshot was decoded (union envelopes in particular). Without this the store
-          // would hold a document that is part decoded, part wire.
+          // An update's values arrive in wire form, so re-validating decodes them the same way
+          // the initial snapshot was decoded (union envelopes in particular). Without this the
+          // store would hold a document that is part decoded, part wire.
           let nextState: unknown = newDocument;
 
           if (schema) {
@@ -267,7 +264,7 @@ export const createGlobalStateStore = ({
 
             if (!parsed.success) {
               console.error(
-                `[StateStore] Patched ${message.state_name} failed schema validation; keeping previous value:`,
+                `[StateStore] Updated ${update.state} failed schema validation; keeping previous value:`,
                 parsed.error,
               );
               return;
@@ -277,12 +274,12 @@ export const createGlobalStateStore = ({
           }
 
           set((state) => {
-            state.states[message.state_name] = nextState;
-            state.globalRevision = message.global_rev;
+            state.states[update.state] = nextState;
+            state.globalRevision = update.global_rev;
           });
         } catch (err) {
           console.error(
-            `[StateStore] Failed to apply patch to ${message.state_name}:`,
+            `[StateStore] Failed to apply update to ${update.state}:`,
             err,
           );
         }

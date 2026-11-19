@@ -113,12 +113,12 @@ describe("backend UI", () => {
     await waitFor(() => screen.getByText(/minimal \|/));
   });
 
-  it("picks the default HTML blok", () => {
+  it("picks the default panel blok", () => {
     expect(
       defaultBlokOf({
-        jonda: blok("jonda", { default: false, context: "HTML" }),
+        jonda: blok("jonda", { default: false, context: "PANEL" }),
         logo: blok("logo", { default: true, context: "LOGO" }),
-        design: blok("design", { default: true, context: "HTML" }),
+        design: blok("design", { default: true, context: "PANEL" }),
       })?.key,
     ).toBe("design");
     expect(defaultBlokOf({ jonda: blok("jonda") })).toBeUndefined();

@@ -18,7 +18,7 @@ export function SwapsControl() {
             {swap.name.split(".")[0].replaceAll("_", " ")}
           </span>
           {swap.options.map((option) =>
-            option.slot === swap.value ? (
+            option.slot === swap.current ? (
               <div
                 key={option.slot}
                 className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/10 px-3 py-2"

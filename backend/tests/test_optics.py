@@ -246,20 +246,28 @@ def test_a_view_reads_any_element_by_its_cube(tmp_path: Path) -> None:
 
 def test_a_view_can_be_a_file_of_its_own(tmp_path: Path) -> None:
     """Named, so that nothing is found by what it is called."""
-    (tmp_path / "shared.bsx").write_text("<Html></Html>\n")
+    (tmp_path / "shared.bsx").write_text(
+        '<Blok kind="agent" context="panel" catalog="newswitch"></Blok>\n'
+    )
     (tmp_path / "i").mkdir()
     description = (INSTRUMENTS / "cam-test" / "microscope.yml").read_text()
     data = yaml.safe_load(description)
     data["ui"]["bloks"] = {"view-shared": {"file": "../shared.bsx", "description": "Shared: it."}}
     (tmp_path / "i" / "microscope.yml").write_text(yaml.safe_dump(data))
-    assert spec.load(tmp_path / "i").ui.bloks["view-shared"].bsx == "<Html></Html>\n"
+    assert (
+        spec.load(tmp_path / "i").ui.bloks["view-shared"].bsx
+        == '<Blok kind="agent" context="panel" catalog="newswitch"></Blok>\n'
+    )
 
     data["ui"]["bloks"]["view-shared"]["file"] = "../gone.bsx"
     (tmp_path / "i" / "microscope.yml").write_text(yaml.safe_dump(data))
     with pytest.raises(spec.SpecError, match="gone.bsx does not exist"):
         spec.load(tmp_path / "i")
 
-    data["ui"]["bloks"]["view-shared"] = {"file": "../shared.bsx", "bsx": "<Html></Html>"}
+    data["ui"]["bloks"]["view-shared"] = {
+        "file": "../shared.bsx",
+        "bsx": '<Blok kind="agent" context="panel"></Blok>',
+    }
     (tmp_path / "i" / "microscope.yml").write_text(yaml.safe_dump(data))
     with pytest.raises(spec.SpecError, match="not both"):
         spec.load(tmp_path / "i")

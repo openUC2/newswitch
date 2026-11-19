@@ -15,10 +15,10 @@
     "@jridgewell/gen-mapping" "^0.3.5"
     "@jridgewell/trace-mapping" "^0.3.24"
 
-"@arkitektio/bsx@^2.2.1":
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/@arkitektio/bsx/-/bsx-2.2.1.tgz#fac45a18609b1b05cc0a44add9746f0e357c25d3"
-  integrity sha512-6kyfhJkQJ6+RWUpafwBLvRLGewx26cG3sVfe+gsFRVpAEdPoqRwRDRIOETNk0WN5+NlswkB7SM648caKVBcD8Q==
+"@arkitektio/bsx@^6.6.2":
+  version "6.6.2"
+  resolved "https://registry.yarnpkg.com/@arkitektio/bsx/-/bsx-6.6.2.tgz#a794cdd3786857c8cac51ff054f6e0892d7230e1"
+  integrity sha512-AyXDUX/V6i3fVElJ3s/u9LlRUNacX2tCleyD6d9eagSo9ykxbroMjDDlsqg6uMUarAg4zGRMP4Qb8KM5pwe+vA==
 
 "@asamuzakjp/css-color@^5.1.11":
   version "5.1.11"

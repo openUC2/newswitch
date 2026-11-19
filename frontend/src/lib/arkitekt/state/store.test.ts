@@ -4,31 +4,32 @@ import { createGlobalStateStore } from "./store";
 import { createIndexedUnion } from "@/apps/default/hooks/states/utils";
 import {
   StateEventType,
-  type StatePatchEvent,
+  type StateOp,
+  type StateUpdateEvent,
 } from "@/lib/arkitekt/transport/types";
 
 /**
- * The replay/live state model: the backend streams JSON-patch events, the store applies
- * them to the current snapshot and tracks the global revision. Getting this wrong means
+ * The replay/live state model: the backend streams state updates (each a list of JSON-patch
+ * operations), the store applies them to the current snapshot and tracks the global revision. Getting this wrong means
  * silently showing the wrong microscope state, so it is worth pinning down.
  */
 
-const makePatch = (
-  overrides: Partial<StatePatchEvent> = {},
-): StatePatchEvent => ({
-  type: StateEventType.STATE_PATCH,
-  session_id: "session-1",
+const REPLACE_X: StateOp = { op: "replace", path: "/x", value: 42 };
+
+/** An update of StageState made of `op` alone, unless `overrides` gives its `ops`. */
+const makeUpdate = (
+  op: Partial<StateOp> = {},
+  overrides: Partial<StateUpdateEvent> = {},
+): StateUpdateEvent => ({
+  type: StateEventType.STATE_UPDATE,
+  state: "StageState",
   global_rev: 1,
-  state_name: "StageState",
-  ts: 1_000,
-  op: "replace",
-  path: "/x",
-  value: 42,
-  task_id: "task-1",
+  ops: [{ ...REPLACE_X, ...op }],
+  task: "task-1",
   ...overrides,
 });
 
-describe("globalStateStore.applyPatch", () => {
+describe("globalStateStore.applyUpdate", () => {
   beforeEach(() => {
     // The store logs on every patch; keep the test output readable.
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -45,8 +46,8 @@ describe("globalStateStore.applyPatch", () => {
 
     store
       .getState()
-      .applyPatch(
-        makePatch({ op: "replace", path: "/x", value: 42, global_rev: 7 }),
+      .applyUpdate(
+        makeUpdate({ op: "replace", path: "/x", value: 42 }, { global_rev: 7 }),
       );
 
     expect(store.getState().states.StageState).toEqual({ x: 42, y: 5 });
@@ -57,7 +58,9 @@ describe("globalStateStore.applyPatch", () => {
     const store = createGlobalStateStore();
     store.getState().setState("StageState", { x: 1 });
 
-    store.getState().applyPatch(makePatch({ op: "add", path: "/z", value: 3 }));
+    store
+      .getState()
+      .applyUpdate(makeUpdate({ op: "add", path: "/z", value: 3 }));
 
     expect(store.getState().states.StageState).toEqual({ x: 1, z: 3 });
   });
@@ -68,14 +71,14 @@ describe("globalStateStore.applyPatch", () => {
 
     // /missing/deep does not exist, so fast-json-patch throws; the store must swallow it
     // rather than leave a half-applied document behind.
-    store.getState().applyPatch(
-      makePatch({
-        op: "replace",
-        path: "/missing/deep",
-        value: 9,
-        global_rev: 99,
-      }),
-    );
+    store
+      .getState()
+      .applyUpdate(
+        makeUpdate(
+          { op: "replace", path: "/missing/deep", value: 9 },
+          { global_rev: 99 },
+        ),
+      );
 
     expect(store.getState().states.StageState).toEqual({ x: 1 });
     expect(store.getState().globalRevision).not.toBe(99);
@@ -88,7 +91,7 @@ describe("globalStateStore.applyPatch", () => {
 
     store
       .getState()
-      .applyPatch(makePatch({ op: "replace", path: "/x", value: 5 }));
+      .applyUpdate(makeUpdate({ op: "replace", path: "/x", value: 5 }));
 
     // The store clones before patching; the caller's object must not be rewritten.
     expect(original.x).toBe(0);
@@ -101,13 +104,13 @@ describe("globalStateStore.applyPatch", () => {
     for (let i = 1; i <= 5; i += 1) {
       store
         .getState()
-        .applyPatch(makePatch({ value: i, global_rev: i, ts: i }));
+        .applyUpdate(makeUpdate({ value: i }, { global_rev: i, agent_ts: i }));
     }
 
     const { latestPatches } = store.getState();
     expect(latestPatches).toHaveLength(3);
     // Oldest entries are dropped, newest kept.
-    expect(latestPatches.map((entry) => entry.ts)).toEqual([3, 4, 5]);
+    expect(latestPatches.map((entry) => entry.ts)).toEqual([3000, 4000, 5000]);
   });
 
   it("drops patches for a state that never hydrated", () => {
@@ -115,7 +118,7 @@ describe("globalStateStore.applyPatch", () => {
 
     // A failed checkout leaves the state absent. Patching it must not record the patch or
     // advance the revision - and must not JSON.parse(undefined) on the way.
-    store.getState().applyPatch(makePatch({ global_rev: 12 }));
+    store.getState().applyUpdate(makeUpdate({}, { global_rev: 12 }));
 
     expect(store.getState().states.StageState).toBeUndefined();
     expect(store.getState().latestPatches).toHaveLength(0);
@@ -138,8 +141,8 @@ describe("globalStateStore.applyPatch", () => {
     store.getState().setState("StageState", { x: 0, kube: { kube_id: "a" } });
 
     // A patch value arrives in wire form; the schema is what turns it back into a flat kube.
-    store.getState().applyPatch(
-      makePatch({
+    store.getState().applyUpdate(
+      makeUpdate({
         op: "replace",
         path: "/kube",
         value: { __use: 1, __value: { wavelength: 525 } },
@@ -161,11 +164,57 @@ describe("globalStateStore.applyPatch", () => {
 
     store
       .getState()
-      .applyPatch(
-        makePatch({ op: "replace", path: "/x", value: "not-a-number" }),
+      .applyUpdate(
+        makeUpdate({ op: "replace", path: "/x", value: "not-a-number" }),
         schema,
       );
 
     expect(store.getState().states.StageState).toEqual({ x: 1 });
+  });
+
+  it("applies every operation of an update together", () => {
+    const store = createGlobalStateStore();
+    store.getState().setState("StageState", { x: 0, y: 0 });
+
+    store.getState().applyUpdate(
+      makeUpdate(
+        {},
+        {
+          global_rev: 3,
+          ops: [
+            { op: "replace", path: "/x", value: 1 },
+            { op: "replace", path: "/y", value: 2 },
+          ],
+        },
+      ),
+    );
+
+    expect(store.getState().states.StageState).toEqual({ x: 1, y: 2 });
+    expect(store.getState().globalRevision).toBe(3);
+    expect(store.getState().latestPatches.map((entry) => entry.path)).toEqual([
+      "/x",
+      "/y",
+    ]);
+  });
+
+  it("applies none of an update when one of its operations fails", () => {
+    const store = createGlobalStateStore();
+    store.getState().setState("StageState", { x: 0 });
+
+    store.getState().applyUpdate(
+      makeUpdate(
+        {},
+        {
+          global_rev: 4,
+          ops: [
+            { op: "replace", path: "/x", value: 1 },
+            { op: "replace", path: "/missing/deep", value: 9 },
+          ],
+        },
+      ),
+    );
+
+    expect(store.getState().states.StageState).toEqual({ x: 0 });
+    expect(store.getState().globalRevision).not.toBe(4);
   });
 });

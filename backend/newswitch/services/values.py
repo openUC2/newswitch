@@ -201,17 +201,17 @@ class Values:
         variable = self.instrument.variables[name]
         cube, short = variable.cube, name.split(".", 1)[1]
         if variable.verb == "moves":
-            self._moves[cube][short] = replace(self._moves[cube][short], value=self._values[name])
+            self._moves[cube][short] = replace(self._moves[cube][short], current=self._values[name])
             self.move_state.moves = _copied(self._moves)
         elif variable.verb == "swaps":
             self._swaps[cube][short] = replace(
                 self._swaps[cube][short],
-                value=self._values[name],
+                current=self._values[name],
                 label=_label(variable.slots[self._values[name]], self._values[name]),
             )
             self.swap_state.swaps = _copied(self._swaps)
         else:
-            self._tunes[cube][short] = replace(self._tunes[cube][short], value=self._values[name])
+            self._tunes[cube][short] = replace(self._tunes[cube][short], current=self._values[name])
             self.tune_state.tunes = _copied(self._tunes)
             if cube in self._sources and short == "power":
                 self._publish_source(cube)
@@ -239,7 +239,7 @@ class Values:
             if variable.verb == "moves":
                 moves[variable.cube][short] = MoveValue(
                     name=name,
-                    value=value,
+                    current=value,
                     unit=_READS_AS.get(variable.unit, variable.unit),
                     along=variable.along,
                     minimum=variable.min,
@@ -251,7 +251,7 @@ class Values:
             elif variable.verb == "swaps":
                 swaps[variable.cube][short] = SwapValue(
                     name=name,
-                    value=value,
+                    current=value,
                     label=_label(variable.slots[value], value),
                     options=[
                         SwapOption(
@@ -267,7 +267,7 @@ class Values:
             else:
                 tunes[variable.cube][short] = TuneValue(
                     name=name,
-                    value=value,
+                    current=value,
                     unit=_READS_AS.get(variable.unit, variable.unit),
                     minimum=variable.min,
                     maximum=variable.max,

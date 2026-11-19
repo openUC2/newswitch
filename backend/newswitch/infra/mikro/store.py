@@ -15,7 +15,6 @@ Importing this needs the extra ``mikro``.
 from datetime import datetime
 from typing import Any, Mapping
 
-import xarray as xr
 from mikro import Mikro, dataset_arrays, space_3d, timelapse_3d
 from mikro.api import schema
 from mikro.api.schema import (
@@ -232,8 +231,9 @@ class MikroDatasetStore:
         in the same one, whatever detector took it.
         """
         names, axes, types = dataset_axes(self.instrument, acquired)
-        image = xr.DataArray(acquired.data, dims=names)
-        level_zero, scales = dataset_arrays(image, levels=1, method="mean", types=types)
+        level_zero, scales = dataset_arrays(
+            acquired.data, levels=1, method="mean", dims=names, types=types
+        )
         dataset = self.client.create_array_dataset(
             data=level_zero,
             scales=scales,

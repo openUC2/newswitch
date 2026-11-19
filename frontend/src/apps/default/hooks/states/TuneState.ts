@@ -8,7 +8,7 @@ export const TuneValueSchema = z
       .literal('@newswitch/tune_value')
       .default('@newswitch/tune_value'),
     name: z.string(),
-    value: z.number(),
+    current: z.number(),
     unit: z.string(),
     minimum: z.number().nullable().optional(),
     maximum: z.number().nullable().optional(),

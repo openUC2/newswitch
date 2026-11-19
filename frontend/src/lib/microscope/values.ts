@@ -53,7 +53,7 @@ export const useStagePosition = () => {
   const { data: space } = useSpaceState({ subscribe: true });
   const sample = useSceneSample();
   const sum = (moves: MoveValue[]) =>
-    moves.reduce((total, move) => total + move.value, 0);
+    moves.reduce((total, move) => total + move.current, 0);
   // Along the axis, the server says: which plane is seen depends on the sample and the light.
   const seeing = Object.values(space?.detectors ?? {}).find(
     (placed) => placed.sample === sample,

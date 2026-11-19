@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import xarray as xr
 from mikro import dataset_arrays
 from mikro.api import schema
 
@@ -63,7 +62,7 @@ def test_a_reading_makes_a_pyramid_of_its_own(
     instrument, _, thermometer = records
     names, _, types = dataset_axes(instrument, thermometer)
     level_zero, scales = dataset_arrays(
-        xr.DataArray(thermometer.data, dims=names), levels=1, method="mean", types=types
+        thermometer.data, levels=1, method="mean", dims=names, types=types
     )
     assert level_zero.shape == (1, 1, 2, 1, 1, 1) and scales == []
 

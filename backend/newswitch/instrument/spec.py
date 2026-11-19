@@ -32,7 +32,7 @@ from pydantic.dataclasses import dataclass
 
 from newswitch.instrument.errors import SpecError, problems_of
 from newswitch.instrument.hardware import STRICT, Hardware
-from newswitch.instrument.ui import UiConfig
+from newswitch.instrument.ui import AgentUiConfig, UiConfig
 from newswitch.settings import Settings
 
 #: The description's name in an instrument's folder.
@@ -1013,7 +1013,7 @@ class Instrument:
     settings: Settings
     drives: tuple[Drive, ...] = ()
     ui: UiConfig | None = None  # what the frontend shows
-    agent_ui: UiConfig | None = None  # what Orkestrator shows
+    agent_ui: AgentUiConfig | None = None  # what Orkestrator shows
     hardware: Hardware = field(default_factory=Hardware)
 
     @model_validator(mode="before")

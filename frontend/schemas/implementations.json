@@ -21,7 +21,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "clear_expanse",
       "params": null,
       "instanceId": null,
@@ -120,7 +119,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "move",
       "params": null,
       "instanceId": null,
@@ -218,7 +216,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "move_one",
       "params": null,
       "instanceId": null,
@@ -261,7 +258,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "move_home",
       "params": null,
       "instanceId": null,
@@ -341,7 +337,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "swap",
       "params": null,
       "instanceId": null,
@@ -421,7 +416,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "tune",
       "params": null,
       "instanceId": null,
@@ -557,7 +551,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "move_to",
       "params": null,
       "instanceId": null,
@@ -619,7 +612,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "set_sample_origin_here",
       "params": null,
       "instanceId": null,
@@ -735,7 +727,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "register_mount",
       "params": null,
       "instanceId": null,
@@ -813,7 +804,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "mount_holder",
       "params": null,
       "instanceId": null,
@@ -1598,7 +1588,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "capture_image",
       "params": null,
       "instanceId": null,
@@ -1660,7 +1649,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "start_live_view",
       "params": null,
       "instanceId": null,
@@ -1722,7 +1710,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "stop_live_view",
       "params": null,
       "instanceId": null,
@@ -1786,7 +1773,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "activate_detector",
       "params": null,
       "instanceId": null,
@@ -1865,7 +1851,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "deactivate_detector",
       "params": null,
       "instanceId": null,
@@ -2019,7 +2004,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "set_window",
       "params": null,
       "instanceId": null,
@@ -2170,7 +2154,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "run_autofocus",
       "params": null,
       "instanceId": null,
@@ -2317,7 +2300,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "calibrate_light_path",
       "params": null,
       "instanceId": null,
@@ -3255,7 +3237,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "scan_region",
       "params": null,
       "instanceId": null,
@@ -4597,7 +4578,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "acquire",
       "params": null,
       "instanceId": null,
@@ -4681,7 +4661,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "home_stage",
       "params": null,
       "instanceId": null,
@@ -4743,7 +4722,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "stop_stage",
       "params": null,
       "instanceId": null,
@@ -4839,7 +4817,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "led_matrix_fill",
       "params": null,
       "instanceId": null,
@@ -4882,7 +4859,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "led_matrix_off",
       "params": null,
       "instanceId": null,
@@ -4978,7 +4954,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "uc2_scan_nodes",
       "params": null,
       "instanceId": null,
@@ -5021,7 +4996,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "home_objective",
       "params": null,
       "instanceId": null,
@@ -5101,7 +5075,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "galvo_set_position",
       "params": null,
       "instanceId": null,
@@ -5307,7 +5280,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "galvo_raster_scan",
       "params": null,
       "instanceId": null,
@@ -5350,7 +5322,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "galvo_stop",
       "params": null,
       "instanceId": null,
@@ -5489,7 +5460,6 @@
         "isDev": false
       },
       "dependencies": [],
-      "tracks": [],
       "interface": "galvo_get_status",
       "params": null,
       "instanceId": null,

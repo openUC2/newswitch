@@ -178,17 +178,16 @@
     }
   ],
   "components": null,
-  "source": "<Html>\n<Card className=\"w-[380px] border-info/30 shadow-md\">\n    <CardHeader>\n        <CardTitle>Newswitch Handler</CardTitle>\n        <CardDescription>Bene don't look at this yet, this is just a placeholder</CardDescription>\n    </CardHeader>\n    <CardContent className=\"grid gap-4\">\n        <div className=\"flex items-center justify-between rounded-md border bg-muted/50 p-3\">\n            <span className=\"text-sm font-medium text-muted-foreground\">Deck Status</span>\n            <span className=\"rounded-full border border-info/30 bg-info/10 px-2 py-1 text-xs font-bold text-info\">Idle</span>\n        </div>\n        <div className=\"mt-2 grid grid-cols-2 gap-2\">\n            <foreach items={self.ObjectiveState.mounted_lenses} let=\"lens\" key={lens.slot}>\n                <Button onClick={self.switch_objective(slot: lens.slot)}>{lens.name}</Button>\n            </foreach>\n        </div>\n    </CardContent>\n</Card>\n</Html>",
-  "module": "newswitch",
+  "source": "<Blok kind=\"agent\" context=\"panel\" catalog=\"newswitch\">\n<Card className=\"w-[380px] border-info/30 shadow-md\">\n    <CardHeader>\n        <CardTitle>Newswitch Handler</CardTitle>\n        <CardDescription>Bene don't look at this yet, this is just a placeholder</CardDescription>\n    </CardHeader>\n    <CardContent className=\"grid gap-4\">\n        <div className=\"flex items-center justify-between rounded-md border bg-muted/50 p-3\">\n            <span className=\"text-sm font-medium text-muted-foreground\">Deck Status</span>\n            <span className=\"rounded-full border border-info/30 bg-info/10 px-2 py-1 text-xs font-bold text-info\">Idle</span>\n        </div>\n        <div className=\"mt-2 grid grid-cols-2 gap-2\">\n            <foreach items={self.ObjectiveState.mounted_lenses} let=\"lens\" key={lens.slot}>\n                <Button onClick={self.switch_objective(slot: lens.slot)}>{lens.name}</Button>\n            </foreach>\n        </div>\n    </CardContent>\n</Card>\n</Blok>",
+  "catalog": "newswitch",
   "description": null,
-  "context": "HTML",
+  "context": "PANEL",
   "default": false,
   "forModel": null,
   "forNode": null,
   "args": null,
   "vocab": 2,
-  "catalogs": ["html@1", "ui@1"],
-  "locals": [],
+  "catalogMinor": null,
   "demo": {
     "deps": {
       "self": {
@@ -204,7 +203,5 @@
     "task": null,
     "queries": null,
     "subscriptions": null
-  },
-  "queries": [],
-  "subscriptions": []
+  }
 }

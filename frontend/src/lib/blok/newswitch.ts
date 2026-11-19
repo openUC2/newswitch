@@ -35,9 +35,8 @@ export type NewswitchBlokDeclaration = {
   readonly vocab?: number | null;
   /** What it is drawn with before anything is live: `{deps: {self: {<State>: ...}}, args, ...}`. */
   readonly demo?: unknown;
-  readonly locals?: unknown;
-  readonly queries?: unknown;
-  readonly subscriptions?: unknown;
+  /** Its `<local>` nodes as the server resolved them; resolved from the tree when absent. */
+  readonly resolvedLocals?: unknown;
   readonly dependencies?: ReadonlyArray<{
     readonly key: string;
     readonly actionDependencies?: ReadonlyArray<{
@@ -154,9 +153,9 @@ export const blokRoots = (blok: NewswitchBlokDeclaration): unknown[] => {
 };
 
 /**
- * The data model a blok is drawn with before anything is live: its declared
- * locals at their defaults, its `into` records idle, and its `demo`
- * (`deps.self.<State>` among it).
+ * The data model a blok is drawn with before anything is live: its `into`
+ * records idle, and its `demo` (`deps.self.<State>` among it). Its `<local>`,
+ * `<query>` and `<subscription>` nodes are part of `roots`.
  */
 export const blokModel = (
   blok: NewswitchBlokDeclaration,
@@ -166,11 +165,9 @@ export const blokModel = (
     roots,
     parseBlokDeclarations({
       vocab: blok.vocab,
-      componentTree: blok.components,
-      locals: blok.locals,
+      componentTree: blok.components ?? roots,
+      resolvedLocals: blok.resolvedLocals,
       demo: blok.demo,
-      queries: blok.queries,
-      subscriptions: blok.subscriptions,
     }),
   );
 

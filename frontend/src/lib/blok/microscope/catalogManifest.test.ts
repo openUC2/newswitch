@@ -20,7 +20,7 @@ const manifest = () =>
   toModuleJson(
     NEWSWITCH_CATALOG_NAME,
     NEWSWITCH_CATALOG_VERSION,
-    "What the newswitch frontend draws beyond the spec's catalogs: the microscope's components, the stage's and their scene layers.",
+    "What the newswitch frontend draws beyond the base catalog: the microscope's components, the stage's and their scene layers.",
     newswitchBlokCatalog,
   );
 
@@ -52,7 +52,7 @@ describe("newswitch catalog manifest", () => {
 
     expect(byName.StageScene).toMatchObject({
       acceptsChildren: true,
-      context: "HTML",
+      context: "PANEL",
       childrenContext: "SCENE",
       downstreamOf: ["StageView"],
     });

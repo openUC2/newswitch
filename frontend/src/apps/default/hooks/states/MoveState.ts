@@ -8,7 +8,7 @@ export const MoveValueSchema = z
       .literal('@newswitch/move_value')
       .default('@newswitch/move_value'),
     name: z.string(),
-    value: z.number(),
+    current: z.number(),
     unit: z.string(),
     along: z.string(),
     minimum: z.number().nullable().optional(),

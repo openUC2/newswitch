@@ -111,7 +111,7 @@ def test_apply_uc2_event_updates_states() -> None:
 
     apply_uc2_event(PositionUpdate(axis="X", position=42.0), values, uc2_state)
     assert values["stage.x"] == pytest.approx(42.0)
-    assert values.move_state.moves["stage"]["x"].value == pytest.approx(42.0)
+    assert values.move_state.moves["stage"]["x"].current == pytest.approx(42.0)
 
     apply_uc2_event(MotionDone(axis="Z", position=-7.5), values, uc2_state)
     assert values["stage.z"] == pytest.approx(-7.5)
@@ -158,4 +158,4 @@ def test_homing_the_objective_changer_says_where_it_is_now() -> None:
     values.stepped("objective.slot", 2)
     with Koil():
         home_objective(bus, values)
-    assert values.swap_state.swaps["objective"]["slot"].value == 1
+    assert values.swap_state.swaps["objective"]["slot"].current == 1

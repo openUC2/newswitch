@@ -224,7 +224,6 @@ export type TaskEventType = (typeof TaskEventType)[keyof typeof TaskEventType];
 
 export const StateEventType = {
   STATE_UPDATE: "STATE_UPDATE",
-  STATE_PATCH: "STATE_PATCH",
 } as const;
 
 export type StateEventType =
@@ -394,38 +393,31 @@ export interface WebSocketInitMessage extends BaseMessage {
   resumed?: boolean;
 }
 
-export interface StateUpdateEvent {
-  type: typeof StateEventType.STATE_UPDATE;
-  state: string;
-  value: unknown;
-}
-
-export interface EnvelopPatch {
+/** One RFC 6902 operation of a state update. */
+export interface StateOp {
   op: "add" | "remove" | "replace" | "move" | "copy" | "test";
   path: string;
   value?: unknown;
-  old_value?: string;
 }
 
-export interface Envelope {
-  state_name: string;
-  rev: number;
-  base_rev: number;
-  ts: number;
-  patches: EnvelopPatch[];
-}
-
-export interface StatePatchEvent {
-  type: typeof StateEventType.STATE_PATCH;
-  session_id: string;
+/**
+ * One update of a state: what takes it from one revision to the next. Its operations are
+ * applied in order and seen together, never one without the others.
+ */
+export interface StateUpdateEvent {
+  type: typeof StateEventType.STATE_UPDATE;
+  /** The state, by the name the agent declares it under. */
+  state: string;
+  /** The agent's state revision once this update is applied. */
   global_rev: number;
-  state_name: string;
-  ts: number;
-  op: "add" | "remove" | "replace" | "move" | "copy";
-  path: string;
-  value?: unknown;
-  old_value?: string;
-  task_id?: string;
+  ops: StateOp[];
+  /** The task that made the update, if one did. */
+  task?: string | null;
+  /** 'cleanup' (a task on its way out) or 'shutdown' (the agent's shutdown hooks). */
+  lifecycle?: string | null;
+  qualifiers?: string[] | null;
+  /** When the agent recorded it, in seconds since the epoch (journal subscribers only). */
+  agent_ts?: number;
 }
 
 export interface LockEvent {
@@ -511,15 +503,13 @@ export type JournalEvent =
   | StateSnapshotEvent
   | ShelveEvent;
 
-export type StateEvent = StateUpdateEvent | StatePatchEvent;
+export type StateEvent = StateUpdateEvent;
 export type LockEventMessage = LockEvent | UnlockEvent;
 
 export type FromAgentMessage = (
   | TaskEvent
   | StateEvent
   | LockEventMessage
-  | StateUpdateEvent
-  | StatePatchEvent
   | JournalEvent
 ) &
   JournalFrameFields;

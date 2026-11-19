@@ -160,7 +160,7 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-dual-sample:
       description: 'Two samples: each stage, its focus and its camera, side by side.'

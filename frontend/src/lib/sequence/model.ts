@@ -162,7 +162,7 @@ export type States = {
       string,
       {
         name: string;
-        value: number;
+        current: number;
         unit: string;
         along: string;
         speed?: number | null;
@@ -176,7 +176,7 @@ export type States = {
       string,
       {
         name: string;
-        value: number;
+        current: number;
         label: string;
         options?: { slot: number; label: string }[];
       }
@@ -184,7 +184,7 @@ export type States = {
   >;
   tunes?: Record<
     string,
-    Record<string, { name: string; value: number; unit: string }>
+    Record<string, { name: string; current: number; unit: string }>
   >;
   sources?: Record<
     string,
@@ -245,7 +245,7 @@ export const factsOf = (states: States): Facts => {
         variable: move.name,
         cube,
         along: move.along,
-        value: move.value,
+        value: move.current,
         unit: move.unit,
         speed: move.speed ?? undefined,
         does: move.does ?? [],
@@ -271,7 +271,7 @@ export const factsOf = (states: States): Facts => {
         variable: swap.name,
         label: swap.name,
         unit: "",
-        value: swap.value,
+        value: swap.current,
         options: swap.options?.map(({ slot, label }) => ({ slot, label })),
         lane: swap.name,
       });
@@ -281,14 +281,14 @@ export const factsOf = (states: States): Facts => {
   for (const [cube, byVariable] of Object.entries(states.tunes ?? {})) {
     for (const tune of Object.values(byVariable)) {
       if (tune.name === `${cube}.exposure`)
-        exposureOf.set(cube, tune.value / 1000);
+        exposureOf.set(cube, tune.current / 1000);
       const isPower = [...powerOf.values()].includes(tune.name);
       if (isPower) {
         sets.push({
           variable: tune.name,
           label: tune.name,
           unit: tune.unit,
-          value: tune.value,
+          value: tune.current,
           lane: tune.name,
         });
       }

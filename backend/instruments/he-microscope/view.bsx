@@ -1,4 +1,4 @@
-<Html>
+<Blok kind="agent" context="panel" catalog="newswitch">
 <div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-spectrum-violet/10 via-transparent to-transparent p-3">
 <ScrollArea className="h-full w-[400px] shrink-0">
 <div className="flex flex-col gap-3 pb-3 pr-3">
@@ -60,10 +60,10 @@
 <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Focus</span>
     <div className="flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.value, digits: 1)}</span>
+        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-violet [&amp;_[data-slot=slider-thumb]]:border-spectrum-violet" step={1} value={self.MoveState.moves.stage.z.value} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
+    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-violet [&amp;_[data-slot=slider-thumb]]:border-spectrum-violet" step={1} value={self.MoveState.moves.stage.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -10.0)}>-10</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -1.0)}>-1</Button>
@@ -102,10 +102,10 @@
                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{str.replace(value: tune.name, search: str.concat(values: [camera.name, "."]), replacement: "")}</span>
                     <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.value, digits: 1)}</span>
+                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: tune.current, digits: 1)}</span>
                         <span className="text-xs text-muted-foreground">{tune.unit}</span>
                     </div>
-                    <Slider className="min-w-0" step={tune.step} value={tune.value} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
+                    <Slider className="min-w-0" step={tune.step} value={tune.current} min={tune.minimum} max={tune.maximum} onCommit={self.tune(name: tune.name, to: event.value)} />
                 </div>
             </foreach>
         </div>
@@ -133,4 +133,4 @@
 </div>
 </div>
 </div>
-</Html>
+</Blok>

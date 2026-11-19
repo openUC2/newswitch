@@ -100,13 +100,13 @@ settings:
   camera_debug_window: false
 
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-sheet:
       description: 'Sheet: the sheet through the sample, the live plane, and where z is.'
       default: true
       bsx: |
-        <Html>
+        <Blok kind="agent" context="panel" catalog="newswitch">
         <div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-spectrum-cyan/10 via-transparent to-spectrum-green/5 p-3">
             <ScrollArea className="h-full w-[430px] shrink-0">
                 <div className="flex flex-col gap-3 pb-3 pr-3">
@@ -142,7 +142,7 @@ ui:
                         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-xl">
                             <div className={light.on ? "pointer-events-none absolute left-1/2 top-1/3 size-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-spectrum-cyan/15 blur-3xl" : "hidden"} />
                             <div className="relative h-[262px] w-full">
-                                <ActionLogo viewBox="0 0 580 340" width="100%" height="100%" title="The light sheet from the side, not to scale">
+                                <Logo viewBox="0 0 580 340" width="100%" height="100%" title="The light sheet from the side, not to scale">
                                     <!-- the detection objective, looking down at the plane -->
                                     <Polygon points="272,14 368,14 368,66 346,104 294,104 272,66" fill="muted" fillOpacity={0.14} stroke="muted" strokeOpacity={0.5} strokeWidth={1.5} />
                                     <Line x1={320} y1={2} x2={320} y2={14} stroke="spectrum-green" strokeWidth={2} strokeDasharray="4 4" />
@@ -159,8 +159,8 @@ ui:
                                     <Ellipse cx={116} cy={190} rx={11} ry={50} fill="muted" fillOpacity={0.14} stroke="muted" strokeOpacity={0.6} strokeWidth={1.5} />
 
                                     <!-- the sample, where the stage has it -->
-                                    <Rect x={214} y={math.clamp(value: math.add(a: 136, b: self.MoveState.moves.stage.z.value), min: 112, max: 180)} width={212} height={108} rx={4} fill="spectrum-green" fillOpacity={0.08} stroke="spectrum-green" strokeOpacity={0.6} strokeWidth={1.5} />
-                                    <SvgText x={232} y={math.clamp(value: math.add(a: 158, b: self.MoveState.moves.stage.z.value), min: 134, max: 202)} text="sample" fill="spectrum-green" fontSize={16} fontWeight="600" />
+                                    <Rect x={214} y={math.clamp(value: math.add(a: 136, b: self.MoveState.moves.stage.z.current), min: 112, max: 180)} width={212} height={108} rx={4} fill="spectrum-green" fillOpacity={0.08} stroke="spectrum-green" strokeOpacity={0.6} strokeWidth={1.5} />
+                                    <SvgText x={232} y={math.clamp(value: math.add(a: 158, b: self.MoveState.moves.stage.z.current), min: 134, max: 202)} text="sample" fill="spectrum-green" fontSize={16} fontWeight="600" />
 
                                     <!-- where the objective focuses, which stays -->
                                     <Line x1={128} y1={190} x2={522} y2={190} stroke="spectrum-green" strokeWidth={1.5} strokeDasharray="4 6" />
@@ -168,10 +168,10 @@ ui:
 
                                     <!-- the sheet, where its positioner has it -->
                                     <G opacity={light.on ? 1 : 0.12}>
-                                        <Rect x={128} y={math.clamp(value: math.add(a: 180, b: math.mul(a: self.MoveState.moves.sheet_lens.z.value, b: 2)), min: 112, max: 250)} width={394} height={20} rx={10} fill="spectrum-cyan" fillOpacity={0.25} />
-                                        <Rect x={128} y={math.clamp(value: math.add(a: 187, b: math.mul(a: self.MoveState.moves.sheet_lens.z.value, b: 2)), min: 119, max: 257)} width={394} height={6} rx={3} fill="spectrum-cyan" fillOpacity={0.85} />
+                                        <Rect x={128} y={math.clamp(value: math.add(a: 180, b: math.mul(a: self.MoveState.moves.sheet_lens.z.current, b: 2)), min: 112, max: 250)} width={394} height={20} rx={10} fill="spectrum-cyan" fillOpacity={0.25} />
+                                        <Rect x={128} y={math.clamp(value: math.add(a: 187, b: math.mul(a: self.MoveState.moves.sheet_lens.z.current, b: 2)), min: 119, max: 257)} width={394} height={6} rx={3} fill="spectrum-cyan" fillOpacity={0.85} />
                                     </G>
-                                    <SvgText x={536} y={math.clamp(value: math.add(a: 170, b: math.mul(a: self.MoveState.moves.sheet_lens.z.value, b: 2)), min: 120, max: 170)} text="sheet" fill="spectrum-cyan" fontSize={16} />
+                                    <SvgText x={536} y={math.clamp(value: math.add(a: 170, b: math.mul(a: self.MoveState.moves.sheet_lens.z.current, b: 2)), min: 120, max: 170)} text="sheet" fill="spectrum-cyan" fontSize={16} />
 
                                     <!-- what the field sees of the sheet, and how far the sheet holds -->
                                     <Line x1={254} y1={266} x2={386} y2={266} stroke="spectrum-green" strokeWidth={2} />
@@ -182,7 +182,7 @@ ui:
                                     <Line x1={165} y1={300} x2={165} y2={312} stroke="spectrum-cyan" strokeWidth={2} />
                                     <Line x1={475} y1={300} x2={475} y2={312} stroke="spectrum-cyan" strokeWidth={2} />
                                     <SvgText x={320} y={330} text={str.concat(values: ["stays thin for ±", fmt.number(value: self.OpticsState.sources.laser_488.reach_um, digits: 0), " µm"])} textAnchor="middle" fill="spectrum-cyan" fontSize={17} />
-                                </ActionLogo>
+                                </Logo>
                             </div>
                             <div className="relative grid grid-cols-3 divide-x divide-border/50 border-t border-border/50">
                                 <div className="flex flex-col px-3 py-2">
@@ -223,7 +223,7 @@ ui:
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Sheet z, stepped by the camera</span>
                                 <div className="flex items-baseline gap-1.5">
-                                    <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.sheet_lens.z.value, digits: 1)}</span>
+                                    <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.sheet_lens.z.current, digits: 1)}</span>
                                     <span className="text-sm text-muted-foreground">µm</span>
                                 </div>
                             </div>
@@ -248,7 +248,7 @@ ui:
                             </else>
                             </if>
                         </div>
-                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-cyan [&amp;_[data-slot=slider-thumb]]:border-spectrum-cyan" step={0.5} value={self.MoveState.moves.sheet_lens.z.value} min={-60} max={60} onCommit={self.move_one(name: "sheet_lens.z", to: event.value)} />
+                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-cyan [&amp;_[data-slot=slider-thumb]]:border-spectrum-cyan" step={0.5} value={self.MoveState.moves.sheet_lens.z.current} min={-60} max={60} onCommit={self.move_one(name: "sheet_lens.z", to: event.value)} />
                         <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
                             <Button size="sm" variant="outline" onClick={self.move_one(name: "sheet_lens.z", by: -5.0)}>-5</Button>
                             <Button size="sm" variant="outline" onClick={self.move_one(name: "sheet_lens.z", by: -0.5)}>-0.5</Button>
@@ -263,11 +263,11 @@ ui:
                         <div className="flex flex-col">
                             <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Stage z, through the sample</span>
                             <div className="flex items-baseline gap-1.5">
-                                <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.value, digits: 1)}</span>
+                                <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.current, digits: 1)}</span>
                                 <span className="text-sm text-muted-foreground">µm</span>
                             </div>
                         </div>
-                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={1} value={self.MoveState.moves.stage.z.value} min={-100} max={100} onCommit={self.move_one(name: "stage.z", to: event.value)} />
+                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={1} value={self.MoveState.moves.stage.z.current} min={-100} max={100} onCommit={self.move_one(name: "stage.z", to: event.value)} />
                         <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
                             <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -50.0)}>-50</Button>
                             <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -5.0)}>-5</Button>
@@ -296,18 +296,18 @@ ui:
                                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Exposure</span>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.camera.exposure.value, digits: 0)}</span>
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.camera.exposure.current, digits: 0)}</span>
                                         <span className="text-xs text-muted-foreground">{self.TuneState.tunes.camera.exposure.unit}</span>
                                     </div>
-                                    <Slider className="min-w-0" step={self.TuneState.tunes.camera.exposure.step} value={self.TuneState.tunes.camera.exposure.value} min={self.TuneState.tunes.camera.exposure.minimum} max={self.TuneState.tunes.camera.exposure.maximum} onCommit={self.tune(name: "camera.exposure", to: event.value)} />
+                                    <Slider className="min-w-0" step={self.TuneState.tunes.camera.exposure.step} value={self.TuneState.tunes.camera.exposure.current} min={self.TuneState.tunes.camera.exposure.minimum} max={self.TuneState.tunes.camera.exposure.maximum} onCommit={self.tune(name: "camera.exposure", to: event.value)} />
                                 </div>
                                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.camera.gain.value, digits: 1)}</span>
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.camera.gain.current, digits: 1)}</span>
                                         <span className="text-xs text-muted-foreground">{self.TuneState.tunes.camera.gain.unit}</span>
                                     </div>
-                                    <Slider className="min-w-0" step={self.TuneState.tunes.camera.gain.step} value={self.TuneState.tunes.camera.gain.value} min={self.TuneState.tunes.camera.gain.minimum} max={self.TuneState.tunes.camera.gain.maximum} onCommit={self.tune(name: "camera.gain", to: event.value)} />
+                                    <Slider className="min-w-0" step={self.TuneState.tunes.camera.gain.step} value={self.TuneState.tunes.camera.gain.current} min={self.TuneState.tunes.camera.gain.minimum} max={self.TuneState.tunes.camera.gain.maximum} onCommit={self.tune(name: "camera.gain", to: event.value)} />
                                 </div>
                             </div>
                         </div>
@@ -337,11 +337,11 @@ ui:
                 </div>
             </div>
         </div>
-        </Html>
+        </Blok>
     view-stack:
       description: 'Stack: sweep the sheet through the sample, stored in mikro.'
       bsx: |
-        <Html>
+        <Blok kind="agent" context="panel" catalog="newswitch">
         <div className="flex h-full w-full flex-col gap-3 overflow-auto bg-gradient-to-br from-spectrum-green/10 via-transparent to-spectrum-cyan/5 p-4">
             <foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
                 <div className="rounded-2xl border border-spectrum-green/30 bg-card/70 p-4 shadow-xl">
@@ -361,7 +361,7 @@ ui:
             </foreach>
             <AcquisitionControl />
         </div>
-        </Html>
+        </Blok>
     view-stage:
       description: 'Stage: where the sample is, with the planes taken there.'
       file: ../views/stage.bsx

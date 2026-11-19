@@ -272,23 +272,29 @@ settings:
 
 The bloks live in the description too, as BSX source, and come from nowhere else. Its `ui` section
 is what the frontend shows, its `agent_ui` section what Orkestrator shows; a section left out shows
-nothing. Each states the `catalog` it is written against and its `bloks` by name, each blok with its
-`bsx`, a `description` (a view's starts with its tab label) and `default` for the one shown first.
+nothing. Each lists its `bloks` by name, each with its `bsx` (or a `file` beside the description), a
+`description` (a view's starts with its tab label) and `default` for the one shown first.
+
+Every blok is one `<Blok kind="agent" context="panel" catalog="...">`, which says the catalog it is
+written for. A `ui` blok is written for `newswitch`, the frontend's catalog, and the section's
+`catalog` names the version of it the bloks were written against; an `agent_ui` blok is written for
+the base catalog (no `catalog`) or Orkestrator's (`https://arkitekt.live/catalogs/orkestrator/v1`).
 
 ```yaml
 ui:
-  catalog: newswitch@9
+  catalog: newswitch@10
   bloks:
     view-camera:
       description: 'Camera: the live image of the camera, and acquiring it.'
       default: true
       bsx: |
-        <Html>
+        <Blok kind="agent" context="panel" catalog="newswitch">
         <LiveView className="h-full" />
-        </Html>
+        </Blok>
 ```
 
-A blok the catalog refuses, or one naming an action this microscope does not have, stops the start.
+A blok the catalog refuses, one written for another catalog, or one naming an action this microscope
+does not have, stops the start.
 
 ## Which ones there are
 

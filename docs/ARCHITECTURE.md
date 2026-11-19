@@ -1,8 +1,8 @@
 # newswitch Architecture & Developer Guide
 
 *How the backend, the arkitekt stack, and the frontend fit together. Written
-against `arkitekt` 11.6.1, `arkitekt-runtime` 8.0.1, `arkitekt-spec` 6.3.1 and
-`arkitekt-fastapi` 3.0.0, as locked in `backend/uv.lock` (2026-10).
+against `arkitekt` 18.2.0, `arkitekt-runtime` 10.5.0, `arkitekt-spec` 12.6.0 and
+`arkitekt-fastapi` 4.1.0, as locked in `backend/uv.lock` (2026-11).
 File references are relative to the repo root.*
 
 ---
@@ -94,7 +94,7 @@ lit and spread by its own depth, so no volume is stored.
 
 What is published is keyed by cube, then by variable: `MoveState.moves`, `SwapState.swaps`,
 `TuneState.tunes`, and `SourceState.sources` by source, so a blok binds
-`self.MoveState.moves.stage.z.value`. A change replaces the whole field, and `Values` keeps plain
+`self.MoveState.moves.stage.z.current`. A change replaces the whole field, and `Values` keeps plain
 copies, because arkitekt takes over the class of what is published. `DetectorState.detectors` stays a list, whose
 entries do publish.
 
@@ -407,7 +407,7 @@ can style by situation with three variants:
   A locked control is marked, not disabled.
 
 Bloks are written in blok
-language v2: they bind to states (`{self.MoveState.moves.stage.z.value}`), loop
+language v2: they bind to states (`{self.MoveState.moves.stage.z.current}`), loop
 (`<foreach items={self.DetectorState.detectors} let="camera">`), and invoke actions
 (`onClick={self.move_one(name: "stage.z", by: 1.0)}`).
 The backend serves their source, and the frontend parses it (`@arkitektio/bsx`). Use them for

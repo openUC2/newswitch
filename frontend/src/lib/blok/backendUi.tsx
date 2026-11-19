@@ -113,12 +113,12 @@ export function BackendUiProvider({ children }: { children: React.ReactNode }) {
 
 export const useBackendUi = (): BackendUi => React.useContext(BackendUiContext);
 
-/** The backend's default blok for a page (`default`, in the HTML context), if it declares one. */
+/** The backend's default blok for a page (`default`, in the PANEL context), if it declares one. */
 export const defaultBlokOf = (
   bloks: Record<string, BackendBlok>,
 ): BackendBlok | undefined =>
   Object.values(bloks).find(
-    (blok) => blok.default === true && (blok.context ?? "HTML") === "HTML",
+    (blok) => blok.default === true && (blok.context ?? "PANEL") === "PANEL",
   );
 
 /** A view the bottom bar switches between: a blok keyed `view-…`, labelled by its description. */
@@ -132,7 +132,7 @@ export const viewsOf = (bloks: Record<string, BackendBlok>): BackendView[] =>
   Object.values(bloks)
     .filter(
       (blok) =>
-        blok.key.startsWith("view-") && (blok.context ?? "HTML") === "HTML",
+        blok.key.startsWith("view-") && (blok.context ?? "PANEL") === "PANEL",
     )
     .map((blok) => {
       const fromDescription = blok.description?.split(":")[0]?.trim();

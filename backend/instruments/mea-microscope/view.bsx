@@ -1,4 +1,4 @@
-<Html>
+<Blok kind="agent" context="panel" catalog="newswitch">
 <div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-spectrum-cyan/10 via-transparent to-transparent p-3">
 <ScrollArea className="h-full w-[400px] shrink-0">
 <div className="flex flex-col gap-3 pb-3 pr-3">
@@ -19,10 +19,10 @@
 <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Focus</span>
     <div className="mt-1 flex items-baseline gap-1.5">
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.value, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage.z.value} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-4 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.x", by: -200.0)}>x −</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.x", by: 200.0)}>x +</Button>
@@ -57,4 +57,4 @@
 </div>
 </div>
 </div>
-</Html>
+</Blok>

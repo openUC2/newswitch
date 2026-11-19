@@ -9,7 +9,8 @@ class MoveValue:
     """A value along a direction, and what moving it does."""
 
     name: str
-    value: float
+    current: float
+    """Where it is now."""
     unit: str
     along: str
     """Across the optical axis (x, y), or along it (axis)."""
@@ -37,7 +38,8 @@ class SwapValue:
     """Which of several things is in place, and what swapping it does."""
 
     name: str
-    value: int
+    current: int
+    """The slot in place now."""
     label: str
     """What is in place, as it reads."""
     options: list[SwapOption] = field(default_factory=list)
@@ -49,7 +51,8 @@ class TuneValue:
     """A value of an element, and what tuning it does."""
 
     name: str
-    value: float
+    current: float
+    """What it is set to now."""
     unit: str
     minimum: Optional[float] = None
     maximum: Optional[float] = None

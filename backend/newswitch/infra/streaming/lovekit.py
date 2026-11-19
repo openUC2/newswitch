@@ -62,9 +62,11 @@ class LovekitSink:
 
 @dataclass
 class CameraStreams:
-    """The detectors' streams, as lovekit declared them."""
+    """The detectors' streams, as lovekit declared them, and what each is titled: the detector,
+    at the same place in ``titles`` as its stream in ``streams`` (a view's tab per camera)."""
 
     streams: list[Stream] = field(default_factory=list)
+    titles: list[str] = field(default_factory=list)
 
 
 async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: CameraStreams) -> None:
@@ -77,7 +79,9 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
         raise TypeError(f"lovekit publishes a LovekitSink, not {type(sink).__name__}")
     declared = [VideoStream(camera.key, title=camera.title) for camera in sink.cameras]
     async with lovekit.publish(declared) as published:
-        live.streams = list(published.streams)
+        streams = list(published.streams)
+        live.titles = [stream.title or stream.key for stream in streams]
+        live.streams = streams
         while not published.stopped.is_set():
             for camera in sink.cameras:
                 frame = sink.take(camera.detector)

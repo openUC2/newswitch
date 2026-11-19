@@ -101,7 +101,7 @@ def test_a_lost_command_leaves_it_where_it_was_and_says_which(tmp_path: Path) ->
     with pytest.raises(RuntimeError, match=r"stage\.z: no answer to command 3"):
         m.values.set({"stage.z": 30.0})
     assert m.values["stage.z"] == 20.0
-    assert m.move_state.moves["stage"]["z"].value == 20.0
+    assert m.move_state.moves["stage"]["z"].current == 20.0
     assert defocus(m) == pytest.approx(20.0)
 
 
@@ -123,7 +123,7 @@ def test_a_stall_leaves_it_on_the_way(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match=r"stage\.z: stalled at 50"):
         m.values.set({"stage.z": 100.0})
     assert m.values["stage.z"] == 50.0
-    assert m.move_state.moves["stage"]["z"].value == 50.0
+    assert m.move_state.moves["stage"]["z"].current == 50.0
 
 
 def test_ending_short_is_what_everyone_sees(tmp_path: Path) -> None:
@@ -157,7 +157,7 @@ def test_a_push_nothing_commanded_reaches_everyone(tmp_path: Path) -> None:
     m = built(tmp_path, "drifts")
     m.values.drivers["stage.z"].creep(lambda value: m.values.stepped("stage.z", value))
     assert m.values["stage.z"] == 3.0
-    assert m.move_state.moves["stage"]["z"].value == 3.0
+    assert m.move_state.moves["stage"]["z"].current == 3.0
     assert defocus(m) == pytest.approx(3.0)
 
 

@@ -177,7 +177,7 @@ const ChannelEditor = ({
             key={tune.name}
             label={tune.name}
             unit={tune.unit}
-            value={channel.set_to[tune.name] ?? tune.value}
+            value={channel.set_to[tune.name] ?? tune.current}
             onChange={(value) => set(tune.name, value)}
           />
         ))}
@@ -193,7 +193,7 @@ const ChannelEditor = ({
                 size="sm"
                 className="h-7 px-2 text-xs"
                 variant={
-                  (channel.set_to[swap.name] ?? swap.value) === option.slot
+                  (channel.set_to[swap.name] ?? swap.current) === option.slot
                     ? "default"
                     : "outline"
                 }
@@ -235,7 +235,7 @@ export function DetailedPlan({ initial }: { initial?: DetailedStart }) {
   );
   const here = useCallback((): Place => {
     const set_to: Values = {};
-    for (const move of moving) set_to[move.name] = move.value;
+    for (const move of moving) set_to[move.name] = move.current;
     return { name: "", set_to };
   }, [moving]);
   const fromNow = useCallback((): Channel => {
@@ -243,11 +243,12 @@ export function DetailedPlan({ initial }: { initial?: DetailedStart }) {
     for (const source of sources) {
       if (source.power_variable) set_to[source.power_variable] = source.power;
     }
-    for (const swap of swaps) set_to[swap.name] = swap.value;
+    for (const swap of swaps) set_to[swap.name] = swap.current;
     const picked = detectors.filter((d) => d.is_active).map((d) => d.name);
     for (const detector of picked) {
       for (const tune of Object.values(tunes[detector] ?? {})) {
-        if (!tune.name.endsWith(".frame_rate")) set_to[tune.name] = tune.value;
+        if (!tune.name.endsWith(".frame_rate"))
+          set_to[tune.name] = tune.current;
       }
     }
     return { name: "", detectors: picked, set_to };
@@ -386,7 +387,7 @@ export function DetailedPlan({ initial }: { initial?: DetailedStart }) {
                   key={move.name}
                   label={move.name}
                   unit={move.unit}
-                  value={place.set_to[move.name] ?? move.value}
+                  value={place.set_to[move.name] ?? move.current}
                   onChange={(value) =>
                     setPlaces(
                       places.map((p, i) =>

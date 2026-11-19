@@ -1,4 +1,4 @@
-<Html>
+<Blok kind="agent" context="panel" catalog="newswitch">
 <div className="flex h-full w-full gap-3 overflow-hidden bg-gradient-to-br from-spectrum-cyan/10 via-transparent to-spectrum-violet/10 p-3">
 <ScrollArea className="h-full w-[400px] shrink-0">
 <div className="flex flex-col gap-3 pb-3 pr-3">
@@ -31,10 +31,10 @@
     <span className="block text-[11px] text-muted-foreground">laser_488, seen by cam_a</span>
     <div className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">focus</span>
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_a.z.value, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_a.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_a.z.value} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_a.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-4 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_a.x", by: -100.0)}>x −</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_a.x", by: 100.0)}>x +</Button>
@@ -44,7 +44,7 @@
     <div className="mt-3 grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">x, y</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.MoveState.moves.stage_a.x.value, digits: 0)}, {fmt.number(value: self.MoveState.moves.stage_a.y.value, digits: 0)}</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.MoveState.moves.stage_a.x.current, digits: 0)}, {fmt.number(value: self.MoveState.moves.stage_a.y.current, digits: 0)}</span>
         </div>
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
@@ -66,10 +66,10 @@
     <span className="block text-[11px] text-muted-foreground">white_led through the condenser, seen by cam_b in color</span>
     <div className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">focus</span>
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_b.z.value, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_b.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_b.z.value} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_b.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-4 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_b.x", by: -100.0)}>x −</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_b.x", by: 100.0)}>x +</Button>
@@ -79,7 +79,7 @@
     <div className="mt-3 grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">x, y</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.MoveState.moves.stage_b.x.value, digits: 0)}, {fmt.number(value: self.MoveState.moves.stage_b.y.value, digits: 0)}</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.MoveState.moves.stage_b.x.current, digits: 0)}, {fmt.number(value: self.MoveState.moves.stage_b.y.current, digits: 0)}</span>
         </div>
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
@@ -119,4 +119,4 @@
 </div>
 </div>
 </div>
-</Html>
+</Blok>
