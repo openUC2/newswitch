@@ -12,7 +12,7 @@ You need Python 3.11+ with uv and Node 20+. The repo uses [just](https://just.sy
 
 ```bash
 just install     # uv sync + yarn install
-just dev         # backend , then frontend (will autocodegen)-> http://localhost:5473
+just dev         # mikro (docker), backend, then frontend (will autocodegen) -> http://localhost:5473
 ```
 
 Run `just` on its own to see every recipe. Both ports come from the committed root `.env` — see
@@ -53,9 +53,11 @@ Don't gitignore them.
 
 ```bash
 just install                 # install both halves + activate git hooks
-just dev                     # both, correctly sequenced
-just dev-backend             # backend only  -> :$BACKEND_PORT  (hot-reloads on edit)
+just dev                     # FastAPI mode: mikro (docker), backend and frontend, correctly sequenced
+just dev-backend             # FastAPI mode, backend only (with mikro) -> :$BACKEND_PORT (hot-reloads on edit)
 just dev-frontend            # frontend only -> :$FRONTEND_PORT (codegen needs no backend)
+just agent --url <server>    # agent mode: the arkitekt app alone; mikro and the UI come from the server
+just mikro / just mikro-down # start / stop the mikro stack alone (it outlives `just dev`)
 
 just check                   # fmt-check + lint + types + tests
 just fmt                     # ruff format + prettier, in place
@@ -360,7 +362,7 @@ VITE_WEBSOCKET_URL=ws://my-lab-box:${BACKEND_PORT:-8099}/ws
 
 Apart from `BACKEND_HOST`, `BACKEND_PORT`, `NEWSWITCH_CONFIG` (which microscope to run, by default the
 fake one) and, in FastAPI mode, `MIKRO_URL`, `MIKRO_DATALAYER_URL` and `MIKRO_TOKEN` (where a mikro is;
-`just dev-mikro` sets them), the backend reads no `.env`: everything about a microscope, how it runs
+`just dev` and `just dev-backend` set them for the stack they start), the backend reads no `.env`: everything about a microscope, how it runs
 included, is in its `microscope.yml` ([`backend/instruments/README.md`](backend/instruments/README.md)).
 
 ## Releases

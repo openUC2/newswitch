@@ -8,7 +8,7 @@
 # pixels go to its own stage and from there to its own sample, mounted on its own holder. A thermometer
 # sits beside the section, on stage_b.
 #
-# Run it:      NEWSWITCH_CONFIG=instruments/dual-sample just dev-mikro
+# Run it:      NEWSWITCH_CONFIG=instruments/dual-sample just dev
 
 spec: newswitch/instrument/v0
 name: dual-sample

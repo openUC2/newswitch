@@ -1,5 +1,6 @@
 import type { ActionDefinition } from '@/lib/arkitekt/task';
 import { AcquireDefinition } from './acquire';
+import { AcquireMdaDefinition } from './acquireMda';
 import { ActivateDetectorDefinition } from './activateDetector';
 import { CalibrateLightPathDefinition } from './calibrateLightPath';
 import { CaptureImageDefinition } from './captureImage';
@@ -42,7 +43,6 @@ export {
   PHookUnionSchema,
   ZHookUnionSchema,
   AcquisitionPlanSchema,
-  AcquiredDatasetSchema,
   AcquireArgsSchema,
   AcquireReturnSchema,
   AcquireDefinition,
@@ -61,11 +61,16 @@ export type {
   ZCalibrationHookOutput,
   AcquisitionPlan,
   AcquisitionPlanOutput,
-  AcquiredDataset,
-  AcquiredDatasetOutput,
   AcquireArgs,
   AcquireReturn,
 } from './acquire';
+export {
+  AcquireMdaArgsSchema,
+  AcquireMdaReturnSchema,
+  AcquireMdaDefinition,
+  useAcquireMda,
+} from './acquireMda';
+export type { AcquireMdaArgs, AcquireMdaReturn } from './acquireMda';
 export {
   ActivateDetectorArgsSchema,
   ActivateDetectorReturnSchema,
@@ -305,6 +310,7 @@ export type { Uc2ScanNodesArgs, Uc2ScanNodesReturn } from './uc2ScanNodes';
 
 export const globalActionDefinition = {
   Acquire: AcquireDefinition,
+  AcquireMda: AcquireMdaDefinition,
   ActivateDetector: ActivateDetectorDefinition,
   CalibrateLightPath: CalibrateLightPathDefinition,
   CaptureImage: CaptureImageDefinition,

@@ -156,19 +156,31 @@ def test_the_shipped_bloks_name_the_published_catalog() -> None:
 # --- agent mode: the agent_ui bloks, drawn with Orkestrator's module -------------------
 
 
-@pytest.mark.parametrize("instrument", [FAKE, CAM_TEST])
-def test_agent_mode_shows_the_agent_ui(instrument: Path) -> None:
+@pytest.mark.parametrize(
+    ("instrument", "bloks"),
+    [
+        (FAKE, {"view-microscope", "view-acquire"}),
+        (INSTRUMENTS / "dual-camera", {"view-microscope", "view-acquire"}),
+        (INSTRUMENTS / "rgb-camera", {"view-microscope", "view-acquire"}),
+        # One camera and no light reaching it: no channel to acquire.
+        (CAM_TEST, {"view-microscope"}),
+    ],
+)
+def test_agent_mode_shows_the_agent_ui(instrument: Path, bloks: set[str]) -> None:
     """Every shipped instrument has an agent_ui that passes the spec and Orkestrator's module."""
     pytest.importorskip("lovekit")
     from main_arkitekt import create_arkitekt_registry
 
     declared = create_arkitekt_registry(spec.load(instrument)).registry.get_declared_bloks()
-    assert set(declared) == {"view-microscope"}
+    assert set(declared) == bloks
     # Written for the base catalog: it runs wherever bloks are drawn, Orkestrator among them.
     assert declared["view-microscope"].catalog == (
-        None if instrument == FAKE else ORKESTRATOR_CATALOG_ID
+        ORKESTRATOR_CATALOG_ID if instrument == CAM_TEST else None
     )
     assert declared["view-microscope"].default
+    if "view-acquire" in declared:
+        assert declared["view-acquire"].catalog is None
+        assert not declared["view-acquire"].default
 
 
 def test_agent_mode_without_an_agent_ui_shows_nothing() -> None:

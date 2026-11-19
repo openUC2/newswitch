@@ -2,7 +2,7 @@
 # emission down two arms. The reflected arm's image comes out mirrored; an acquisition turns it back
 # when it merges the two (`routines.acquire`).
 #
-# Run it:      NEWSWITCH_CONFIG=instruments/dual-camera just dev-mikro
+# Run it:      NEWSWITCH_CONFIG=instruments/dual-camera just dev
 
 spec: newswitch/instrument/v0
 name: dual-camera
@@ -143,3 +143,6 @@ agent_ui:
       description: 'Microscope: drive the stage on its map or with the pad, and run the cameras, lights and optics.'
       default: true
       file: ../views/agent-microscope.bsx
+    view-acquire:
+      description: 'Acquire: channels on a stack of planes, over a grid of tiles, some times, into mikro.'
+      file: ../views/agent-mda.bsx

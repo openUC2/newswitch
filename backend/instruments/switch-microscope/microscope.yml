@@ -15,7 +15,7 @@
 # which: each source, detector and setting of the swaps that gets light through is one, found by the
 # optics, with the swaps that make it (the selector, the port, the filter it is seen through).
 #
-# Run it:      NEWSWITCH_CONFIG=instruments/switch-microscope just dev-mikro
+# Run it:      NEWSWITCH_CONFIG=instruments/switch-microscope just dev
 
 spec: newswitch/instrument/v0
 name: switch-microscope

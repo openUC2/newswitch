@@ -407,8 +407,8 @@ Every record's `t` is placed on its sample's clock, in seconds since that mounti
 6 s and the array's sample at 6 s are one instant, and so are records of one mounting from other
 acquisitions. A probe's own samples, `s`, are an INDEX whose time the registration states.
 
-A channel sets what it says, and a source it does not name is off. It is stored in mikro (`just mikro`,
-then `just dev-mikro`), not in the local cache, and is refused before anything moves when a server has
+A channel sets what it says, and a source it does not name is off. It is stored in mikro (`just dev` starts
+one), not in the local cache, and is refused before anything moves when a server has
 no mikro. Each detector at each position becomes an `ArrayDataset` of its own, along its own axes,
 each declared by type, of the type it delivers, placed in the space of the sample it was taken of (one
 per mounting, with the mount from this microscope's stage space beside it):

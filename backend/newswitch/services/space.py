@@ -343,6 +343,16 @@ class SpaceManager:
         """
         return self.mount(self.sample_of(detector, values)) @ self.to_stage(detector, values)
 
+    def looking_at(self, detector: str) -> tuple[float, float]:
+        """Where the middle of `detector`'s image is on the sample it sees, in its micrometres, as
+        things are now: where the view is.
+
+        Raises:
+            Dark: The switches send no light to it.
+        """
+        x, y = (self.placement(detector) @ self._image_middle(detector))[:2]
+        return float(x), float(y)
+
     def remember(
         self, image: str, to_sample: np.ndarray | list[list[float]], sample: str | None = None
     ) -> None:

@@ -120,7 +120,7 @@ services:
   # Once: brings the database to the image's release; the server's own start only serves.
   mikro-migrate:
     profiles: [mikro]
-    image: jhnnsrs/mikro:${MIKRO_SERVICE_TAG:-12}
+    image: jhnnsrs/mikro:${MIKRO_SERVICE_TAG:-latest}
     command: arkitekt-service run migrate
     depends_on:
       mikro-db:
@@ -130,8 +130,9 @@ services:
 
   mikro:
     profiles: [mikro]
-    # The server the mikro client in backend/pyproject.toml is written against.
-    image: jhnnsrs/mikro:${MIKRO_SERVICE_TAG:-12}
+    # The latest server: the one the mikro client in backend/pyproject.toml is tested against
+    # (its own integration stack runs jhnnsrs/mikro:latest). MIKRO_SERVICE_TAG pins another.
+    image: jhnnsrs/mikro:${MIKRO_SERVICE_TAG:-latest}
     command: arkitekt-service debug
     stop_grace_period: 1s
     ports:

@@ -9,7 +9,7 @@
 # the beads the camera draws: they fire at random, and each electrode picks up those near it.
 # Mount the slide instead (mount_holder) and the array reads nothing: it has no electrodes.
 #
-# Run it:      NEWSWITCH_CONFIG=instruments/mea-microscope just dev-mikro
+# Run it:      NEWSWITCH_CONFIG=instruments/mea-microscope just dev
 
 spec: newswitch/instrument/v0
 name: mea-microscope

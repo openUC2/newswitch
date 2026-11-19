@@ -170,3 +170,6 @@ agent_ui:
       description: 'Microscope: drive the stage on its map or with the pad, and run the cameras, lights and optics.'
       default: true
       file: ../views/agent-microscope.bsx
+    view-acquire:
+      description: 'Acquire: channels on a stack of planes, over a grid of tiles, some times, into mikro.'
+      file: ../views/agent-mda.bsx

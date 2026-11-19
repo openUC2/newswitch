@@ -596,7 +596,7 @@ startup hooks that provide those (`python main.py fastapi|arkitekt` picks one).
 | Registers | startup `provide_frame_broadcaster` → `FrameSink`; `provide_no_dataset_store` → `DatasetStore`, or the part `mikro_app` | state `CameraStreams`, startup `provide_lovekit_sink` → `Tuple[FrameSink, CameraStreams]`, startup `provide_dataset_store` → `DatasetStore`, background `publish_camera_streams` (when there are detectors) |
 | UI | the description's `ui`, newswitch frontend's catalog (`declare_ui`) | the description's `agent_ui`, the spec's catalogs and Orkestrator's module (`declare_agent_ui`) |
 | Frames | `WS /stream/...` (above) | lovekit streams, one per detector |
-| Mikro | Configured by hand: `MIKRO_URL`, `MIKRO_DATALAYER_URL`, `MIKRO_TOKEN` (`newswitch/infra/mikro/connection.py`); unset runs without one. Compose has a stack for it: `just mikro`, then `just dev-mikro` | `mikro_service`: the one the arkitekt server provides |
+| Mikro | Configured by hand: `MIKRO_URL`, `MIKRO_DATALAYER_URL`, `MIKRO_TOKEN` (`newswitch/infra/mikro/connection.py`); unset runs without one. Compose has a stack for it, which `just dev` starts | `mikro_service`: the one the arkitekt server provides |
 | HTTP routes | auth, accounts, `newswitch/infra/http/`: live view, files, cache | none |
 
 `create_app` includes the module-level routers of `newswitch/infra/http/`:

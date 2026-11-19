@@ -2,7 +2,7 @@
 # fluoresces: what the image shows is what the stains take out of the light, of each color its own
 # share. Hematoxylin leaves nuclei blue-purple, eosin leaves what is around them pink.
 #
-# Run it:      NEWSWITCH_CONFIG=instruments/he-microscope just dev-mikro
+# Run it:      NEWSWITCH_CONFIG=instruments/he-microscope just dev
 
 spec: newswitch/instrument/v0
 name: he-microscope

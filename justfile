@@ -12,6 +12,9 @@ MIKRO_PORT := env("MIKRO_PORT", "6580")
 RUSTFS_PORT := env("RUSTFS_PORT", "6890")
 
 BACKEND_HEALTH := "http://localhost:" + BACKEND_PORT + "/health"
+MIKRO_GRAPHQL := "http://localhost:" + MIKRO_PORT + "/graphql"
+# Where the backend finds the mikro stack: its token is the static one in deploy/mikro/mikro.yaml.
+MIKRO_ENV := "MIKRO_URL=http://localhost:" + MIKRO_PORT + " MIKRO_DATALAYER_URL=http://localhost:" + RUSTFS_PORT + " MIKRO_TOKEN=newswitch-dev"
 
 # List available recipes
 default:
@@ -27,29 +30,69 @@ install:
     npx --yes lefthook install
 
 # ---------- dev ----------
+# Two modes. FastAPI mode (dev*) always runs with mikro: the stack in docker, started first,
+# and nothing starts if it does not come up. Agent mode (agent) is the arkitekt app alone: the
+# arkitekt server provides mikro and shows the UI.
+#
 # --ws-per-message-deflate false: the live view compresses its frames itself; this compressing
 # every one again on the event loop takes a core and most of the frame rate (uvicorn does so by default).
 
-# Backend only -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
-dev-backend:
-    cd backend && uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
+# Any instrument works: the frontend's hooks are generated from the committed schema export
+# (just export-schemas), not this backend.
+# FastAPI mode: mikro (docker), backend and frontend -> http://localhost:$FRONTEND_PORT
+dev: mikro
+    #!/usr/bin/env bash
+    set -uo pipefail
+    export {{MIKRO_ENV}}
+    trap 'trap - EXIT; kill 0' EXIT INT TERM
+    (cd backend && exec uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
+    just wait-backend || echo "!! backend unreachable - the frontend will show it as offline" >&2
+    echo "frontend -> http://localhost:{{FRONTEND_PORT}}"
+    (cd frontend && exec yarn dev) &
+    wait
 
-# Frontend only -> http://localhost:$FRONTEND_PORT (codegen reads frontend/schemas/, no backend needed)
-# Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
-dev-frontend:
-    cd frontend && yarn dev
-
-# Backend + frontend on the fake microscope: a simulated instrument, with hidden errors
+# FastAPI mode on the fake microscope: a simulated instrument, with hidden errors
 dev-fake:
     NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev
 
-# The mikro stack in docker: images and their metadata, for FastAPI mode
+# FastAPI mode, the backend alone: mikro (docker) and backend -> http://localhost:$BACKEND_PORT (hot-reloads on edit)
+dev-backend: mikro
+    cd backend && {{MIKRO_ENV}} uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3
+
+# Binding, port and allowedHosts live in vite.config.ts, so no flags needed here.
+# The frontend alone, for a backend `just dev-backend` runs -> http://localhost:$FRONTEND_PORT
+dev-frontend:
+    cd frontend && yarn dev
+
+# Agent mode: newswitch as an arkitekt app, and nothing else: no frontend, no mikro stack. It logs
+# in to the arkitekt server fakts finds (--url / $FAKTS_URL), which provides mikro (and its
+# storage), streams the cameras through lovekit and shows the agent_ui. Needs the extra 'agent'.
+#   NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent --url <server>
+# Agent mode: the arkitekt app alone, with mikro from the server fakts finds
+agent *args:
+    cd backend && uv run --extra agent python main_arkitekt.py {{args}}
+
+# It keeps running after `just dev` stops, and keeps its data; `just mikro-down` stops it.
+# Start the mikro stack in docker (images and their metadata, for FastAPI mode) and wait for it
 mikro:
     docker compose --profile mikro up -d mikro
+    just wait-mikro
 
-# Backend + frontend talking to the mikro stack (`just mikro` first)
-dev-mikro:
-    MIKRO_URL=http://localhost:{{MIKRO_PORT}} MIKRO_DATALAYER_URL=http://localhost:{{RUSTFS_PORT}} MIKRO_TOKEN=newswitch-dev just dev
+# Stop the mikro stack; its data stays in the mikro-db and mikro-rustfs volumes
+mikro-down:
+    docker compose --profile mikro stop mikro mikro-redis mikro-db rustfs
+
+# Block until mikro's GraphQL endpoint answers
+wait-mikro url=MIKRO_GRAPHQL:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    echo "waiting for mikro at {{url}} ..."
+    for _ in $(seq 1 60); do
+      if curl -sf "{{url}}" >/dev/null 2>&1; then echo "mikro is up"; exit 0; fi
+      sleep 1
+    done
+    echo "mikro did not answer within 60s" >&2
+    exit 1
 
 # Block until the backend's schema endpoints answer
 wait-backend url=BACKEND_HEALTH:
@@ -63,26 +106,9 @@ wait-backend url=BACKEND_HEALTH:
     echo "backend did not answer within 60s" >&2
     exit 1
 
-# Run backend + frontend together. Any instrument works: the frontend's hooks
-# are generated from the committed schema export (just export-schemas), not this backend.
-dev:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    trap 'trap - EXIT; kill 0' EXIT INT TERM
-    (cd backend && exec uv run uvicorn main_fastapi:create --factory --ws-per-message-deflate false --host {{BACKEND_HOST}} --port {{BACKEND_PORT}} --reload --timeout-graceful-shutdown 3) &
-    just wait-backend || echo "!! backend unreachable - the frontend will show it as offline" >&2
-    echo "frontend -> http://localhost:{{FRONTEND_PORT}}"
-    (cd frontend && exec yarn dev) &
-    wait
-
-# newswitch as an arkitekt agent (lovekit streams, the agent's view), e.g.
-#   NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent
-# Logs in to the arkitekt server fakts finds (--url / $FAKTS_URL). Needs the extra 'agent'.
-agent *args:
-    cd backend && uv run --extra agent python main_arkitekt.py {{args}}
-
-# Isolated stack for Playwright. Vite's test mode skips backend schema codegen so an
-# E2E run cannot dirty the committed generated frontend files.
+# Vite's test mode skips backend schema codegen so an E2E run cannot dirty the committed
+# generated frontend files. No mikro: the E2E specs cover login and accounts, and CI has no stack.
+# Isolated backend + frontend for Playwright (not a way to run newswitch)
 dev-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
