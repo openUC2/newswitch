@@ -17,7 +17,7 @@ import yaml
 from scipy import ndimage
 
 from newswitch.instrument.compiler import compile_instrument
-from newswitch.instrument.predict import Answer, state_key
+from newswitch.instrument.predict import Answer
 from newswitch.instrument.space import holder_to_stage
 from newswitch.instrument.spec import Instrument, Pattern, Probe, Stain
 from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
@@ -401,10 +401,8 @@ class Simulator:
         sample = self.instrument.seen_sample(detector, state)
         y, x, depth = self.beads_on_stage(pattern, sample)
 
-        moves = self._table.states[state_key(self.instrument, state)][detector]["focus"]["moves"]
-        sample_moves = {move.name for move in self.instrument.sample_moves(sample)}
-        sample_um = sum(float(state[name]) for name in moves if name in sample_moves)
-        lens_um = sum(float(state[name]) for name in moves if name not in sample_moves)
+        sample_um = sum(float(state[move.name]) for move in self.instrument.sample_moves(sample))
+        lens_um = self._table.focus_um(detector, state)
         lit = np.ones(depth.shape)
         for sheet in answer.sheet_by_source.values():
             plane = sum(float(state[move.name]) for move in self.instrument.sheet_moves(sample))
@@ -416,7 +414,9 @@ class Simulator:
 
         pixel_um = math.hypot(to_sample[0, 0], to_sample[1, 0])
         grown = pattern.radius / pixel_um
-        spread = np.hypot(grown, answer.blur_px_per_um * (depth + sample_um + lens_um))
+        from_focus = depth + sample_um + lens_um
+        per_um = np.where(from_focus >= 0.0, answer.blur_px_per_um, answer.blur_px_per_um_nearer)
+        spread = np.hypot(grown, per_um * from_focus)
         brightness = lit * (grown / spread) ** 2
         columns, rows = np.linalg.inv(to_sample) @ np.stack(
             [x - answer.centre[0], y - answer.centre[1]]

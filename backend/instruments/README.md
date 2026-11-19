@@ -33,6 +33,12 @@ nudging it (`newswitch/instrument/roles.py`):
 A routine that needs one of these and finds none or several refuses and lists them, so a second focus
 motor stops an autofocus rather than changing which motor it drives. The call can name the one it means.
 
+Any lens on the way to a detector, and the sensor itself, can have moves: each is placed where its
+moves put it before the route is traced. So a camera on a slide moves where it looks, a tube lens
+moved along the axis refocuses, and a camera moved along it can undo what the stage took out of focus.
+Across the axis, `x` and `y` are the sensor's, carried back along the light. A flat element (a filter,
+a dichroic) moved changes nothing, and what moves on the illumination side is not traced.
+
 A detector must tune its `exposure`. Anything else it does not tune is fixed: a PMT has no `binning`.
 A tune called `power`, `exposure`, `gain`, `binning` or `frame_rate` is in mW, ms, dB, no unit or Hz.
 A source's power goes up to its `max_power`, whatever else its tune states.

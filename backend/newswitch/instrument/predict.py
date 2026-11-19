@@ -40,7 +40,8 @@ class Answer:
     sheet_by_source: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     """A light sheet's thickness and reach, for each source that makes one."""
     in_focus_px: float = 0.0  # rms blur of what is in focus, on the sensor
-    blur_px_per_um: float = 0.0  # what adds to it with the distance from focus
+    blur_px_per_um: float = 0.0  # what adds to it with the distance from focus, away from the lens
+    blur_px_per_um_nearer: float = 0.0  # and towards it
 
     @property
     def black(self) -> bool:
@@ -150,6 +151,14 @@ def assemble(
     for variable in stage.variables.values():
         if variable.verb == "moves" and variable.along in ("x", "y"):
             centre["xy".index(variable.along)] = float(state[variable.name])
+    # Where the optics send the image on the sensor: the pixel in its middle looks that far aside.
+    mounted = _mounted(instrument.cubes[detector].element, pixel_x, pixel_y)
+    aside = (
+        imaging.get("shift_x_um", 0.0) / (axis_x.step * binning),
+        imaging.get("shift_y_um", 0.0) / (axis_y.step * binning),
+    )
+    for row in (0, 1):
+        centre[row] -= mounted[row][0] * aside[0] + mounted[row][1] * aside[1]
 
     readout = instrument.cubes[detector].element.readout
     # The pixel a sample point falls on, before any binning: what binning does is the readout's.
@@ -194,13 +203,17 @@ def assemble(
     in_focus_um = math.hypot(imaging.get("in_focus_um", imaging["spot_center_um"]), airy_um / 3.0)
     return Answer(
         detector=detector,
-        pixel_to_stage=_mounted(instrument.cubes[detector].element, pixel_x, pixel_y),
+        pixel_to_stage=mounted,
         centre=(centre[0], centre[1]),
         size=(width, height),
         field_of_view_um=(abs(pixel_x) * width, abs(pixel_y) * height),
         spot_px=spot_um / (axis_x.step * binning),
         in_focus_px=in_focus_um / (axis_x.step * binning),
         blur_px_per_um=imaging.get("blur_um_per_um", 0.0) / (axis_x.step * binning),
+        blur_px_per_um_nearer=imaging.get(
+            "blur_um_per_um_nearer", imaging.get("blur_um_per_um", 0.0)
+        )
+        / (axis_x.step * binning),
         relative_illumination=imaging["relative_illumination"],
         distortion_percent=imaging["distortion_percent"],
         band_nm=band,
@@ -350,30 +363,41 @@ class Compiled:
                 )
         return found
 
-    def answer(self, detector: str, state: Mapping[str, Any]) -> Answer:
-        """What `detector` sees under `state`, from the table: tracing nothing.
-
-        Moves along the optical axis are not in the table as such: each is applied through the
-        sensitivities the compiler measured around the combination of swaps.
-        """
+    def _moved(self, detector: str, state: Mapping[str, Any]) -> dict[str, float]:
+        """What the tracer found for `detector` under the swaps of `state`, with what has moved
+        since applied: each move through what the compiler measured it to do, added up."""
         entry = self.states[state_key(self.instrument, state)].get(detector)
         if entry is None:
             raise self.instrument.dark(detector, state)
         imaging = dict(entry["imaging"])
-        focus = entry["focus"]
-        blur_squared = focus["in_focus_um"] ** 2
-        for name, sensitivity in entry["axial"].items():
+        for name, per_um in entry["moves"].items():
             moved = float(state[name]) - float(self.instrument.variables[name].initial)
-            imaging["magnification"] += sensitivity["magnification_per_um"] * moved
-            if name not in focus["moves"]:
-                blur_squared += (sensitivity["blur_um_per_um"] * moved) ** 2
+            for what in ("magnification", "focus_um", "shift_x_um", "shift_y_um"):
+                imaging[what] += per_um[f"{what}_per_um"] * moved
+        return imaging
+
+    def focus_um(self, detector: str, state: Mapping[str, Any]) -> float:
+        """How far the optics have taken `detector`'s focus from where the sample starts, towards
+        the lens: whatever moved it, a lens or the camera."""
+        return self._moved(detector, state)["focus_um"]
+
+    def answer(self, detector: str, state: Mapping[str, Any]) -> Answer:
+        """What `detector` sees under `state`, from the table: tracing nothing.
+
+        Moves of the optics are not in the table as such: each is applied through the sensitivities
+        the compiler measured around the combination of swaps. Where focus is adds up with its
+        sign, so one move can undo what another did.
+        """
+        imaging = self._moved(detector, state)
+        entry = self.states[state_key(self.instrument, state)][detector]
+        focus = entry["focus"]
         on = self.instrument.seen_sample(detector, state)
-        sample = {move.name for move in self.instrument.sample_moves(on)}
-        lens_um = sum(float(state[name]) for name in focus["moves"] if name not in sample)
-        defocus_um = self.instrument.lit_um(state, lens_um, sample=on) + lens_um
-        imaging["in_focus_um"] = float(np.sqrt(blur_squared))
-        imaging["blur_um_per_um"] = focus["blur_um_per_um"]
-        imaging["spot_center_um"] = float(
-            np.sqrt(blur_squared + (focus["blur_um_per_um"] * defocus_um) ** 2)
+        defocus_um = (
+            self.instrument.lit_um(state, imaging["focus_um"], sample=on) + imaging["focus_um"]
         )
+        imaging["in_focus_um"] = focus["in_focus_um"]
+        imaging["blur_um_per_um"] = focus["blur_um_per_um"]
+        imaging["blur_um_per_um_nearer"] = focus["blur_um_per_um_nearer"]
+        per_um = focus["blur_um_per_um" if defocus_um >= 0.0 else "blur_um_per_um_nearer"]
+        imaging["spot_center_um"] = float(np.hypot(focus["in_focus_um"], per_um * defocus_um))
         return assemble(self.instrument, detector, state, imaging, entry["coupling"])

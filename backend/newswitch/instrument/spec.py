@@ -1376,12 +1376,13 @@ class Instrument:
             if variable.verb == "moves" and variable.along == "axis"
         ]
 
-    def lit_um(self, state: Mapping[str, Any], lens_um: float = 0.0, *, sample: str) -> float:
+    def lit_um(self, state: Mapping[str, Any], focus_um: float = 0.0, *, sample: str) -> float:
         """Where the part of the sample that is seen is along the axis.
 
-        The part nearest the plane the light makes of it: a sheet's, or else where the lens nearest
-        the sample focuses, `lens_um` having moved. So in a thin section it is where the section is
-        and in a volume where the plane is, and no sample is treated differently for being either.
+        The part nearest the plane the light makes of it: a sheet's, or else where the optics
+        focus, having taken that `focus_um` towards the lens. So in a thin section it is where the
+        section is and in a volume where the plane is, and no sample is treated differently for
+        being either.
         """
         half = self.simulation_at(state, sample).pattern.depth / 2.0
         at = sum(float(state[move.name]) for move in self.sample_moves(sample))
@@ -1391,7 +1392,7 @@ class Instrument:
             for source in self.sources()
             for route in self.routes(self.illumination, source, sample)
         )
-        plane = sum(float(state[move.name]) for move in sheets) if has_sheet else -lens_um
+        plane = sum(float(state[move.name]) for move in sheets) if has_sheet else -focus_um
         return min(max(plane, at - half), at + half)
 
     def simulation_at(self, state: Mapping[str, Any], sample: str) -> Simulation:

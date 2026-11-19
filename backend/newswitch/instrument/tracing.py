@@ -7,6 +7,11 @@ Each route is traced on its own, as a straight line with mirrors unfolded: optil
 sequence of surfaces, and branching is the job of the routes. Filters and dichroics only shape the
 spectrum here, as they are thin and flat, and a mirror only flips the image.
 
+Every lens on a route, and the sensor it ends on, is placed where its moves put it before it is
+traced: along the axis and across it (`_layout`). So what any of them does to where the image is,
+how large and how sharp, is traced, and none of it is a case of its own. Across the axis, x and y
+are the sensor's, carried back along the light.
+
 Errors can be passed in (`Errors`), so the same tracer can describe a microscope that is not quite
 what its description says. Nominal predictions pass none.
 """
@@ -68,6 +73,9 @@ class Imaging:
     spot_center_um: float  # rms, on the sensor
     spot_corner_um: float
     numerical_aperture: float  # on the sensor's side
+    shift_x_um: float = 0.0  # where the middle of what is seen lands, from the sensor's middle
+    shift_y_um: float = 0.0
+    focus_um: float = 0.0  # how far the plane in focus is from where the sample starts, lens-wards
 
 
 def _elements(instrument: Instrument) -> Iterator[Element]:
@@ -341,61 +349,85 @@ def _prescription_surfaces(path: str) -> list[dict[str, Any]]:
     return found
 
 
+def _optic(
+    lenses: tuple[tuple[Any, ...], ...],
+    object_distance: float,
+    na: float,
+    index_of: float,
+    wavelength_um: float,
+    field_mm: float,
+) -> Any:  # noqa: ANN401 - optiland has no stub for this
+    """A route as optiland takes it: each lens where it is, along the axis and across it."""
+    from optiland.materials import IdealMaterial
+    from optiland.optic import Optic
+
+    optic = Optic()
+    index = 0
+    optic.add_surface(
+        index=index, radius=np.inf, thickness=object_distance, material=IdealMaterial(index_of)
+    )
+    for position, lens in enumerate(lenses):
+        kind, what, after, x, y, *rest = lens
+        if kind == "ideal":
+            index += 1
+            if position == 0:
+                # The stop at the back focal plane: the object side is telecentric, so moving
+                # the sample defocuses it and does not change the scale. It is the lens's own, and
+                # goes where the lens goes.
+                optic.add_surface(
+                    index=index, surface_type="paraxial", f=what, thickness=what, dx=x, dy=y
+                )
+                index += 1
+                optic.add_surface(
+                    index=index, radius=np.inf, thickness=after - what, is_stop=True, dx=x, dy=y
+                )
+            else:
+                optic.add_surface(
+                    index=index, surface_type="paraxial", f=what, thickness=after, dx=x, dy=y
+                )
+        else:
+            (clear_radius,) = rest
+            surfaces = _prescription_surfaces(what)
+            for i, surface in enumerate(surfaces):
+                index += 1
+                next_z = surfaces[i + 1]["z"] if i + 1 < len(surfaces) else None
+                thickness = next_z - surface["z"] if next_z is not None else after
+                optic.add_surface(
+                    index=index,
+                    radius=surface["radius"],
+                    thickness=thickness,
+                    material=surface["material"],
+                    aperture=2.0 * clear_radius,  # optiland takes the diameter
+                    dx=x,
+                    dy=y,
+                )
+    optic.add_surface(index=index + 1)
+    optic.set_aperture("objectNA", na)
+    optic.fields.set_telecentric(True)
+    optic.set_field_type("object_height")
+    optic.add_field(y=0.0)
+    optic.add_field(y=field_mm)
+    optic.add_wavelength(wavelength_um, is_primary=True)
+    return optic
+
+
+def _landing(rays: Any) -> tuple[float, float]:  # noqa: ANN401
+    """Where one ray ends, in millimetres."""
+    return float(np.ravel(rays.x)[0]), float(np.ravel(rays.y)[0])
+
+
 @lru_cache(maxsize=512)
 def _trace(
     lenses: tuple[tuple[Any, ...], ...],
+    sensor: tuple[float, float],
     object_distance: float,
     na: float,
     index: float,
     wavelength_um: float,
     half_diagonal_mm: float,
-) -> tuple[float, float, float, float, float]:
-    from optiland.materials import IdealMaterial
-    from optiland.optic import Optic
-
-    index_of = index
-
+) -> tuple[float, float, float, float, float, float, float]:
     def build(field_mm: float) -> Any:  # noqa: ANN401 - optiland has no stub for this
-        optic = Optic()
-        index = 0
-        optic.add_surface(
-            index=index, radius=np.inf, thickness=object_distance, material=IdealMaterial(index_of)
-        )
-        for position, lens in enumerate(lenses):
-            kind, *rest = lens
-            if kind == "ideal":
-                f, after = rest
-                index += 1
-                if position == 0:
-                    # The stop at the back focal plane: the object side is telecentric, so moving
-                    # the sample defocuses it and does not change the scale.
-                    optic.add_surface(index=index, surface_type="paraxial", f=f, thickness=f)
-                    index += 1
-                    optic.add_surface(index=index, radius=np.inf, thickness=after - f, is_stop=True)
-                else:
-                    optic.add_surface(index=index, surface_type="paraxial", f=f, thickness=after)
-            else:
-                path, after, clear_radius = rest
-                surfaces = _prescription_surfaces(path)
-                for i, surface in enumerate(surfaces):
-                    index += 1
-                    next_z = surfaces[i + 1]["z"] if i + 1 < len(surfaces) else None
-                    thickness = next_z - surface["z"] if next_z is not None else after
-                    optic.add_surface(
-                        index=index,
-                        radius=surface["radius"],
-                        thickness=thickness,
-                        material=surface["material"],
-                        aperture=2.0 * clear_radius,  # optiland takes the diameter
-                    )
-        optic.add_surface(index=index + 1)
-        optic.set_aperture("objectNA", na)
-        optic.fields.set_telecentric(True)
-        optic.set_field_type("object_height")
-        optic.add_field(y=0.0)
-        optic.add_field(y=field_mm)
-        optic.add_wavelength(wavelength_um, is_primary=True)
-        return optic
+        return _optic(lenses, object_distance, na, index, wavelength_um, field_mm)
 
     def rms(rays: Any) -> tuple[float, float]:  # noqa: ANN401
         x, y = np.asarray(rays.x), np.asarray(rays.y)
@@ -406,9 +438,16 @@ def _trace(
         return float(np.sqrt(spread.mean())) * 1000.0, float(alive.mean())
 
     # Measured with a ray close to the axis: optiland's paraxial shortcut does not handle a
-    # telecentric object side, where the entrance pupil is at infinity.
-    probe = build(1.0).trace_generic(Hx=0, Hy=0.001, Px=0, Py=0, wavelength=wavelength_um)
-    magnification = float(np.ravel(probe.y)[0]) / 0.001
+    # telecentric object side, where the entrance pupil is at infinity. Against where the middle
+    # lands: a lens off the axis sends it elsewhere.
+    probing = build(1.0)
+    middle_x, middle_y = _landing(
+        probing.trace_generic(Hx=0, Hy=0, Px=0, Py=0, wavelength=wavelength_um)
+    )
+    _, probe_y = _landing(
+        probing.trace_generic(Hx=0, Hy=0.001, Px=0, Py=0, wavelength=wavelength_um)
+    )
+    magnification = (probe_y - middle_y) / 0.001
     field = half_diagonal_mm / abs(magnification)
     optic = build(field)
     center_rays = optic.trace(
@@ -420,16 +459,149 @@ def _trace(
     spot_center, alive_center = rms(center_rays)
     spot_corner, alive_corner = rms(corner_rays)
     chief = optic.trace_generic(Hx=0, Hy=1, Px=0, Py=0, wavelength=wavelength_um)
-    real_height = float(np.ravel(chief.y)[0])
+    real_height = _landing(chief)[1] - middle_y
     distortion = (real_height / (magnification * field) - 1.0) * 100.0
     relative = alive_corner / alive_center if alive_center else 0.0
-    return magnification, distortion, relative, spot_center, spot_corner
+    return (
+        magnification,
+        distortion,
+        relative,
+        spot_center,
+        spot_corner,
+        (middle_x - sensor[0]) * 1000.0,
+        (middle_y - sensor[1]) * 1000.0,
+    )
 
 
-def _lens(pending: Mapping[str, Any], after: float) -> tuple[Any, ...]:
-    if pending["kind"] == "prescription":
-        return ("prescription", pending["what"], after, pending["clear_radius"])
-    return ("ideal", pending["what"], after)
+#: How far apart the two planes are that say where focus is, in micrometres, and how far out in the
+#: pupil the ray that says it: near the axis, so that a lens's aberrations do not move the answer.
+_FOCUS_PROBE_UM = 10.0
+_FOCUS_PROBE_PUPIL = 0.05
+
+
+@lru_cache(maxsize=2048)
+def _focus_height(
+    lenses: tuple[tuple[Any, ...], ...],
+    object_distance: float,
+    na: float,
+    index: float,
+    wavelength_um: float,
+) -> float:
+    """How far from the middle a ray near the axis lands: nothing, where the object is in focus."""
+    optic = _optic(lenses, object_distance, na, index, wavelength_um, 1.0)
+    _, middle = _landing(optic.trace_generic(Hx=0, Hy=0, Px=0, Py=0, wavelength=wavelength_um))
+    _, beside = _landing(
+        optic.trace_generic(Hx=0, Hy=0, Px=0, Py=_FOCUS_PROBE_PUPIL, wavelength=wavelength_um)
+    )
+    return beside - middle
+
+
+@dataclass(frozen=True)
+class _Layout:
+    """A route as it stands under some values: each lens and the sensor where its moves put it."""
+
+    lenses: tuple[tuple[Any, ...], ...]  # as `_optic` takes them
+    sensor: tuple[float, float]  # across the axis, in millimetres
+    to_first: float  # from where the sample starts to the first lens, in millimetres
+    first_moved_um: float  # how far of that the lens has moved, along the axis
+    na: float
+    index: float
+    reflections: int
+
+    def in_focus_um(self, wavelength_um: float) -> float:
+        """Where the plane in focus is, from where the sample starts, away from the lens."""
+        heights = [
+            _focus_height(
+                self.lenses, self.to_first + plane / 1000.0, self.na, self.index, wavelength_um
+            )
+            for plane in (0.0, _FOCUS_PROBE_UM)
+        ]
+        if heights[1] == heights[0]:
+            return 0.0
+        return -heights[0] * _FOCUS_PROBE_UM / (heights[1] - heights[0])
+
+
+def _layout(
+    instrument: Instrument,
+    detector: str,
+    state: Mapping[str, Any],
+    errors: Errors,
+) -> _Layout:
+    """Place everything on the one route from the sample to `detector`, as `state` has it.
+
+    Along the axis, a cube is where the distances put it, and its moves along the axis from there;
+    across it, where its moves along x and y put it. Only where a lens and the sensor are changes
+    what is seen: a flat filter, moved, is the same filter.
+    """
+    stage = instrument.seen_sample(detector, state)
+    routes = instrument.detection_routes(detector, state)
+    if len(routes) != 1:
+        raise ValueError(f"{detector}: {len(routes)} routes from the sample; one is handled")
+    route = routes[0]
+
+    def moved(name: str, along: str) -> float:
+        """How far `name` has moved along `along`, in millimetres."""
+        return sum(
+            state[v.name] / 1000.0
+            for v in instrument.cubes[name].variables.values()
+            if v.verb == "moves" and v.along == along
+        )
+
+    placed: list[tuple[str, Any, float]] = []  # each lens: its cube, its element, where it is
+    at = 0.0
+    for edge in route:
+        target = instrument.cubes[edge.target].element_at(state)
+        distance = edge.distance if edge.distance not in (None, "focus") else 0.0
+        if edge.distance == "focus":
+            # the lens this distance belongs to, as really built
+            lens = (
+                target if target.kind == "lens" else instrument.cubes[edge.source].element_at(state)
+            )
+            focal = lens.f
+            if not placed or (len(placed) == 1 and lens is placed[0][1]):
+                focal *= errors.objective_focal_factor
+            # In a medium, what is in focus is that much further from the lens.
+            distance = focal * (lens.index if edge.source == stage else 1.0)
+        at += float(distance)
+        if target.kind == "lens":
+            placed.append((edge.target, target, at + moved(edge.target, "axis")))
+    if not placed:
+        raise ValueError(f"{detector}: no lens on the way from the sample")
+    ends = [*(where for _, _, where in placed[1:]), at + moved(detector, "axis")]
+    lenses = []
+    for position, ((name, lens, where), end) in enumerate(zip(placed, ends)):
+        across = (moved(name, "x"), moved(name, "y"))
+        if lens.prescription is not None:
+            lenses.append(
+                (
+                    "prescription",
+                    str(instrument.folder / lens.prescription),
+                    end - where,
+                    *across,
+                    lens.clear_radius,
+                )
+            )
+        else:
+            focal = lens.f * (errors.objective_focal_factor if position == 0 else 1.0)
+            lenses.append(("ideal", focal, end - where, *across))
+    first_name, first, to_first = placed[0]
+    return _Layout(
+        lenses=tuple(lenses),
+        sensor=(moved(detector, "x"), moved(detector, "y")),
+        to_first=to_first,
+        first_moved_um=moved(first_name, "axis") * 1000.0,
+        na=first.na,
+        index=first.index,
+        reflections=sum(1 for edge in route if edge.via == "reflect"),
+    )
+
+
+def _as_it_starts(instrument: Instrument, state: Mapping[str, Any]) -> dict[str, Any]:
+    """`state`, with everything that moves back where it starts."""
+    return {
+        **state,
+        **{v.name: v.initial for v in instrument.variables.values() if v.verb == "moves"},
+    }
 
 
 def _scan_sample(instrument: Instrument, scanner: str) -> str:
@@ -472,36 +644,6 @@ def scan_um_per_degree(
                 focal *= errors.objective_focal_factor
             angle -= height / focal
     return height * 1000.0 * math.pi / 180.0
-
-
-def focus_moves(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> list[str]:
-    """What moves a detector's focus: the sample, and the lens nearest it, along the axis."""
-    scanner = instrument.scanner_of(detector)
-    if scanner is not None:
-        route = _scan_route(instrument, scanner)
-        last = [
-            element
-            for edge in route
-            if (element := instrument.cubes[edge.target].element_at(state)).kind == "lens"
-        ][-1]
-        nearest = next(
-            edge.target for edge in route if instrument.cubes[edge.target].element_at(state) is last
-        )
-    else:
-        route = instrument.detection_routes(detector, state)[0]
-        nearest = next(
-            edge.target
-            for edge in route
-            if instrument.cubes[edge.target].element_at(state).kind == "lens"
-        )
-    return [
-        *(move.name for move in instrument.sample_moves(instrument.seen_sample(detector, state))),
-        *(
-            variable.name
-            for variable in instrument.cubes[nearest].variables.values()
-            if variable.verb == "moves" and variable.along == "axis"
-        ),
-    ]
 
 
 def _scan_imaging(
@@ -547,6 +689,7 @@ def _scan_imaging(
         spot_center_um=abs(defocus_um) * last.na / last.index * abs(magnification),
         spot_corner_um=abs(defocus_um) * last.na / last.index * abs(magnification),
         numerical_aperture=last.na / abs(magnification),
+        focus_um=lens_um,
     )
 
 
@@ -566,88 +709,49 @@ def imaging(
     if scanner is not None:
         return _scan_imaging(instrument, scanner, state, errors, defocused_um)
     stage = instrument.seen_sample(detector, state)
-    routes = instrument.detection_routes(detector, state)
-    if len(routes) != 1:
-        raise ValueError(f"{detector}: {len(routes)} routes from the sample; one is handled")
-    route = routes[0]
-    lenses: list[tuple[Any, ...]] = []
-    object_distance = 0.0
-    reflections = sum(1 for edge in route if edge.via == "reflect")
-    objective_f: float | None = None
-    na: float | None = None
-    immersion: float | None = None
-    distance_since_lens = 0.0
-    pending: dict[str, Any] | None = None
-
-    def moved(name: str) -> float:
-        """How far `name` has moved along the axis, in millimetres."""
-        cube = instrument.cubes[name]
-        return sum(
-            state[v.name] / 1000.0
-            for v in cube.variables.values()
-            if v.verb == "moves" and v.along == "axis"
+    wavelength_um = wavelength_nm / 1000.0
+    layout = _layout(instrument, detector, state, errors)
+    # Where focus is, counted from where the description puts it: as it starts, a microscope is in
+    # focus where its distances say, and what has moved since moves it from there. A lens nearest
+    # the sample takes it along one for one; anything else, as far as tracing finds.
+    start = _layout(instrument, detector, _as_it_starts(instrument, state), errors)
+    focus_um = layout.first_moved_um
+    if (layout.lenses, layout.to_first) != (start.lenses, start.to_first):
+        focus_um = (
+            start.first_moved_um
+            + start.in_focus_um(wavelength_um)
+            - layout.in_focus_um(wavelength_um)
         )
-
-    for position, edge in enumerate(route):
-        target = instrument.cubes[edge.target].element_at(state)
-        distance = edge.distance if edge.distance not in (None, "focus") else 0.0
-        if edge.distance == "focus":
-            # the lens this distance belongs to, as really built
-            lens = (
-                target if target.kind == "lens" else instrument.cubes[edge.source].element_at(state)
-            )
-            focal = lens.f
-            if not lenses:
-                focal *= errors.objective_focal_factor
-            # In a medium, what is in focus is that much further from the lens.
-            distance = focal * (lens.index if edge.source == stage else 1.0)
-        distance_since_lens += float(distance)
-        if target.kind == "lens":
-            if not lenses and object_distance == 0.0 and pending is None:
-                # Whichever moves: the sample, or the lens nearest it.
-                lens_um = moved(edge.target) * 1000.0
-                defocus_um = (
-                    instrument.lit_um(state, lens_um, sample=stage) + lens_um
-                    if defocused_um is None
-                    else defocused_um
-                )
-                object_distance = distance_since_lens + defocus_um / 1000.0
-            elif pending is not None:
-                lenses.append(_lens(pending, distance_since_lens + moved(edge.target)))
-            if target.prescription is not None:
-                if not lenses and pending is None:
-                    na, immersion = target.na, target.index
-                pending = {
-                    "kind": "prescription",
-                    "what": str(instrument.folder / target.prescription),
-                    "clear_radius": target.clear_radius,
-                }
-            else:
-                focal = target.f
-                if objective_f is None:
-                    focal *= errors.objective_focal_factor
-                    objective_f = focal
-                    na = target.na
-                    immersion = target.index
-                pending = {"kind": "ideal", "what": focal}
-            distance_since_lens = -moved(edge.target) if pending["kind"] == "prescription" else 0.0
-    assert pending is not None and na is not None and immersion is not None
-    lenses.append(_lens(pending, distance_since_lens))
+    if defocused_um is None:
+        object_distance = (
+            layout.to_first + instrument.lit_um(state, focus_um, sample=stage) / 1000.0
+        )
+    else:
+        object_distance = layout.to_first - layout.first_moved_um / 1000.0 + defocused_um / 1000.0
 
     axes = instrument.cubes[detector].element_at(state).axes
     half_diagonal = math.hypot(
         axes["x"].size * axes["x"].pitch / 2000.0,
         axes["y"].size * axes["y"].pitch / 2000.0,
     )
-    magnification, distortion, relative, spot_center, spot_corner = _trace(
-        tuple(lenses), object_distance, na, immersion, wavelength_nm / 1000.0, half_diagonal
+    magnification, distortion, relative, spot_center, spot_corner, shift_x, shift_y = _trace(
+        layout.lenses,
+        layout.sensor,
+        object_distance,
+        layout.na,
+        layout.index,
+        wavelength_um,
+        half_diagonal,
     )
     return Imaging(
         magnification=magnification,
-        reflections=reflections,
+        reflections=layout.reflections,
         distortion_percent=distortion,
         relative_illumination=relative,
         spot_center_um=spot_center,
         spot_corner_um=spot_corner,
-        numerical_aperture=na / abs(magnification),
+        numerical_aperture=layout.na / abs(magnification),
+        shift_x_um=shift_x,
+        shift_y_um=shift_y,
+        focus_um=focus_um,
     )

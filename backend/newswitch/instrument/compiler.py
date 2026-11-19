@@ -91,40 +91,60 @@ def _focus_response(
     state: Mapping[str, Any],
     errors: tracing.Errors,
 ) -> dict[str, Any]:
-    """How sharp what is in focus is, and how blur grows with the distance from there."""
+    """How sharp what is in focus is, and how blur grows with the distance from there: on each
+    side of focus on its own, as a real lens does not blur alike before and behind it."""
     wavelength = tracing.design_wavelength(instrument, detector, state)
-    sharp = tracing.imaging(instrument, detector, state, wavelength, errors, 0.0).spot_center_um
-    away = tracing.imaging(
-        instrument, detector, state, wavelength, errors, _FOCUS_NUDGE_UM
-    ).spot_center_um
+
+    def spot(defocused_um: float) -> float:
+        found = tracing.imaging(instrument, detector, state, wavelength, errors, defocused_um)
+        return found.spot_center_um
+
+    sharp = spot(0.0)
     return {
         "in_focus_um": sharp,
-        "blur_um_per_um": max(away**2 - sharp**2, 0.0) ** 0.5 / _FOCUS_NUDGE_UM,
-        "moves": tracing.focus_moves(instrument, detector, state),
+        "blur_um_per_um": max(spot(_FOCUS_NUDGE_UM) ** 2 - sharp**2, 0.0) ** 0.5 / _FOCUS_NUDGE_UM,
+        "blur_um_per_um_nearer": max(spot(-_FOCUS_NUDGE_UM) ** 2 - sharp**2, 0.0) ** 0.5
+        / _FOCUS_NUDGE_UM,
     }
 
 
-def _axial(
+def _moves(
     instrument: Instrument,
     detector: str,
     state: Mapping[str, Any],
     imaging: Mapping[str, float],
     errors: tracing.Errors,
 ) -> dict[str, dict[str, float]]:
-    """How each move along the optical axis changes scale and blur, per micrometre."""
+    """What each move of anything on the way to `detector` does to its image, per micrometre: its
+    scale, where its focus is, and where it lands on the sensor.
+
+    Not what moves the sample: that changes what is looked at, and the optics stay as they are.
+    """
+    sample = instrument.seen_sample(detector, state)
+    on_the_way = {
+        cube
+        for route in instrument.detection_routes(detector, state)
+        for edge in route
+        for cube in (edge.source, edge.target)
+    } - {sample}
+    wavelength = tracing.design_wavelength(instrument, detector, state)
     found = {}
     for name, variable in instrument.variables.items():
-        if variable.verb != "moves" or variable.along != "axis":
+        if variable.verb != "moves" or variable.cube not in on_the_way:
             continue
         assert variable.step is not None
-        moved, _ = _trace(
-            instrument, detector, {**state, name: state[name] + variable.step}, errors
+        moved = asdict(
+            tracing.imaging(
+                instrument,
+                detector,
+                {**state, name: state[name] + variable.step},
+                wavelength,
+                errors,
+            )
         )
-        blur = max(moved["spot_center_um"] ** 2 - imaging["spot_center_um"] ** 2, 0.0) ** 0.5
         found[name] = {
-            "magnification_per_um": (moved["magnification"] - imaging["magnification"])
-            / variable.step,
-            "blur_um_per_um": blur / variable.step,
+            f"{what}_per_um": (moved[what] - imaging[what]) / variable.step
+            for what in ("magnification", "focus_um", "shift_x_um", "shift_y_um")
         }
     return found
 
@@ -260,7 +280,7 @@ def compile_instrument(instrument: Instrument, errors: tracing.Errors | None = N
             entry[detector] = {
                 "imaging": imaging,
                 "coupling": coupling,
-                "axial": _axial(instrument, detector, state, imaging, applied),
+                "moves": _moves(instrument, detector, state, imaging, applied),
                 "focus": _focus_response(instrument, detector, state, applied),
             }
         states[state_key(instrument, state)] = entry
