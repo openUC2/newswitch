@@ -1,13 +1,12 @@
 """What can change on a microscope, by what it does."""
 
-from typing import Tuple
-
 from arkitekt import App
 
 from newswitch.actions import space, values
 from newswitch.microscope import locks
 from newswitch.microscope.apps import core
 from newswitch.microscope.run import Run
+from newswitch.microscope.startup import provide_values
 from newswitch.services.values import Values
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
@@ -18,16 +17,6 @@ app.register_state(SwapState)
 app.register_state(TuneState)
 app.register_state(SourceState)
 app.register_context(Values)
-
-
-async def provide_values(
-    run: Run,
-) -> Tuple[Values, MoveState, SwapState, TuneState, SourceState]:
-    """Every variable."""
-    m = run.microscope
-    return m.values, m.move_state, m.swap_state, m.tune_state, m.source_state
-
-
 app.register_startup(provide_values)
 app.register_action(values.move, locks=[locks.MOTION])
 app.register_action(values.move_one, locks=[locks.MOTION])

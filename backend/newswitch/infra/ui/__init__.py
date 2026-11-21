@@ -12,9 +12,12 @@
 The views the frontend's bottom bar switches between are the bloks keyed ``view-…`` (their
 description starts with the tab's label); the one marked ``default`` is shown first.
 
-`declare_agent_ui` declares the description's ``agent_ui`` section instead, for Orkestrator: bloks
-written for the base catalog or Orkestrator's (``<Blok catalog="https://arkitekt.live/...">``).
-A description without the section shows nothing there: no blok comes from anywhere else.
+`declare_agent_ui` declares the agent's bloks instead, for Orkestrator: `AGENT_BLOKS`, which ship
+with newswitch (``agent/``), written for the base catalog or Orkestrator's
+(``<Blok catalog="https://arkitekt.live/...">``). They are the same on every microscope, as the
+agent's actions and states are (`newswitch.microscope.registry`): a blok shows what the states hold,
+so it copes with a microscope that lacks a part. The variables they bind by name are a convention a
+description follows: the stage is the cube ``stage``, moving along ``x``, ``y`` and ``z``.
 
 A registry holds a blok to the blok language alone; the catalog rules run only inside
 `checking_catalogs`. Both declare their bloks inside it with every catalog finding an error, so a
@@ -26,6 +29,7 @@ Tailwind.
 import re
 import warnings
 from collections.abc import Iterable
+from pathlib import Path
 
 from arkitekt import ORKESTRATOR_CATALOG_ID, App, checking_catalogs
 from arkitekt_spec.declare.app import source_catalog
@@ -41,18 +45,42 @@ from newswitch.infra.ui.catalog import (
 from newswitch.instrument.spec import Instrument
 from newswitch.instrument.ui import BlokEntry, UiConfig
 
-#: What an ``agent_ui`` blok may be written for: the base catalog (None) or Orkestrator's.
+#: What an agent blok may be written for: the base catalog (None) or Orkestrator's.
 AGENT_CATALOGS: frozenset[str | None] = frozenset({None, ORKESTRATOR_CATALOG_ID})
+
+#: Where the agent's bloks are.
+AGENT_BLOK_DIR = Path(__file__).parent / "agent"
+
+#: The agent's bloks, keyed by name: the file each is in (in `AGENT_BLOK_DIR`), what it is, and
+#: whether it is shown first.
+AGENT_BLOKS: dict[str, tuple[str, str, bool]] = {
+    "view-microscope": (
+        "microscope.bsx",
+        (
+            "Microscope: drive the stage on its map or with the pad, and run the cameras, lights "
+            "and optics."
+        ),
+        True,
+    ),
+    "view-acquire": (
+        "mda.bsx",
+        "Acquire: channels on a stack of planes, over a grid of tiles, some times, into mikro.",
+        False,
+    ),
+}
 
 #: Findings a ``ui`` blok may carry: the frontend compiles Tailwind, so every class draws.
 UI_TOLERATED: frozenset[str] = frozenset({"class.not_portable"})
 
 __all__ = [
+    "AGENT_BLOKS",
+    "AGENT_BLOK_DIR",
     "AGENT_CATALOGS",
     "CATALOG_FILE",
     "CATALOG_NAME",
-    "PublishedCatalog",
     "UI_TOLERATED",
+    "PublishedCatalog",
+    "agent_bloks",
     "check_catalog",
     "declare_agent_ui",
     "declare_bloks",
@@ -142,8 +170,18 @@ def declare_ui(
     declare_bloks(app, "ui", instrument.ui.bloks, {CATALOG_NAME}, UI_TOLERATED)
 
 
-def declare_agent_ui(app: App, instrument: Instrument | None) -> None:
-    """Declare the ``agent_ui`` bloks of `instrument`, for Orkestrator (agent mode).
+def agent_bloks() -> dict[str, BlokEntry]:
+    """The agent's bloks (`AGENT_BLOKS`), read from their files."""
+    return {
+        name: BlokEntry(
+            bsx=(AGENT_BLOK_DIR / file).read_text(), description=description, default=default
+        )
+        for name, (file, description, default) in AGENT_BLOKS.items()
+    }
+
+
+def declare_agent_ui(app: App) -> None:
+    """Declare the agent's bloks (`AGENT_BLOKS`) on `app`, for Orkestrator (agent mode).
 
     Orkestrator renders them, so they are checked strictly against the catalog each names (the
     base catalog or Orkestrator's; never newswitch's) and against what `app` registered.
@@ -151,6 +189,4 @@ def declare_agent_ui(app: App, instrument: Instrument | None) -> None:
     Raises:
         ValueError: The catalog refuses a blok, or a blok is written for another catalog.
     """
-    if instrument is None or instrument.agent_ui is None:
-        return
-    declare_bloks(app, "agent_ui", instrument.agent_ui.bloks, AGENT_CATALOGS)
+    declare_bloks(app, "agent", agent_bloks(), AGENT_CATALOGS)

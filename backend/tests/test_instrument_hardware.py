@@ -23,8 +23,8 @@ from newswitch.instrument import hardware, parts, spec
 from newswitch.microscope.parts import build_drivers, build_microscope, build_uc2_bus, bus_options
 from newswitch.settings import Settings
 from newswitch.states.uc2 import UC2State
-from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
-from tests.conftest import registry_names, run_settings, wired_only
+from newswitch.reference import REFERENCE_INSTRUMENT
+from tests.conftest import run_settings, wired_only
 
 README = Path(__file__).parent.parent / "instruments" / "README.md"
 
@@ -153,7 +153,6 @@ def test_simulated_a_board_is_a_virtual_bus(tmp_path: Path) -> None:
     """Its UC2 actions work without one being there, and nothing else needs wiring."""
     settings = run_settings(tmp_path)
     instrument = rewired(tmp_path, actuators=None, cameras=None)
-    assert "UC2State" in registry_names(instrument)[0]
     built = build_microscope(settings, instrument)
     assert isinstance(built.uc2_bus, VirtualUC2Bus)
 
@@ -419,8 +418,8 @@ def _simulation(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d.update(ui={"views": ["fluorescence"]}), "views"),
         (lambda d: d.update(ui={"catalog": "newswitch", "bloks": {}}), "catalog"),
         (lambda d: d.update(ui={"catalog": "newswitch@3", "bloks": {"v": {}}}), "bsx"),
-        (lambda d: d.update(agent_ui={"bloks": {"v": {"x": 1}}}), "v"),
-        (lambda d: d.update(agent_ui={"catalog": "orkestrator@v4", "bloks": {}}), "catalog"),
+        # The agent's bloks ship with newswitch: a description holds none.
+        (lambda d: d.update(agent_ui={"bloks": {}}), "agent_ui: the agent's bloks ship with"),
     ],
 )
 def test_a_description_that_does_not_validate_is_refused(

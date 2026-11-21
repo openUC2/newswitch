@@ -18,7 +18,7 @@ from newswitch.instrument import spec
 from newswitch.routines.affine_matrix import pixel_shift
 from newswitch.routines.calibration import calibrate_light_path
 from newswitch.settings import Settings, load_devices, load_settings
-from tests.conftest import registry_names, run_settings
+from tests.conftest import run_settings
 
 BACKEND = Path(__file__).parent.parent
 INSTRUMENT = BACKEND / "instruments" / "fake-microscope"
@@ -88,12 +88,13 @@ def test_real_hardware_needs_it_wired(settings: Settings) -> None:
 # --- what it has
 
 
-def test_it_has_the_parts_its_elements_say() -> None:
-    """Which controls exist follows from the description."""
-    states, _ = registry_names(spec.load(INSTRUMENT))
-    assert {"MoveState", "SwapState", "TuneState", "SourceState", "DetectorState"} <= states
-    assert "UC2State" in states  # it describes a board, and simulated that is a virtual one
-    assert "UC2State" not in registry_names(spec.load(INSTRUMENT.parent / "cam-test"))[0]
+def test_it_has_the_parts_its_elements_say(tmp_path: Path) -> None:
+    """Which parts it builds follows from the description (what is registered does not)."""
+    built = build_microscope(run_settings(tmp_path / "it"), spec.load(INSTRUMENT))
+    assert built.values is not None and built.detector is not None
+    assert built.uc2_bus is not None  # it describes a board, and simulated that is a virtual one
+    camera = INSTRUMENT.parent / "cam-test"
+    assert build_microscope(run_settings(tmp_path / "camera"), spec.load(camera)).uc2_bus is None
 
 
 def test_the_models_come_from_the_description(microscope: Microscope) -> None:

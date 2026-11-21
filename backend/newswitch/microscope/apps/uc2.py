@@ -1,13 +1,12 @@
 """The UC2 board."""
 
-from typing import Tuple
-
 from arkitekt import App
 
 from newswitch.actions import uc2
 from newswitch.microscope import locks
 from newswitch.microscope.apps import core, values
 from newswitch.microscope.run import Run
+from newswitch.microscope.startup import provide_uc2
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.states.uc2 import UC2State
 
@@ -16,13 +15,6 @@ app.registry.merge(core.app.registry).merge(values.app.registry)
 
 app.register_state(UC2State)
 app.register_context(UC2BusManager)
-
-
-async def provide_uc2(run: Run) -> Tuple[UC2BusManager, UC2State]:
-    """The UC2 board."""
-    return run.microscope.uc2_bus, run.microscope.uc2_state
-
-
 app.register_startup(provide_uc2)
 app.register_background(uc2.run_uc2_bus)
 app.register_background(uc2.run_uc2_event_dispatch)

@@ -11,7 +11,16 @@ more web-stack-friendly, modern, and maintainable foundation for the same functi
 You need Python 3.11+ with uv and Node 20+. The repo uses [just](https://just.systems/man/en/) for task automation. Install it, then:
 
 ```bash
-just install     # uv sync + yarn install
+just install                         # uv sync + yarn install
+cd backend && uv sync --extra agent  # the agent needs the extra 'agent'
+NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent --url <server>
+```
+
+newswitch is an arkitekt app: `just agent` runs it as an agent that logs in to an arkitekt server and
+is shown in Orkestrator, which provides mikro and draws its UI. That is the standard way to run it.
+To work on the newswitch frontend instead, serve the same app through FastAPI:
+
+```bash
 just dev         # mikro (docker), backend, then frontend (will autocodegen) -> http://localhost:5473
 ```
 
@@ -21,18 +30,16 @@ Run `just` on its own to see every recipe. Both ports come from the committed ro
 ## The one rule: re-export the schemas when the API changes
 
 The frontend's typed hooks are **generated from the backend's schemas** — but not from a running backend.
-What a backend registers depends on its instrument (`create_registry` in
-`backend/newswitch/microscope/registry.py`), while the hooks must cover everything newswitch can do. So the
-schemas come from a committed export of a *complete* microscope:
+What a backend registers is the same on every microscope (the global `app` in
+`backend/newswitch/microscope/registry.py`: every part, whatever the instrument has), so the schemas come
+from a committed export of it, made without any instrument:
 
 ```bash
 just export-schemas   # = cd backend && uv run python -m newswitch.infra.export_schemas
 ```
 
-builds the app registry in-process on the reference microscope
-`backend/newswitch/reference/complete-microscope/` (everything a microscope can have, no bloks; it
-refuses an instrument lacking any of it), takes a snapshot of it — nothing is started — and writes exactly what a
-FastAPI backend on it serves at `/schemas/implementations`, `/schemas/states` and `/schemas/locks` into
+builds the app registry in-process, takes a snapshot of it — nothing is started — and writes exactly what a
+FastAPI backend serves at `/schemas/implementations`, `/schemas/states` and `/schemas/locks` into
 `frontend/schemas/{implementations,states,locks}.json`. It is the mirror of the blok catalog, which the
 frontend exports for the backend.
 
@@ -53,10 +60,11 @@ Don't gitignore them.
 
 ```bash
 just install                 # install both halves + activate git hooks
+just agent --url <server>    # agent mode (the standard one): the arkitekt app alone; mikro and the UI come from the server
+just agent-inspect           # what the agent declares, as `arkitekt plugin build` compiles it (no instrument read)
 just dev                     # FastAPI mode: mikro (docker), backend and frontend, correctly sequenced
 just dev-backend             # FastAPI mode, backend only (with mikro) -> :$BACKEND_PORT (hot-reloads on edit)
 just dev-frontend            # frontend only -> :$FRONTEND_PORT (codegen needs no backend)
-just agent --url <server>    # agent mode: the arkitekt app alone; mikro and the UI come from the server
 just mikro / just mikro-down # start / stop the mikro stack alone (it outlives `just dev`)
 
 just check                   # fmt-check + lint + types + tests
@@ -65,7 +73,7 @@ just lint                    # ruff + eslint
 just types                   # tsc against tsconfig.app.json
 just test                    # pytest + vitest
 just test-all                # also runs the backend integration tests
-just export-schemas          # write the complete microscope's schemas into frontend/schemas/
+just export-schemas          # write the app's schemas into frontend/schemas/
 just drift-check             # are the committed export and codegen still in sync with the backend?
 
 just build                   # frontend bundle + backend wheel/sdist
@@ -74,23 +82,27 @@ just clean                   # nuke .venv, node_modules, dist
 just list-users               # list every account and its role (run on the appliance)
 just reset-password user pw   # recovery: set a new password for an existing account
 just create-admin user pw     # recovery: create a fresh admin account
-
-just agent                    # serve as an arkitekt agent instead (see below)
 ```
 
-### Two ways to serve: FastAPI or arkitekt agent
+### Two ways to serve: arkitekt agent or FastAPI
 
-newswitch can be served two ways, each its own entry file. Both read the same settings and
-instrument (`load_devices` in `backend/newswitch/settings.py`) and call
-`create_registry` (`backend/newswitch/microscope/registry.py`), which registers the contexts
-`FrameSink`, the detectors send their frames to, and `DatasetStore`, an acquisition stores its datasets
-in; each entry file passes in the arkitekt services it needs, then registers on the returned app the
-startup hooks that provide those two, how the frames are watched and the UI.
+newswitch is one global, static arkitekt app: `app` in `backend/app.py`, declared at module level. It
+imports and registers directly every action, state, context and startup hook newswitch has, whatever
+the microscope has, and the agent's own pieces and bloks. (FastAPI mode merges the same parts through
+their registries, `app` in `backend/newswitch/microscope/registry.py`; a test holds the two equal.) The microscope is the
+app context, a `Run` of the description `NEWSWITCH_CONFIG` names, read only when it starts. A part it lacks
+(a board, a stage, a detector) is a context its startup hook does not provide: arkitekt fails an action
+that needs it when it is called, and does not start the background tasks that need it. So the app can be
+inspected and compiled into a release without any instrument (`just agent-inspect`, which is what
+`arkitekt plugin build` runs).
+
+Both entry files register the startup hooks that provide `FrameSink`, the detectors send their
+frames to, and `DatasetStore`, an acquisition stores its datasets in, how the frames are watched and the UI.
 
 | Entry file | Run | Registry | Frames | UI | HTTP routes |
 | --- | --- | --- | --- | --- | --- |
+| `backend/app.py` (standard) | `python app.py`, `arkitekt run prod app --context app:load_run`, `just agent` | the global `app` | `LovekitSink` → one lovekit `VideoStream` per detector | the agent's own bloks (`newswitch/infra/ui/agent/`), in the base catalog | none |
 | `backend/main_fastapi.py` | `uvicorn main_fastapi:create --factory`, `just dev` | `create_fastapi_registry` | `FrameBroadcaster` → websocket live view `/stream/...` | the description's `ui`, in the newswitch frontend's catalog | auth, accounts, live view, files, cache |
-| `backend/main_arkitekt.py` | `python main_arkitekt.py`, `just agent` | `create_arkitekt_registry` | `LovekitSink` → one lovekit `VideoStream` per detector | the description's `agent_ui`, in Orkestrator's standard catalog | none |
 
 As an agent, newswitch runs through `arkitekt.run`, logs in to the arkitekt
 server fakts finds (`--url` or `$FAKTS_URL`) and is shown in Orkestrator. It needs the extra `agent`:

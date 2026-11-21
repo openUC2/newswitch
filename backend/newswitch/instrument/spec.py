@@ -32,7 +32,7 @@ from pydantic.dataclasses import dataclass
 
 from newswitch.instrument.errors import SpecError, problems_of
 from newswitch.instrument.hardware import STRICT, Hardware
-from newswitch.instrument.ui import AgentUiConfig, UiConfig
+from newswitch.instrument.ui import UiConfig
 from newswitch.settings import Settings
 
 #: The description's name in an instrument's folder.
@@ -1013,7 +1013,6 @@ class Instrument:
     settings: Settings
     drives: tuple[Drive, ...] = ()
     ui: UiConfig | None = None  # what the frontend shows
-    agent_ui: AgentUiConfig | None = None  # what Orkestrator shows
     hardware: Hardware = field(default_factory=Hardware)
 
     @model_validator(mode="before")
@@ -1792,7 +1791,7 @@ def _with_view_files(data: dict[str, Any], folder: Path) -> dict[str, Any]:
     """
     found = dict(data)
     problems = []
-    for section in ("ui", "agent_ui"):
+    for section in ("ui",):
         if not isinstance(data.get(section), Mapping) or not isinstance(
             data[section].get("bloks"), Mapping
         ):
@@ -1832,6 +1831,11 @@ def load(path: str | Path) -> Instrument:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict) or not str(data.get("spec", "")).startswith(SPEC):
         raise SpecError(f"{path} does not say it is an instrument description")
+    if "agent_ui" in data:
+        raise SpecError(
+            f"{path}: agent_ui: the agent's bloks ship with newswitch (newswitch/infra/ui/agent/) "
+            "and are the same on every microscope; remove the section"
+        )
     data = _with_view_files(_with_components(data), path.parent)
     try:
         return _INSTRUMENT.validate_python({**data, "folder": path.parent.resolve()})

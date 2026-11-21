@@ -1,4 +1,4 @@
-"""Tools beside the two servers (``main_fastapi.py``, ``main_arkitekt.py``, see ``main.py``).
+"""Tools beside the two servers (``app.py``, ``main_fastapi.py``, see ``main.py``).
 
 check_instrument    what the design predicts against what the images measure
 

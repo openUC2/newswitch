@@ -18,7 +18,7 @@ dependencies = [
     "pint>=0.25.2",
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
-    "arkitekt==18.2.0",
+    "arkitekt[mesh]==18.2.0",
     "arkitekt-fastapi==4.1.0",
     "arkitekt-runtime==10.5.0",
     "arkitekt-spec==12.6.0",
@@ -50,7 +50,7 @@ uc2 = [
 # to update, enter the new SHA and run `uv lock`. Its C++ extension needs the MVS SDK
 # (/opt/MVS) to build, also for the simulated camera, and Python 3.12 - hence the markers,
 # and CI leaves this extra out.
-# Running as an arkitekt agent (`python main_arkitekt.py`): connected to an arkitekt
+# Running as an arkitekt agent (`python app.py`, the standard way): connected to an arkitekt
 # server through rekuest, the cameras streamed through lovekit (newswitch.infra.streaming), its images
 # and their metadata in the mikro that server provides.
 agent = [

@@ -1,7 +1,7 @@
 """newswitch: a microscope, described by its optical elements, served through arkitekt.
 
-Start at ``backend/main.py`` (how it is built and served: ``main_fastapi.py``,
-``main_arkitekt.py``). The code is in two halves: the microscope, and `infra`, which serves it.
+Start at ``backend/main.py`` (how it is built and served: ``app.py``, the arkitekt agent, or
+``main_fastapi.py``). The code is in two halves: the microscope, and `infra`, which serves it.
 `infra` may import the microscope; the microscope never imports `infra` (``tests/test_layering.py``).
 
 The microscope:
@@ -16,7 +16,7 @@ The microscope:
 - `drivers`: the parts' implementations (UC2 hardware, simulation); `services`: the shared
   managers (acquisition, light path, metadata, calibration, hooks, io, cache, expanse);
 - `tools`: compiling an instrument, exporting schemas;
-- `reference`: the complete microscope the frontend's schemas are exported from.
+- `reference`: the complete microscope (every part) the tests run on.
 
 What serves it, `infra`:
 

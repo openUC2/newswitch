@@ -30,9 +30,10 @@ install:
     npx --yes lefthook install
 
 # ---------- dev ----------
-# Two modes. FastAPI mode (dev*) always runs with mikro: the stack in docker, started first,
-# and nothing starts if it does not come up. Agent mode (agent) is the arkitekt app alone: the
-# arkitekt server provides mikro and shows the UI.
+# Two modes, one app (backend/app.py: every action, state and blok, whatever the microscope has).
+# Agent mode (agent), the standard one, is the arkitekt app alone: the arkitekt server provides
+# mikro and shows the UI. FastAPI mode (dev*) serves it to the newswitch frontend and always runs
+# with mikro: the stack in docker, started first, and nothing starts if it does not come up.
 #
 # --ws-per-message-deflate false: the live view compresses its frames itself; this compressing
 # every one again on the event loop takes a core and most of the frame rate (uvicorn does so by default).
@@ -66,11 +67,15 @@ dev-frontend:
 
 # Agent mode: newswitch as an arkitekt app, and nothing else: no frontend, no mikro stack. It logs
 # in to the arkitekt server fakts finds (--url / $FAKTS_URL), which provides mikro (and its
-# storage), streams the cameras through lovekit and shows the agent_ui. Needs the extra 'agent'.
+# storage), streams the cameras through lovekit and shows the agent's bloks. Needs the extra 'agent'.
 #   NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent --url <server>
-# Agent mode: the arkitekt app alone, with mikro from the server fakts finds
+# Agent mode (the standard one): the arkitekt app alone, with mikro from the server fakts finds
 agent *args:
-    cd backend && uv run --extra agent python main_arkitekt.py {{args}}
+    cd backend && uv run --extra agent python app.py {{args}}
+
+# What the agent declares, as `arkitekt plugin build` compiles it: no instrument is read
+agent-inspect:
+    cd backend && env -u NEWSWITCH_CONFIG uv run --extra agent arkitekt inspect all app --json
 
 # It keeps running after `just dev` stops, and keeps its data; `just mikro-down` stops it.
 # Start the mikro stack in docker (images and their metadata, for FastAPI mode) and wait for it

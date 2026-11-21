@@ -1,18 +1,20 @@
-"""The app registry holds what the instrument has, and nothing else."""
+"""The app registry holds every part, whatever the instrument has: one static app."""
 
 import time
+from typing import Any
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+from arkitekt_fastapi.testing import AsyncAgentTestClient
 from fastapi.testclient import TestClient
 
 from main_fastapi import create_app
 from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.instrument import spec
 from newswitch.settings import Settings
-from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
-from tests.conftest import registry_names, run_settings
+from newswitch.reference import REFERENCE_INSTRUMENT
+from tests.conftest import collect_until_completed, registry_names, run_settings
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 CAM_TEST = INSTRUMENTS / "cam-test"
@@ -37,28 +39,20 @@ def app_for(instrument: Path, tmp_path: Path) -> FastAPI:
     )
 
 
-def registered(instrument: Path | None) -> tuple[set[str], set[str]]:
-    """The state and action names an instrument (None: none) registers."""
-    return registry_names(None if instrument is None else spec.load(instrument))
+EVERY_STATE = DEVICE_STATES | CORE_STATES | {"AutofocusState"}
 
 
-def test_a_complete_microscope_registers_every_part() -> None:
-    """The reference microscope has every part: every state and action."""
-    states, actions = registered(REFERENCE_INSTRUMENT)
-    assert DEVICE_STATES | CORE_STATES | {"AutofocusState"} <= states
-    assert {"move", "move_one", "move_home", "swap", "tune", "home_stage"} <= actions
+def test_every_part_is_registered() -> None:
+    """One static app, whatever the instrument: every state and every action."""
+    states, actions = registry_names()
+    assert states == EVERY_STATE
+    assert {"move", "move_one", "move_home", "swap", "tune", "home_stage", "galvo_stop"} <= actions
+    assert {"capture_image", "run_autofocus", "scan_region", "acquire", "acquire_mda"} <= actions
 
 
-def test_a_camera_alone_registers_no_stage() -> None:
-    """One camera: its state and actions, the core, its variables, nothing that needs a stage."""
-    states, actions = registered(CAM_TEST)
-    assert states == CORE_STATES | VALUE_STATES | {"DetectorState"}
-    assert {"capture_image", "start_live_view", "tune"} <= actions
-    assert not {"calibrate_light_path", "scan_region", "run_autofocus"} & actions
-
-
-def test_the_parts_it_registers_are_the_parts_it_starts(tmp_path: Path) -> None:
-    """Started, the agent publishes the states of the parts it has, and no others."""
+def test_a_camera_alone_starts_every_state(tmp_path: Path) -> None:
+    """Started on one camera (no stage, no board), the agent publishes every state all the same:
+    what the camera lacks is an empty one."""
     app = app_for(CAM_TEST, tmp_path)
     with TestClient(app) as client:
         # The startup hooks run once the agent is up; wait for what they publish.
@@ -66,19 +60,25 @@ def test_the_parts_it_registers_are_the_parts_it_starts(tmp_path: Path) -> None:
         for _ in range(250):
             states = client.get("/states").json()["states"]
             published = {name for name, state in states.items() if state["initialized"]}
-            if "DetectorState" in published:  # the detector's hook runs after the core's
+            if published == EVERY_STATE:
                 break
             time.sleep(0.02)
-        assert published == CORE_STATES | VALUE_STATES | {"DetectorState"}
-        assert client.get("/states/DetectorState").status_code == 200
-        assert client.get("/states/AutofocusState").status_code == 404
+        assert published == EVERY_STATE
+        assert client.get("/states/UC2State").status_code == 200
 
 
-def test_without_an_instrument_only_the_core() -> None:
-    """No instrument: no devices, so only the core."""
-    states, actions = registered(None)
-    assert states == CORE_STATES
-    assert actions == {"clear_expanse"}
+@pytest.mark.asyncio
+async def test_an_action_of_a_part_it_lacks_fails_when_called(tmp_path: Path) -> None:
+    """No board: its context is not provided, so its actions fail, and the rest work."""
+    async with AsyncAgentTestClient(app_for(CAM_TEST, tmp_path)) as client:
+        lacking = await client.assign("home_stage", {})
+        events = await collect_until_completed(client, lacking.task_id)
+        assert events and events[-1].event_type in ("FAILED", "CRITICAL"), events
+        assert "uc2_bus_manager not found" in str(events[-1]), events[-1]
+
+        working = await client.assign("activate_detector", {"name": "sim_cam"})
+        events = await collect_until_completed(client, working.task_id)
+        assert events and events[-1].event_type == "COMPLETED", events[-1]
 
 
 def test_the_committed_schema_export_is_current(tmp_path: Path) -> None:
@@ -92,18 +92,14 @@ def test_the_committed_schema_export_is_current(tmp_path: Path) -> None:
         )
 
 
-def test_the_schema_export_refuses_an_incomplete_microscope(tmp_path: Path) -> None:
-    """A part missing from the export would drop its hooks from the frontend."""
-    from newswitch.infra.export_schemas import export
+def test_without_a_board_its_bus_is_not_built(tmp_path: Path) -> None:
+    """A part the instrument lacks is None: its startup hook provides no context, so arkitekt
+    starts none of its background tasks."""
+    from newswitch.microscope.parts import build_microscope
 
-    with pytest.raises(ValueError, match="UC2State"):
-        export(tmp_path, CAM_TEST)
-
-
-def test_with_a_uc2_board_the_bus_runs() -> None:
-    """A UC2 board is provided and its bus pumped: both are registered with it."""
-    states, actions = registered(REFERENCE_INSTRUMENT)
-    assert "UC2State" in states and "home_stage" in actions
+    built = build_microscope(run_settings(tmp_path), spec.load(CAM_TEST))
+    assert built.uc2_bus is None and built.detector is not None
+    assert build_microscope(run_settings(tmp_path / "ref"), spec.load(REFERENCE_INSTRUMENT)).uc2_bus
 
 
 def test_a_camera_alone_acquires(settings: Settings) -> None:
@@ -136,7 +132,7 @@ def test_a_part_reached_twice_counts_once() -> None:
     """Focus and acquisition both bring stage and detector: one hook of each, one state."""
     from main_fastapi import create_fastapi_registry
 
-    registry = create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT)).registry
+    registry = create_fastapi_registry(None).registry
     hooks = registry.hooks_registry.startup_hooks
     assert {"provide_core", "provide_values", "provide_detector", "provide_focus"} <= set(hooks)
     assert list(registry.states).count("MoveState") == 1
@@ -154,13 +150,45 @@ def test_two_apps_share_no_microscope(tmp_path: Path) -> None:
 
 
 def test_merging_leaves_the_parts_as_they_are() -> None:
-    """Parts live as long as the process, so one instrument must not leak into the next app."""
+    """Parts live as long as the process, so what one app adds must not leak into the next."""
     from main_fastapi import create_fastapi_registry
+    from newswitch.microscope import registry
     from newswitch.microscope.apps import values
 
     before = set(values.app.registry.hooks_registry.startup_hooks)
-    create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT))
+    microscope = set(registry.app.registry.hooks_registry.startup_hooks)
+    create_fastapi_registry(spec.load(REFERENCE_INSTRUMENT), with_mikro=True)
     assert set(values.app.registry.hooks_registry.startup_hooks) == before
+    assert set(registry.app.registry.hooks_registry.startup_hooks) == microscope
     assert not {"provide_frame_broadcaster", "provide_focus"} & before
-    states, _ = registered(CAM_TEST)
-    assert not {"AutofocusState", "UC2State"} & states
+    assert not {"provide_frame_broadcaster", "provide_mikro"} & microscope
+    assert registry.app.registry.get_declared_bloks() == {}
+
+
+def test_the_agent_declares_what_fastapi_declares() -> None:
+    """``app.py`` registers every part directly; FastAPI through the part registries. Both declare
+    the same actions, with the same locks and definitions, the same states, and the same models."""
+    pytest.importorskip("lovekit")
+    from app import app as agent
+    from main_fastapi import create_fastapi_registry
+
+    served = agent.registry.snapshot()
+    fastapi = create_fastapi_registry(None).registry.snapshot()
+
+    def actions(registry: Any) -> dict[str, Any]:  # noqa: ANN401
+        return {
+            impl.interface or impl.definition.name: impl.model_dump(mode="json")
+            for impl in registry.get_implementations()
+        }
+
+    assert actions(served) == actions(fastapi)
+    assert set(served.states) == set(fastapi.states) | {"CameraStreams"}
+    assert {lock.key for lock in served.get_locks()} == {lock.key for lock in fastapi.get_locks()}
+    hooks = set(agent.registry.hooks_registry.startup_hooks)
+    assert {
+        "provide_core",
+        "provide_values",
+        "provide_detector",
+        "provide_focus",
+        "provide_uc2",
+    } <= hooks

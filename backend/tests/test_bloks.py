@@ -1,4 +1,4 @@
-"""The UI the backend declares: the frontend's module, and the views of the instrument."""
+"""The UI the backend declares: the frontend's module and the instrument's views, and the agent's own."""
 
 import dataclasses
 from pathlib import Path
@@ -8,6 +8,7 @@ from arkitekt import ORKESTRATOR_CATALOG_ID, App
 
 from main_fastapi import create_fastapi_registry
 from newswitch.infra.ui import (
+    AGENT_BLOKS,
     AGENT_CATALOGS,
     CATALOG_NAME,
     UI_TOLERATED,
@@ -18,7 +19,7 @@ from newswitch.infra.ui import (
 )
 from newswitch.instrument import spec
 from newswitch.instrument.ui import BlokEntry, UiConfig
-from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.reference import REFERENCE_INSTRUMENT
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 FAKE = INSTRUMENTS / "fake-microscope"
@@ -153,59 +154,50 @@ def test_the_shipped_bloks_name_the_published_catalog() -> None:
         assert ui is not None and ui.catalog == current
 
 
-# --- agent mode: the agent_ui bloks, drawn with Orkestrator's module -------------------
+# --- agent mode: the agent's own bloks, drawn with Orkestrator's module -------------------
 
 
-@pytest.mark.parametrize(
-    ("instrument", "bloks"),
-    [
-        (FAKE, {"view-microscope", "view-acquire"}),
-        (INSTRUMENTS / "dual-camera", {"view-microscope", "view-acquire"}),
-        (INSTRUMENTS / "rgb-camera", {"view-microscope", "view-acquire"}),
-        # One camera and no light reaching it: no channel to acquire.
-        (CAM_TEST, {"view-microscope"}),
-    ],
-)
-def test_agent_mode_shows_the_agent_ui(instrument: Path, bloks: set[str]) -> None:
-    """Every shipped instrument has an agent_ui that passes the spec and Orkestrator's module."""
+def test_agent_mode_shows_its_own_bloks() -> None:
+    """The agent's bloks ship with it: the same on every microscope, whatever it has, and they
+    pass the base catalog and what the static app registers."""
     pytest.importorskip("lovekit")
-    from main_arkitekt import create_arkitekt_registry
+    from app import app
 
-    declared = create_arkitekt_registry(spec.load(instrument)).registry.get_declared_bloks()
-    assert set(declared) == bloks
+    declared = app.registry.get_declared_bloks()
+    assert set(declared) == set(AGENT_BLOKS) == {"view-microscope", "view-acquire"}
     # Written for the base catalog: it runs wherever bloks are drawn, Orkestrator among them.
-    assert declared["view-microscope"].catalog == (
-        ORKESTRATOR_CATALOG_ID if instrument == CAM_TEST else None
-    )
-    assert declared["view-microscope"].default
-    if "view-acquire" in declared:
-        assert declared["view-acquire"].catalog is None
-        assert not declared["view-acquire"].default
+    assert declared["view-microscope"].catalog is None and declared["view-microscope"].default
+    assert declared["view-acquire"].catalog is None and not declared["view-acquire"].default
 
 
-def test_agent_mode_without_an_agent_ui_shows_nothing() -> None:
-    """No blok comes from anywhere else."""
-    pytest.importorskip("lovekit")
-    from main_arkitekt import create_arkitekt_registry
-
-    app = create_arkitekt_registry(spec.load(REFERENCE_INSTRUMENT))
-    assert app.registry.get_declared_bloks() == {}
+def test_a_description_holds_no_agent_bloks(tmp_path: Path) -> None:
+    """An ``agent_ui`` section is refused, saying where the agent's bloks are now."""
+    copy = tmp_path / "instrument"
+    copy.mkdir()
+    description = (CAM_TEST / spec.DESCRIPTION).read_text()
+    (copy / spec.DESCRIPTION).write_text(description + "agent_ui:\n  bloks: {}\n")
+    for name in ("view.bsx",):
+        (copy / name).write_text((CAM_TEST / name).read_text())
+    with pytest.raises(spec.SpecError, match="ship with newswitch"):
+        spec.load(copy)
 
 
 def test_agent_mode_refuses_a_newswitch_component() -> None:
     """Orkestrator does not render the newswitch frontend's components."""
     pytest.importorskip("lovekit")
-    from main_arkitekt import create_arkitekt_registry
+    import app as agent
 
-    app = create_arkitekt_registry(None)
+    # A fresh app with what the agent's holds: the global one is not declared on from outside.
+    app = App("newswitch", app_context=agent.Run)
+    app.registry.merge(agent.app.registry)
     broken = BlokEntry(bsx=orkestrator_blok("<StageControl />"))
     with pytest.raises(ValueError, match="StageControl"):
-        declare_bloks(app, "agent_ui", {"broken": broken}, AGENT_CATALOGS)
+        declare_bloks(app, "agent", {"broken": broken}, AGENT_CATALOGS)
 
 
-def test_the_agent_ui_is_not_written_for_the_newswitch_catalog() -> None:
+def test_an_agent_blok_is_not_written_for_the_newswitch_catalog() -> None:
     """Orkestrator does not hold the newswitch catalog: a blok written for it is refused."""
     app = create_fastapi_registry(None)
     view = BlokEntry(bsx=newswitch_blok("<div />"))
-    with pytest.raises(ValueError, match="agent_ui.bloks.view is written for 'newswitch'"):
-        declare_bloks(app, "agent_ui", {"view": view}, AGENT_CATALOGS)
+    with pytest.raises(ValueError, match="agent.bloks.view is written for 'newswitch'"):
+        declare_bloks(app, "agent", {"view": view}, AGENT_CATALOGS)

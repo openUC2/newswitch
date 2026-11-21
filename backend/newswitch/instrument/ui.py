@@ -1,4 +1,7 @@
-"""The ``ui`` and ``agent_ui`` sections of a description: the bloks a server declares."""
+"""The ``ui`` section of a description: the bloks FastAPI mode declares for the newswitch frontend.
+
+The agent's bloks are not described: they ship with newswitch (`newswitch.infra.ui.AGENT_BLOKS`).
+"""
 
 from __future__ import annotations
 
@@ -35,11 +38,4 @@ class UiConfig:
         pattern=r"^[A-Za-z0-9_-]+@[A-Za-z0-9_.-]+$",
         description="The catalog the bloks were written against, as <name>@<version>",
     )
-    bloks: dict[str, BlokEntry] = Field(description="The bloks, keyed by name")
-
-
-@dataclass(kw_only=True, config=STRICT)
-class AgentUiConfig:
-    """Orkestrator's UI: the bloks, each naming in its root the catalog it is written for."""
-
     bloks: dict[str, BlokEntry] = Field(description="The bloks, keyed by name")

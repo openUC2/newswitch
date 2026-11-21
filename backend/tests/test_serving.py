@@ -19,8 +19,8 @@ from tests.conftest import run_settings
 
 pytest.importorskip("lovekit")
 
-from main_arkitekt import (  # noqa: E402  (needs the extra "agent")
-    create_arkitekt_registry,
+from app import (  # noqa: E402  (needs the extra "agent")
+    app,
     provide_lovekit_sink,
 )
 from newswitch.infra.streaming.lovekit import (  # noqa: E402
@@ -125,8 +125,13 @@ def test_the_agent_publishes_the_detectors(tmp_path: Path) -> None:
     sink, streams = asyncio.run(provide_lovekit_sink(current))
     assert isinstance(sink, LovekitSink) and isinstance(streams, CameraStreams)
     assert [(c.detector, c.key) for c in sink.cameras] == [("sim_cam", "sim_cam")]
-    app = create_arkitekt_registry(spec.load(CAM_TEST))
     assert "CameraStreams" in app.registry.snapshot().states
+
+
+def test_without_detectors_the_agent_publishes_nothing(tmp_path: Path) -> None:
+    """No detector, no sink: arkitekt then does not start the publisher, which needs one."""
+    sink, streams = asyncio.run(provide_lovekit_sink(Run.of(run_settings(tmp_path))))
+    assert sink is None and isinstance(streams, CameraStreams)
 
 
 def test_lovekit_publishes_only_its_own_sink() -> None:
@@ -158,12 +163,35 @@ def test_fastapi_streams_over_the_websocket(tmp_path: Path) -> None:
     assert isinstance(first, FrameBroadcaster) and first is not second
 
 
-def test_the_agent_runs_any_instrument(tmp_path: Path) -> None:
-    """Agent mode needs nothing of a description but the description."""
-    from main_arkitekt import create
+def test_the_agent_is_declared_without_an_instrument(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What ``arkitekt inspect all app`` does when it compiles a release: import the app, with no
+    instrument named, and declare all of it."""
+    import importlib
+    import sys
 
-    app = create(Run.of(run_settings(tmp_path, instrument=CAM_TEST)))
-    assert "view-microscope" in app.registry.get_declared_bloks()
+    from arkitekt.app.spec import app_declaration
+
+    monkeypatch.delenv("NEWSWITCH_CONFIG", raising=False)
+    monkeypatch.setattr(spec, "load", lambda *_: pytest.fail("the description was read"))
+    sys.modules.pop("app", None)
+    agent = importlib.import_module("app").app
+
+    declaration = app_declaration(agent, agent.snapshot(), entrypoint="app")
+    inspection = declaration.to_inspection()
+    actions = {impl.interface for impl in inspection.implementations}
+    assert {"capture_image", "move", "acquire_mda", "home_stage", "galvo_stop"} <= actions
+    assert {"view-microscope", "view-acquire"} <= {blok.key for blok in inspection.bloks}
+
+
+def test_the_agent_runs_the_instrument_it_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its context is the run of the description ``NEWSWITCH_CONFIG`` names."""
+    from app import load_run
+
+    monkeypatch.setenv("NEWSWITCH_CONFIG", str(CAM_TEST))
+    current = load_run()
+    assert current.instrument is not None and current.instrument.detectors() == ["sim_cam"]
 
 
 def test_the_agent_reads_the_instrument_once(

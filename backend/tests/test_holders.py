@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from newswitch.actions.space import mount_holder
-from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.reference import REFERENCE_INSTRUMENT
 from newswitch.instrument import spec
 from newswitch.instrument.space import holder_to_stage
 from newswitch.microscope.parts import Microscope, build_microscope

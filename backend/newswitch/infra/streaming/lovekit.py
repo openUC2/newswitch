@@ -1,11 +1,11 @@
-"""The detectors' frames as lovekit streams (arkitekt agent, ``main_arkitekt.py``).
+"""The detectors' frames as lovekit streams (arkitekt agent, ``app.py``).
 
 Every detector is a lovekit `VideoStream`, keyed by its cube in the instrument
 (lovekit keeps a stream's id by its key over restarts; detectors change with
 the description's order), titled by its name. The detectors hand their frames to a `LovekitSink`
 from their own threads; it keeps the newest one per detector, and the background hook
 `publish_camera_streams` sends what is new, at most `MAX_FPS` per stream, from the event
-loop. The declared streams are held in the state `CameraStreams`, which the ``agent_ui``
+loop. The declared streams are held in the state `CameraStreams`, which the agent's
 bloks show (``<StructureDisplay value="@stream" />``).
 
 Not imported by `newswitch.infra.streaming`: it needs the extra ``agent``
@@ -72,7 +72,7 @@ class CameraStreams:
 async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: CameraStreams) -> None:
     """Background: declare a stream per detector and send each its newest frames.
 
-    `sink` is the agent's `FrameSink` context, which ``main_arkitekt.py`` provides as a
+    `sink` is the agent's `FrameSink` context, which ``app.py`` provides as a
     `LovekitSink`.
     """
     if not isinstance(sink, LovekitSink):

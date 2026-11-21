@@ -1,19 +1,19 @@
 """Pytest configuration and shared fixtures for newswitch tests.
 
 The microscope the tests run on is the complete reference microscope
-(`newswitch.infra.export_schemas.REFERENCE_INSTRUMENT`: every part), simulated, with every folder
+(`newswitch.reference.REFERENCE_INSTRUMENT`: every part), simulated, with every folder
 under the test's ``tmp_path``:
 
 - `settings`: the settings of such a run;
 - `microscope`: its parts, built (`newswitch.microscope.parts.build_microscope`): managers and
   states wired exactly as the app wires them, no hand-wiring;
-- `registry_names`: what an instrument registers (states, actions), without an app;
+- `registry_names`: what newswitch registers (states, actions), the same on every microscope;
 - `virtual_microscope_app`: the full FastAPI app, for tests that talk to the agent.
 """
 
 import asyncio
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from arkitekt_fastapi.testing import AsyncAgentTestClient, BufferedEvent
@@ -30,7 +30,7 @@ from newswitch.models.acquisition import (
     AcquisitionStack,
 )
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.infra.export_schemas import REFERENCE_INSTRUMENT
+from newswitch.reference import REFERENCE_INSTRUMENT
 
 
 @pytest.fixture(autouse=True)
@@ -79,9 +79,10 @@ def microscope(settings: Settings) -> Microscope:
     return build_microscope(settings, spec.load(REFERENCE_INSTRUMENT))
 
 
-def registry_names(instrument: Optional[spec.Instrument]) -> tuple[set[str], set[str]]:
-    """The states and actions `instrument` registers in FastAPI mode (no app, no startup)."""
-    registry = create_fastapi_registry(instrument).registry.snapshot()
+def registry_names() -> tuple[set[str], set[str]]:
+    """The states and actions newswitch registers in FastAPI mode (no app, no startup): the same
+    whatever its instrument."""
+    registry = create_fastapi_registry(None).registry.snapshot()
     actions = {impl.interface or impl.definition.name for impl in registry.get_implementations()}
     return set(registry.states), actions
 

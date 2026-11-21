@@ -2,15 +2,14 @@
 
     uv run python -m newswitch.infra.export_schemas            # writes ../frontend/schemas/*.json
 
-What newswitch registers depends on the instrument (`newswitch.microscope.registry`),
-but the frontend's hooks must cover everything newswitch can do. So they are generated
-from the schemas of a complete microscope (`REFERENCE_INSTRUMENT`: every part), written here into
-committed files the frontend's codegen reads (``frontend/plugins/generate-app.ts``),
-whatever instrument a running backend has. The mirror of the blok catalog, which the
-frontend exports for the backend.
+What newswitch registers is the same on every microscope (`newswitch.microscope.registry`), so
+the frontend's hooks cover everything newswitch can do whatever instrument a running backend has.
+They are generated from the schemas of that registry, written here into committed files the
+frontend's codegen reads (``frontend/plugins/generate-app.ts``). The mirror of the blok catalog,
+which the frontend exports for the backend.
 
 The frontend talks to newswitch served by FastAPI (``main_fastapi.py``), so the
-files are exactly what a FastAPI backend on the reference microscope serves at
+files are exactly what a FastAPI backend serves at
 ``/schemas/implementations``, ``/schemas/states`` and ``/schemas/locks``: the same objects,
 from a snapshot of its app registry (what the served agent takes when it starts), encoded
 the same way. Nothing is started. Re-export after changing an action, state or lock;
@@ -26,35 +25,15 @@ from fastapi.encoders import jsonable_encoder
 
 from main_fastapi import create_fastapi_registry
 
-from newswitch.instrument import spec
-
-#: A microscope with every part (and no UI): what the frontend's hooks are generated from.
-REFERENCE_INSTRUMENT = Path(__file__).parents[1] / "reference" / "complete-microscope"
 #: Read by the frontend's codegen.
 SCHEMA_DIR = Path(__file__).parents[3] / "frontend" / "schemas"
-#: The states of every part: a microscope without one has no hooks for it.
-EVERY_PART = {
-    "MoveState",
-    "SwapState",
-    "TuneState",
-    "SourceState",
-    "DetectorState",
-    "UC2State",
-}
 
 
-def served_schemas(instrument: Path = REFERENCE_INSTRUMENT) -> dict[str, Any]:
-    """File name -> what a FastAPI backend on `instrument` serves for it.
-
-    Raises:
-        ValueError: `instrument` lacks a part: its hooks would be missing in the frontend.
-    """
+def served_schemas() -> dict[str, Any]:
+    """File name -> what a FastAPI backend serves for it, on any microscope."""
     # What the served agent takes when it starts (arkitekt_fastapi's lifespan), and what its
-    # /schemas/* routes return from it.
-    registry = create_fastapi_registry(spec.load(instrument)).registry.snapshot()
-    missing = sorted(EVERY_PART - set(registry.states))
-    if missing:
-        raise ValueError(f"{instrument.name} is not a complete microscope: it lacks {missing}")
+    # /schemas/* routes return from it. The ``ui`` bloks are not in them: no instrument is needed.
+    registry = create_fastapi_registry(None).registry.snapshot()
 
     implementations = {
         impl.interface or impl.definition.name: impl for impl in registry.get_implementations()
@@ -73,11 +52,11 @@ def served_schemas(instrument: Path = REFERENCE_INSTRUMENT) -> dict[str, Any]:
     )
 
 
-def export(out: Path = SCHEMA_DIR, instrument: Path = REFERENCE_INSTRUMENT) -> list[Path]:
-    """Write the schemas of `instrument` into `out`."""
+def export(out: Path = SCHEMA_DIR) -> list[Path]:
+    """Write the schemas into `out`."""
     out.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, schema in served_schemas(instrument).items():
+    for name, schema in served_schemas().items():
         target = out / name
         target.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
         written.append(target)

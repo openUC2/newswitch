@@ -1,7 +1,5 @@
 """What every microscope has: files, hooks, the expanse, calibration, light paths."""
 
-from typing import Tuple
-
 from arkitekt import App
 
 from newswitch.actions import core
@@ -9,6 +7,7 @@ from newswitch.protocols.frame_sink import FrameSink
 from newswitch.microscope import locks
 from newswitch.microscope.apps import models
 from newswitch.microscope.run import Run
+from newswitch.microscope.startup import provide_core
 from newswitch.protocols.cache import CacheManager
 from newswitch.protocols.calibration import CalibrationManager
 from newswitch.protocols.dataset_store import DatasetStore
@@ -44,45 +43,5 @@ app.register_context(SpaceManager)
 app.register_context(CacheManager, locks=[locks.CACHE])
 app.register_context(FrameSink)  # provided by the entrypoint
 app.register_context(DatasetStore)  # provided by the entrypoint
-
-
-async def provide_core(
-    run: Run,
-) -> Tuple[
-    IOManager,
-    IOState,
-    HookManager,
-    HookState,
-    ExpanseState,
-    ExpanseManager,
-    CalibrationState,
-    CalibrationManager,
-    OpticsState,
-    OpticsManager,
-    MetadataManager,
-    SpaceState,
-    SpaceManager,
-    CacheManager,
-]:
-    """What every microscope has."""
-    m = run.microscope
-    return (
-        m.io,
-        m.io_state,
-        m.hooks,
-        m.hook_state,
-        m.expanse_state,
-        m.expanse,
-        m.calibration_state,
-        m.calibration,
-        m.optics_state,
-        m.optics,
-        m.metadata,
-        m.space_state,
-        m.space,
-        m.cache,
-    )
-
-
 app.register_startup(provide_core)
 app.register_action(core.clear_expanse)

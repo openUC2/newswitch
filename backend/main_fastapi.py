@@ -3,12 +3,15 @@
     NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev
     uv run uvicorn main_fastapi:create --factory --reload
 
-`create_fastapi_registry` registers newswitch for the newswitch frontend: the microscope
-(`create_registry`), a `FrameBroadcaster` as the detectors' `FrameSink` (the websocket live
-view streams from it), and the description's ``ui`` bloks checked against the frontend's catalog. `create_app`
-serves that registry through arkitekt-fastapi, with auth, accounts, live view, files and
-the cache beside it. There is no module-level app: uvicorn calls `create` (``--factory``), on every
-reload again.
+The agent (``app.py``) is the standard way to run newswitch; this serves the same microscope to the
+newswitch frontend instead of Orkestrator. `create_fastapi_registry` registers it: the global
+microscope registry the agent merges too (`newswitch.microscope.registry.app`: every part, whatever
+the instrument has), a
+`FrameBroadcaster` as the detectors' `FrameSink` (the websocket live view streams from it), and the
+description's ``ui`` bloks checked against the frontend's catalog. Those are the instrument's own,
+as this app is not compiled into a release. `create_app` serves that registry through
+arkitekt-fastapi, with auth, accounts, live view, files and the cache beside it. There is no
+module-level app: uvicorn calls `create` (``--factory``), on every reload again.
 """
 
 import logging
@@ -31,7 +34,7 @@ from newswitch.infra.accounts.routes import router as users_router
 from newswitch.infra.ui import declare_ui
 from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.instrument.spec import Instrument
-from newswitch.microscope.registry import create_registry
+from newswitch.microscope import registry
 from newswitch.infra.http.cache import router as cache_router
 from newswitch.infra.http.files import router as files_router
 from newswitch.infra.http.liveview import router as liveview_router
@@ -56,14 +59,16 @@ async def provide_no_dataset_store(run: Run) -> DatasetStore:
 
 
 def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = False) -> App:
-    """Step 3: the registry of `instrument` for the newswitch frontend.
+    """Step 3: the registry for the newswitch frontend, with the ``ui`` bloks of `instrument`.
 
     Args:
-        instrument: What to run; None: no devices, the core only.
+        instrument: Whose ``ui`` bloks to declare; None: none. What is registered besides does
+            not depend on it.
         with_mikro: Provide the client of the run's mikro. Nothing provides one here, as arkitekt
             does in agent mode.
     """
-    app = create_registry(instrument)
+    app = App(registry.IDENTIFIER, registry.VERSION, app_context=Run)
+    app.registry.merge(registry.app.registry)  # the microscope: every part
     app.register_startup(provide_frame_broadcaster)
     if with_mikro:
         from newswitch.infra.mikro import app as mikro_app  # needs the extra mikro
@@ -120,12 +125,12 @@ def create_app(
     # The registry this app serves: created here, everything registered on it, with the
     # views of the instrument
     run = Run.of(config, MikroConnection.from_env())
-    registry = create_fastapi_registry(run.instrument, with_mikro=run.mikro is not None)
+    served = create_fastapi_registry(run.instrument, with_mikro=run.mikro is not None)
 
     # Serve everything registered (actions, states, contexts, hooks, bloks)
     configure_fastapi(
         app=fastapi,
-        app_registry=registry.registry,
+        app_registry=served.registry,
         expand_user_from_request=make_expand_user_from_request(authenticator),
         app_context=run,
         db_file=config.db_path,

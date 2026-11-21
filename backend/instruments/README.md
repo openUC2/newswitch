@@ -7,7 +7,8 @@ only takes a restart. What changes while it runs
 (exposure, gain, positions) lives in its states and starts from each variable's `initial`.
 
 ```bash
-NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev   # or its folder
+NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just agent --url <server>   # or its folder
+NEWSWITCH_CONFIG=instruments/fake-microscope/microscope.yml just dev                    # FastAPI and the frontend
 ```
 
 `NEWSWITCH_CONFIG` is the only thing that picks a microscope (the root `.env` and the Dockerfile
@@ -270,15 +271,20 @@ settings:
 
 ## What it shows
 
-The bloks live in the description too, as BSX source, and come from nowhere else. Its `ui` section
-is what the frontend shows, its `agent_ui` section what Orkestrator shows; a section left out shows
-nothing. Each lists its `bloks` by name, each with its `bsx` (or a `file` beside the description), a
-`description` (a view's starts with its tab label) and `default` for the one shown first.
+What the newswitch frontend shows lives in the description too, as BSX source, in its `ui` section;
+left out, the frontend shows nothing there. It lists its `bloks` by name, each with its `bsx` (or a
+`file` beside the description), a `description` (a view's starts with its tab label) and `default`
+for the one shown first.
 
 Every blok is one `<Blok kind="agent" context="panel" catalog="...">`, which says the catalog it is
 written for. A `ui` blok is written for `newswitch`, the frontend's catalog, and the section's
-`catalog` names the version of it the bloks were written against; an `agent_ui` blok is written for
-the base catalog (no `catalog`) or Orkestrator's (`https://arkitekt.live/catalogs/orkestrator/v1`).
+`catalog` names the version of it the bloks were written against.
+
+What Orkestrator shows (newswitch run as an agent) is not in the description: the agent's bloks ship
+with newswitch (`newswitch/infra/ui/agent/`) and are the same on every microscope. A description
+with an `agent_ui` section is refused. Those bloks bind variables by name, so a description follows
+their convention: the stage is the cube `stage`, moving along `x`, `y` and `z` (`stage.x`, `stage.y`,
+`stage.z`).
 
 ```yaml
 ui:
@@ -293,7 +299,7 @@ ui:
         </Blok>
 ```
 
-A blok the catalog refuses, one written for another catalog, or one naming an action this microscope
+A blok the catalog refuses, one written for another catalog, or one naming an action newswitch
 does not have, stops the start.
 
 ## Which ones there are

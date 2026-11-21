@@ -1,53 +1,49 @@
-"""The app registry of one newswitch: what its instrument has, merged.
+"""Who newswitch is on an arkitekt server, and the microscope FastAPI mode serves: every part merged.
 
-Each is a registry of its own (`newswitch.microscope.apps`): its states, contexts, startup hook,
-actions and background tasks, as plain module-level functions. `create_registry` creates a fresh `App`
-and merges the ones the instrument turns out to have:
+The agent (``app.py``) registers every part itself, directly; FastAPI mode (``main_fastapi.py``)
+merges `app` here. Each part is a registry of its own (`newswitch.microscope.apps`): its states,
+contexts, startup hook, actions and background tasks, as plain module-level functions. `app` merges
+all of them, once, when this module is imported:
 
 1. the core every microscope has (the models, files, the expanse, calibration, light paths, hooks);
-2. what it has: its variables, its detectors, a UC2 board;
-3. what needs several of those, when all of them are there (focus, acquisition).
+2. what a microscope may have: its variables, its detectors, a UC2 board;
+3. what needs several of those (focus, acquisition).
+
+What is registered does not depend on the instrument, which is only known when a run starts (its
+`Run`, the app context). That is what lets arkitekt inspect the app without one, and compile it into
+a release (``arkitekt inspect all app``). Every state is always provided; a part the instrument
+lacks is a context its startup hook provides as ``None``. arkitekt then fails an action that needs
+it when it is called, and does not start the background tasks or shutdown hooks that need it.
 
 How it is served is not registered here. The detectors stream to a `FrameSink` context
-(declared by the core, a protocol); ``main_fastapi.py`` and ``main_arkitekt.py`` each provide it
-their way (the websocket live view's `FrameBroadcaster`, a lovekit sink), pass in the
-arkitekt services they need, and register the UI they show (the description's ``ui`` or
-``agent_ui``, checked strictly against what was merged here).
+(declared by the core, a protocol); ``main_fastapi.py`` merges `app` into the app it serves,
+provides that context (the websocket live view's `FrameBroadcaster`) and declares the UI it shows.
+Like the parts, `app` lives as long as the process: declare nothing on it from outside.
+``tests/test_registry.py`` holds it and ``app.py`` to the same actions, states and locks.
 
-Without an instrument only the core is merged. Every app is run with its own `Run`, which holds its
-one `build_microscope`: two apps share nothing.
+Every app is run with its own `Run`, which holds its one `build_microscope`: two runs share nothing.
 """
 
-from typing import Any, Sequence
+from importlib.metadata import PackageNotFoundError, version
 
-from arkitekt import App, Service
+from arkitekt import App
 
-from newswitch.instrument.spec import Instrument
 from newswitch.microscope.apps import acquisition, core, detector, focus, uc2, values
 from newswitch.microscope.run import Run
 
+#: What newswitch is called on an arkitekt server.
+IDENTIFIER = "newswitch"
+#: What it says it is there.
+DESCRIPTION = (
+    "A microscope, described by its optical elements: its stage, optics, detectors and acquisition."
+)
 
-def create_registry(instrument: Instrument | None, services: Sequence[Service[Any]] = ()) -> App:
-    """A new app registry with what `instrument` has.
+try:
+    #: The installed newswitch's version: the one in ``pyproject.toml``.
+    VERSION = version("newswitch")
+except PackageNotFoundError:  # run from a checkout that was never installed
+    VERSION = "0.0.0"
 
-    Args:
-        instrument: What to run; None: no devices, the core only.
-        services: The arkitekt services the app is created with (lovekit for the agent).
-    """
-    app = App("newswitch", app_context=Run, services=services)
-    app.registry.merge(core.app.registry)
-    if instrument is None:
-        return app
-
-    moves = any(variable.verb == "moves" for variable in instrument.variables.values())
-    detectors, sources = instrument.detectors(), instrument.sources()
-    app.registry.merge(values.app.registry)
-    if detectors:
-        app.registry.merge(detector.app.registry)
-    if moves and detectors:
-        app.registry.merge(focus.app.registry)
-    if moves and detectors and sources:
-        app.registry.merge(acquisition.app.registry)
-    if instrument.hardware.boards:
-        app.registry.merge(uc2.app.registry)
-    return app
+app = App(IDENTIFIER, app_context=Run)
+for part in (core, values, detector, focus, acquisition, uc2):
+    app.registry.merge(part.app.registry)

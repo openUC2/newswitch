@@ -1,5 +1,5 @@
 """The microscope never imports what serves it: `newswitch.infra` and the entry files that put it
-together (``main_fastapi.py``, ``main_arkitekt.py``, ``main.py``) import the rest, not the reverse.
+together (``app.py``, ``main_fastapi.py``, ``main.py``) import the rest, not the reverse.
 
 Only imports that run count: one under ``if TYPE_CHECKING:`` names a type and loads nothing.
 """
@@ -12,7 +12,7 @@ import pytest
 PACKAGE = Path(__file__).resolve().parents[1] / "newswitch"
 INFRA = PACKAGE / "infra"
 #: What serves the microscope: the package, and the entry files beside it.
-SERVING = ("newswitch.infra", "main", "main_fastapi", "main_arkitekt")
+SERVING = ("newswitch.infra", "app", "main", "main_fastapi")
 
 
 def _is_type_checking(test: ast.expr) -> bool:
