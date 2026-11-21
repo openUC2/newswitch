@@ -8,12 +8,35 @@ typed events a real transport would.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Optional
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from newswitch.drivers.uc2.event_broker import UC2EventBroker
-from newswitch.models.uc2 import STAGE_AXES, HomingChanged, MotionDone, PositionUpdate, UC2Event
+from newswitch.drivers.uc2.firmware import wanting
+from newswitch.instrument.hardware import Firmware
+from newswitch.models.uc2 import (
+    STAGE_AXES,
+    HomingChanged,
+    MotionDone,
+    PositionUpdate,
+    UC2Event,
+    UC2Node,
+)
 from newswitch.states.uc2 import UC2State
+
+if TYPE_CHECKING:  # pragma: no cover
+    from newswitch.drivers.uc2.firmware import FirmwareImage, Report
+
+#: What a simulated node is, by its node id (as the uc2canopen node map has them).
+_VIRTUAL_KINDS = {
+    11: "motor",
+    12: "motor",
+    13: "motor",
+    14: "motor",
+    20: "led",
+    21: "laser",
+    30: "galvo",
+}
 
 
 @dataclass
@@ -33,10 +56,39 @@ class VirtualUC2Bus:
 
     state: UC2State
 
-    def __init__(self, state: UC2State, config: Optional[VirtualUC2BusConfig] = None) -> None:
-        """Initialize the simulator with shared bus state."""
+    def __init__(
+        self,
+        state: UC2State,
+        config: Optional[VirtualUC2BusConfig] = None,
+        firmware: Optional[Firmware] = None,
+    ) -> None:
+        """Initialize the simulator with shared bus state, and what its description says it runs."""
         self.state = state
         self.config = config or VirtualUC2BusConfig()
+        self.firmware = firmware
+        self._board = UC2Node(
+            can_id=1,
+            kind="master",
+            status="connected",
+            firmware="virtual",
+            image="esp32_UC2_canopen_master_release.bin",
+            build="virtual",
+        )
+        ids = self.config.fake_nodes if self.config.fake_nodes is not None else [11, 12, 13, 20, 21]
+        self._nodes = {
+            can_id: UC2Node(
+                can_id=can_id,
+                kind=_VIRTUAL_KINDS.get(can_id, "motor"),
+                status="idle",
+                firmware="virtual",
+                image=f"esp32_UC2_canopen_slave_{_VIRTUAL_KINDS.get(can_id, 'motor')}_release.bin",
+                build="virtual",
+                mac=f"02:00:00:00:00:{can_id:02X}",
+            )
+            for can_id in ids
+        }
+        self.flashed: list[Optional[int]] = []
+        """What was flashed, in order: None for the board, else the node id."""
         self._broker = UC2EventBroker()
         self._positions: dict[str, float] = {axis: 0.0 for axis in STAGE_AXES}
         self._lasers: dict[int, int] = {}
@@ -105,13 +157,36 @@ class VirtualUC2Bus:
 
     # -- bus / fleet -------------------------------------------------------------
 
-    async def ascan_nodes(self, timeout: float = 3.0) -> list[int]:
-        """Return the configured fake node list and mirror it into state."""
-        nodes = (
-            self.config.fake_nodes if self.config.fake_nodes is not None else [11, 12, 13, 20, 21]
-        )
-        self.state.nodes_online = sorted(nodes)
-        return sorted(nodes)
+    async def ascan_nodes(self, timeout: float = 3.0) -> list[UC2Node]:
+        """The simulated nodes, mirrored into state."""
+        self.state.nodes_online = sorted(self._nodes)
+        return [wanting(self._nodes[can_id], self.firmware) for can_id in sorted(self._nodes)]
+
+    async def aidentify(self) -> Optional[UC2Node]:
+        """The simulated master on the port."""
+        return wanting(self._board, self.firmware, board=True)
+
+    # -- firmware ------------------------------------------------------------------
+
+    def _flashed(self, node: UC2Node, image: "FirmwareImage") -> UC2Node:
+        name = image.path.name.replace("_merged.bin", ".bin")
+        return replace(node, image=name, firmware=image.version or "virtual")
+
+    async def aflash_board(self, image: "FirmwareImage", report: "Report") -> None:
+        """Pretend to write the board: it then runs the image."""
+        for percent in (0, 50, 100):
+            report(f"writing {image.path.name}", percent)
+            await asyncio.sleep(0)
+        self._board = self._flashed(self._board, image)
+        self.flashed.append(None)
+
+    async def aflash_node(self, can_id: int, image: "FirmwareImage", report: "Report") -> None:
+        """Pretend to send a node its image: it then runs it."""
+        if can_id not in self._nodes:
+            raise RuntimeError(f"node {can_id} is not on the bus")
+        report(f"sending {image.path.name}", 100)
+        self._nodes[can_id] = self._flashed(self._nodes[can_id], image)
+        self.flashed.append(can_id)
 
     # -- objective changer -------------------------------------------------------
 

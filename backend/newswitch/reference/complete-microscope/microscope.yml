@@ -110,4 +110,5 @@ hardware:
     laser-dac: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
     led-dac: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
   cameras:
-    camera: {protocol: usb3-vision, vendor: Simulated, buffer_size: 8}
+    # uc2_cam_py's simulated camera, at the size its sensor is described with (its default is 1920 x 1200)
+    camera: {protocol: usb3-vision, vendor: Simulated, buffer_size: 8, vendor_options: {sensor_width: 512, sensor_height: 512}}

@@ -114,3 +114,6 @@ frontend/test-results/
 
 # Models built by the removed optikit design pipeline
 backend/newswitch/assets/design/
+
+# The arkitekt agent's runtime journal (rekuest_journal.db*), written wherever it runs
+backend/.arkitekt/

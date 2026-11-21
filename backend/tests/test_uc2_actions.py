@@ -1,10 +1,17 @@
 """Agent-level tests for the Wave-1 UC2 registered actions (virtual bus)."""
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 from arkitekt_fastapi.testing import AsyncAgentTestClient
 from fastapi import FastAPI
 
-from tests.conftest import collect_until_completed
+from main_fastapi import create_app
+from newswitch.infra.accounts.auth import AllowAllAuthenticator
+from tests.conftest import collect_until_completed, run_settings
+
+FAKE = Path(__file__).parent.parent / "instruments" / "fake-microscope"
 
 
 @pytest.mark.asyncio
@@ -83,3 +90,42 @@ async def test_run_autofocus_action(virtual_microscope_app: FastAPI) -> None:
 
         moves = (await client.get("/states/MoveState")).json()["state"]["moves"]
         assert moves["stage"]["z"]["current"] == pytest.approx(best_z)
+
+
+@pytest.mark.asyncio
+async def test_the_scan_says_what_each_node_runs(virtual_microscope_app: FastAPI) -> None:
+    """Its return holds each node's image and version, and the board lands in UC2State."""
+    async with AsyncAgentTestClient(virtual_microscope_app) as client:
+        result = await client.assign("uc2_scan_nodes", {})
+        events = await collect_until_completed(client, result.task_id)
+        assert events[-1].event_type == "COMPLETED"
+        returned = [e.get_returns() for e in events if e.get_returns()]
+        assert "esp32_UC2_canopen_slave_motor_release.bin" in str(returned)
+        state = (await client.get("/states/UC2State")).json()
+        assert "master" in str(state) and "esp32_UC2_canopen_master_release.bin" in str(state)
+
+
+@pytest.mark.asyncio
+async def test_update_firmware_flashes_what_the_description_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On the fake microscope's simulated bus: the board and the named nodes, nothing downloaded."""
+    from newswitch.drivers.uc2 import firmware
+
+    async def fetch(spec: Any, pin: Any, full: bool) -> firmware.FirmwareImage:  # noqa: ANN401
+        return firmware.FirmwareImage(
+            path=Path(f"esp32_{pin.env}.bin"),
+            chip="esp32",
+            offset=0x10000,
+            url="",
+            version=spec.version_of(pin),
+        )
+
+    monkeypatch.setattr(firmware, "fetch", fetch)
+    app = create_app(run_settings(tmp_path, instrument=FAKE), AllowAllAuthenticator())
+    async with AsyncAgentTestClient(app) as client:
+        result = await client.assign("update_firmware", {"nodes": [11]})
+        events = await collect_until_completed(client, result.task_id, timeout=20.0)
+        assert events[-1].event_type == "COMPLETED", events[-1]
+        returned = [e.get_returns() for e in events if e.get_returns()]
+        assert "esp32_UC2_canopen_slave_motor_release_motX.bin" in str(returned)

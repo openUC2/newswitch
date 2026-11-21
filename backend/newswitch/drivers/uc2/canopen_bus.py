@@ -18,7 +18,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
+from newswitch.drivers.uc2 import canopen_sdo
+from newswitch.drivers.uc2 import firmware as fw
 from newswitch.drivers.uc2.event_broker import UC2EventBroker
+from newswitch.instrument.hardware import Firmware
 from newswitch.models.uc2 import (
     BusError,
     HomingChanged,
@@ -26,6 +29,7 @@ from newswitch.models.uc2 import (
     NodeSeen,
     PositionUpdate,
     UC2Event,
+    UC2Node,
 )
 from newswitch.states.uc2 import UC2State
 
@@ -70,6 +74,9 @@ class UC2CanBusConfig:
     move_timeout_s: float = 120.0
     reconnect_backoff_initial_s: float = 1.0
     reconnect_backoff_max_s: float = 30.0
+    # False: every motion command (moves, homing, the objective changer) is refused before it
+    # reaches the board; stopping still works. For a frame whose stage must not move.
+    allow_motion: bool = True
     # Objective changer, realized as a motor node driving between calibrated
     # slot positions (steps). Index 0 = slot 1, index 1 = slot 2, ...
     objective_node: int = 15
@@ -83,10 +90,16 @@ class UC2CanBus:
 
     state: UC2State
 
-    def __init__(self, state: UC2State, config: Optional[UC2CanBusConfig] = None) -> None:
+    def __init__(
+        self,
+        state: UC2State,
+        config: Optional[UC2CanBusConfig] = None,
+        firmware: Optional[Firmware] = None,
+    ) -> None:
         """Initialize the CAN transport with shared bus state (no I/O yet)."""
         self.state = state
         self.config = config or UC2CanBusConfig()
+        self.firmware = firmware
         self._broker = UC2EventBroker()
         self._client: Optional["AsyncUC2Client"] = None
         self._connected = asyncio.Event()
@@ -224,6 +237,17 @@ class UC2CanBus:
             self._client = None
             await client.aclose()
 
+    def _may_move(self, what: str) -> None:
+        """Refuse a motion command when the board's motion is disabled (``allow_motion: false``).
+
+        Raises:
+            PermissionError: It is.
+        """
+        if not self.config.allow_motion:
+            raise PermissionError(
+                f"{what}: motion is disabled on this board (allow_motion: false); nothing was sent"
+            )
+
     async def _require_client(self, timeout: float = 30.0) -> "AsyncUC2Client":
         """Wait for the background connection and return the async client."""
         try:
@@ -248,6 +272,7 @@ class UC2CanBus:
         acceleration: Optional[float] = None,
     ) -> float:
         """Move one axis (event-driven wait on the TPDO done edge)."""
+        self._may_move("amove_axis")
         client = await self._require_client()
         speed_steps = int(abs((speed or self.config.default_speed) * self.scale_for_axis(axis)))
         final_steps = await client.move_and_wait(
@@ -268,6 +293,7 @@ class UC2CanBus:
 
     async def ahome_axis(self, axis: str) -> None:
         """Home one axis and wait for the homing-done status."""
+        self._may_move("ahome_axis")
         client = await self._require_client()
         homed = await client.home_and_wait(
             axis=self.sub_for_axis(axis),
@@ -290,17 +316,70 @@ class UC2CanBus:
 
     # -- bus / fleet --------------------------------------------------------------
 
-    async def ascan_nodes(self, timeout: float = 3.0) -> list[int]:
-        """Passively scan for online CAN nodes and mirror them into state."""
+    async def ascan_nodes(self, timeout: float = 3.0) -> list[UC2Node]:
+        """The online CAN nodes (heard for `timeout` seconds), each asked what it runs."""
         client = await self._require_client()
-        nodes = await client.scan_nodes(timeout=timeout)
-        self.state.nodes_online = sorted(set(self.state.nodes_online) | set(nodes))
-        return sorted(nodes)
+        ids = sorted(await client.scan_nodes(timeout=timeout))
+        self.state.nodes_online = sorted(set(self.state.nodes_online) | set(ids))
+
+        def identities() -> list[UC2Node]:
+            attached = canopen_sdo.attach(client.sync, self.config.sdo_timeout)
+            try:
+                return [
+                    fw.wanting(
+                        fw.node_from_scan(
+                            {
+                                "canId": can_id,
+                                "statusStr": "online",
+                                **canopen_sdo.read_identity(attached, can_id),
+                            }
+                        ),
+                        self.firmware,
+                    )
+                    for can_id in ids
+                ]
+            finally:
+                attached.detach()
+
+        return await asyncio.to_thread(identities)
+
+    async def aidentify(self) -> Optional[UC2Node]:
+        """None: on socketcan no board is on a port, only CAN nodes."""
+        return None
+
+    # -- firmware ----------------------------------------------------------------
+
+    async def aflash_board(self, image: "fw.FirmwareImage", report: "fw.Report") -> None:
+        """No board is on a port of a CAN bus: flash a master over its own USB (transport rest)."""
+        raise RuntimeError(
+            "a canopen bus has no board on a port: flash the master over its USB (transport: rest)"
+        )
+
+    async def aflash_node(
+        self, can_id: int, image: "fw.FirmwareImage", report: "fw.Report"
+    ) -> None:
+        """Send `image` to a node's OTA over SDO; it reboots into it."""
+        client = await self._require_client()
+        loop = asyncio.get_running_loop()
+        data = await asyncio.to_thread(image.path.read_bytes)
+
+        def progress(percent: int) -> None:
+            loop.call_soon_threadsafe(report, f"sending {image.path.name}", percent)
+
+        def send() -> None:
+            attached = canopen_sdo.attach(client.sync, max(self.config.sdo_timeout, 5.0))
+            try:
+                canopen_sdo.flash_node(attached, can_id, data, progress)
+            finally:
+                attached.detach()
+
+        await asyncio.to_thread(send)
 
     # -- objective changer ---------------------------------------------------------
 
     async def aobjective_move(self, slot: int) -> None:
         """Drive the objective motor node to the calibrated slot position."""
+        self._may_move("aobjective_move")
         positions = self.config.objective_slot_positions_steps
         if not 1 <= slot <= len(positions):
             raise ValueError(f"Objective slot {slot} out of range 1..{len(positions)}")
@@ -317,6 +396,7 @@ class UC2CanBus:
 
     async def aobjective_home(self) -> None:
         """Home the objective motor node."""
+        self._may_move("aobjective_home")
         client = await self._require_client()
         homed = await client.home_and_wait(
             axis=self.config.objective_sub,

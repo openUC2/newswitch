@@ -17,6 +17,7 @@ from newswitch.models.space import (
     Transformation,
     PlaceShape,
 )
+from newswitch.models.uc2 import UC2Node
 from newswitch.models.hooks import RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 
 #: Every model, in the order they are registered.
@@ -62,4 +63,5 @@ MODELS: tuple[type, ...] = (
     CalibratedLightPath,
     models.AcquiredDataset,
     uc2.GalvoStatus,
+    UC2Node,
 )

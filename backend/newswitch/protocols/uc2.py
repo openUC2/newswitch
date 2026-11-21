@@ -20,11 +20,15 @@ emergency stop, buttons) are exposed as a typed async event stream via
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, Protocol, runtime_checkable
 
-from newswitch.models.uc2 import UC2Event
+from newswitch.instrument.hardware import Firmware
+from newswitch.models.uc2 import UC2Event, UC2Node
 from newswitch.protocols.base import BackgroundManager
 from newswitch.states.uc2 import UC2State
+
+if TYPE_CHECKING:  # pragma: no cover
+    from newswitch.drivers.uc2.firmware import FirmwareImage, Report
 
 # ---------------------------------------------------------------------------
 # Typed hardware events
@@ -51,6 +55,8 @@ class UC2BusManager(BackgroundManager, Protocol):
     """
 
     state: UC2State
+    firmware: Optional[Firmware]
+    """What the description says the board and its CAN nodes run; None: it says nothing."""
 
     # -- stage motion (micrometers; degrees for axis "A") ---------------------
 
@@ -79,8 +85,22 @@ class UC2BusManager(BackgroundManager, Protocol):
 
     # -- bus / fleet -----------------------------------------------------------
 
-    async def ascan_nodes(self, timeout: float = 3.0) -> list[int]:
-        """Discover reachable bus nodes (CAN node ids / firmware CAN scan)."""
+    async def ascan_nodes(self, timeout: float = 3.0) -> list[UC2Node]:
+        """The reachable CAN nodes, each as it identifies itself (image, version, build, MAC)."""
+        ...
+
+    async def aidentify(self) -> Optional[UC2Node]:
+        """The board on the port, as it identifies itself; None when there is none (socketcan)."""
+        ...
+
+    # -- firmware (`newswitch.drivers.uc2.firmware`) -----------------------------
+
+    async def aflash_board(self, image: "FirmwareImage", report: "Report") -> None:
+        """Write `image` to the board on the port over USB, and reconnect to it."""
+        ...
+
+    async def aflash_node(self, can_id: int, image: "FirmwareImage", report: "Report") -> None:
+        """Send `image` (the app alone) to a CAN node, which reboots into it."""
         ...
 
     # -- objective changer -----------------------------------------------------

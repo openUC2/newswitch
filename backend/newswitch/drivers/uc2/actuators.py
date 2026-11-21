@@ -108,6 +108,40 @@ class Laser(_OneAtATime):
 
 
 @dataclass(frozen=True)
+class LedArrayConfig:
+    """The color a board's LED array fills with at full power (0-255 each)."""
+
+    r: int = 255
+    g: int = 255
+    b: int = 255
+
+
+class LedArray(_OneAtATime):
+    """A source's power as the fill of a board's LED array: its color, scaled by the power's share
+    of the full scale; none turns it off. On a CAN master the fill reaches the illumination board."""
+
+    def __init__(self, bus: UC2BusManager, config: LedArrayConfig, maximum: float) -> None:
+        """An LED array on `bus`, whose full scale is `maximum`, in its variable's unit."""
+        self.bus = bus
+        self.config = config
+        self.maximum = maximum
+
+    def start(self, initial: Any) -> Any:  # noqa: ANN401 - whatever the variable holds
+        """Nothing turned it on yet, whatever it is described to start from."""
+        return 0.0
+
+    def set(self, value: Any, report: Report, task: Task | None = None) -> None:  # noqa: ANN401
+        """Fill it, or turn it off."""
+        share = max(0.0, min(1.0, value / self.maximum))
+        if share == 0.0:
+            unkoil(self.bus.aled_off)
+        else:
+            r, g, b = (round(share * c) for c in (self.config.r, self.config.g, self.config.b))
+            unkoil(self.bus.aled_fill, r, g, b)
+        report(value)
+
+
+@dataclass(frozen=True)
 class WheelConfig:
     """A wheel on one axis of the board."""
 
@@ -162,6 +196,15 @@ def _laser(variable: Variable, options: Mapping[str, Any], context: Mapping[str,
     return Laser(_bus(context), LaserConfig(**options), variable.max)
 
 
+def _ledarray(variable: Variable, options: Mapping[str, Any], context: Mapping[str, Any]) -> Driver:
+    if variable.max is None:
+        raise TypeError("an LED array's power needs a max: it is what a full fill means")
+    config = LedArrayConfig(**options)
+    if not all(0 <= c <= 255 for c in (config.r, config.g, config.b)):
+        raise TypeError("an LED array's color is 0-255 per channel")
+    return LedArray(_bus(context), config, variable.max)
+
+
 def _wheel(variable: Variable, options: Mapping[str, Any], context: Mapping[str, Any]) -> Driver:
     config = WheelConfig(**options)
     if sorted(config.positions) != sorted(variable.slots):
@@ -181,5 +224,6 @@ def _turret(variable: Variable, options: Mapping[str, Any], context: Mapping[str
 
 register_driver("uc2.stepper", _stepper)
 register_driver("uc2.laser", _laser)
+register_driver("uc2.ledarray", _ledarray)
 register_driver("uc2.wheel", _wheel)
 register_driver("uc2.turret", _turret)

@@ -18,10 +18,10 @@ dependencies = [
     "pint>=0.25.2",
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
-    "arkitekt[mesh]==18.2.0",
+    "arkitekt==18.5.0",
     "arkitekt-fastapi==4.1.0",
-    "arkitekt-runtime==10.5.0",
-    "arkitekt-spec==12.6.0",
+    "arkitekt-runtime==10.7.0",
+    "arkitekt-spec==12.8.0",
     "koil>=3.4.1",
     "pyyaml>=6",
     "scipy>=1.17.0",
@@ -45,6 +45,10 @@ types = [
 uc2 = [
     "uc2-rest @ git+https://github.com/openUC2/UC2-REST.git@60f15bfc543baf41e46996cd149b298419de5eac",
     "uc2canopen>=0.2.0",
+    # Flashing (newswitch.drivers.uc2.firmware): esptool for the USB board, python-canopen for
+    # reading node identities and updating satellites directly on socketcan (segmented/block SDO).
+    "esptool>=4.8",
+    "canopen>=2.3",
 ]
 # Cameras through uc2_cam_py (newswitch.drivers.uc2.uc2_detector), pinned to a commit;
 # to update, enter the new SHA and run `uv lock`. Its C++ extension needs the MVS SDK
@@ -54,7 +58,9 @@ uc2 = [
 # server through rekuest, the cameras streamed through lovekit (newswitch.infra.streaming), its images
 # and their metadata in the mikro that server provides.
 agent = [
-    "arkitekt[rekuest,lovekit]==18.2.0",
+    "arkitekt[rekuest,lovekit]==18.5.0",
+    # The server's lovekit speaks the v6 API (no publishToken): the client has to be 6 too.
+    "lovekit>=6.0.0",
     "mikro==14.0.1",
 ]
 # Talking to a mikro in FastAPI mode (`newswitch.infra.mikro.connection`), where nothing

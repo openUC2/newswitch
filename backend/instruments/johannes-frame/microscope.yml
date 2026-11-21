@@ -1,0 +1,153 @@
+# Johannes' openUC2 FRAME: a HAT+ CAN master on the Pi's USB (CP2102), four motor satellites (A, X,
+# Y, Z), a laser and an LED satellite, and a HikRobot color camera (MV-CS060-10UC-PRO).
+#
+# Run it:      NEWSWITCH_CONFIG=instruments/johannes-frame just agent --url <server>
+# Its bus:     NEWSWITCH_CONFIG=instruments/johannes-frame just uc2 status
+#
+# THE STAGE MUST NOT MOVE FOR NOW: its moves name no actuator (they are simulated, nothing reaches the
+# board) and the board refuses every motion command (allow_motion: false), home_stage and the
+# objective changer included. To let it move: wire stg-x/y/z below again and drop allow_motion.
+#
+# Wired: the laser satellite, the illumination board's white LED and RGB ring, and the camera. The optics and the sources' spectra below are placeholders
+# (the rgb-camera's): measure the objective, tube lens and filters of this frame and state them.
+# How the HAT+ master routes what it is told (docs.openuc2.com, boards and node ids):
+#   /laser_act LASERid 0-3 -> laser satellite, node 20, channels 1-4
+#   /laser_act LASERid 4   -> illumination board, node 30, its white LED
+#   /ledarr_act            -> illumination board, node 30, its RGB ring array (136 LEDs)
+
+spec: newswitch/instrument/v0
+name: johannes-frame
+
+cubes:
+  laser:   # the laser satellite's first channel; its wavelength and power are placeholders
+    element: {kind: source, emits: laser, spectrum: {center: 488 nm, width: 2 nm}, max_power: 50 mW}
+    tunes:
+      power: {actuator: laser-0, initial: 0 mW, step: 1 mW, max: 50 mW}
+
+  led:     # the illumination board's white LED, from below
+    element: {kind: source, emits: led, spectrum: {center: 550 nm, width: 200 nm}, max_power: 50 nW}
+    tunes:
+      power: {actuator: led-white, initial: 0 mW, step: 1 nW, max: 50 nW}
+
+  ring:    # the illumination board's RGB ring array, filled white, from below
+    element: {kind: source, emits: led, spectrum: {center: 550 nm, width: 200 nm}, max_power: 50 nW}
+    tunes:
+      power: {actuator: ring-array, initial: 0 mW, step: 1 nW, max: 50 nW}
+
+  stage:
+    element:
+      kind: sample
+      simulation: gfp-beads
+      simulations:   # what the simulated camera sees until the real one is wired
+        gfp-beads:
+          fluorophore: egfp
+          absorbed: 1.0e-4
+          transmit: 0.9
+          reflect: 1.0e-6
+          pattern: {beads: 3600, radius: 2 um, depth: 4 um}
+    moves:
+      x: {along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      y: {along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
+      z: {along: axis, initial: 0 um, step: 1 um, min: -500 um, max: 500 um, speed: 500 um/s}
+
+  objective:
+    element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, working_distance: 10 mm}
+
+  dichroic:
+    element: {kind: dichroic, curve: lp_500}
+
+  tube:
+    element: {kind: lens, f: 200 mm}
+
+  camera:   # MV-CS060-10UC-PRO: 3072 x 2048 color pixels of 2.4 um
+    element:
+      kind: sensor
+      axes: {x: {size: 3072, pitch: 2.4 um}, y: {size: 2048, pitch: 2.4 um}}
+      readout: scmos
+      colors:
+        r: {center: 620 nm, width: 70 nm}
+        g: {center: 530 nm, width: 70 nm}
+        b: {center: 460 nm, width: 70 nm}
+    tunes:
+      frame_rate: {initial: 30 Hz, min: 1 Hz, max: 60 Hz, step: 1 Hz}
+      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 24 dB}
+      binning: {initial: 1, min: 1, max: 4, step: 1}
+
+illumination:
+  - {from: laser, to: dichroic}
+  - {from: dichroic, via: reflect, to: objective}
+  - {from: objective, to: stage, side: epi, field: 500 um}
+  - {from: led, to: stage, side: transmitted, field: 500 um}
+  - {from: ring, to: stage, side: transmitted, field: 500 um}
+
+detection:
+  - {from: stage, to: objective, distance: focus}
+  - {from: objective, to: dichroic, distance: 100 mm}
+  - {from: dichroic, via: transmit, to: tube, distance: 30 mm}
+  - {from: tube, to: camera, distance: focus}
+
+hardware:
+  boards:
+    uc2:
+      transport: rest     # serial JSON to the HAT+ master, which reaches the satellites over CAN
+      port_pattern: /dev/serial/by-id/usb-Silicon_Labs_CP2102*
+      baudrate: 921600
+      require_master: true
+      allow_motion: false   # the stage must not move: every motion command is refused
+      # What the bus runs, pinned to the builds it ran when this was written (2026-11-21, just uc2
+      # scan): development builds after v2026.0.0-beta.4, which no release publishes. On every start a
+      # server compares them with this (on_start: flash), and finds nothing to flash. A board running
+      # something else is flashed only from an image that is the pinned build: point its `release`
+      # (or `source`) at where that build is, or pin a release instead (e.g. 11: UC2_..._motX).
+      firmware:
+        release: v2026.0.0-beta.4
+        on_start: flash
+        board: {env: UC2_canopen_master_release, version: v2026.0.0-beta.4-13-ge86ebf3-t20261102085646}
+        nodes:
+          10: {env: UC2_canopen_slave_motor_release_motA, version: v2026.0.0-beta.4-9-g3c86acd-t20260930173005-pr133}
+          11: {env: UC2_canopen_slave_motor_release_motX, version: v2026.0.0-beta.4-9-g3c86acd-t20260930173005-pr133}
+          12: {env: UC2_canopen_slave_motor_release_motY, version: v2026.0.0-beta.4-9-g3c86acd-t20260930173005-pr133}
+          13: {env: UC2_canopen_slave_motor_release_motZ, version: v2026.0.0-beta.4-9-g3c86acd-t20260930173005-pr133}
+          20: {env: UC2_canopen_slave_laser_debug, version: v2026.0.0-beta.4-9-g3c86acd-t20260930173005-dirty}
+          30: {env: UC2_canopen_slave_led_release, version: v2026.0.0-beta.4-13-ge86ebf3-t20261102085646-pr133}
+  actuators:
+    # The stage, unwired for now (it must not move). 3.2 steps/um: the openUC2 default lead screw
+    # (0.3125 um/step); check per axis before wiring it again:
+    #   stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    #   stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    #   stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    # A satellite takes 0-65535 (u16) for full scale, the docs say, and does not say how it rescales;
+    # pwm_max 1023 keeps full power well below that until the full scale is measured.
+    laser-0: {driver: uc2.laser, board: uc2, channel: 0, pwm_max: 1023}
+    led-white: {driver: uc2.laser, board: uc2, channel: 4, pwm_max: 1023}
+    ring-array: {driver: uc2.ledarray, board: uc2, r: 255, g: 255, b: 255}
+  cameras:
+    # MV-CS060-10UC-PRO. store_image_data: false, or uc2_cam_py records every frame to
+    # camera_recording_dir (about 1 GB in minutes of live view at full size)
+    camera: {protocol: usb3-vision, vendor: HikRobot, serial_number: "DB0833733", store_image_data: false}
+
+settings:
+  simulate: unwired
+  db_path: arkitekt_agent.db
+  image_dir: /tmp/newswitch/images
+  cache_dir: /tmp/newswitch/cache
+  camera_recording_dir: data/recordings
+  camera_debug_window: false
+
+ui:
+  catalog: newswitch@10
+  bloks:
+    view-minimal:
+      description: 'Minimal: the live image and the stage, nothing else.'
+      default: true
+      file: ../views/minimal.bsx
+    view-stage:
+      description: 'Stage: the sample on the stage, with the images taken there.'
+      file: ../views/stage.bsx
+    view-fluorescence:
+      description: 'Fluorescence: excitation, emission and detection, built from blok primitives.'
+      file: ../views/fluorescence.bsx
+    view-acquire:
+      description: 'Acquire: time, positions, z planes and detectors, stored in mikro.'
+      file: ../views/acquire.bsx

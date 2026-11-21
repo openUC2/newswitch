@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
+
+from newswitch.models.uc2 import UC2Node
 
 
 @dataclass
@@ -15,3 +18,9 @@ class UC2State:
     estop_active: bool = False
     nodes_online: list[int] = field(default_factory=list)
     last_error: str = ""
+    board: Optional[UC2Node] = None
+    """The board on the port, as it identified itself (`uc2_scan_nodes`)."""
+    nodes: list[UC2Node] = field(default_factory=list)
+    """The CAN nodes, as the last scan found them."""
+    flashing: Optional[str] = None
+    """What is being flashed, and how far (`update_firmware`); None: nothing."""

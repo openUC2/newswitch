@@ -466,8 +466,16 @@ which `simulate: nothing` refuses.
 | --- | --- | --- |
 | `uc2.stepper` | A move, on one axis of the board | `board`, `axis`, `steps_per_um` (required: a wrong guess moves the sample somewhere else) |
 | `uc2.laser` | A source's power; its tune must state a `max`, the board's full scale | `board`, `channel`, `pwm_max` |
+| `uc2.ledarray` | A source's power as the fill of the board's LED array (on a CAN master: the illumination board's RGB ring): its color scaled by the power's share of the `max`; none turns it off | `board`, `r`, `g`, `b` (0-255, default white) |
 | `uc2.wheel` | A swap, by moving an axis | `board`, `axis`, `positions` per slot |
 | `uc2.turret` | A swap, by the objective changer | `board`, `positions` per slot in steps on a `canopen` board; a `rest` board's firmware keeps its own |
+
+A board with `allow_motion: false` refuses every motion command (moves, homing, the objective
+changer) before anything is sent; stopping still works. `instruments/johannes-frame` uses it, with its
+stage unwired, while its stage must not move.
+
+On a HAT+ CAN master, `uc2.laser` channels 0-3 reach the laser satellite (node 20) and channel 4 the
+illumination board's white LED (node 30); `uc2.ledarray` reaches that board's RGB ring.
 
 Others can be added: `register_driver` in `newswitch/drivers/base.py`. A wire in `drives` has no driver
 that can arm it yet, so one whose ends are real is refused.
@@ -536,3 +544,68 @@ hardware:
     laser-635: {driver: uc2.laser, board: uc2, channel: 1, pwm_max: 1023}
     led: {driver: uc2.laser, board: uc2, channel: 2, pwm_max: 1023}
 ```
+
+### What the bus runs: its firmware
+
+A board says which firmware it and its CAN nodes run: a release of
+[`youseetoo/uc2-esp32`](https://github.com/youseetoo/uc2-esp32/releases) and the PlatformIO env of
+each, which is the image the release publishes (`esp32_<env>.bin`). A node is an env (of the release),
+or pinned to a build: `{env, version, release}`, where `version` is exactly what it reports (a release
+image reports its tag; a development build `git describe`, `v2026.0.0-beta.4-13-ge86ebf3-t…`) and
+`release` where an image of it is fetched from. `instruments/johannes-frame` pins every node to the
+build it runs.
+
+On every start on real hardware (not `simulate: everything`) a server reads what the board and each
+node run and compares it with this (the background task `keep_firmware`). As `on_start` says, it
+flashes what differs (`flash`, the default), only says so in `UC2State.last_error` (`check`), or
+does nothing (`off`). Every image is fetched first and its own version, read off its app descriptor,
+checked against the pin: an image that is not the pinned build is refused before anything is
+written. `just uc2` and the action `update_firmware` do the same on demand.
+
+```yaml
+hardware:
+  boards:
+    uc2:
+      transport: rest
+      port_pattern: /dev/serial/by-id/usb-Silicon_Labs_CP2102*
+      baudrate: 921600
+      firmware:
+        release: v2026.0.0-beta.4                    # a release (tag)
+        on_start: flash                              # flash | check | off
+        board: UC2_canopen_master_release            # the board on the port; left out: left alone
+        nodes:                                       # CAN node id -> env, or a pinned build
+          11: UC2_canopen_slave_motor_release_motX
+          12: UC2_canopen_slave_motor_release_motY
+          13: UC2_canopen_slave_motor_release_motZ
+          30: {env: UC2_canopen_slave_led_release, version: v2026.0.0-beta.4-13-ge86ebf3-t20261102085646-pr133}
+        # source: https://github.com/youseetoo/uc2-esp32/releases/download   (the default)
+  actuators:
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    led: {driver: uc2.laser, board: uc2, channel: 3, pwm_max: 1023}
+```
+
+```bash
+just uc2 scan              # the board on the port and each CAN node: kind, image, version, build, MAC
+just uc2 status            # ... against the description; on canopen also where the node map disagrees
+just uc2 flash --dry-run   # what would be flashed, how, and from which URL
+just uc2 flash             # flash it (asks first); --node 11, --no-board, --force, --full
+just uc2 scan --no-description --port /dev/ttyUSB0 --baudrate 921600   # any board, no description
+```
+
+- The board on the port (the HAT+ master, a standalone board) is flashed over USB with esptool, the
+  app alone at 0x10000: what it stored (NVS: node id, role, positions) is kept. `--full` writes the
+  merged image at 0x0 instead, for a blank board; it resets NVS.
+- A CAN satellite is updated over CAN, the app alone into its free OTA slot, after which it reboots
+  into it (NVS kept): through the master (`rest`), or directly over SDO (`canopen`). It needs the
+  bootloader already: flash a blank satellite over its own USB once.
+- The order is the documented one: the board first, then each node. A board counts as updated once it
+  reports the image of the env and the pinned version.
+- `just uc2` opens the port itself: stop whatever holds it first. A running agent does the same with
+  the actions `uc2_scan_nodes` and `update_firmware`, which hold the motion, swap, tune and galvo
+  locks while the bus is down.
+- The documented node ids (docs.openuc2.com) are motor A/X/Y/Z 10-13, laser 20, LED 30, galvo 40,
+  GPIO 60; the canopen node map's defaults (`node_a: 14`, `node_led: 20`, `node_laser: 21`,
+  `node_galvo: 30`) follow uc2canopen instead. `just uc2 status` says where they disagree with what
+  answers.

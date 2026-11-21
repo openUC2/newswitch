@@ -73,6 +73,13 @@ dev-frontend:
 agent *args:
     cd backend && uv run --extra agent python app.py {{args}}
 
+# The UC2 bus of the description NEWSWITCH_CONFIG names: what is on it, and its firmware.
+# Talks to the port itself: stop whatever holds it (a server, ImSwitch) first. Needs the extra 'uc2'.
+#   just uc2 scan | status | flash --dry-run | flash [--node 11] [--no-board] [--yes]
+# The UC2 bus: scan it, compare its firmware with the description's, flash it
+uc2 *args:
+    cd backend && uv run --extra uc2 python -m newswitch.tools.uc2 {{args}}
+
 # What the agent declares, as `arkitekt plugin build` compiles it: no instrument is read
 agent-inspect:
     cd backend && env -u NEWSWITCH_CONFIG uv run --extra agent arkitekt inspect all app --json

@@ -122,7 +122,7 @@ def test_real_hardware_opens_the_cameras(
         assert isinstance(manager, UC2DetectorManager)
         assert isinstance(manager, DetectorManager)
         (detector,) = manager.state.detectors
-        assert (detector.name, detector.width, detector.height) == ("sim_cam", 640, 480)
+        assert (detector.name, detector.plane()) == ("sim_cam", (480, 640))  # rows, columns
         assert (detector.serial_number, detector.connection_type) == ("SIM-0001", "USB3")
         assert not detector.is_recording  # no debug window: nobody holds it
     finally:

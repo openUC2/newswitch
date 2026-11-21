@@ -158,8 +158,57 @@ def test_a_wheel_moves_its_axis() -> None:
 
 @pytest.mark.asyncio
 async def test_virtual_bus_scan_nodes() -> None:
-    """Node scan returns the fake fleet and mirrors it into UC2State."""
+    """Node scan returns the fake fleet, each with what it runs, and mirrors the ids into UC2State."""
     bus = make_virtual_bus()
     nodes = await bus.ascan_nodes()
-    assert nodes == [11, 12, 13, 20, 21]
-    assert bus.state.nodes_online == nodes
+    assert [node.can_id for node in nodes] == [11, 12, 13, 20, 21]
+    assert [node.kind for node in nodes] == ["motor", "motor", "motor", "led", "laser"]
+    assert all(node.image.startswith("esp32_UC2_canopen_slave_") for node in nodes)
+    assert bus.state.nodes_online == [node.can_id for node in nodes]
+
+
+class RecordingLeds:
+    """What an LED array is told to do, recorded."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    async def aled_fill(self, r: int, g: int, b: int) -> None:
+        self.calls.append(("fill", r, g, b))
+
+    async def aled_off(self) -> None:
+        self.calls.append(("off",))
+
+
+def test_an_led_array_fills_with_its_color_scaled_by_the_power() -> None:
+    """Half the full scale is half its color; none turns it off; it starts off, telling it nothing."""
+    from newswitch.drivers.uc2.actuators import LedArray, LedArrayConfig
+
+    import koil
+
+    leds = RecordingLeds()
+    driver = LedArray(leds, LedArrayConfig(r=255, g=128, b=0), maximum=50.0)  # type: ignore[arg-type]
+    assert driver.start(20.0) == 0.0 and leds.calls == []
+    reported: list[float] = []
+    with koil.Koil():
+        driver.set(25.0, reported.append)
+        driver.set(0.0, reported.append)
+        driver.set(80.0, reported.append)  # beyond the full scale: the full color
+    assert leds.calls == [("fill", 128, 64, 0), ("off",), ("fill", 255, 128, 0)]
+    assert reported == [25.0, 0.0, 80.0]
+
+
+def test_an_led_array_needs_a_full_scale_and_a_color_it_can_show() -> None:
+    """A power with no max, or a channel beyond 255, is refused when it is built."""
+    from types import SimpleNamespace
+
+    from newswitch.drivers.base import build_driver
+    from newswitch.instrument.errors import SpecError
+
+    context = {"bus": RecordingLeds()}
+    with pytest.raises(SpecError, match="needs a max"):
+        build_driver("uc2.ledarray", SimpleNamespace(name="ring.power", max=None), {}, context)  # type: ignore[arg-type]
+    with pytest.raises(SpecError, match="0-255"):
+        build_driver(
+            "uc2.ledarray", SimpleNamespace(name="ring.power", max=50.0), {"r": 300}, context
+        )  # type: ignore[arg-type]

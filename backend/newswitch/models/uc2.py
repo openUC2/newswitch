@@ -55,6 +55,28 @@ class NodeSeen:
     nmt_state: int
 
 
+@dataclass
+class UC2Node:
+    """A board on the UC2 bus, as it says of itself: the board on the port, or a CAN node.
+
+    What it reports is the firmware's: ``image`` is the file it was flashed from
+    (``esp32_UC2_canopen_slave_motor_release_motX.bin``), ``firmware`` its version. ``wanted`` and
+    ``wanted_version`` are what the description pins it to (`newswitch.instrument.hardware.Firmware`).
+    """
+
+    can_id: int
+    kind: str = ""  # master, motor, laser, led, galvo, gpio, unrouted, ...
+    status: str = ""  # idle, unreachable, ... (as the master reports it)
+    firmware: str = ""
+    image: str = ""
+    build: str = ""
+    mac: str = ""
+    wanted: Optional[str] = None
+    """The env the description pins it to, if any."""
+    wanted_version: Optional[str] = None
+    """The version it reports when it runs what is pinned."""
+
+
 @dataclass(frozen=True)
 class BusError:
     """A transport-level error occurred (link loss, protocol error)."""

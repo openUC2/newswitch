@@ -113,19 +113,22 @@ def bus_options(hardware: Hardware) -> dict[str, Any]:
 
 
 def build_uc2_bus(settings: Settings, instrument: Instrument, uc2_state: UC2State) -> UC2BusManager:
-    """The bus of the board: simulated when everything is, else REST or CANopen, as it says."""
-    if settings.simulate == "everything":
-        return VirtualUC2Bus(state=uc2_state)
+    """The bus of the board: simulated when everything is, else REST or CANopen, as it says. Each
+    is told the firmware the description names, which is no option of its link."""
     board = instrument.hardware.board
     assert board is not None
+    if settings.simulate == "everything":
+        return VirtualUC2Bus(state=uc2_state, firmware=board.firmware)
     logger.info("UC2 transport: %s", board.transport)
     options = bus_options(instrument.hardware)
     where = f"boards.{board.name}"
     if board.transport == "rest":
         options["serialport"] = board.resolved_port()
-        return UC2RestBus(state=uc2_state, config=_driver_config(UC2RestBusConfig, options, where))
+        config = _driver_config(UC2RestBusConfig, options, where)
+        return UC2RestBus(state=uc2_state, config=config, firmware=board.firmware)
     options["port"] = board.resolved_port()
-    return UC2CanBus(state=uc2_state, config=_driver_config(UC2CanBusConfig, options, where))
+    config = _driver_config(UC2CanBusConfig, options, where)
+    return UC2CanBus(state=uc2_state, config=config, firmware=board.firmware)
 
 
 def build_detector_manager(

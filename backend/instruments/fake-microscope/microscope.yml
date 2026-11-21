@@ -124,7 +124,21 @@ detection:
 # `simulate: everything` below never builds it; for a real rig, state what is really there.
 hardware:
   boards:
-    uc2: {transport: canopen, interface: socketcan, channel: can0}
+    uc2:
+      transport: canopen
+      interface: socketcan
+      channel: can0
+      # What the bus runs (just uc2 status / flash): a release of youseetoo/uc2-esp32 and each env.
+      firmware:
+        release: v2026.0.0-beta.4
+        board: UC2_canopen_master_release
+        nodes:                       # the documented node ids (docs.openuc2.com)
+          10: UC2_canopen_slave_motor_release_motA
+          11: UC2_canopen_slave_motor_release_motX
+          12: UC2_canopen_slave_motor_release_motY
+          13: UC2_canopen_slave_motor_release_motZ
+          20: UC2_canopen_slave_laser_release
+          30: UC2_canopen_slave_led_release
   actuators:
     stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
     stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}

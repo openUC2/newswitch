@@ -60,12 +60,14 @@ from newswitch.actions.uc2 import (
     galvo_stop,
     home_objective,
     home_stage,
+    keep_firmware,
     led_matrix_fill,
     led_matrix_off,
     run_uc2_bus,
     run_uc2_event_dispatch,
     stop_stage,
     uc2_scan_nodes,
+    update_firmware,
 )
 from newswitch.actions.values import move, move_home, move_one, swap, tune
 from newswitch.infra.mikro.store import MikroDatasetStore
@@ -238,6 +240,7 @@ app.register_context(UC2BusManager)
 app.register_startup(provide_uc2)
 app.register_background(run_uc2_bus)
 app.register_background(run_uc2_event_dispatch)
+app.register_background(keep_firmware)  # on start: what runs, against what is pinned
 app.register_action(home_stage, locks=[locks.MOTION])
 app.register_action(stop_stage)
 app.register_action(led_matrix_fill, locks=[locks.TUNE])
@@ -248,6 +251,8 @@ app.register_action(galvo_set_position, locks=[locks.GALVO])
 app.register_action(galvo_raster_scan, locks=[locks.GALVO])
 app.register_action(galvo_stop)
 app.register_action(galvo_get_status)
+# The bus is down while it flashes: nothing may move, swap, tune or scan meanwhile.
+app.register_action(update_firmware, locks=[locks.MOTION, locks.SWAP, locks.TUNE, locks.GALVO])
 
 # --- the agent's own: the cameras as lovekit streams, mikro from the server, Orkestrator's bloks
 app.register_state(CameraStreams)
