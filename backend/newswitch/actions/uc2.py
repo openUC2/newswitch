@@ -36,13 +36,13 @@ async def keep_firmware(uc2_bus: UC2BusManager, uc2_state: UC2State) -> None:
     try:
         if spec.on_start == "check":
             board, nodes = await firmware.scan(uc2_bus, uc2_state)
-            jobs = firmware.plan(spec, board, nodes)
+            jobs = firmware.plan(spec, board, nodes, with_board=uc2_bus.has_port_board)
             if jobs:
                 uc2_state.last_error = "firmware: " + "; ".join(f"{j.target} {j.why}" for j in jobs)
                 logger.warning("UC2 %s", uc2_state.last_error)
             return
         await firmware.update(uc2_bus, uc2_state)
-        pinned = len(spec.nodes) + (spec.board is not None)
+        pinned = len(spec.nodes) + (spec.board is not None and uc2_bus.has_port_board)
         logger.info("UC2 firmware: the %d pinned boards run what the description pins", pinned)
     except Exception as exc:  # the bus is unreachable, or a pinned build cannot be had
         uc2_state.last_error = f"firmware: {exc}"

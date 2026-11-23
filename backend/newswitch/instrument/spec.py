@@ -409,6 +409,56 @@ class MountedHolder:
     mount: Mount
 
 
+def _place_of(holder: Holder, place: str, what: str) -> tuple[float, float]:
+    """Where `place` (``"<grid>:<name>"``, as ``slot:A1``) of `holder` is, in millimetres from its
+    origin.
+
+    Raises:
+        ValueError: It has no such place.
+    """
+    grid, _, name = place.partition(":")
+    places = holder.grids[grid].places() if grid in holder.grids else {}
+    if name not in places:
+        known = sorted(f"{g}:{n}" for g, found in holder.grids.items() for n in found.places())
+        raise ValueError(f"{what}: {place!r} is no place of it; it has {known}")
+    return places[name]
+
+
+@dataclass(frozen=True, config=STRICT)
+class Calibration:
+    """How the mount of a holder is measured: a calibration slide, centred in a place of the
+    holder, and a mark on it that can be found in an image.
+
+    Where the mark is on the stage when it is in the middle of `detector`'s image, less where it is
+    on the holder (`mark_on_holder`), is where the holder's origin is: its mount.
+    """
+
+    holder: str
+    """Which of the sample's holders it lies in."""
+    at: str
+    """The place of that holder it lies in, centred: ``<grid>:<name>``, as ``slot:A1``."""
+    slide: Annotated[Holder, BeforeValidator(_from_library("holders"))]
+    """The calibration slide, from the library of holders, or as stated."""
+    mark: str
+    """What is found of it: a place of the slide, ``<grid>:<name>``, as ``pinhole:B1``."""
+    detector: str | None = None
+    """What looks for it; by default the first detector of the sample."""
+    home: list[Literal["X", "Y", "Z", "A"]] = field(default_factory=list)
+    """The axes homed first, in this order, on the board that drives them."""
+    values: dict[str, str] = field(default_factory=dict)
+    """What the variables are taken to meanwhile, as quantities (``led.power: 20 nW``,
+    ``stage.z: -3520 um``); each is taken back afterwards, but the stage's x and y."""
+    search_radius: Millimetres = 4.0
+    """How far from where the mount puts it the mark is looked for."""
+    search_step: Millimetres = 1.0
+    """How far apart the places looked at are: less than the image is wide."""
+
+    def mark_on_slide(self) -> tuple[float, float]:
+        """The mark from the slide's middle, in millimetres."""
+        x, y = _place_of(self.slide, self.mark, "mark")
+        return x - self.slide.extent.x / 2, y - self.slide.extent.y / 2
+
+
 @dataclass(frozen=True, config=STRICT)
 class SampleHolder:
     """Where a sample is, and what can be on it, by name: `simulation` is the one that is.
@@ -423,6 +473,18 @@ class SampleHolder:
     simulations: Annotated[dict[str, Simulation], Field(min_length=1)]
     holders: dict[str, MountedHolder] = field(default_factory=dict)
     mounted: str | None = None
+    calibration: Calibration | None = None
+    """How the mount of one of its holders is measured (`calibrate_mount`)."""
+
+    def mark_on_holder(self) -> tuple[float, float]:
+        """Where the calibration's mark is on its holder, in millimetres from the holder's origin,
+        when the slide lies centred in its place."""
+        assert self.calibration is not None
+        calibration = self.calibration
+        holder = self.holders[calibration.holder].holder
+        x, y = _place_of(holder, calibration.at, "at")
+        dx, dy = calibration.mark_on_slide()
+        return x + dx, y + dy
 
     @model_validator(mode="after")
     def _simulation_is_one_of_them(self) -> Self:
@@ -441,6 +503,20 @@ class SampleHolder:
             )
         if self.holders and self.mounted is None:
             raise ValueError("with holders, one is mounted to start with (mounted:)")
+        return self
+
+    @model_validator(mode="after")
+    def _calibration_is_in_one_of_them(self) -> Self:
+        calibration = self.calibration
+        if calibration is None:
+            return self
+        if calibration.holder not in self.holders:
+            raise ValueError(
+                f"calibration: holder {calibration.holder!r} is none of the holders "
+                f"{sorted(self.holders)}"
+            )
+        _place_of(self.holders[calibration.holder].holder, calibration.at, "calibration: at")
+        calibration.mark_on_slide()
         return self
 
 

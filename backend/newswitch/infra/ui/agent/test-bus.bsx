@@ -1,0 +1,64 @@
+<Blok kind="agent" context="panel">
+<div className="flex flex-col gap-3 p-3">
+    <Card className="gap-3 py-3">
+        <div className="flex items-center justify-between gap-2 px-3">
+            <div className="flex items-center gap-2">
+                <Icon name="cpu" size={16} className="text-primary" />
+                <Text size="sm" weight="semibold">UC2 bus test</Text>
+                <Badge variant={self.UC2State.connected ? "default" : "destructive"}>{self.UC2State.connected ? str.concat(values: ["connected (", self.UC2State.transport, ")"]) : "not connected"}</Badge>
+                <if when={self.UC2State.estop_active}>
+                    <Badge variant="destructive" icon="alert-triangle">E-stop</Badge>
+                </if>
+            </div>
+            <Button size="sm" icon="search" disabled={self.tasks.uc2_scan_nodes.running == true} onClick={self.uc2_scan_nodes(timeout: 5)}>Scan</Button>
+        </div>
+
+        <if when={self.UC2State.flashing}>
+            <Alert icon="activity" title="Flashing" description={self.UC2State.flashing} className="mx-3" />
+        </if>
+        <if when={self.UC2State.last_error}>
+            <Alert variant="destructive" icon="alert-triangle" title="Last error" description={self.UC2State.last_error} className="mx-3" />
+        </if>
+
+        <div className="px-3">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead text="Node" />
+                        <TableHead text="Kind" />
+                        <TableHead text="Status" />
+                        <TableHead text="Image" />
+                        <TableHead text="Runs" />
+                        <TableHead text="Pinned" />
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    <foreach items={list.compact(value: [self.UC2State.board])} let="node" key={"board"}>
+                        <TableRow>
+                            <TableCell text={str.concat(values: [val.to_string(value: node.can_id), " (port)"])} />
+                            <TableCell text={node.kind} />
+                            <TableCell text={node.status} />
+                            <TableCell text={node.image} />
+                            <TableCell text={node.firmware} />
+                            <TableCell text={node.wanted_version == null ? "-" : (node.wanted_version == node.firmware ? "ok" : str.concat(values: ["wants ", node.wanted_version]))} />
+                        </TableRow>
+                    </foreach>
+                    <foreach items={self.UC2State.nodes} let="node" key={node.can_id}>
+                        <TableRow>
+                            <TableCell text={val.to_string(value: node.can_id)} />
+                            <TableCell text={node.kind} />
+                            <TableCell text={node.status} />
+                            <TableCell text={node.image} />
+                            <TableCell text={node.firmware} />
+                            <TableCell text={node.wanted_version == null ? "-" : (node.wanted_version == node.firmware ? "ok" : str.concat(values: ["wants ", node.wanted_version]))} />
+                        </TableRow>
+                    </foreach>
+                </TableBody>
+            </Table>
+            <if when={self.UC2State.board == null && list.len(value: self.UC2State.nodes) == 0}>
+                <Text size="xs" tone="muted">Nothing scanned yet: press Scan.</Text>
+            </if>
+        </div>
+    </Card>
+</div>
+</Blok>

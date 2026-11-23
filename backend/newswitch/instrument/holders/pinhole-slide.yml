@@ -1,0 +1,15 @@
+spec: newswitch/holder/v0
+description: >-
+  openUC2's pinhole slide (KiCad pinhole-slide Rev A), a black PCB of 76 x 26 mm, lying along y:
+  three vias on its centre line, 19 mm apart, drills 0.2, 0.3 and 0.4 mm (B1, the 0.3 mm one, in
+  its middle; which end has the 0.2 mm one depends on how it was put in). In transmitted light
+  each is a bright disc on black.
+kind: slide
+extent: {x: 26 mm, y: 76 mm}
+grids:
+  pinhole:
+    rows: 3
+    columns: 1
+    pitch: {x: 0 mm, y: 19 mm}
+    a1: {x: 13 mm, y: 19 mm}
+    place: {diameter: 0.3 mm}

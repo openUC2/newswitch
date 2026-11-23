@@ -1,0 +1,75 @@
+<Blok kind="agent" context="panel">
+<div className="flex flex-col gap-3 p-3">
+    <Card className="gap-3 py-3">
+        <div className="flex items-center justify-between gap-2 px-3">
+            <div className="flex items-center gap-2">
+                <Icon name="camera" size={16} className="text-primary" />
+                <Text size="sm" weight="semibold">Detectors test</Text>
+                <if when={self.DetectorState.is_acquiring}>
+                    <Badge variant="secondary" icon="activity">Live</Badge>
+                </if>
+            </div>
+            <div className="flex items-center gap-1">
+                <Button size="sm" icon="play" disabled={self.DetectorState.is_acquiring} onClick={self.start_live_view()}>Live</Button>
+                <Button size="sm" variant="outline" icon="pause" disabled={self.DetectorState.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
+                <Button size="sm" variant="ghost" icon="camera" onClick={self.capture_image()}>Snap all</Button>
+            </div>
+        </div>
+
+        <foreach items={self.DetectorState.detectors} let="detector" key={detector.name}>
+            <foreach items={list.compact(value: [{
+                exposure: obj.get(value: self.TuneState.tunes, key: str.concat(values: [detector.name, ".exposure"])),
+                gain: obj.get(value: self.TuneState.tunes, key: str.concat(values: [detector.name, ".gain"]))
+            }])} let="tunes" key={detector.name}>
+                <div className="flex flex-col gap-2 border-t px-3 pt-3">
+                    <div className="flex items-center gap-2">
+                        <if when={detector.is_active}>
+                            <Switch checked={true} onChange={self.deactivate_detector(name: detector.name)} />
+                        </if>
+                        <if when={detector.is_active == false}>
+                            <Switch checked={false} onChange={self.activate_detector(name: detector.name)} />
+                        </if>
+                        <Text size="sm" weight="semibold" className="flex-1" truncate>{detector.name}</Text>
+                        <Badge variant={detector.is_active ? "default" : "outline"}>{detector.is_active ? "on" : "off"}</Badge>
+                        <Button size="xs" variant="ghost" icon="camera" disabled={detector.is_active == false} onClick={self.capture_image(name: detector.name)}>Snap</Button>
+                    </div>
+                    <Text size="xs" tone="muted" mono>{str.concat(values: [
+                        detector.model ?? "simulated", " | ", detector.serial_number ?? "-", " | ",
+                        detector.data_type, " | ", list.len(value: detector.colors) > 0 ? "color" : "mono"
+                    ])}</Text>
+                    <if when={tunes.exposure}>
+                        <div className="flex items-center gap-2">
+                            <Icon name="clock" size={14} className="text-muted-foreground" />
+                            <Slider className="flex-1" value={tunes.exposure.current} min={tunes.exposure.minimum} max={math.min(values: [tunes.exposure.maximum, 1000])} step={1} onCommit={self.tune(name: tunes.exposure.name, to: event.value)} />
+                            <Text size="xs" mono className="w-16 text-right">{str.concat(values: [fmt.number(value: tunes.exposure.current, digits: 0), " ms"])}</Text>
+                        </div>
+                    </if>
+                    <if when={tunes.gain}>
+                        <div className="flex items-center gap-2">
+                            <Icon name="sliders" size={14} className="text-muted-foreground" />
+                            <Slider className="flex-1" value={tunes.gain.current} min={tunes.gain.minimum} max={tunes.gain.maximum} step={tunes.gain.step} onCommit={self.tune(name: tunes.gain.name, to: event.value)} />
+                            <Text size="xs" mono className="w-16 text-right">{str.concat(values: [fmt.number(value: tunes.gain.current, digits: 0), " dB"])}</Text>
+                        </div>
+                    </if>
+                </div>
+            </foreach>
+        </foreach>
+
+        <if when={list.len(value: self.DetectorState.detectors) == 0}>
+            <Empty icon="camera" title="No detectors" description="This microscope describes none." />
+        </if>
+    </Card>
+
+    <Card className="gap-0 overflow-hidden py-0">
+        <foreach items={self.CameraStreams.streams} let="stream" key={stream}>
+            <StructureDisplay value={stream} variant="card" />
+        </foreach>
+        <if when={list.len(value: self.CameraStreams.streams) == 0}>
+            <div className="flex h-32 items-center justify-center gap-2 text-muted-foreground">
+                <Spinner />
+                <Text size="sm" tone="muted">Waiting for the camera streams</Text>
+            </div>
+        </if>
+    </Card>
+</div>
+</Blok>

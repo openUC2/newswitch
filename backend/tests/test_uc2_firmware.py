@@ -594,7 +594,7 @@ def test_johannes_frame_pins_what_its_bus_runs() -> None:
     """The frame's description: its board on the CP2102, and each node pinned to its build."""
     instrument = spec.load(Path(__file__).parent.parent / "instruments" / "johannes-frame")
     board = instrument.hardware.board
-    assert board is not None and board.transport == "rest" and board.firmware is not None
+    assert board is not None and board.transport == "canopen" and board.firmware is not None
     firmware = board.firmware
     assert firmware.on_start == "flash" and sorted(firmware.nodes) == [10, 11, 12, 13, 20, 30]
     motx = UC2Node(
@@ -630,11 +630,169 @@ def test_a_board_without_motion_refuses_every_motion_before_sending(transport: s
             asyncio.run(call)
 
 
-def test_johannes_frame_cannot_move_its_stage() -> None:
-    """Its stage's moves name no actuator, and its board refuses motion."""
+def test_johannes_frame_moves_its_stage_on_its_board() -> None:
+    """Its stage's X, Y and Z are the board's steppers, and its board lets them move."""
     instrument = spec.load(Path(__file__).parent.parent / "instruments" / "johannes-frame")
-    moves = [v for v in instrument.variables.values() if v.verb == "moves"]
-    assert moves and all(v.actuator is None for v in moves)
-    assert not any(a.driver == "uc2.stepper" for a in instrument.hardware.actuators.values())
+    moves = {v.name: v for v in instrument.variables.values() if v.verb == "moves"}
+    assert {n: v.actuator for n, v in moves.items()} == {
+        "stage.x": "stg-x",
+        "stage.y": "stg-y",
+        "stage.z": "stg-z",
+    }
+    axes = {
+        a.name: a.options["axis"]
+        for a in instrument.hardware.actuators.values()
+        if a.driver == "uc2.stepper"
+    }
+    assert axes == {"stg-x": "X", "stg-y": "Y", "stg-z": "Z"}
     board = instrument.hardware.board
-    assert board is not None and board.options.get("allow_motion") is False
+    assert board is not None and board.options.get("allow_motion", True) is True
+
+
+def test_johannes_frame_talks_canopen_on_can0_with_its_node_ids(tmp_path: Path) -> None:
+    """Its bus is the Pi's can0, with this frame's node map, not uc2canopen's defaults."""
+    from newswitch.drivers.uc2.canopen_bus import UC2CanBus
+    from newswitch.microscope.parts import build_uc2_bus
+    from tests.conftest import run_settings
+
+    instrument = spec.load(Path(__file__).parent.parent / "instruments" / "johannes-frame")
+    bus = build_uc2_bus(run_settings(tmp_path, simulate="unwired"), instrument, UC2State())
+    assert isinstance(bus, UC2CanBus) and not bus.has_port_board
+    config = bus.config
+    assert (config.interface, config.channel, config.bitrate) == ("socketcan", "can0", 500000)
+    nodes = (
+        config.node_a,
+        config.node_x,
+        config.node_y,
+        config.node_z,
+        config.node_laser,
+        config.node_led,
+    )
+    assert nodes == (10, 11, 12, 13, 20, 30)
+    assert bus.firmware is not None and sorted(bus.firmware.nodes) == [10, 11, 12, 13, 20, 30]
+
+
+def test_on_canopen_only_the_can_nodes_are_flashed() -> None:
+    """No board is on a port: its pin is skipped, the nodes are checked and flashed."""
+    state = UC2State()
+    virtual = VirtualUC2Bus(state, firmware=FIRMWARE)
+    virtual.has_port_board = False  # type: ignore[misc]
+    asyncio.run(fw.update(virtual, state, fetcher=fake_fetch, verify_timeout=1))
+    assert virtual.flashed == [11, 20]
+
+
+def test_a_laser_on_its_own_node_is_set_there() -> None:
+    """A laser channel with a node goes to that node; without one, the bus's laser node."""
+    import koil
+
+    from newswitch.drivers.uc2.actuators import Laser, LaserConfig
+
+    calls: list[tuple] = []
+
+    class Bus:
+        async def aset_laser(self, channel: int, value: int, node: int | None = None) -> None:
+            calls.append((channel, value, node))
+
+    with koil.Koil():
+        Laser(Bus(), LaserConfig(channel=0, node=30), maximum=10.0).set(5.0, lambda v: None)  # type: ignore[arg-type]
+        Laser(Bus(), LaserConfig(channel=2), maximum=10.0).set(10.0, lambda v: None)  # type: ignore[arg-type]
+    assert calls == [(0, 512, 30), (2, 1023, None)]
+
+
+# --- where an axis's 0 is, and how it homes ---------------------------------------------------
+
+
+def test_an_axis_homes_as_it_says_over_the_defaults() -> None:
+    """Its own direction, speed, timeout, back-off and polarity; the rest the bus's home_*. The
+    polarity and back-off are written to its node before homing starts."""
+    from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+
+    config = UC2CanBusConfig(
+        node_z=13,
+        homing={"Z": {"direction": 1, "speed": 10000, "release": -10000, "polarity": 1}},
+    )
+    bus = UC2CanBus(UC2State(), config)
+    assert bus.homing_for_axis("X") == {"direction": -1, "speed": 15000, "timeout_ms": 20000}
+    calls: list[tuple] = []
+
+    class Sdo:
+        def write_u8(self, *args: int) -> None:
+            calls.append(("u8", *args))
+
+        def write_i32(self, *args: int) -> None:
+            calls.append(("i32", *args))
+
+    class Motor:
+        seen = True
+
+        def __init__(self) -> None:
+            # "done" of the last homing first, then this one's "homing", then its "done"
+            self.statuses = [2, 2, 1, 1, 2]
+
+        @property
+        def homing_status(self) -> int:
+            return self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+
+    motor = Motor()
+
+    class Listener:
+        def get_motor(self, node: int, sub: int) -> Motor:
+            calls.append(("read", node, sub))
+            return motor
+
+    class Client:
+        sync = type("Sync", (), {"_sdo": Sdo(), "_listener": Listener()})()
+
+        async def home(self, **kwargs: int) -> None:
+            calls.append(("home", kwargs))
+
+    bus._client = Client()  # type: ignore[assignment]
+    bus._connected.set()
+    asyncio.run(bus.ahome_axis("Z"))
+    assert calls[:2] == [("u8", 13, 0x2015, 1, 1), ("i32", 13, 0x2014, 1, -10000)]
+    home = calls[2][1]
+    assert (home["direction"], home["speed"], home["timeout_ms"], home["node_id"]) == (1, 10000, 20000, 13)
+    # it waited through the stale "done" for this homing's own end
+    assert motor.statuses == [2] and len([c for c in calls if c[0] == "read"]) == 5
+
+    with pytest.raises(ValueError, match="unknown"):
+        UC2CanBus(UC2State(), UC2CanBusConfig(homing={"X": {"dir": 1}})).homing_for_axis("X")
+
+
+def test_a_move_that_never_says_it_runs_is_over_soon() -> None:
+    """A move to where the axis is, or a very short one, never broadcasts running: it is over
+    after MOVE_START_S, not after the move timeout; a long one once it stops."""
+    import time
+
+    from newswitch.drivers.uc2 import canopen_bus
+    from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+
+    class Motor:
+        seen = True
+        position = 0
+
+        def __init__(self, runs_for: float) -> None:
+            self.until = time.monotonic() + runs_for
+
+        @property
+        def running(self) -> bool:
+            return time.monotonic() < self.until
+
+    class Client:
+        def __init__(self, runs_for: float) -> None:
+            motor = Motor(runs_for)
+            listener = type("Listener", (), {"get_motor": lambda self, n, s: motor})()
+            self.sync = type("Sync", (), {"_listener": listener})()
+
+        async def move(self, **kwargs: int) -> None:
+            pass
+
+    bus = UC2CanBus(UC2State(), UC2CanBusConfig(steps_per_um_x=-3.2, move_timeout_s=5.0))
+    for runs_for, at_least, at_most in ((0.0, 0.5, 1.5), (1.2, 1.1, 1.6)):
+        bus._client = Client(runs_for)  # type: ignore[assignment]
+        bus._connected.set()
+        started = time.monotonic()
+        where = asyncio.run(bus.amove_axis("X", 1000.0, is_absolute=True))
+        took = time.monotonic() - started
+        assert at_least <= took <= at_most and where == pytest.approx(1000.0, abs=0.5)
+    assert canopen_bus.MOVE_START_S < 1.0

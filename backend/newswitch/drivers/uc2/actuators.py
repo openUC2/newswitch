@@ -81,10 +81,12 @@ class _OneAtATime:
 
 @dataclass(frozen=True)
 class LaserConfig:
-    """A channel of a board's lasers."""
+    """A channel of a board's lasers, and on a canopen bus the CAN node it is on (default: the
+    bus's laser node)."""
 
     channel: int
     pwm_max: int = 1023
+    node: int | None = None
 
 
 class Laser(_OneAtATime):
@@ -103,7 +105,11 @@ class Laser(_OneAtATime):
     def set(self, value: Any, report: Report, task: Task | None = None) -> None:  # noqa: ANN401
         """Set its counts."""
         share = max(0.0, min(1.0, value / self.maximum))
-        unkoil(self.bus.aset_laser, self.config.channel, round(share * self.config.pwm_max))
+        counts = round(share * self.config.pwm_max)
+        if self.config.node is None:
+            unkoil(self.bus.aset_laser, self.config.channel, counts)
+        else:
+            unkoil(self.bus.aset_laser, self.config.channel, counts, self.config.node)
         report(value)
 
 

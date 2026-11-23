@@ -56,6 +56,8 @@ class UC2BusManager(BackgroundManager, Protocol):
 
     state: UC2State
     firmware: Optional[Firmware]
+    has_port_board: bool
+    """Whether a board is on a port (the master over USB); on socketcan there are CAN nodes only."""
     """What the description says the board and its CAN nodes run; None: it says nothing."""
 
     # -- stage motion (micrometers; degrees for axis "A") ---------------------
@@ -119,8 +121,9 @@ class UC2BusManager(BackgroundManager, Protocol):
 
     # -- illumination (raw PWM counts) ----------------------------------------
 
-    async def aset_laser(self, channel: int, value: int) -> None:
-        """Set a laser/LED PWM channel to a raw hardware value."""
+    async def aset_laser(self, channel: int, value: int, node: Optional[int] = None) -> None:
+        """Set a laser/LED PWM channel to a raw hardware value. `node`: the CAN node it is on, for
+        a bus that addresses nodes itself (canopen); a master routes channels on its own."""
         ...
 
     async def aled_fill(self, r: int, g: int, b: int) -> None:

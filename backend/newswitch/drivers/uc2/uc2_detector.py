@@ -612,9 +612,15 @@ class UC2DetectorManager:
     def _send_new_image(
         self, sink: "FrameSink", name: str, camera: uc2_cam_py.Camera, last_sent: dict[str, int]
     ) -> None:
-        """Send the camera's latest image to `sink` unless it was sent already."""
+        """Send the camera's latest image to `sink` unless it was sent already, or the sink does
+        not want it now (one that keeps only the newest frame says so with ``wants``; it is then
+        not copied at all)."""
         image = camera.get_last_image()
         if image is None or last_sent.get(name) == image.time_ns:
+            return
+        wants = getattr(sink, "wants", None)
+        if wants is not None and not wants(name):
+            last_sent[name] = image.time_ns  # seen: the next new image is asked about again
             return
         data = image.data.copy()
         if image.is_valid():

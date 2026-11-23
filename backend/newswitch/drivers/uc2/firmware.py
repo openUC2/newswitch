@@ -398,6 +398,8 @@ async def update(
             report(message, percent)
 
     board, nodes = await scan(bus, state)
+    # On socketcan no board is on a port: only the CAN nodes are the bus's to flash.
+    with_board = with_board and bus.has_port_board
     jobs = plan(firmware, board, nodes, only=only, with_board=with_board, force=force)
     if not jobs:
         state.flashing = None

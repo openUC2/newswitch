@@ -1,0 +1,62 @@
+<Blok kind="agent" context="panel">
+<local name="step" kind="STRING" default="100" persist />
+<local name="go" kind="STRING" default="" />
+<foreach items={list.compact(value: [{
+    moving: self.tasks.move_one.running == true || self.tasks.move.running == true || self.tasks.move_home.running == true || self.tasks.home_stage.running == true || self.tasks.calibrate_mount.running == true
+}])} let="stage" key={"stage"}>
+<div className="flex flex-col gap-3 p-3">
+    <Card className="gap-3 py-3">
+        <div className="flex items-center justify-between gap-2 px-3">
+            <div className="flex items-center gap-2">
+                <Icon name="move" size={16} className="text-primary" />
+                <Text size="sm" weight="semibold">Stage test</Text>
+                <if when={stage.moving}>
+                    <Badge variant="secondary" icon="activity">Moving</Badge>
+                </if>
+            </div>
+            <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" icon="home" disabled={stage.moving} onClick={self.home_stage()}>Home</Button>
+                <Button size="sm" variant="outline" icon="circle-dot" disabled={stage.moving} onClick={self.calibrate_mount()}>Calibrate holder</Button>
+                <Button size="sm" variant="destructive" icon="square" onClick={self.stop_stage()}>Stop</Button>
+            </div>
+        </div>
+
+        <div className="flex items-center gap-2 px-3">
+            <Text size="xs" tone="muted" className="w-12">Step um</Text>
+            <ToggleGroup bind={step} variant="outline" size="sm" className="flex-1">
+                <ToggleGroupItem value="1" className="flex-1">1</ToggleGroupItem>
+                <ToggleGroupItem value="10" className="flex-1">10</ToggleGroupItem>
+                <ToggleGroupItem value="100" className="flex-1">100</ToggleGroupItem>
+                <ToggleGroupItem value="500" className="flex-1">500</ToggleGroupItem>
+                <ToggleGroupItem value="1000" className="flex-1">1000</ToggleGroupItem>
+            </ToggleGroup>
+        </div>
+
+        <foreach items={obj.values(value: self.MoveState.moves.stage ?? {})} let="axis" key={axis.name}>
+            <div className="flex flex-col gap-1.5 border-t px-3 pt-3">
+                <div className="flex items-center gap-2">
+                    <Text size="sm" weight="semibold" className="w-16" mono>{axis.name}</Text>
+                    <Text size="lg" weight="semibold" mono className="flex-1">{str.concat(values: [fmt.number(value: axis.current, digits: 1), " ", axis.unit])}</Text>
+                    <Text size="xs" tone="muted" mono>{str.concat(values: [fmt.number(value: axis.minimum, digits: 0), " .. ", fmt.number(value: axis.maximum, digits: 0)])}</Text>
+                </div>
+                <Progress value={math.mul(math.div(math.sub(axis.current, axis.minimum), math.sub(axis.maximum, axis.minimum)), 100)} />
+                <div className="flex flex-wrap items-center gap-1">
+                    <Button size="sm" variant="outline" icon="arrow-left" disabled={stage.moving} onClick={self.move_one(name: axis.name, by: math.neg(math.mul(val.to_number(value: step), 10)))}>x10</Button>
+                    <Button size="sm" variant="outline" icon="chevron-left" disabled={stage.moving} onClick={self.move_one(name: axis.name, by: math.neg(val.to_number(value: step)))}>{str.concat(values: ["-", step])}</Button>
+                    <Button size="sm" variant="outline" icon="chevron-right" disabled={stage.moving} onClick={self.move_one(name: axis.name, by: val.to_number(value: step))}>{str.concat(values: ["+", step])}</Button>
+                    <Button size="sm" variant="outline" icon="arrow-right" disabled={stage.moving} onClick={self.move_one(name: axis.name, by: math.mul(val.to_number(value: step), 10))}>x10</Button>
+                    <Button size="sm" variant="ghost" icon="circle-dot" disabled={stage.moving} onClick={self.move_one(name: axis.name, to: 0)}>0</Button>
+                </div>
+            </div>
+        </foreach>
+
+        <div className="flex items-center gap-2 border-t px-3 pt-3">
+            <Input type="number" bind={go} placeholder="go to (um), every axis" className="flex-1" />
+            <foreach items={obj.values(value: self.MoveState.moves.stage ?? {})} let="axis" key={axis.name}>
+                <Button size="sm" variant="outline" disabled={stage.moving || val.to_number(value: go) == null} onClick={self.move_one(name: axis.name, to: val.to_number(value: go))}>{axis.name}</Button>
+            </foreach>
+        </div>
+    </Card>
+</div>
+</foreach>
+</Blok>

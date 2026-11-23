@@ -67,6 +67,35 @@ AGENT_BLOKS: dict[str, tuple[str, str, bool]] = {
         "Acquire: channels on a stack of planes, over a grid of tiles, some times, into mikro.",
         False,
     ),
+    "calibrate-holder": (
+        "calibrate-holder.bsx",
+        (
+            "Calibrate the holder: home, check the light is on the calibration slide, find its "
+            "mark and write down where the holder sits."
+        ),
+        False,
+    ),
+    # Test views: one part of the microscope each, everything it can do, plainly.
+    "test-stage": (
+        "test-stage.bsx",
+        "Test the stage: each axis's position in its range, jog by a chosen step, go to, stop.",
+        False,
+    ),
+    "test-detectors": (
+        "test-detectors.bsx",
+        "Test the detectors: turn each on and off, its exposure and gain, snap, live view.",
+        False,
+    ),
+    "test-lights": (
+        "test-lights.bsx",
+        "Test the lights: each source on and off, its power, and 0, 10, 50 and 100 %.",
+        False,
+    ),
+    "test-bus": (
+        "test-bus.bsx",
+        "Test the UC2 bus: connected, scan, and what the board and each CAN node run.",
+        False,
+    ),
 }
 
 #: Findings a ``ui`` blok may carry: the frontend compiles Tailwind, so every class draws.

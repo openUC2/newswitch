@@ -71,6 +71,11 @@ class UC2CanBusConfig:
     home_speed_steps: int = 15000
     home_direction: int = -1
     home_timeout_ms: int = 20000
+    # How each axis homes, by axis (X, Y, Z, A): any of direction (-1 / +1), speed (steps/s),
+    # timeout_ms, release (steps to back off from the endstop after touching it) and polarity
+    # (0 normally low, 1 normally high). What an axis leaves out is the home_* above; release
+    # and polarity, then, what the node holds. Written to the node before every homing.
+    homing: dict[str, dict[str, int]] = field(default_factory=dict)
     move_timeout_s: float = 120.0
     reconnect_backoff_initial_s: float = 1.0
     reconnect_backoff_max_s: float = 30.0
@@ -85,10 +90,20 @@ class UC2CanBusConfig:
     objective_speed_steps: int = 20000
 
 
+#: How long a move has to say it runs before it is taken to be over: one to where the motor is,
+#: or too short to show between two broadcasts (they come every 0.1 s or so while it runs).
+MOVE_START_S = 0.6
+
+#: How long a homing has to say it started before its node's last homing status counts as its
+#: own end: it broadcasts a change at once, its regular TPDO every half second.
+START_GRACE_S = 2.0
+
+
 class UC2CanBus:
     """UC2BusManager implementation speaking CANopen via uc2canopen."""
 
     state: UC2State
+    has_port_board = False
 
     def __init__(
         self,
@@ -151,6 +166,21 @@ class UC2CanBus:
     def to_units(self, axis: str, steps: float) -> float:
         """Convert hardware steps into micrometers (degrees for A)."""
         return steps / self.scale_for_axis(axis)
+
+    def homing_for_axis(self, axis: str) -> dict[str, int]:
+        """How an axis homes: its own settings over the home_* defaults."""
+        own = {str(key).upper(): value for key, value in self.config.homing.items()}.get(
+            axis.upper(), {}
+        )
+        unknown = set(own) - {"direction", "speed", "timeout_ms", "release", "polarity"}
+        if unknown:
+            raise ValueError(f"homing of axis {axis}: unknown {sorted(unknown)}")
+        return {
+            "direction": self.config.home_direction,
+            "speed": self.config.home_speed_steps,
+            "timeout_ms": self.config.home_timeout_ms,
+            **own,
+        }
 
     # -- lifecycle ------------------------------------------------------------------
 
@@ -275,16 +305,66 @@ class UC2CanBus:
         self._may_move("amove_axis")
         client = await self._require_client()
         speed_steps = int(abs((speed or self.config.default_speed) * self.scale_for_axis(axis)))
-        final_steps = await client.move_and_wait(
-            axis=self.sub_for_axis(axis),
-            position=self.to_steps(axis, target),
+        steps = self.to_steps(axis, target)
+        final_steps = await self._move_and_wait(
+            client,
+            node=self.node_for_axis(axis),
+            sub=self.sub_for_axis(axis),
+            steps=steps,
             speed=max(speed_steps, 1),
             acceleration=int(acceleration or 0),
             is_absolute=is_absolute,
-            node_id=self.node_for_axis(axis),
-            timeout=self.config.move_timeout_s,
         )
         return self.to_units(axis, final_steps)
+
+    async def _move_and_wait(
+        self,
+        client: "AsyncUC2Client",
+        node: int,
+        sub: int,
+        steps: int,
+        speed: int,
+        acceleration: int = 0,
+        is_absolute: bool = True,
+    ) -> int:
+        """Start a move and return once it is over: where it went (absolute), or where the node
+        says it is (relative).
+
+        A node says it runs, and then that it stopped; a move to where it is, or one shorter than
+        between two of its broadcasts, never says it runs. So: over once it was seen running and
+        is not, or once it was not seen running within `MOVE_START_S`. (uc2canopen's own wait
+        knows only the first, and waits out its timeout on the others.) Cancelled, the motor is
+        stopped.
+        """
+        loop = asyncio.get_running_loop()
+        await client.move(
+            axis=sub,
+            position=steps,
+            speed=speed,
+            acceleration=acceleration,
+            is_absolute=is_absolute,
+            node_id=node,
+        )
+        started = loop.time()
+        seen_running = False
+        try:
+            while True:
+                motor = client.sync._listener.get_motor(node, sub)  # noqa: SLF001 - TPDO cache
+                running = bool(motor is not None and motor.seen and motor.running)
+                if running:
+                    seen_running = True
+                elif seen_running or loop.time() - started > MOVE_START_S:
+                    break
+                if loop.time() - started > self.config.move_timeout_s:
+                    raise TimeoutError(f"node {node} still moving after {self.config.move_timeout_s:.0f} s")
+                await asyncio.sleep(0.02)
+        except asyncio.CancelledError:
+            await asyncio.shield(client.stop(axis=sub, node_id=node))
+            raise
+        if is_absolute:
+            return steps
+        motor = client.sync._listener.get_motor(node, sub)  # noqa: SLF001
+        return int(motor.position) if motor is not None else 0
 
     async def astop_axis(self, axis: str) -> None:
         """Stop one axis via the motor command word."""
@@ -292,19 +372,63 @@ class UC2CanBus:
         await client.stop(axis=self.sub_for_axis(axis), node_id=self.node_for_axis(axis))
 
     async def ahome_axis(self, axis: str) -> None:
-        """Home one axis and wait for the homing-done status."""
+        """Home one axis, as its homing settings say, and wait for the homing-done status."""
         self._may_move("ahome_axis")
         client = await self._require_client()
-        homed = await client.home_and_wait(
-            axis=self.sub_for_axis(axis),
-            speed=self.config.home_speed_steps,
-            direction=self.config.home_direction,
-            timeout_ms=self.config.home_timeout_ms,
-            node_id=self.node_for_axis(axis),
-            timeout=self.config.home_timeout_ms / 1000.0 + 10.0,
+        homing = self.homing_for_axis(axis)
+        node, sub = self.node_for_axis(axis), self.sub_for_axis(axis)
+        await self._write_homing(client, node, sub, homing)
+        await client.home(
+            axis=sub,
+            speed=homing["speed"],
+            direction=homing["direction"],
+            timeout_ms=homing["timeout_ms"],
+            node_id=node,
         )
+        homed = await self._homed(client, node, sub, homing["timeout_ms"] / 1000.0 + 10.0)
         if not homed:
             raise RuntimeError(f"Homing axis {axis} failed or timed out")
+
+    @staticmethod
+    async def _homed(client: "AsyncUC2Client", node: int, sub: int, timeout: float) -> bool:
+        """Whether the homing just started ends done (not timed out), as the node broadcasts it.
+
+        A node keeps saying "done" of its last homing until the next one starts: so first its
+        "homing", then its end. A homing that ends before its "homing" is seen (an axis that
+        sits on its endstop) is taken from the status once `START_GRACE_S` passed.
+        """
+        homing, done, timed_out = 1, 2, 3
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        seen_homing = False
+        while loop.time() - started < timeout:
+            motor = client.sync._listener.get_motor(node, sub)  # noqa: SLF001 - the TPDO cache
+            status = None if motor is None or not motor.seen else motor.homing_status
+            if status == homing:
+                seen_homing = True
+            elif status in (done, timed_out) and (
+                seen_homing or loop.time() - started > START_GRACE_S
+            ):
+                return status == done
+            await asyncio.sleep(0.05)
+        return False
+
+    @staticmethod
+    async def _write_homing(
+        client: "AsyncUC2Client", node: int, sub: int, homing: dict[str, int]
+    ) -> None:
+        """Write the endstop's polarity and the back-off to the node, where they are given."""
+        from uc2canopen.od import OD
+
+        sdo = client.sync._sdo  # noqa: SLF001 - uc2canopen has no call for these two
+        if "polarity" in homing:
+            await asyncio.to_thread(
+                sdo.write_u8, node, OD.HOMING_ENDSTOP_POLARITY, sub + 1, homing["polarity"]
+            )
+        if "release" in homing:
+            await asyncio.to_thread(
+                sdo.write_i32, node, OD.HOMING_ENDSTOP_RELEASE, sub + 1, homing["release"]
+            )
 
     async def aget_position(self, axis: str) -> float:
         """Read one axis position (TPDO cache preferred)."""
@@ -384,13 +508,12 @@ class UC2CanBus:
         if not 1 <= slot <= len(positions):
             raise ValueError(f"Objective slot {slot} out of range 1..{len(positions)}")
         client = await self._require_client()
-        await client.move_and_wait(
-            axis=self.config.objective_sub,
-            position=positions[slot - 1],
+        await self._move_and_wait(
+            client,
+            node=self.config.objective_node,
+            sub=self.config.objective_sub,
+            steps=positions[slot - 1],
             speed=self.config.objective_speed_steps,
-            is_absolute=True,
-            node_id=self.config.objective_node,
-            timeout=self.config.move_timeout_s,
         )
         self._objective_slot = slot
 
@@ -420,10 +543,12 @@ class UC2CanBus:
 
     # -- illumination -----------------------------------------------------------------
 
-    async def aset_laser(self, channel: int, value: int) -> None:
-        """Set a laser PWM channel on the laser node."""
+    async def aset_laser(self, channel: int, value: int, node: Optional[int] = None) -> None:
+        """Set a laser PWM channel on `node`, by default the laser node (the illumination board's
+        white LED is a laser channel of its own node)."""
         client = await self._require_client()
-        await client.laser_set(channel=channel, pwm=value, node_id=self.config.node_laser)
+        node_id = self.config.node_laser if node is None else node
+        await client.laser_set(channel=channel, pwm=value, node_id=node_id)
 
     async def aled_fill(self, r: int, g: int, b: int) -> None:
         """Fill the LED matrix on the LED node."""

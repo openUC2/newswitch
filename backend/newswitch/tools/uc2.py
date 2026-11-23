@@ -156,7 +156,7 @@ async def _run(args: argparse.Namespace) -> int:
             board,
             nodes,
             only=args.node or None,
-            with_board=not args.no_board,
+            with_board=not args.no_board and bus.has_port_board,
             force=args.force,
         )
         _print(bus, board, nodes)
@@ -191,7 +191,7 @@ async def _run(args: argparse.Namespace) -> int:
             bus,
             bus.state,
             only=args.node or None,
-            with_board=not args.no_board,
+            with_board=not args.no_board and bus.has_port_board,
             full=args.full,
             force=args.force,
             report=report,

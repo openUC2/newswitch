@@ -72,6 +72,7 @@ class UC2RestBus:
     """UC2BusManager implementation speaking the UC2-REST serial JSON protocol."""
 
     state: UC2State
+    has_port_board = True
 
     def __init__(
         self,
@@ -402,8 +403,8 @@ class UC2RestBus:
 
     # -- illumination -------------------------------------------------------------------
 
-    async def aset_laser(self, channel: int, value: int) -> None:
-        """Set a laser/LED PWM channel."""
+    async def aset_laser(self, channel: int, value: int, node: Optional[int] = None) -> None:
+        """Set a laser/LED PWM channel; the master routes it to its node (`node` is not needed)."""
         client = await self._require_client()
         await client.set_laser(channel=channel, value=value)
 

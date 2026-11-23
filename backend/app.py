@@ -30,6 +30,8 @@ handle points nowhere there. Serving them through arkitekt is open.
 Needs the extra ``agent`` (``uv sync --extra agent``).
 """
 
+import logging
+import sys
 from typing import Tuple
 
 from arkitekt import App, run
@@ -87,6 +89,7 @@ from newswitch.microscope.startup import (
     provide_core,
     provide_detector,
     provide_focus,
+    provide_mount_calibration,
     provide_uc2,
     provide_values,
 )
@@ -106,6 +109,7 @@ from newswitch.routines.acquire import acquire
 from newswitch.routines.autofocus import run_autofocus
 from newswitch.routines.calibration import calibrate_light_path
 from newswitch.routines.mda import acquire_mda
+from newswitch.routines.mount_calibration import calibrate_mount
 from newswitch.routines.region_scan import scan_region
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
@@ -116,6 +120,7 @@ from newswitch.states.detector import DetectorState
 from newswitch.states.expanse import ExpanseState
 from newswitch.states.hooks import HookState
 from newswitch.states.io import IOState
+from newswitch.states.mount_calibration import MountCalibrationState
 from newswitch.states.optics import OpticsState
 from newswitch.states.space import SpaceState
 from newswitch.states.uc2 import UC2State
@@ -242,6 +247,11 @@ app.register_background(run_uc2_bus)
 app.register_background(run_uc2_event_dispatch)
 app.register_background(keep_firmware)  # on start: what runs, against what is pinned
 app.register_action(home_stage, locks=[locks.MOTION])
+# Where the holder sits: homes, holds for a person to check the light is on the calibration
+# slide, finds its mark, writes the mount down. Its state is what a panel shows of it.
+app.register_state(MountCalibrationState)
+app.register_startup(provide_mount_calibration)
+app.register_action(calibrate_mount, locks=[locks.MOTION, locks.TUNE, locks.DETECTOR])
 app.register_action(stop_stage)
 app.register_action(led_matrix_fill, locks=[locks.TUNE])
 app.register_action(led_matrix_off, locks=[locks.TUNE])
@@ -263,8 +273,19 @@ declare_agent_ui(app)
 
 
 def main() -> None:
-    """Run `app` on the microscope ``NEWSWITCH_CONFIG`` names, until stopped."""
-    run(app, context=load_run())
+    """Run `app` on the microscope ``NEWSWITCH_CONFIG`` names, until stopped.
+
+    ``--force`` takes over a connection the server still holds for this agent (one that was not
+    closed, say, and has not timed out yet); without it such a start is refused.
+    """
+    # What newswitch says at INFO (the firmware check, how the camera streams keep up) reaches the
+    # console; arkitekt and the libraries keep their own levels.
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    newswitch_logger = logging.getLogger("newswitch")
+    newswitch_logger.addHandler(handler)
+    newswitch_logger.setLevel(logging.INFO)
+    run(app, context=load_run(), force="--force" in sys.argv[1:])
 
 
 if __name__ == "__main__":

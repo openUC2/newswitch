@@ -3,7 +3,7 @@ that serves them (``app.py``; FastAPI through `newswitch.microscope.apps.models`
 
 from newswitch import models
 from newswitch.actions import uc2
-from newswitch.models.calibration import CalibratedLightPath
+from newswitch.models.calibration import CalibratedLightPath, MeasuredMount
 from newswitch.models.devices import AxisWindow, Detector, DetectorAxis
 from newswitch.models.space import (
     Axis,
@@ -61,6 +61,7 @@ MODELS: tuple[type, ...] = (
     ZCalibrationHook,
     RegisteredHook,
     CalibratedLightPath,
+    MeasuredMount,
     models.AcquiredDataset,
     uc2.GalvoStatus,
     UC2Node,

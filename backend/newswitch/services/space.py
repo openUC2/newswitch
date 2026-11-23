@@ -60,7 +60,7 @@ from newswitch.instrument.space import (
     stage_system,
     translation,
 )
-from newswitch.instrument.spec import Grid, Instrument, MountedHolder, Probe
+from newswitch.instrument.spec import Grid, Instrument, Mount, MountedHolder, Probe
 from newswitch.models.devices import Detector
 from newswitch.models.space import (
     Axis,
@@ -555,6 +555,28 @@ class SpaceManager:
         self._mount(space, holder)
         self.forget_images(sample)
         self.refresh()
+
+    def mounted_holder(self, holder: str, sample: str | None = None) -> MountedHolder:
+        """`holder` of `sample` and where it sits now: as described, or as measured since.
+
+        Raises:
+            ValueError: The description names no such holder for it.
+        """
+        sample = self.one_sample(sample)
+        if holder not in self._holders[sample]:
+            raise ValueError(f"No holder {holder!r} on {sample}: there are {sorted(self._holders[sample])}")
+        return self._holders[sample][holder]
+
+    def set_mount(self, holder: str, mount: Mount, sample: str | None = None) -> None:
+        """`holder` of `sample` sits at `mount` from now on (it was measured there); if it is the
+        one mounted, its sample is where that says, with the images taken of it."""
+        sample = self.one_sample(sample)
+        known = self.mounted_holder(holder, sample)
+        self._holders[sample][holder] = MountedHolder(holder=known.holder, mount=mount)
+        space = self.state.samples[sample]
+        if space.holder == holder:
+            self._mount(space, holder)
+            self.refresh()
 
     def _mount(self, space: SampleSpace, holder: str) -> None:
         mounted = self._holders[space.sample][holder]

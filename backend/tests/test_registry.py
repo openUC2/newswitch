@@ -20,7 +20,7 @@ INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 CAM_TEST = INSTRUMENTS / "cam-test"
 
 VALUE_STATES = {"MoveState", "SwapState", "TuneState", "SourceState"}
-DEVICE_STATES = VALUE_STATES | {"DetectorState", "UC2State"}
+DEVICE_STATES = VALUE_STATES | {"DetectorState", "UC2State", "MountCalibrationState"}
 CORE_STATES = {
     "IOState",
     "HookState",

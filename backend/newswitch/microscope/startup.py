@@ -27,6 +27,7 @@ from newswitch.states.detector import DetectorState
 from newswitch.states.expanse import ExpanseState
 from newswitch.states.hooks import HookState
 from newswitch.states.io import IOState
+from newswitch.states.mount_calibration import MountCalibrationState
 from newswitch.states.optics import OpticsState
 from newswitch.states.space import SpaceState
 from newswitch.states.uc2 import UC2State
@@ -93,3 +94,26 @@ async def provide_focus(run: Run) -> AutofocusState:
 async def provide_uc2(run: Run) -> Tuple[UC2BusManager, UC2State]:
     """The UC2 board (no bus without one)."""
     return run.microscope.uc2_bus, run.microscope.uc2_state  # pyright: ignore[reportReturnType]
+
+
+async def provide_mount_calibration(run: Run) -> MountCalibrationState:
+    """The holder calibration: of the first sample whose description says how its holder is
+    calibrated (empty, when none does)."""
+    instrument = run.instrument
+    for sample in [] if instrument is None else instrument.samples():
+        holding = instrument.sample_holder(sample)
+        calibration = holding.calibration
+        if calibration is None:
+            continue
+        mounted = holding.holders[calibration.holder]
+        return MountCalibrationState(
+            sample=sample,
+            holder=calibration.holder,
+            holder_kind=mounted.holder.description.split(",")[0].split(".")[0],
+            slide=calibration.slide.description.split(",")[0].split(".")[0],
+            at=calibration.at,
+            mark=calibration.mark,
+            mount_x_mm=mounted.mount.x,
+            mount_y_mm=mounted.mount.y,
+        )
+    return MountCalibrationState()

@@ -1,0 +1,15 @@
+spec: newswitch/holder/v0
+description: >-
+  A Heidstar HDS-SH-80120-IS4 insert, four slides on a 30 mm pitch, lying along y. Its origin is
+  that of an SBS plate in the same stage holder (the A1-notch corner), as ImSwitch's
+  "Heidstar 4x Histosample" layout states its slots (slot 1, the leftmost, is A1); not measured
+  from the CAD, good to about half a millimetre.
+kind: slide
+extent: {x: 127.76 mm, y: 85.48 mm}
+grids:
+  slot:
+    rows: 1
+    columns: 4
+    pitch: {x: 30 mm, y: 0 mm}
+    a1: {x: 18.4 mm, y: 40.6 mm}
+    place: {size: 26 mm}

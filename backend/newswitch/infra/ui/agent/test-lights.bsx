@@ -1,0 +1,44 @@
+<Blok kind="agent" context="panel">
+<div className="flex flex-col gap-3 p-3">
+    <Card className="gap-3 py-3">
+        <div className="flex items-center gap-2 px-3">
+            <Icon name="zap" size={16} className="text-primary" />
+            <Text size="sm" weight="semibold">Lights test</Text>
+        </div>
+
+        <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+            <div className="flex flex-col gap-2 border-t px-3 pt-3">
+                <div className="flex items-center gap-2">
+                    <div className="size-3 shrink-0">
+                        <Logo viewBox="0 0 10 10" width="100%" height="100%" title={light.name}>
+                            <Circle cx={5} cy={5} r={5} fill={str.concat(values: ["spectrum-", light.color])} fillOpacity={light.on ? 1 : 0.25} />
+                        </Logo>
+                    </div>
+                    <Text size="sm" weight="semibold" className="flex-1" truncate>{light.name}</Text>
+                    <Text size="xs" tone="muted" mono>{str.concat(values: [light.emits, " | ", fmt.number(value: light.wavelength, digits: 0), " nm"])}</Text>
+                    <if when={light.power_variable}>
+                        <Switch checked={light.on} onChange={self.tune(name: light.power_variable, to: light.on ? 0 : light.lit_power)} />
+                    </if>
+                </div>
+                <if when={light.power_variable}>
+                    <Slider value={light.power} min={0} max={light.max_power} step={math.div(light.max_power, 100)} onCommit={self.tune(name: light.power_variable, to: event.value)} />
+                    <div className="flex items-center gap-1">
+                        <Text size="xs" tone="muted" mono className="flex-1">{str.concat(values: [fmt.number(value: math.mul(math.div(light.power, light.max_power), 100), digits: 0), " %"])}</Text>
+                        <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: 0)}>off</Button>
+                        <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: math.mul(light.max_power, 0.1))}>10 %</Button>
+                        <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: math.mul(light.max_power, 0.5))}>50 %</Button>
+                        <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: light.max_power)}>100 %</Button>
+                    </div>
+                </if>
+                <if when={light.power_variable == null}>
+                    <Text size="xs" tone="muted">No power to set: it is always on.</Text>
+                </if>
+            </div>
+        </foreach>
+
+        <if when={list.len(value: obj.keys(value: self.SourceState.sources)) == 0}>
+            <Empty icon="zap" title="No lights" description="This microscope describes no sources." />
+        </if>
+    </Card>
+</div>
+</Blok>

@@ -1,19 +1,31 @@
-# Johannes' openUC2 FRAME: a HAT+ CAN master on the Pi's USB (CP2102), four motor satellites (A, X,
-# Y, Z), a laser and an LED satellite, and a HikRobot color camera (MV-CS060-10UC-PRO).
+# Johannes' openUC2 FRAME: a HAT+ (its CAN master on the Pi's USB, CP2102, and its MCP2515 as the
+# Pi's own can0), four motor satellites (A, X, Y, Z), a laser and an LED satellite, and a HikRobot
+# color camera (MV-CS060-10UC-PRO). The Pi talks CANopen to the satellites itself, on can0: the ESP32
+# master stays on the bus (node 1) but is sent nothing, as one client per node is the rule.
+# can0 needs, in /boot/firmware/config.txt:
+#   dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=12,spimaxfrequency=10000000
+# and to be up at 500 kbit/s: ip link set can0 up type can bitrate 500000 restart-ms 100
 #
 # Run it:      NEWSWITCH_CONFIG=instruments/johannes-frame just agent --url <server>
 # Its bus:     NEWSWITCH_CONFIG=instruments/johannes-frame just uc2 status
 #
-# THE STAGE MUST NOT MOVE FOR NOW: its moves name no actuator (they are simulated, nothing reaches the
-# board) and the board refuses every motion command (allow_motion: false), home_stage and the
-# objective changer included. To let it move: wire stg-x/y/z below again and drop allow_motion.
+# Wired: the stage (X, Y, Z on the motor satellites 11-13), the laser satellite (node 20), the
+# illumination board's white LED and RGB ring (node 30), and the camera. To keep the stage from moving again: set
+# allow_motion: false on the board (every motion command is then refused before it is sent).
 #
-# Wired: the laser satellite, the illumination board's white LED and RGB ring, and the camera. The optics and the sources' spectra below are placeholders
+# The stage: 0 is where homing puts it (each axis has one endstop: X and Y count away from theirs,
+# Z towards the sample), and the stage's dimensions are its limits. What is on it is the holder,
+# from the library (newswitch/instrument/holders), mounted where its `mount` says: its origin on
+# the stage. That is measured with the calibration slide (calibrate_mount: home, find the
+# slide's middle pinhole, centre it) and written back here, so this is the one place it is
+# stated. Until the stage is homed, its positions are the boards' own count, which they keep over
+# a restart (NVS) but which is wrong after a move by hand or lost steps.
+#
+# The optics and the sources' spectra below are placeholders
 # (the rgb-camera's): measure the objective, tube lens and filters of this frame and state them.
-# How the HAT+ master routes what it is told (docs.openuc2.com, boards and node ids):
-#   /laser_act LASERid 0-3 -> laser satellite, node 20, channels 1-4
-#   /laser_act LASERid 4   -> illumination board, node 30, its white LED
-#   /ledarr_act            -> illumination board, node 30, its RGB ring array (136 LEDs)
+# The node ids are this frame's (docs.openuc2.com, boards and node ids), not uc2canopen's defaults:
+#   motors A/X/Y/Z 10-13, laser 20 (channels 0-3), illumination 30 (white LED: its laser channel 0;
+#   RGB ring: its LED array, 136 LEDs), galvo 40, GPIO 60.
 
 spec: newswitch/instrument/v0
 name: johannes-frame
@@ -45,10 +57,27 @@ cubes:
           transmit: 0.9
           reflect: 1.0e-6
           pattern: {beads: 3600, radius: 2 um, depth: 4 um}
+      holders:
+        # measured 2026-11-23 with the pinhole slide in slot 1 (ImSwitch, 2026-11-09: -0.056, 1.439)
+        slides: {holder: heidstar-4-slide, mount: {x: -0.048 mm, y: 1.479 mm}}
+      mounted: slides
+      calibration:
+        holder: slides
+        at: slot:A1              # the leftmost slot
+        slide: pinhole-slide
+        mark: pinhole:B1         # its middle pinhole, 0.3 mm: a bright disc on black
+        home: [Z, X, Y, A]       # A, the turret: homed, the 4x is in the light path
+        values:
+          led.power: 20 nW
+          stage.z: -3520 um      # the 4x in focus on the slide (ImSwitch)
+          camera.exposure: 2 ms
     moves:
-      x: {along: x, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
-      y: {along: y, initial: 0 um, step: 10 um, min: -5000 um, max: 5000 um, speed: 5000 um/s}
-      z: {along: axis, initial: 0 um, step: 1 um, min: -500 um, max: 500 um, speed: 500 um/s}
+      # the travel, as measured from the endstops (X 106.25 mm, Y 61.37 mm, 2026-11-23), less a
+      # margin at the far end. z: 0 at the endstop; the slide is in focus around -3520 um (4x) and
+      # -4840 um (10x), ImSwitch measured.
+      x: {actuator: stg-x, along: x, initial: 0 um, step: 10 um, min: 0 um, max: 105500 um, speed: 5000 um/s}
+      y: {actuator: stg-y, along: y, initial: 0 um, step: 10 um, min: 0 um, max: 60800 um, speed: 5000 um/s}
+      z: {actuator: stg-z, along: axis, initial: 0 um, step: 1 um, min: -6500 um, max: 0 um, speed: 500 um/s}
 
   objective:
     element: {kind: lens, name: f20 NA 0.25, f: 20 mm, na: 0.25, immersion: air, working_distance: 10 mm}
@@ -90,16 +119,33 @@ detection:
 hardware:
   boards:
     uc2:
-      transport: rest     # serial JSON to the HAT+ master, which reaches the satellites over CAN
-      port_pattern: /dev/serial/by-id/usb-Silicon_Labs_CP2102*
-      baudrate: 921600
-      require_master: true
-      allow_motion: false   # the stage must not move: every motion command is refused
+      transport: canopen  # the Pi's own can0 (the HAT+'s MCP2515), straight to the satellites
+      interface: socketcan
+      channel: can0
+      bitrate: 500000
+      node_a: 10
+      node_x: 11
+      node_y: 12
+      node_z: 13
+      node_laser: 20
+      node_led: 30
+      node_galvo: 40
+      # How each axis homes: every one toward + (its endstop), normally-high switches; Z backs
+      # off 3.125 mm towards the sample afterwards. ImSwitch's values for this frame, as used on
+      # 2026-11-23. A is the objective turret: homed, its slot 0 (4x) is in the light path.
+      homing:
+        X: {direction: 1, speed: 20000, timeout_ms: 30000, release: 0, polarity: 1}
+        Y: {direction: 1, speed: 20000, timeout_ms: 20000, release: 0, polarity: 1}
+        Z: {direction: 1, speed: 10000, timeout_ms: 20000, release: -10000, polarity: 1}
+        A: {direction: 1, speed: 20000, timeout_ms: 20000, release: 0, polarity: 1}
+      # Back to the serial master: transport: rest, homing removed, port_pattern:
+      # /dev/serial/by-id/usb-Silicon_Labs_CP2102*, baudrate: 921600, require_master: true
       # What the bus runs, pinned to the builds it ran when this was written (2026-11-21, just uc2
       # scan): development builds after v2026.0.0-beta.4, which no release publishes. On every start a
       # server compares them with this (on_start: flash), and finds nothing to flash. A board running
       # something else is flashed only from an image that is the pinned build: point its `release`
       # (or `source`) at where that build is, or pin a release instead (e.g. 11: UC2_..._motX).
+      # On canopen the master is no board on a port: its pin is checked over the serial bus only.
       firmware:
         release: v2026.0.0-beta.4
         on_start: flash
@@ -112,15 +158,16 @@ hardware:
           20: {env: UC2_canopen_slave_laser_debug, version: v2026.0.0-beta.4-9-g3c86acd-t20260930173005-dirty}
           30: {env: UC2_canopen_slave_led_release, version: v2026.0.0-beta.4-13-ge86ebf3-t20261102085646-pr133}
   actuators:
-    # The stage, unwired for now (it must not move). 3.2 steps/um: the openUC2 default lead screw
-    # (0.3125 um/step); check per axis before wiring it again:
-    #   stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: 3.2}
-    #   stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: 3.2}
-    #   stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
+    # The stage, on the motor satellites (X/Y/Z: nodes 11/12/13, node_x/y/z above). 3.2 steps/um
+    # is the openUC2 default lead screw (0.3125 um/step); X checked: 239,790 steps moved it ~75 mm.
+    # X and Y negative: their boards count down away from the endstops, the stage counts up.
+    stg-x: {driver: uc2.stepper, board: uc2, axis: X, steps_per_um: -3.2}
+    stg-y: {driver: uc2.stepper, board: uc2, axis: Y, steps_per_um: -3.2}
+    stg-z: {driver: uc2.stepper, board: uc2, axis: Z, steps_per_um: 3.2}
     # A satellite takes 0-65535 (u16) for full scale, the docs say, and does not say how it rescales;
     # pwm_max 1023 keeps full power well below that until the full scale is measured.
-    laser-0: {driver: uc2.laser, board: uc2, channel: 0, pwm_max: 1023}
-    led-white: {driver: uc2.laser, board: uc2, channel: 4, pwm_max: 1023}
+    laser-0: {driver: uc2.laser, board: uc2, channel: 0, pwm_max: 1023}                # node 20
+    led-white: {driver: uc2.laser, board: uc2, channel: 0, node: 30, pwm_max: 1023}    # its own node
     ring-array: {driver: uc2.ledarray, board: uc2, r: 255, g: 255, b: 255}
   cameras:
     # MV-CS060-10UC-PRO. store_image_data: false, or uc2_cam_py records every frame to

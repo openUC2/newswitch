@@ -55,6 +55,7 @@ class VirtualUC2Bus:
     """Simulated UC2 hardware bus implementing the UC2BusManager protocol."""
 
     state: UC2State
+    has_port_board = True
 
     def __init__(
         self,
@@ -206,7 +207,7 @@ class VirtualUC2Bus:
 
     # -- illumination ---------------------------------------------------------------
 
-    async def aset_laser(self, channel: int, value: int) -> None:
+    async def aset_laser(self, channel: int, value: int, node: Optional[int] = None) -> None:
         """Store the simulated laser PWM value."""
         self._lasers[channel] = value
 

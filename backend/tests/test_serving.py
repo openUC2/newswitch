@@ -206,3 +206,32 @@ def test_the_agent_reads_the_instrument_once(
     monkeypatch.setattr(spec, "load", nothing_reads)
     sink, _ = asyncio.run(provide_lovekit_sink(current))
     assert isinstance(sink, LovekitSink) and [c.key for c in sink.cameras] == ["sim_cam"]
+
+
+def test_a_streamed_frame_is_binned_to_the_streams_size() -> None:
+    """A 6 MP frame goes out at most STREAM_MAX_WIDTH wide, even-sized, averaged over its bins;
+    a narrow one keeps its pixels."""
+    from newswitch.infra.streaming.lovekit import STREAM_MAX_WIDTH, binned, stream_rgba
+
+    frame = np.zeros((2048, 3072), dtype=np.uint16)
+    frame[:, 1536:] = 1000
+    rgba = stream_rgba(frame)
+    assert rgba.shape == (682, 1024, 4) and rgba.dtype == np.uint8
+    assert rgba.shape[1] <= STREAM_MAX_WIDTH and rgba.shape[0] % 2 == 0
+    assert (rgba[..., 3] == 255).all()
+    assert rgba[0, 0, 0] == 0 and rgba[0, -1, 0] == 255  # the stretch spans dark to bright
+    noisy = np.random.default_rng(0).normal(100.0, 10.0, (300, 3000)).astype(np.float32)
+    assert binned(noisy).std() < noisy.std() / 2  # binning by 3 averages the noise down
+    small = np.arange(64 * 63, dtype=np.uint16).reshape(64, 63)
+    assert binned(small) is small  # narrow enough: sent as it is
+
+
+def test_a_lovekit_sink_wants_a_frame_only_once_the_last_is_taken() -> None:
+    """While a frame waits to be sent, a newer one would only replace it: the camera is told not
+    to copy it, and every new frame still counts as offered."""
+    sink = LovekitSink([CameraStream(detector="cam", key="cam", title="cam")])
+    assert sink.wants("cam")
+    sink.broadcast_sync("cam", np.zeros((2, 2), dtype=np.uint16))
+    assert not sink.wants("cam")
+    assert sink.take("cam") is not None
+    assert sink.wants("cam") and sink.offered["cam"] == 3
