@@ -59,7 +59,7 @@ cubes:
           pattern: {beads: 3600, radius: 2 um, depth: 4 um}
       holders:
         # measured 2026-11-23 with the pinhole slide in slot 1 (ImSwitch, 2026-11-09: -0.056, 1.439)
-        slides: {holder: heidstar-4-slide, mount: {x: -0.048 mm, y: 1.479 mm}}
+        slides: {holder: heidstar-4-slide, mount: {x: -0.059 mm, y: 1.486 mm}}
       mounted: slides
       calibration:
         holder: slides

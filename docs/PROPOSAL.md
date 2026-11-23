@@ -253,3 +253,4 @@ calibrated, and kept in newswitch's calibration store (§1).
 - **Invalidation:** a calibration belongs to a design commit. When the design changes, is it voided
   as a whole, or only where the change touches it (a new holder voids the holder offset, not the
   focus)?
+okay

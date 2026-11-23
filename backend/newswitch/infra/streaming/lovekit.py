@@ -67,6 +67,15 @@ def binned(frame: np.ndarray, max_width: int = STREAM_MAX_WIDTH) -> np.ndarray:
     return view.reshape(shape).mean(axis=(1, 3), dtype=np.float32)
 
 
+def _full_scale(data: np.ndarray) -> float:
+    """The brightest a frame of this kind can be: 8, 12 or 16 bits, from its type and values (a
+    12-bit camera delivers uint16 that stay below 4096)."""
+    if data.dtype == np.uint8:
+        return 255.0
+    brightest = float(data.max()) if data.size else 0.0
+    return 4095.0 if brightest <= 4095 else 65535.0
+
+
 def stream_rgba(frame: np.ndarray, max_width: int = STREAM_MAX_WIDTH) -> np.ndarray:
     """A frame as the RGBA bytes a video track takes, binned down to the stream's size.
 
@@ -78,6 +87,10 @@ def stream_rgba(frame: np.ndarray, max_width: int = STREAM_MAX_WIDTH) -> np.ndar
         return to_rgba(np.asarray(data, dtype=np.uint8) if data.dtype != np.uint8 else data)
     sample = data[::STRETCH_SAMPLE, ::STRETCH_SAMPLE]
     low, high = (float(v) for v in np.percentile(sample, (1.0, 99.9)))
+    if high <= low:  # nearly all of it one level (black): a small bright spot is above that
+        high = float(data.max())
+    if high <= low:  # all of it one level: shown as that level of the sensor's range, so a
+        low, high = 0.0, _full_scale(data)  # saturated frame is white and a dark one black
     scale = 255.0 / (high - low) if high > low else 0.0
     eight = np.clip((data - low) * scale, 0, 255).astype(np.uint8)
     rgba = np.empty((*eight.shape, 4), dtype=np.uint8)
@@ -170,7 +183,7 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
                     await published[camera.key].send(rgba)
                     stats.add(
                         camera.key,
-                        frame.shape,
+                        frame,
                         converted - started,
                         time.perf_counter() - converted,
                     )
@@ -180,6 +193,16 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
             # took some of it); with nothing new, look again soon, so a fresh frame waits little.
             busy = time.perf_counter() - started_round
             await asyncio.sleep(max(0.0, 1.0 / MAX_FPS - busy) if sent_any else POLL_INTERVAL_S)
+
+
+def _levels(frame: Optional[np.ndarray]) -> str:
+    """How bright the last frame sent was: its 1st and 99.9th percentile and its brightest pixel,
+    in its own units (so a black frame shows as one, and a dark one with a bright spot too)."""
+    if frame is None:
+        return "-"
+    sample = np.asarray(frame)[::STRETCH_SAMPLE, ::STRETCH_SAMPLE]
+    low, high = np.percentile(sample, (1.0, 99.9))
+    return f"p1 {low:.0f} / p99.9 {high:.0f} / max {np.asarray(frame).max():.0f}"
 
 
 class _Stats:
@@ -193,8 +216,13 @@ class _Stats:
         self.send: dict[str, float] = {}
         self.shape: dict[str, tuple[int, ...]] = {}
         self.offered_before: dict[str, int] = {}
+        self.last: dict[str, np.ndarray] = {}
 
-    def add(self, key: str, shape: tuple[int, ...], convert: float, send: float) -> None:
+    def add(
+        self, key: str, frame: np.ndarray, convert: float, send: float
+    ) -> None:
+        self.last[key] = frame
+        shape = frame.shape
         self.sent[key] = self.sent.get(key, 0) + 1
         self.convert[key] = self.convert.get(key, 0.0) + convert
         self.send[key] = self.send.get(key, 0.0) + send
@@ -213,13 +241,15 @@ class _Stats:
             if not new and not sent:
                 continue
             logger.info(
-                "stream %s: camera offered %.1f fps, sent %.1f fps, frame %s, convert %.0f ms, send %.0f ms",
+                "stream %s: camera offered %.1f fps, sent %.1f fps, frame %s, convert %.0f ms, "
+                "send %.0f ms, levels %s",
                 key,
                 new / elapsed,
                 sent / elapsed,
                 "x".join(str(n) for n in self.shape.get(key, ())),
                 1000 * self.convert.get(key, 0.0) / max(sent, 1),
                 1000 * self.send.get(key, 0.0) / max(sent, 1),
+                _levels(self.last.get(key)),
             )
         self.since = time.monotonic()
         self.sent.clear()

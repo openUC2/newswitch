@@ -77,6 +77,10 @@ class UC2CanBusConfig:
     # and polarity, then, what the node holds. Written to the node before every homing.
     homing: dict[str, dict[str, int]] = field(default_factory=dict)
     move_timeout_s: float = 120.0
+    # How often a moving axis's position is passed on at most: a motor node broadcasts it every
+    # 10 ms while running, and each one passed on is a state update and a new coordinate graph.
+    # Where it stops is always passed on.
+    position_update_min_interval_s: float = 0.1
     reconnect_backoff_initial_s: float = 1.0
     reconnect_backoff_max_s: float = 30.0
     # False: every motion command (moves, homing, the objective changer) is refused before it
@@ -117,6 +121,10 @@ class UC2CanBus:
         self.firmware = firmware
         self._broker = UC2EventBroker()
         self._client: Optional["AsyncUC2Client"] = None
+        # Where each axis is known to be, in steps (`_believed`).
+        self._known_steps: dict[str, int] = {}
+        # When each axis's position was last passed on (`_due`).
+        self._last_passed: dict[str, float] = {}
         self._connected = asyncio.Event()
         self._objective_slot = 1
 
@@ -241,19 +249,25 @@ class UC2CanBus:
             async for event in client.events():
                 if isinstance(event, MotorUpdateEvent):
                     axis = self.axis_for_node(event.node_id, event.axis)
-                    if axis is not None:
+                    if (
+                        axis is not None
+                        and self._believed(axis, event.position, event.running)
+                        and self._due(axis, event.running)
+                    ):
                         self._broker.publish(
                             PositionUpdate(axis=axis, position=self.to_units(axis, event.position))
                         )
                 elif isinstance(event, MotorDoneEvent):
                     axis = self.axis_for_node(event.node_id, event.axis)
-                    if axis is not None:
+                    if axis is not None and self._believed(axis, event.position, False):
                         self._broker.publish(
                             MotionDone(axis=axis, position=self.to_units(axis, event.position))
                         )
                 elif isinstance(event, HomingChangedEvent):
                     axis = self.axis_for_node(event.node_id, event.axis)
                     if axis is not None:
+                        if event.status == 2:  # homed: the count is what the node says next
+                            self._known_steps.pop(axis, None)
                         self._broker.publish(HomingChanged(axis=axis, status=event.status))
                 elif isinstance(event, HeartbeatEvent):
                     if event.node_id not in self.state.nodes_online:
@@ -277,6 +291,31 @@ class UC2CanBus:
             raise PermissionError(
                 f"{what}: motion is disabled on this board (allow_motion: false); nothing was sent"
             )
+
+    def _due(self, axis: str, running: bool) -> bool:
+        """Whether a position report of a moving axis is passed on now: at most every
+        `position_update_min_interval_s`. One of an axis at rest always is (it stopped there, or
+        it changed while standing still)."""
+        now = asyncio.get_running_loop().time()
+        if running and now - self._last_passed.get(axis, -1e9) < self.config.position_update_min_interval_s:
+            return False
+        self._last_passed[axis] = now
+        return True
+
+    def _believed(self, axis: str, steps: int, running: bool) -> bool:
+        """Whether a node's position report is where the axis is.
+
+        The motor firmware sends two kinds of position broadcast on the same TPDO, alternately,
+        twice a second: one with the step count and one with 0 in its place, standing still too
+        (seen on 2026-11-23, v2026.0.0-beta.4-9). So a 0 from an axis at rest that is known to be
+        elsewhere is not believed. Known: what it reported while running or not 0 at rest, where
+        a move of this bus ended, and anything after homing (which does make it 0).
+        """
+        known = self._known_steps.get(axis)
+        if not running and steps == 0 and known not in (None, 0):
+            return False
+        self._known_steps[axis] = steps
+        return True
 
     async def _require_client(self, timeout: float = 30.0) -> "AsyncUC2Client":
         """Wait for the background connection and return the async client."""
@@ -315,6 +354,8 @@ class UC2CanBus:
             acceleration=int(acceleration or 0),
             is_absolute=is_absolute,
         )
+        if is_absolute:
+            self._known_steps[axis.upper()] = final_steps
         return self.to_units(axis, final_steps)
 
     async def _move_and_wait(

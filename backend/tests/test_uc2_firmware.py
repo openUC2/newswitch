@@ -796,3 +796,36 @@ def test_a_move_that_never_says_it_runs_is_over_soon() -> None:
         took = time.monotonic() - started
         assert at_least <= took <= at_most and where == pytest.approx(1000.0, abs=0.5)
     assert canopen_bus.MOVE_START_S < 1.0
+
+
+def test_a_zero_from_an_axis_at_rest_known_elsewhere_is_not_believed() -> None:
+    """The motor firmware alternates its position broadcast with one saying 0, at rest too: that 0
+    is dropped while the axis is known elsewhere; a real 0 (after homing, or reached moving) is
+    not."""
+    from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+
+    bus = UC2CanBus(UC2State(), UC2CanBusConfig())
+    seen = [bus._believed("X", steps, running=False) for steps in (-58692, 0, -58692, 0)]
+    assert seen == [True, False, True, False]
+    assert bus._believed("X", 0, running=True)  # passing through 0 while moving
+    assert bus._believed("X", 0, running=False)  # and standing there now
+    assert bus._believed("Y", 0, running=False)  # nothing known yet: believed
+
+
+def test_a_moving_axis_is_passed_on_ten_times_a_second_and_where_it_stops_always() -> None:
+    """A node broadcasts every 10 ms while running: a tenth of that is passed on; the report of it
+    standing still is passed on at once."""
+    from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
+
+    bus = UC2CanBus(UC2State(), UC2CanBusConfig(position_update_min_interval_s=0.1))
+
+    async def reports() -> list[bool]:
+        passed = []
+        for _ in range(50):  # half a second of a move, every 10 ms
+            passed.append(bus._due("X", running=True))
+            await asyncio.sleep(0.01)
+        passed.append(bus._due("X", running=False))  # it stopped
+        return passed
+
+    passed = asyncio.run(reports())
+    assert 4 <= sum(passed[:-1]) <= 7 and passed[-1]

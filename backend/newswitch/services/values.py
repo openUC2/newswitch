@@ -182,7 +182,14 @@ class Values:
                 )
 
     def stepped(self, name: str, value: Any) -> None:  # noqa: ANN401
-        """A wire took a variable there: nothing is commanded, it is only known to be there now."""
+        """A wire took a variable there: nothing is commanded, it is only known to be there now.
+
+        Where it already is, nothing is published: a board reports its positions over and over,
+        standing still too, and an unchanged state is no update.
+        """
+        with self._lock:
+            if name in self._values and self._values[name] == value:
+                return
         self.reporter(name)(value)
         self.on_change()
 

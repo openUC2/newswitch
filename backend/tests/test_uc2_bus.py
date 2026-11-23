@@ -159,3 +159,24 @@ def test_homing_the_objective_changer_says_where_it_is_now() -> None:
     with Koil():
         home_objective(bus, values)
     assert values.swap_state.swaps["objective"]["slot"].current == 1
+
+
+def test_a_position_reported_again_publishes_nothing() -> None:
+    """A board reports where it is over and over, standing still too: only a change is an update."""
+    values = Values(
+        spec.load(REFERENCE_INSTRUMENT),
+        MoveState(),
+        SwapState(),
+        TuneState(),
+        SourceState(),
+        {"stage.z": Stepper(make_virtual_bus(), StepperConfig(axis="Z", steps_per_um=3.2), None)},
+    )
+    told: list[float] = []
+    values.on_change = lambda: told.append(values["stage.z"])
+    published = []
+    for position in (-7.5, -7.5, -7.5, -2.0, -2.0):
+        before = values.move_state.moves
+        apply_uc2_event(PositionUpdate(axis="Z", position=position), values, UC2State())
+        published.append(values.move_state.moves is not before)
+    assert told == [-7.5, -2.0]
+    assert published == [True, False, False, True, False]

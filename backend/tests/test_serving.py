@@ -235,3 +235,26 @@ def test_a_lovekit_sink_wants_a_frame_only_once_the_last_is_taken() -> None:
     assert not sink.wants("cam")
     assert sink.take("cam") is not None
     assert sink.wants("cam") and sink.offered["cam"] == 3
+
+
+def test_a_black_frame_with_a_small_bright_spot_shows_the_spot() -> None:
+    """Nearly all of it at the black level: the percentiles agree, and the spot is stretched
+    against the brightest pixel instead of the image going black."""
+    import numpy as np
+
+    from newswitch.infra.streaming.lovekit import stream_rgba
+
+    frame = np.full((512, 512), 8, dtype=np.uint16)
+    frame[250:254, 250:254] = 4000
+    rgba = stream_rgba(frame, max_width=512)
+    assert rgba[..., 0].max() >= 250 and rgba[0, 0, 0] == 0
+
+
+def test_a_saturated_frame_is_white_and_a_black_one_black() -> None:
+    """All of a frame at one level shows as that level of the sensor's range, not as black."""
+    import numpy as np
+
+    from newswitch.infra.streaming.lovekit import stream_rgba
+
+    assert stream_rgba(np.full((64, 64), 4088, dtype=np.uint16))[0, 0, 0] >= 250
+    assert stream_rgba(np.full((64, 64), 8, dtype=np.uint16))[0, 0, 0] <= 1
