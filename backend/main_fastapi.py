@@ -43,6 +43,7 @@ from newswitch.protocols.dataset_store import DatasetStore
 from newswitch.protocols.frame_sink import FrameSink
 from newswitch.infra.mikro.none import NoDatasetStore
 from newswitch.infra.mikro.connection import MikroConnection
+from newswitch.logging_setup import setup_logging
 from newswitch.settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -151,7 +152,12 @@ def create_app(
 
 
 def create() -> FastAPI:
-    """Steps 1-4: the uvicorn factory (``uvicorn main_fastapi:create --factory``)."""
+    """Steps 1-4: the uvicorn factory (``uvicorn main_fastapi:create --factory``).
+
+    Logging is configured here, as ``sys_config.yaml`` says, not in `create_app`: tests build
+    their apps with that, and write no log files.
+    """
+    setup_logging()
     return create_app(load_settings())
 
 

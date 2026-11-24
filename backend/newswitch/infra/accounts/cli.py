@@ -13,7 +13,6 @@ over the network: whoever can run this already has full access to the machine.
 from __future__ import annotations
 
 import argparse
-import sys
 
 from newswitch.infra.accounts.store import (
     Role,
@@ -21,10 +20,15 @@ from newswitch.infra.accounts.store import (
     UserNotFoundError,
     UserStore,
 )
+from newswitch.logging_setup import console, setup_logging
+
+#: What this tool reports: to stdout (errors to stderr), and into the log file.
+report = console("accounts")
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point for `python -m newswitch.infra.accounts.cli`."""
+    setup_logging()
     parser = argparse.ArgumentParser(prog="python -m newswitch.infra.accounts.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -46,25 +50,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list-users":
         for user in store.list_users():
             state = "disabled" if user.disabled else "enabled"
-            print(f"{user.username}\t{user.role.value}\t{state}")
+            report.info("%s\t%s\t%s", user.username, user.role.value, state)
         return 0
 
     if args.command == "reset-password":
         try:
             store.change_password(args.username, args.password)
         except UserNotFoundError:
-            print(f"No such user: {args.username}", file=sys.stderr)
+            report.error("No such user: %s", args.username)
             return 1
-        print(f"Password for '{args.username}' has been reset; its sessions were revoked.")
+        report.info("Password for '%s' has been reset; its sessions were revoked.", args.username)
         return 0
 
     if args.command == "create-admin":
         try:
             store.create_user(args.username, args.password, Role.ADMIN)
         except UserAlreadyExistsError:
-            print(f"'{args.username}' already exists.", file=sys.stderr)
+            report.error("'%s' already exists.", args.username)
             return 1
-        print(f"Created admin account '{args.username}'.")
+        report.info("Created admin account '%s'.", args.username)
         return 0
 
     return 1

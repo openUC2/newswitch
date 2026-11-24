@@ -12,14 +12,18 @@ under the test's ``tmp_path``:
 """
 
 import asyncio
+import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from arkitekt_fastapi.testing import AsyncAgentTestClient, BufferedEvent
 from fastapi import FastAPI
 
 from main_fastapi import create_app, create_fastapi_registry
+from newswitch import logging_setup, sys_config
 from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.instrument import spec
 from newswitch.settings import Settings
@@ -40,6 +44,51 @@ def views_beside_copies(tmp_path: Path) -> None:
         link = folder / "views"
         if not link.exists():
             link.symlink_to(Path(__file__).parent.parent / "instruments" / "views")
+
+
+@pytest.fixture(autouse=True)
+def log_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[Path]:
+    """Logging into a folder of the test's own, undone afterwards: no test writes backend.log.
+
+    `sys_config.SYS_CONFIG_FILE` is a copy of the committed ``sys_config.yaml`` whose log file is
+    in that folder, and relative log files (the fallback included) go there too. Afterwards only
+    what `configure_logging` installed is removed: pytest attaches handlers of its own to the
+    root logger and removes them itself.
+    """
+    folder = tmp_path_factory.mktemp("log")
+    config = yaml.safe_load(sys_config.SYS_CONFIG_FILE.read_text(encoding="utf-8"))
+    config["log_file_path"] = str(folder / "backend.log")
+    copy = tmp_path_factory.mktemp("sys_config") / "sys_config.yaml"
+    copy.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.setattr(sys_config, "SYS_CONFIG_FILE", copy)
+    monkeypatch.setattr(logging_setup, "LOG_DIR", folder)
+
+    root = logging.getLogger()
+    root_level = root.level
+    library_names = (*logging_setup.UVICORN_LOGGERS, logging_setup.CONSOLE)
+    libraries = {
+        name: (list(lg.handlers), lg.level, lg.propagate)
+        for name, lg in ((name, logging.getLogger(name)) for name in library_names)
+    }
+    yield folder
+    for handler in logging_setup._installed:
+        root.removeHandler(handler)
+        handler.close()
+    logging_setup._installed.clear()
+    console = logging.getLogger(logging_setup.CONSOLE)
+    for handler in logging_setup._console_installed:
+        console.removeHandler(handler)
+        handler.close()
+    logging_setup._console_installed.clear()
+    root.setLevel(root_level)
+    logging.captureWarnings(False)
+    for name, (handlers, level, propagate) in libraries.items():
+        library_logger = logging.getLogger(name)
+        library_logger.handlers[:] = handlers
+        library_logger.setLevel(level)
+        library_logger.propagate = propagate
 
 
 def wired_only(data: dict[str, Any], actuators: dict[str, Any], **hardware: Any) -> None:  # noqa: ANN401

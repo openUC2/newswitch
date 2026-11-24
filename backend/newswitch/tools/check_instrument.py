@@ -19,12 +19,16 @@ from newswitch.instrument.naming import channel_names
 from newswitch.instrument.compiler import compile_instrument, difference, impacts
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import load
+from newswitch.logging_setup import console, setup_logging
 from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
 
 #: How far apart prediction and measurement may be before it is worth saying so.
 SCALE_TOLERANCE_PERCENT = 0.5
 ROTATION_TOLERANCE_DEG = 0.25
 SHIFT_TOLERANCE_PX = 0.5
+
+#: What this tool reports: to stdout, and into the log file.
+report = console("check_instrument")
 
 
 def save(folder: Path, name: str, frame: np.ndarray) -> None:
@@ -74,32 +78,43 @@ def flag(mismatch: float, tolerance: float) -> str:
     return "MISMATCH" if abs(mismatch) > tolerance else "ok"
 
 
+def _heading(title: str, *args: object) -> None:
+    """A section of the report: an empty line, then its title."""
+    report.info("")
+    report.info(title, *args)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run the loop on the instrument the command line names."""
+    setup_logging()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("instrument", type=Path, help="the instrument's folder")
     instrument = load(parser.parse_args(argv).instrument)
     compiled = compile_instrument(instrument)
     out = instrument.folder / "out"
-    print(f"=== {len(compiled.states)} combinations, {len(instrument.detectors())} detectors")
+    report.info(
+        "=== %d combinations, %d detectors", len(compiled.states), len(instrument.detectors())
+    )
 
-    print("\n=== What impacts what: calculated, nothing declared this")
+    _heading("=== What impacts what: calculated, nothing declared this")
     for row in impacts(instrument, instrument.initial_state()):
         changes = ", ".join(f"{k} {v:.3g}" for k, v in row["changes"].items()) or "nothing"
-        print(f"  {row['variable']:20} {row['verb']:6} {row['detector']:9} -> {changes}")
+        report.info(
+            "  %-20s %-6s %-9s -> %s", row["variable"], row["verb"], row["detector"], changes
+        )
 
     state = instrument.initial_state()
-    print("\n=== The logical detectors: what each delivers, from its parts and its wires")
+    _heading("=== The logical detectors: what each delivers, from its parts and its wires")
     for detector in instrument.detectors():
         axes = ", ".join(
             f"{axis.name}{'*' if axis.size is None else ''}"
             for axis in instrument.detector_axes(detector)
         )
-        print(f"  {detector}: ({axes})")
+        report.info("  %s: (%s)", detector, axes)
     for drive in instrument.drives:
-        print(f"  wire: {drive.source} -> {drive.target}")
+        report.info("  wire: %s -> %s", drive.source, drive.target)
 
-    print("\n=== The channels each simulation has: calculated, nothing declared these")
+    _heading("=== The channels each simulation has: calculated, nothing declared these")
     for sample in instrument.samples():
         for simulation in instrument.sample_holder(sample).simulations:
             current = {**state, instrument.simulation_key(sample): simulation}
@@ -109,13 +124,19 @@ def main(argv: list[str] | None = None) -> None:
                 if channel.sample != sample:
                     continue
                 swaps = ", ".join(f"{name}={slot}" for name, slot in channel.swaps.items())
-                print(
-                    f"  {sample}: {simulation}: {name}: {channel.source} -> {channel.detector}, "
-                    f"{channel.electrons:.4g} electrons at full power, at {channel.band_nm:.0f} nm"
-                    + (f", with {swaps}" if swaps else "")
+                report.info(
+                    "  %s: %s: %s: %s -> %s, %.4g electrons at full power, at %.0f nm%s",
+                    sample,
+                    simulation,
+                    name,
+                    channel.source,
+                    channel.detector,
+                    channel.electrons,
+                    channel.band_nm,
+                    f", with {swaps}" if swaps else "",
                 )
 
-    print("\n=== What each detector will see, for each combination of swaps")
+    _heading("=== What each detector will see, for each combination of swaps")
     for current in instrument.swap_states():
         if any(
             current[instrument.simulation_key(sample)]
@@ -128,14 +149,18 @@ def main(argv: list[str] | None = None) -> None:
         }
         for detector in instrument.detectors():
             if instrument.sample_of(detector, current) is None:
-                print(f"  {swaps} {detector}: dark, the switches send its light elsewhere")
+                report.info("  %s %s: dark, the switches send its light elsewhere", swaps, detector)
                 continue
             answer = compiled.answer(detector, current)
-            print(
-                f"  {swaps} {detector}: {_size_and_rotation(np.array(answer.pixel_to_stage))[0]:.3f} "
-                f"um/px, fov {answer.field_of_view_um[0]:.0f} um, "
-                f"band {answer.band_nm or 0:.0f} nm, {answer.light:.0f} counts, "
-                f"corner {answer.relative_illumination:.2f}"
+            report.info(
+                "  %s %s: %.3f um/px, fov %.0f um, band %.0f nm, %.0f counts, corner %.2f",
+                swaps,
+                detector,
+                _size_and_rotation(np.array(answer.pixel_to_stage))[0],
+                answer.field_of_view_um[0],
+                answer.band_nm or 0,
+                answer.light,
+                answer.relative_illumination,
             )
 
     roles = Roles(instrument)
@@ -147,15 +172,15 @@ def main(argv: list[str] | None = None) -> None:
     if powers:
         source = instrument.cubes[powers[0].split(".")[0]]
         microscope.set({powers[0]: source.element_at(state).max_power})
-    print(f"\n=== Measure images with newswitch's own calibration code, under {powers[:1]}")
-    print(f"  {'':22} {'predicted':>10} {'measured':>10}")
+    _heading("=== Measure images with newswitch's own calibration code, under %s", powers[:1])
+    report.info("  %-22s %10s %10s", "", "predicted", "measured")
     for detector in instrument.detectors():
         sample = instrument.sample_of(detector, microscope.state)
         if sample is None:
-            print(f"  {detector}: dark, the switches send its light elsewhere")
+            report.info("  %s: dark, the switches send its light elsewhere", detector)
             continue
         if not (roles.sideways(detector, "x", sample) and roles.sideways(detector, "y", sample)):
-            print(f"  {detector}: nothing moves its view")
+            report.info("  %s: nothing moves its view", detector)
             continue
         predicted = _size_and_rotation(
             np.array(compiled.answer(detector, microscope.state).pixel_to_stage)
@@ -164,19 +189,26 @@ def main(argv: list[str] | None = None) -> None:
         try:
             size, turn = measure(microscope, detector)
         except ValueError as error:
-            print(f"  {detector}: {error}")
+            report.info("  %s: %s", detector, error)
             continue
         mismatch = (size / predicted - 1.0) * 100.0
-        print(
-            f"  {detector} um/px          {predicted:10.4f} {size:10.4f}   "
-            f"{flag(mismatch, SCALE_TOLERANCE_PERCENT)} ({mismatch:+.2f}%)"
+        report.info(
+            "  %s um/px          %10.4f %10.4f   %s (%+.2f%%)",
+            detector,
+            predicted,
+            size,
+            flag(mismatch, SCALE_TOLERANCE_PERCENT),
+            mismatch,
         )
-        print(
-            f"  {detector} turn, degrees  {0.0:10.2f} {turn:10.2f}   "
-            f"{flag(turn, ROTATION_TOLERANCE_DEG)}"
+        report.info(
+            "  %s turn, degrees  %10.2f %10.2f   %s",
+            detector,
+            0.0,
+            turn,
+            flag(turn, ROTATION_TOLERANCE_DEG),
         )
 
-    print("\n=== Swap each: where the design says the image does not move, does it?")
+    _heading("=== Swap each: where the design says the image does not move, does it?")
     for swap in (v for v in instrument.variables.values() if v.verb == "swaps"):
         start = microscope.state[swap.name]
         for detector in instrument.detectors():
@@ -191,17 +223,21 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 if "scale" not in predicted:
                     shift = pixel_shift(before, microscope.image(detector))
-                    print(
-                        f"  {swap.name}={slot} {detector}: measured "
-                        f"({shift[0]:+.2f}, {shift[1]:+.2f}) px   "
-                        f"{flag(float(np.hypot(*shift)), SHIFT_TOLERANCE_PX)}"
+                    report.info(
+                        "  %s=%s %s: measured (%+.2f, %+.2f) px   %s",
+                        swap.name,
+                        slot,
+                        detector,
+                        shift[0],
+                        shift[1],
+                        flag(float(np.hypot(*shift)), SHIFT_TOLERANCE_PX),
                     )
             microscope.set({swap.name: start})
 
     if microscope.truth:
-        print("\n=== The truth, now that everyone has answered")
+        _heading("=== The truth, now that everyone has answered")
         for name, value in microscope.truth.items():
-            print(f"  {name}: {value}")
+            report.info("  %s: %s", name, value)
 
 
 if __name__ == "__main__":

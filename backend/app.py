@@ -30,7 +30,6 @@ handle points nowhere there. Serving them through arkitekt is open.
 Needs the extra ``agent`` (``uv sync --extra agent``).
 """
 
-import logging
 import sys
 from typing import Tuple
 
@@ -81,6 +80,7 @@ from newswitch.infra.streaming.lovekit import (
 )
 from newswitch.infra.ui import declare_agent_ui
 from newswitch.instrument.spec import Instrument
+from newswitch.logging_setup import setup_logging
 from newswitch.microscope import locks
 from newswitch.microscope.models import MODELS
 from newswitch.microscope.registry import DESCRIPTION, IDENTIFIER, VERSION
@@ -278,13 +278,9 @@ def main() -> None:
     ``--force`` takes over a connection the server still holds for this agent (one that was not
     closed, say, and has not timed out yet); without it such a start is refused.
     """
-    # What newswitch says at INFO (the firmware check, how the camera streams keep up) reaches the
-    # console; arkitekt and the libraries keep their own levels.
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-    newswitch_logger = logging.getLogger("newswitch")
-    newswitch_logger.addHandler(handler)
-    newswitch_logger.setLevel(logging.INFO)
+    # As sys_config.yaml says: what newswitch says at INFO (the firmware check, how the camera
+    # streams keep up) is in the log file; on the terminal with log_to_terminal: info.
+    setup_logging()
     run(app, context=load_run(), force="--force" in sys.argv[1:])
 
 

@@ -90,6 +90,8 @@ dist-ssr/
 .yarn/
 logs/
 *.log
+# rotated log files (backend.log.1 ... .3, newswitch.logging_setup)
+*.log.[0-9]*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -117,3 +119,7 @@ backend/newswitch/assets/design/
 
 # The arkitekt agent's runtime journal (rekuest_journal.db*), written wherever it runs
 backend/.arkitekt/
+
+# local only: camera SDK packages, leftover device files of main
+backend/external/
+backend/configs/

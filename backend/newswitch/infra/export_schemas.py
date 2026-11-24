@@ -24,9 +24,13 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 
 from main_fastapi import create_fastapi_registry
+from newswitch.logging_setup import console, setup_logging
 
 #: Read by the frontend's codegen.
 SCHEMA_DIR = Path(__file__).parents[3] / "frontend" / "schemas"
+
+#: What this tool reports: to stdout, and into the log file.
+report = console("export_schemas")
 
 
 def served_schemas() -> dict[str, Any]:
@@ -65,11 +69,12 @@ def export(out: Path = SCHEMA_DIR) -> list[Path]:
 
 def main(argv: list[str] | None = None) -> None:
     """Command line: ``python -m newswitch.infra.export_schemas [-o DIR]``."""
+    setup_logging()
     parser = argparse.ArgumentParser(description="Export the schemas the frontend generates from.")
     parser.add_argument("-o", "--out", type=Path, default=SCHEMA_DIR, help="folder to write into")
     args = parser.parse_args(argv)
     for path in export(args.out):
-        print(f"wrote {path}")
+        report.info("wrote %s", path)
 
 
 if __name__ == "__main__":

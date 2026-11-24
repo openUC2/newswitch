@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import logging
 import os
 import sys
 from typing import Optional
@@ -28,10 +27,14 @@ from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument.hardware import Firmware
+from newswitch.logging_setup import console, setup_logging
 from newswitch.models.uc2 import UC2Node
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.settings import CONFIG_ENV_VAR
 from newswitch.states.uc2 import UC2State
+
+#: What this tool reports: to stdout, and into the log file.
+report = console("uc2")
 
 #: What the node map of a CAN bus expects each node to be.
 _EXPECTED_KINDS = {
@@ -97,18 +100,19 @@ def _row(node: UC2Node, firmware: Optional[Firmware], board: bool = False) -> st
     ).rstrip()
 
 
-def _print(bus: UC2BusManager, board: Optional[UC2Node], nodes: list[UC2Node]) -> None:
+def _show(bus: UC2BusManager, board: Optional[UC2Node], nodes: list[UC2Node]) -> None:
     release = bus.firmware.release if bus.firmware is not None else None
-    print(f"release: {release or '(the description names no firmware)'}")
-    print(
-        f"  {'node':>4}  {'kind':<10} {'status':<11} {'image':<52} {'version':<22} {'build':<22} {'mac':<17}  wanted"
+    report.info("release: %s", release or "(the description names no firmware)")
+    report.info(
+        "  %4s  %-10s %-11s %-52s %-22s %-22s %-17s  wanted",
+        *("node", "kind", "status", "image", "version", "build", "mac"),
     )
     if board is not None:
-        print(_row(board, bus.firmware, board=True) + "   <- the board on the port")
+        report.info("%s   <- the board on the port", _row(board, bus.firmware, board=True))
     for node in nodes:
-        print(_row(node, bus.firmware))
+        report.info("%s", _row(node, bus.firmware))
     if not nodes:
-        print("  (no CAN node answered)")
+        report.info("  (no CAN node answered)")
 
 
 def _node_map_problems(bus: UC2BusManager, nodes: list[UC2Node]) -> list[str]:
@@ -145,9 +149,9 @@ async def _run(args: argparse.Namespace) -> int:
     try:
         board, nodes = await fw.scan(bus, bus.state, args.timeout)
         if args.command in ("scan", "status"):
-            _print(bus, board, nodes)
+            _show(bus, board, nodes)
             for problem in _node_map_problems(bus, nodes) if args.command == "status" else []:
-                print(f"! {problem}")
+                report.info("! %s", problem)
             return 0
         if bus.firmware is None:
             raise SystemExit("the description names no firmware: set boards.<board>.firmware")
@@ -159,11 +163,13 @@ async def _run(args: argparse.Namespace) -> int:
             with_board=not args.no_board and bus.has_port_board,
             force=args.force,
         )
-        _print(bus, board, nodes)
+        _show(bus, board, nodes)
         if not jobs:
-            print("\nnothing to flash: everything runs what the description names")
+            report.info("")
+            report.info("nothing to flash: everything runs what the description names")
             return 0
-        print("\nto flash, in this order:")
+        report.info("")
+        report.info("to flash, in this order:")
         for job in jobs:
             full = args.full and job.can_id is None
             how = (
@@ -175,17 +181,23 @@ async def _run(args: argparse.Namespace) -> int:
                     else "CAN OTA (keeps NVS)"
                 )
             )
-            print(
-                f"  {job.target:<10} {job.env:<42} {how}\n             {fw.image_url(bus.firmware, job.pin, full)}\n             why: {job.why}"
-            )
+            report.info("  %-10s %-42s %s", job.target, job.env, how)
+            report.info("             %s", fw.image_url(bus.firmware, job.pin, full))
+            report.info("             why: %s", job.why)
         if args.dry_run:
             return 0
         if not args.yes and input("\nflash now? [y/N] ").strip().lower() not in ("y", "yes"):
-            print("not flashed")
+            report.info("not flashed")
             return 1
 
-        def report(message: str, percent: int) -> None:
-            print(f"\r  [{percent:3d} %] {message:<90}", end="", flush=True)
+        shown: list[tuple[str, int]] = []
+
+        def progress(message: str, percent: int) -> None:
+            # A log line is not overwritten: one per step, and per tenth of it
+            step = (message, min(percent, 100) // 10)
+            if not shown or shown[-1] != step:
+                shown.append(step)
+                report.info("  [%3d %%] %s", percent, message)
 
         nodes = await fw.update(
             bus,
@@ -194,10 +206,11 @@ async def _run(args: argparse.Namespace) -> int:
             with_board=not args.no_board and bus.has_port_board,
             full=args.full,
             force=args.force,
-            report=report,
+            report=progress,
         )
-        print("\n\nflashed; the bus now reports:")
-        _print(bus, bus.state.board, nodes)
+        report.info("")
+        report.info("flashed; the bus now reports:")
+        _show(bus, bus.state.board, nodes)
         return 0
     finally:
         pump.cancel()
@@ -234,9 +247,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--yes", action="store_true", help="do not ask before flashing")
     parser.add_argument("--simulate", action="store_true", help="a simulated bus (no hardware)")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log_to_terminal: info, whatever sys_config.yaml says",
+    )
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
+    setup_logging(terminal="info" if args.verbose else None)
     sys.exit(asyncio.run(_run(args)))
 
 

@@ -90,7 +90,9 @@ dev-dependencies =  [
 
 
 [tool.ruff.lint]
-extend-select = ["ANN", "D1", "F401"]
+# T20: no print in the backend, the command-line tools included; everything logs
+# (newswitch.logging_setup, a tool's result through its `console` logger)
+extend-select = ["ANN", "D1", "F401", "T20"]
 
 [tool.ruff]
 

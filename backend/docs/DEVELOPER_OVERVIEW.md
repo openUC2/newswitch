@@ -59,6 +59,35 @@ says what the cubes' actuators are wired to. A simulated run ignores it, apart f
 on a `VirtualUC2Bus`; a real one reaches the board over its `transport` (`rest`, `canopen`) and refuses to start until
 everything with a control is wired (`check_wired`). Details: `backend/instruments/README.md`.
 
+### Logging (`newswitch/logging_setup.py`, `backend/sys_config.yaml`)
+
+The backend does not print, its command-line tools included (ruff rule T20, no exceptions); every
+module logs through `logging.getLogger(__name__)`. `backend/sys_config.yaml` holds the backend's
+global settings, whatever the microscope (`newswitch/sys_config.py`: every key must be there,
+unknown keys are errors): one level for the terminal (`log_to_terminal`) and one for the log file
+(`log_to_file`), each `fatal`, `error`, `warn`, `info`, `debug` or `none`, and the file
+(`log_file_path`, relative to `backend/`). The file is appended to and rotated at 10 MB
+(`backend.log.1` … `.3`); if it cannot be opened, `backend/backend.log` is used with a warning.
+`setup_logging()` reads the file and configures logging; it runs in the entry points
+(`main_fastapi.create`, the uvicorn factory; `app.main`; the tools `tools/uc2.py` (`--verbose`:
+terminal at `info`), `tools/check_instrument.py`, `infra/accounts/cli.py`, `infra/export_schemas.py`),
+never in `create_app`, so tests write no log files (the autouse fixture `log_dir` in
+`tests/conftest.py` points it at a folder of the test's own). It takes away uvicorn's own handlers.
+
+What a tool reports as its result goes through `console("<tool>")` (loggers under
+`newswitch.console`): the bare message to stdout, warnings and errors to stderr, whatever
+`log_to_terminal` says, and into the log file like every other record (not to the terminal twice).
+
+Libraries: a library that logs to a logger of its own name without a handler, or is handed a
+logger of the `newswitch` tree, follows these levels and this file. uc2_cam_py is such a library:
+`drivers/uc2/uc2_detector.py` hands each camera `logging.getLogger("newswitch.camera.<name>")`,
+which also gets what its C++ core says. `route_to_root` and `log_prints` take away the handlers
+of a library that attaches its own, or turn its prints into records (uc2rest while its client is
+built, `drivers/uc2/rest_bus.py`). Not covered: `arkitekt run …` (arkitekt's command line sets up
+logging itself and does not call `app.main`), uvicorn's reloader process under `--reload`,
+warnings raised while the backend is imported, prints of libraries outside `log_prints` (uc2rest
+while it runs), native output.
+
 ### Registered functions
 
 The registries of `microscope/apps/` register the actions of `newswitch/actions/<part>.py` (`app.register_action`, e.g., illumination control, detector settings, capture; the UC2 board's in `actions/uc2.py`) that receive **managers + state** injected by the agent; the routines in `newswitch/routines/` add more, each only when the parts it needs are configured. These actions are the primary API surface for automation or external systems. Long-running actions take an injected `task: Task` and call `task.progress(...)` / `task.pausepoint()`, passing the task down to managers that report progress (e.g. `StageManager.move(..., task=task)`); tests calling an action directly pass `Task.local()`.
