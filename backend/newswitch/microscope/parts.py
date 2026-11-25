@@ -8,7 +8,7 @@ is; what has none is simulated or refused, as ``settings.simulate`` says.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -16,13 +16,13 @@ import newswitch.drivers.uc2.actuators  # noqa: F401 - makes the uc2.* drivers a
 from newswitch import models, protocols, states
 from newswitch.calibration.manager import CalibrationManager
 from newswitch.calibration.states import CalibrationState
-from newswitch.drivers.base import Driver, build_driver
+from newswitch.drivers.base import Driver, Report, build_driver
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.instrument import parts as instrument_parts
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import Hardware
-from newswitch.instrument.spec import Instrument
+from newswitch.instrument.spec import Drive, Instrument
 from newswitch.models.devices import Detector
 from newswitch.protocols import DetectorManager
 from newswitch.protocols.io import IOManager
@@ -37,9 +37,9 @@ from newswitch.services.metadata import MetadataManager
 from newswitch.services.optics import OpticsManager
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
-from newswitch.settings import SIMULATED, Settings
+from newswitch.settings import SIMULATED, Settings, Simulate
+from newswitch.simulation import drivers as simulated_drivers
 from newswitch.simulation.detector import SimulatedDetectorManager
-from newswitch.simulation.drivers import Simulated
 from newswitch.simulation.uc2_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.states.autofocus import AutofocusState
 from newswitch.states.detector import DetectorState
@@ -61,7 +61,7 @@ _DETECTOR_TUNES: dict[str, tuple[str, Callable[[Detector], Any]]] = {
 }
 
 
-class DetectorTune(Simulated):
+class DetectorTune:
     """A variable a detector's own manager applies, and says what it became."""
 
     def __init__(self, manager: DetectorManager, detector: str, tune: str) -> None:
@@ -80,6 +80,14 @@ class DetectorTune(Simulated):
         """Apply it, and report what the detector made of it."""
         detector = self.manager.update_detector(self.detector, **{self.argument: value})
         report(self.applied(detector))
+
+    @classmethod
+    def set_together(
+        cls, targets: Iterable[tuple[Driver, Any, Report]], task: Any = None  # noqa: ANN401
+    ) -> None:
+        """One after the other: a detector applies each at once."""
+        for driver, value, report in targets:
+            driver.set(value, report, task)
 
 
 def _driver_config(cls: type, options: Mapping[str, Any], where: str) -> Any:  # noqa: ANN401
@@ -248,7 +256,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         SpecError: The description does not say how to reach something it has to.
     """
     if instrument is not None:
-        instrument_parts.check_wired(instrument, settings.simulate)
+        check_wired(instrument, settings.simulate)
     logger.info(
         "Initializing a microscope with %s simulated: %s",
         settings.simulate,
@@ -285,6 +293,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
             tune_state,
             source_state,
             build_drivers(settings, instrument, uc2_bus, detector),
+            unwired=simulated_drivers.unwired,
         )
 
     io_state = IOState()
@@ -310,8 +319,10 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
 
     if isinstance(detector, SimulatedDetectorManager):
         # What it renders is on what each sample is mounted on now.
-        detector.simulator.mounted = lambda sample: (
-            space_state.samples[sample].holder if sample in space_state.samples else None
+        detector.follow_mounts(
+            lambda sample: (
+                space_state.samples[sample].holder if sample in space_state.samples else None
+            )
         )
 
     def refresh() -> None:
@@ -383,6 +394,59 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         values=values,
         detector=detector,
         acquisition=acquisition,
+    )
+
+
+def check_wired(instrument: Instrument, simulate: Simulate) -> None:
+    """Check that what is not to be simulated can be reached.
+
+    With nothing to simulate, a variable with no driver has nothing to take it anywhere, and a
+    detector with no camera nothing to deliver its images. A wire with a real end cannot be armed.
+
+    Raises:
+        SpecError: Something is not wired; every one is listed.
+    """
+    problems = [
+        f"the probe {name}: no driver reads a probe yet, so it is simulated or nothing"
+        for name in instrument.probes()
+        if simulate not in SIMULATED
+    ]
+    if simulate == "nothing":
+        problems += [
+            f"{variable.name} has no wired actuator (hardware.actuators)"
+            for variable in instrument.variables.values()
+            if not instrument_parts.keeps_itself(instrument, variable.cube)
+            and instrument.hardware.actuators.get(variable.actuator or "") is None
+        ]
+        problems += [
+            f"the detector {name} has no camera (hardware.cameras)"
+            for name in instrument.detectors()
+            if name not in instrument.hardware.cameras
+        ]
+    if simulate == "unwired" and instrument.hardware.cameras:
+        # One manager runs all the detectors: it would leave these out without a word.
+        problems += [
+            f"the detector {name} has no camera beside those that do: real and simulated "
+            "detectors cannot run together yet"
+            for name in instrument.detectors()
+            if name not in instrument.hardware.cameras
+        ]
+    if simulate not in SIMULATED:
+        # A rig really wired this way while the software steps too would move twice per plane.
+        problems += [
+            f"{drive.source} -> {drive.target}: no driver can arm this wire yet"
+            for drive in instrument.drives
+            if simulate == "nothing" or _is_real(instrument, drive)
+        ]
+    if problems:
+        raise SpecError(f"{instrument.name}: {'; '.join(problems)}")
+
+
+def _is_real(instrument: Instrument, drive: Drive) -> bool:
+    """Whether either end of a wire is hardware, with what is unwired simulated."""
+    target = instrument.variables.get(drive.target)
+    return drive.sender[0] in instrument.hardware.cameras or (
+        target is not None and target.actuator in instrument.hardware.actuators
     )
 
 

@@ -9,7 +9,8 @@ import numpy as np
 import pytest
 import yaml
 
-from newswitch.instrument import parts, spec
+from newswitch.instrument import spec
+from newswitch.microscope import parts as microscope_parts
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.services.values import Values
@@ -201,7 +202,7 @@ def test_every_component_problem_is_listed_at_once(tmp_path: Path) -> None:
 def test_a_wire_is_refused_on_real_hardware(tmp_path: Path) -> None:
     """A rig really wired so, with the software stepping too, would move twice per plane."""
     with pytest.raises(spec.SpecError, match="no driver can arm this wire"):
-        parts.check_wired(spec.load(described(tmp_path)), "nothing")
+        microscope_parts.check_wired(spec.load(described(tmp_path)), "nothing")
 
 
 def test_a_wire_from_a_real_camera_is_refused_with_the_rest_simulated(tmp_path: Path) -> None:
@@ -212,13 +213,13 @@ def test_a_wire_from_a_real_camera_is_refused_with_the_rest_simulated(tmp_path: 
 
     instrument = spec.load(described(tmp_path, change))
     with pytest.raises(spec.SpecError, match="no driver can arm this wire"):
-        parts.check_wired(instrument, "unwired")
-    parts.check_wired(instrument, "everything")
+        microscope_parts.check_wired(instrument, "unwired")
+    microscope_parts.check_wired(instrument, "everything")
 
 
 def test_a_wire_between_what_is_simulated_is_simulated(tmp_path: Path) -> None:
     """Nothing real on either end: there is nothing to arm."""
-    parts.check_wired(spec.load(described(tmp_path)), "unwired")
+    microscope_parts.check_wired(spec.load(described(tmp_path)), "unwired")
 
 
 # --- the logical detectors

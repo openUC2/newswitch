@@ -470,7 +470,7 @@ class UC2DetectorManager:
         raise TimeoutError(f"no image from camera {camera.serial} within {timeout_s:.1f} s")
 
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
-        """The cameras run free, so nothing here can step a stage (`parts.check_wired`)."""
+        """The cameras run free, so nothing here can step a stage (`microscope.parts.check_wired`)."""
         raise ValueError(f"Detector {name} delivers no z: no camera is triggered")
 
     def start_stream(self, name: str) -> None:

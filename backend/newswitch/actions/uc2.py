@@ -14,7 +14,6 @@ from newswitch.drivers.uc2.dispatch import dispatch_uc2_events
 from newswitch.models.uc2 import STAGE_AXES, UC2Node
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.services.values import Values
-from newswitch.simulation.uc2_bus import VirtualUC2Bus
 from newswitch.states.uc2 import UC2State
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,7 @@ async def keep_firmware(uc2_bus: UC2BusManager, uc2_state: UC2State) -> None:
     differs (``flash``: each image fetched and checked first, then the board, then the nodes), or
     only say so in UC2State (``check``). A failure is said there too; the server runs on."""
     spec = uc2_bus.firmware
-    if spec is None or spec.on_start == "off" or isinstance(uc2_bus, VirtualUC2Bus):
+    if spec is None or spec.on_start == "off" or not uc2_bus.keeps_firmware:
         return
     try:
         if spec.on_start == "check":

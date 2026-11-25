@@ -25,7 +25,8 @@ BACKEND_DIR = Path(__file__).parent.parent
 #: Names the instrument newswitch runs on.
 CONFIG_ENV_VAR = "NEWSWITCH_CONFIG"
 #: Runs the description named with another `Settings.simulate` than it states: ``virtual`` runs a
-#: rig's description as its digital twin, without touching the file.
+#: rig's description as its digital twin, without touching the file. Read by the entry files
+#: (``app.py``, ``main_fastapi.py``), which pass it to `load_settings`.
 SIMULATE_ENV_VAR = "NEWSWITCH_SIMULATE"
 
 Simulate = Literal["everything", "virtual", "debug", "unwired", "nothing"]
@@ -48,7 +49,7 @@ class Settings(BaseModel):
     test_pattern`); what its ``hardware``
     section does not wire, so that a real camera can sit beside a simulated stage (``unwired``);
     or nothing, so that what is not wired is refused.
-    ``$NEWSWITCH_SIMULATE`` overrides it for a run."""
+    ``$NEWSWITCH_SIMULATE`` overrides it for a run (`load_settings`)."""
     db_path: str
     """SQLite file of the arkitekt agent (state history, journal); relative to the working
     directory."""
@@ -67,6 +68,11 @@ class Settings(BaseModel):
     instrument: Optional[Path] = None
     """The description these come from, set by `load_settings`. None: no devices, the core only."""
 
+    @property
+    def test_pattern(self) -> bool:
+        """Whether each camera's stream sends a test pattern instead of its frames (``debug``)."""
+        return self.simulate == "debug"
+
     @field_validator("instrument", "camera_recording_dir", "image_dir", "cache_dir")
     @classmethod
     def _relative_to_backend(cls, path: Optional[Path]) -> Optional[Path]:
@@ -75,11 +81,14 @@ class Settings(BaseModel):
         return BACKEND_DIR / path
 
 
-def load_settings(named: Optional[str] = None) -> Settings:
-    """The ``settings`` of the instrument `named` (default: ``$NEWSWITCH_CONFIG``).
+def load_settings(named: Optional[str] = None, simulate: Optional[str] = None) -> Settings:
+    """The ``settings`` of the instrument `named` (default: ``$NEWSWITCH_CONFIG``), run in the
+    mode `simulate` where one is given (the entry files pass ``$NEWSWITCH_SIMULATE``): a run in
+    another mode than its description states gets files of its own (`_apart`).
 
     Raises:
-        SpecError: None is named, or what is named is no valid description.
+        SpecError: None is named, what is named is no valid description, or `simulate` is no
+            simulation mode.
     """
     #TODO: no local imports
     from newswitch.instrument import spec
@@ -94,22 +103,20 @@ def load_settings(named: Optional[str] = None) -> Settings:
     if not path.is_absolute():
         path = BACKEND_DIR / path
     settings = spec.load(path).settings.model_copy(update={"instrument": path}) #TODO: this is weird
-    override = os.environ.get(SIMULATE_ENV_VAR) #TO: no no overrwide, this is a bad idea, it should be passed in as an argument to load_settings
-    if override:
-        if override not in get_args(Simulate):
+    if simulate:
+        if simulate not in get_args(Simulate):
             raise SpecError(
-                f"{SIMULATE_ENV_VAR}={override!r} is no simulation mode: one of " #TODO: should be vlaidated py pydanic
+                f"simulate={simulate!r} is no simulation mode: one of "
                 f"{', '.join(get_args(Simulate))}"
             )
-        if override != settings.simulate:
+        if simulate != settings.simulate:
             logging.getLogger(__name__).info(
-                "%s: simulate %s instead of %s (%s), with files of its own",
+                "%s: simulate %s instead of %s, with files of its own",
                 path.name,
-                override,
+                simulate,
                 settings.simulate,
-                SIMULATE_ENV_VAR,
             )
-            settings = settings.model_copy(update={"simulate": override, **_apart(settings, override)})
+            settings = settings.model_copy(update={"simulate": simulate, **_apart(settings, simulate)})
     return settings
 
 

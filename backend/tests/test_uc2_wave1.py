@@ -11,6 +11,7 @@ from newswitch.instrument import spec
 from newswitch.models.uc2 import BusError
 from newswitch.reference import REFERENCE_INSTRUMENT
 from newswitch.services.values import Values
+from newswitch.simulation.drivers import unwired
 from newswitch.simulation.uc2_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
@@ -33,6 +34,7 @@ def reference_with(**drivers: Driver) -> Values:
         TuneState(),
         SourceState(),
         {name.replace("__", "."): driver for name, driver in drivers.items()},
+        unwired=unwired,
     )
 
 

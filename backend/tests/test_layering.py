@@ -117,11 +117,8 @@ def _everything_but(*allowed: str) -> tuple[str, ...]:
 #: What still breaks a rule, and goes in the step that cuts it (docs: the split's plan). A rule that
 #: holds where this says it breaks fails too: strike it off here.
 PENDING: dict[str, set[str]] = {
-    "design": {"newswitch.instrument.parts -> newswitch.settings"},
-    "simulation": {
-        "newswitch.services.values -> newswitch.simulation",
-        "newswitch.actions.uc2 -> newswitch.simulation",
-    },
+    "design": set(),
+    "simulation": set(),
     "calibration": {
         "newswitch.protocols.calibration -> newswitch.calibration",
         "newswitch.protocols.optics -> newswitch.calibration",
@@ -201,7 +198,9 @@ def test_only_the_simulation_and_the_root_read_the_simulation_mode() -> None:
                 and getattr(node, "id", getattr(node, "name", None)) == "SIMULATED"
             ):
                 readers.add(module)
-    assert readers == {"newswitch.instrument.parts", "newswitch.calibration.mount"}
+    # the mount calibration asks so as not to write a twin's mount into the description: it goes
+    # when what is calibrated is kept in the calibration's own store
+    assert readers == {"newswitch.calibration.mount"}
 
 
 def test_only_the_simulation_reads_the_truth() -> None:

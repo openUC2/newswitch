@@ -107,6 +107,7 @@ class UC2CanBus:
     """UC2BusManager implementation speaking CANopen via uc2canopen."""
 
     state: UC2State
+    keeps_firmware = True
     has_port_board = False
 
     def __init__(

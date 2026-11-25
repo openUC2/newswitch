@@ -14,6 +14,7 @@ from newswitch.models.uc2 import BusError, EStopChanged, MotionDone, NodeSeen, P
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.reference import REFERENCE_INSTRUMENT
 from newswitch.services.values import Values
+from newswitch.simulation.drivers import unwired
 from newswitch.simulation.uc2_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
@@ -106,6 +107,7 @@ def test_apply_uc2_event_updates_states() -> None:
             "stage.x": Stepper(bus, StepperConfig(axis="X", steps_per_um=3.2), None),
             "stage.z": Stepper(bus, StepperConfig(axis="Z", steps_per_um=3.2), None),
         },
+        unwired=unwired,
     )
     uc2_state = UC2State()
 
@@ -137,6 +139,7 @@ def test_what_moved_by_itself_reaches_the_optics() -> None:
         TuneState(),
         SourceState(),
         {"stage.z": Stepper(bus, StepperConfig(axis="Z", steps_per_um=3.2), None)},
+        unwired=unwired,
     )
     told: list[float] = []
     values.on_change = lambda: told.append(values["stage.z"])
@@ -154,6 +157,7 @@ def test_homing_the_objective_changer_says_where_it_is_now() -> None:
         TuneState(),
         SourceState(),
         {"objective.slot": Turret(bus)},
+        unwired=unwired,
     )
     values.stepped("objective.slot", 2)
     with Koil():
@@ -170,6 +174,7 @@ def test_a_position_reported_again_publishes_nothing() -> None:
         TuneState(),
         SourceState(),
         {"stage.z": Stepper(make_virtual_bus(), StepperConfig(axis="Z", steps_per_um=3.2), None)},
+        unwired=unwired,
     )
     told: list[float] = []
     values.on_change = lambda: told.append(values["stage.z"])

@@ -73,6 +73,7 @@ class UC2RestBus:
     """UC2BusManager implementation speaking the UC2-REST serial JSON protocol."""
 
     state: UC2State
+    keeps_firmware = True
     has_port_board = True
 
     def __init__(

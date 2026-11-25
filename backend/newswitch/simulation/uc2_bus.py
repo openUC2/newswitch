@@ -106,6 +106,7 @@ class VirtualUC2Bus:
     """Simulated UC2 hardware bus implementing the UC2BusManager protocol."""
 
     state: UC2State
+    keeps_firmware = False
     has_port_board = True
 
     def __init__(

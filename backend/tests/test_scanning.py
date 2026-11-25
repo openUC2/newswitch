@@ -11,10 +11,11 @@ import pytest
 import yaml
 from arkitekt import Task
 
-from newswitch.instrument import parts, spec
+from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.tracing import scan_um_per_degree
+from newswitch.microscope import parts as microscope_parts
 from newswitch.microscope.parts import build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.routines.acquire import acquire as run_plan
@@ -223,7 +224,7 @@ def test_a_scan_that_cannot_work_is_refused_when_parsed(
 def test_a_point_detector_is_refused_on_real_hardware(instrument: spec.Instrument) -> None:
     """Nothing can read one yet."""
     with pytest.raises(spec.SpecError, match="the detector pmt has no camera"):
-        parts.check_wired(instrument, "nothing")
+        microscope_parts.check_wired(instrument, "nothing")
 
 
 def test_a_point_detector_is_no_camera(tmp_path: Path) -> None:

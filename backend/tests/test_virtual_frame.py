@@ -42,17 +42,26 @@ def test_the_switch_runs_a_description_otherwise_without_touching_it(
     monkeypatch.setenv(CONFIG_ENV_VAR, str(FRAME))
     assert load_settings().simulate == "unwired"  # as the file says
     rig = load_settings()
-    monkeypatch.setenv(SIMULATE_ENV_VAR, "virtual")
-    twin = load_settings()
+    twin = load_settings(simulate="virtual")
     assert twin.simulate == "virtual"
     # beside the rig, with files of its own: the rig's cache is not cleared by the twin's start
     assert twin.db_path.endswith("arkitekt_agent.virtual.db") and twin.db_path != rig.db_path
     assert twin.cache_dir == rig.cache_dir / "virtual" and twin.image_dir == rig.image_dir / "virtual"
-    monkeypatch.setenv(SIMULATE_ENV_VAR, "unwired")  # what the file says: nothing changes
-    assert load_settings() == rig
-    monkeypatch.setenv(SIMULATE_ENV_VAR, "sometimes")
+    assert load_settings(simulate="unwired") == rig  # what the file says: nothing changes
     with pytest.raises(SpecError, match="no simulation mode"):
-        load_settings()
+        load_settings(simulate="sometimes")
+
+
+def test_the_entry_files_take_the_switch_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``$NEWSWITCH_SIMULATE`` is read where newswitch starts, not by `load_settings`."""
+    import app
+
+    monkeypatch.setenv(CONFIG_ENV_VAR, str(FRAME))
+    monkeypatch.setenv(SIMULATE_ENV_VAR, "virtual")
+    assert load_settings().simulate == "unwired"
+    assert app.load_run().settings.simulate == "virtual"
 
 
 # --- the twin ----------------------------------------------------------------------------------

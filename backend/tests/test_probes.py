@@ -11,9 +11,8 @@ from arkitekt import Task
 
 from newswitch.instrument import spec
 from newswitch.instrument.errors import SpecError
-from newswitch.instrument.parts import check_wired
 from newswitch.instrument.space import translation
-from newswitch.microscope.parts import Microscope, build_microscope
+from newswitch.microscope.parts import Microscope, build_microscope, check_wired
 from newswitch.models.acquisition import (
     AcquisitionChannel,
     AcquisitionPlan,

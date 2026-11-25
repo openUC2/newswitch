@@ -536,6 +536,8 @@ def test_a_pinned_build_is_flashed_only_from_that_build() -> None:
 class OnRealHardware:
     """A simulated bus that is not the virtual one: as a real transport looks to `keep_firmware`."""
 
+    keeps_firmware = True
+
     def __init__(self, bus: VirtualUC2Bus) -> None:
         self._bus = bus
 

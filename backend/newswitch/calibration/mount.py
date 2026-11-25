@@ -163,9 +163,11 @@ def _description_file() -> Optional[Path]:
     """The description this run was started with, if a measured mount is written into it: not
     when the run is simulated (``simulate: everything`` or ``virtual``), whose mount says nothing
     of the real microscope the description is of."""
-    from newswitch.settings import SIMULATED, load_settings
+    import os
 
-    settings = load_settings()
+    from newswitch.settings import SIMULATE_ENV_VAR, SIMULATED, load_settings
+
+    settings = load_settings(simulate=os.environ.get(SIMULATE_ENV_VAR))
     if settings.simulate in SIMULATED:
         logger.info("a simulated run (%s): the mount is not written down", settings.simulate)
         return None

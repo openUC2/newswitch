@@ -30,6 +30,7 @@ handle points nowhere there. Serving them through arkitekt is open.
 Needs the extra ``agent`` (``uv sync --extra agent``).
 """
 
+import os
 import sys
 from typing import Tuple
 
@@ -114,7 +115,7 @@ from newswitch.routines.mda import acquire_mda
 from newswitch.routines.region_scan import scan_region
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
-from newswitch.settings import load_settings
+from newswitch.settings import SIMULATE_ENV_VAR, load_settings
 from newswitch.states.autofocus import AutofocusState
 from newswitch.states.detector import DetectorState
 from newswitch.states.expanse import ExpanseState
@@ -142,8 +143,8 @@ async def provide_lovekit_sink(current: Run) -> Tuple[FrameSink, CameraStreams]:
     Optional there.)
     """
     cameras = cameras_of(current.instrument)
-    test_pattern = current.settings.simulate == "debug"  # the network tested, not the cameras
-    sink = LovekitSink(cameras, test_pattern=test_pattern) if cameras else None
+    # with `simulate: debug` the network is tested, not the cameras
+    sink = LovekitSink(cameras, test_pattern=current.settings.test_pattern) if cameras else None
     return sink, CameraStreams()  # pyright: ignore[reportReturnType]
 
 
@@ -153,13 +154,13 @@ async def provide_dataset_store(current: Run, client: Mikro) -> DatasetStore:
 
 
 def load_run() -> Run:
-    """The app context: the run of the description ``NEWSWITCH_CONFIG`` names
-    (``arkitekt run ... --context app:load_run``).
+    """The app context: the run of the description ``NEWSWITCH_CONFIG`` names, in the mode
+    ``NEWSWITCH_SIMULATE`` names, if any (``arkitekt run ... --context app:load_run``).
 
     Raises:
         SpecError: None is named, or what is named is no valid description.
     """
-    return Run.of(load_settings()) #TODO: make this more functional, i want a load_run that takes a path and returns a run,
+    return Run.of(load_settings(simulate=os.environ.get(SIMULATE_ENV_VAR))) #TODO: make this more functional, i want a load_run that takes a path and returns a run,
 
 
 #: newswitch, as arkitekt finds it (``arkitekt ... app``, ``$ARKITEKT_APP``). Global, and declared

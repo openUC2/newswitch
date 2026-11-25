@@ -1,15 +1,12 @@
-"""An instrument as what the server runs on: what delivers images, and what is wired."""
+"""An instrument as what the server runs on: what delivers images, and which cameras it has."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import CAMERA_PROTOCOLS
-from newswitch.instrument.spec import Drive, Instrument, Probe, Sensor
-from newswitch.settings import SIMULATED, Simulate
+from newswitch.instrument.spec import Instrument, Probe, Sensor
 from newswitch.models.devices import Detector, DetectorAxis
-
 
 #: How often a probe at a point is read while live (Hz): a temperature does not change by the frame.
 POINT_RATE = 1.0
@@ -122,59 +119,6 @@ def cameras(instrument: Instrument) -> tuple[list[Detector], dict[str, dict[str,
     return (found, vendor_options) if found else None
 
 
-def check_wired(instrument: Instrument, simulate: Simulate) -> None:
-    """Check that what is not to be simulated can be reached.
-
-    With nothing to simulate, a variable with no driver has nothing to take it anywhere, and a
-    detector with no camera nothing to deliver its images. A wire with a real end cannot be armed.
-
-    Raises:
-        SpecError: Something is not wired; every one is listed.
-    """
-    problems = [
-        f"the probe {name}: no driver reads a probe yet, so it is simulated or nothing"
-        for name in instrument.probes()
-        if simulate not in SIMULATED
-    ]
-    if simulate == "nothing":
-        problems += [
-            f"{variable.name} has no wired actuator (hardware.actuators)"
-            for variable in instrument.variables.values()
-            if not _keeps_itself(instrument, variable.cube)
-            and instrument.hardware.actuators.get(variable.actuator or "") is None
-        ]
-        problems += [
-            f"the detector {name} has no camera (hardware.cameras)"
-            for name in instrument.detectors()
-            if name not in instrument.hardware.cameras
-        ]
-    if simulate == "unwired" and instrument.hardware.cameras:
-        # One manager runs all the detectors: it would leave these out without a word.
-        problems += [
-            f"the detector {name} has no camera beside those that do: real and simulated "
-            "detectors cannot run together yet"
-            for name in instrument.detectors()
-            if name not in instrument.hardware.cameras
-        ]
-    if simulate not in SIMULATED:
-        # A rig really wired this way while the software steps too would move twice per plane.
-        problems += [
-            f"{drive.source} -> {drive.target}: no driver can arm this wire yet"
-            for drive in instrument.drives
-            if simulate == "nothing" or _is_real(instrument, drive)
-        ]
-    if problems:
-        raise SpecError(f"{instrument.name}: {'; '.join(problems)}")
-
-
-def _is_real(instrument: Instrument, drive: Drive) -> bool:
-    """Whether either end of a wire is hardware, with what is unwired simulated."""
-    target = instrument.variables.get(drive.target)
-    return drive.sender[0] in instrument.hardware.cameras or (
-        target is not None and target.actuator in instrument.hardware.actuators
-    )
-
-
-def _keeps_itself(instrument: Instrument, cube: str) -> bool:
+def keeps_itself(instrument: Instrument, cube: str) -> bool:
     """Whether what a cube's variables are is its detector's: a camera sets its own exposure."""
     return cube in instrument.detectors()

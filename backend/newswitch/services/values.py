@@ -18,13 +18,12 @@ from typing import Any
 
 from arkitekt import Task
 
-from newswitch.drivers.base import Driver, Report
+from newswitch.drivers.base import Driver, Report, Unwired
 from newswitch.instrument import spec
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument, Variable
 from newswitch.models.values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
 from newswitch.services.element_facts import facts_of, spectrum_color
-from newswitch.simulation.drivers import Simulated, SimulatedMove
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
 
@@ -65,10 +64,13 @@ class Values:
         tune_state: TuneState,
         source_state: SourceState,
         drivers: Mapping[str, Driver] | None = None,
+        *,
+        unwired: Unwired,
     ) -> None:
         """The values of `instrument`, at what its `drivers` say they start at.
 
-        A variable with no driver here is simulated.
+        A variable with no driver here gets the one `unwired` builds: what the composition root
+        chose for what no hardware reaches (`newswitch.simulation.drivers.unwired`).
         """
         self.instrument = instrument
         self.roles = Roles(instrument)
@@ -79,7 +81,8 @@ class Values:
         self.on_change: Callable[[], None] = lambda: None
         self._lock = threading.RLock()
         self.drivers: dict[str, Driver] = {
-            name: (drivers or {}).get(name) or self._simulated(variable)
+            name: (drivers or {}).get(name)
+            or unwired(variable, lambda name=name: self._values[name])
             for name, variable in instrument.variables.items()
         }
         self._values: dict[str, Any] = instrument.initial_state()
@@ -93,17 +96,12 @@ class Values:
         }
         self._publish_all()
 
-    def _simulated(self, variable: Variable) -> Driver:
-        if variable.verb == "moves":
-            return SimulatedMove(variable.speed, lambda: self._values[variable.name])
-        return Simulated()
-
     def __getitem__(self, name: str) -> Any:  # noqa: ANN401 - whatever the variable holds
         """What the variable `name` is now."""
         return self._values[name]
 
     def snapshot(self) -> dict[str, Any]:
-        """Every value now, and the simulation: what the optics take."""
+        """Every value now: what the optics take."""
         return dict(self._values)
 
     def set(

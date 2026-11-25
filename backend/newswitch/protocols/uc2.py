@@ -56,6 +56,9 @@ class UC2BusManager(BackgroundManager, Protocol):
 
     state: UC2State
     firmware: Optional[Firmware]
+    keeps_firmware: bool
+    """Whether what its boards run is checked against `firmware` (and flashed) on start: a real
+    board's is; a virtual one runs no firmware."""
     has_port_board: bool
     """Whether a board is on a port (the master over USB); on socketcan there are CAN nodes only."""
     """What the description says the board and its CAN nodes run; None: it says nothing."""

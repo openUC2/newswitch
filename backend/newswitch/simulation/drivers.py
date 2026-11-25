@@ -9,6 +9,7 @@ from typing import Any
 from arkitekt import Task
 
 from newswitch.drivers.base import Driver, Report
+from newswitch.instrument.spec import Variable
 
 
 class Simulated:
@@ -71,3 +72,11 @@ class SimulatedMove(Simulated):
     def set(self, value: Any, report: Report, task: Task | None = None) -> None:  # noqa: ANN401
         """Travel there."""
         type(self).set_together([(self, value, report)], task)
+
+
+def unwired(variable: Variable, current: Callable[[], Any]) -> Driver:
+    """What drives `variable` where no hardware does: a move travels at its speed from where
+    `current` says it is, anything else is there at once."""
+    if variable.verb == "moves":
+        return SimulatedMove(variable.speed, current)
+    return Simulated()

@@ -118,6 +118,10 @@ class SimulatedDetectorManager:
 
     # ------------------------------------------------------------- finding them
 
+    def follow_mounts(self, mounted: Callable[[str], str | None]) -> None:
+        """Render each sample on the holder `mounted` names for it, as the space says it is now."""
+        self.simulator.mounted = mounted
+
     def _active(self, name: str | None = None) -> Optional[Detector]:
         """The active detector called `name`; without a name, the first active one with images."""
         for detector in self.state.detectors:

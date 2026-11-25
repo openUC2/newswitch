@@ -44,7 +44,7 @@ from newswitch.protocols.frame_sink import FrameSink
 from newswitch.infra.mikro.none import NoDatasetStore
 from newswitch.infra.mikro.connection import MikroConnection
 from newswitch.logging_setup import setup_logging
-from newswitch.settings import Settings, load_settings
+from newswitch.settings import SIMULATE_ENV_VAR, Settings, load_settings
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ def create() -> FastAPI:
     their apps with that, and write no log files.
     """
     setup_logging()
-    return create_app(load_settings())
+    return create_app(load_settings(simulate=os.environ.get(SIMULATE_ENV_VAR)))
 
 
 def main() -> None:

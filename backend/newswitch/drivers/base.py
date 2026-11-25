@@ -38,6 +38,9 @@ class Driver(Protocol):
         ...
 
 
+#: Builds the driver of a variable no hardware reaches: from the variable, and where it is now.
+Unwired = Callable[[Variable, Callable[[], Any]], Driver]
+
 #: Builds a driver: from the variable it drives, the actuator's options, and what it may need.
 Factory = Callable[[Variable, Mapping[str, Any], Mapping[str, Any]], Driver]
 
