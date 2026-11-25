@@ -22,7 +22,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from arkitekt import Task
@@ -43,8 +43,12 @@ from newswitch.protocols.dataset_store import (
     AcquiredChannel,
     AcquiredPlane,
     AcquiredRecord,
+    FrameMemory,
+    RecordStream,
+    StreamingDatasetStore,
     DatasetStore,
 )
+from newswitch.routines.pace import Timing, Writes
 from newswitch.services.space import AXIS_TYPES, SpaceManager
 from newswitch.services.values import Values
 
@@ -136,6 +140,8 @@ class _Record:
     sets: Mapping[str, float] = field(default_factory=dict)  # what its first channel sets
     placed: AxisMap | None = None  # its axes on the sample, once there
     cadence: _Cadence | None = None  # when it is taken: as all its channels are
+    stream: RecordStream | None = None  # where its exposures go as they come, instead of `data`
+    streamed: tuple[tuple[int, ...], str] = ((), "")  # its shape and type, when streamed
 
     @property
     def dims(self) -> tuple[str, ...]:
@@ -711,13 +717,138 @@ def _expose(
     z_index: int,
     store: DatasetStore,
     detector_manager: protocols.DetectorManager,
+    timing: Timing | None = None,
+    writes: Writes | None = None,
 ) -> None:
     """Every detector of a channel takes what it takes, into its record at the position."""
+    timing = timing or Timing()
     for exposure in lighting.exposures:
         _activate(exposure, detector_manager)
         started = datetime.now(timezone.utc)
-        images = detector_manager.capture_channels(exposure.detector.name)
-        _keep(merge, exposure, images, time_index, z_index, started, store)
+        name = exposure.detector.name
+        if merge.records[exposure.record].stream is not None:
+            capture = getattr(detector_manager, "capture_frame", None)
+            frame_of = (
+                (lambda: capture(name))
+                if capture is not None
+                else (lambda: FrameMemory.of_array(detector_manager.capture_channels(name)))
+            )
+            _stream_in(
+                merge, exposure, frame_of, time_index, z_index, started, store, timing, writes
+            )
+            continue
+        with timing("camera"):
+            images = detector_manager.capture_channels(name)
+        with timing("write"):
+            _keep(merge, exposure, images, time_index, z_index, started, store)
+
+
+#: How often an exposure is taken again when the camera reused its slot while it was copied.
+STREAM_ATTEMPTS = 3
+#: The axes of a record that is streamed: a camera's.
+STREAMED_DIMS = ("t", "c", "z", "y", "x")
+
+
+def _streamable(record: _Record, store: DatasetStore) -> bool:
+    """Whether `record` goes to `store` exposure by exposure: a camera's, into a store that takes
+    them so (`StreamingDatasetStore`)."""
+    return (
+        isinstance(store, StreamingDatasetStore)
+        and bool(getattr(store, "streams", True))
+        and record.dims == STREAMED_DIMS
+        and record.data is not None
+    )
+
+
+def _open_streams(merges: list[_Merge], store: DatasetStore) -> list[RecordStream]:
+    """A stream for every record that goes so, its array never made (`data` was planned only:
+    `np.empty` holds no memory until written)."""
+    opened = []
+    for merge in merges:
+        for record in merge.records.values():
+            if not _streamable(record, store):
+                continue
+            assert record.data is not None
+            shape, dtype = tuple(int(n) for n in record.data.shape), str(record.data.dtype)
+            record.stream = store.stream(  # type: ignore[attr-defined]
+                shape, dtype, record.dims, len(record.detector.colors) or 1
+            )
+            record.streamed = (shape, dtype)
+            record.data = None
+            opened.append(record.stream)
+    return opened
+
+
+def _stream_in(
+    merge: _Merge,
+    exposure: _Exposure,
+    frame_of: Callable[[], FrameMemory],
+    time_index: int,
+    z_index: int,
+    started: datetime,
+    store: DatasetStore,
+    timing: Timing | None = None,
+    writes: Writes | None = None,
+) -> None:
+    """One exposure into its record's stream, from where it is: taken again if the camera reused
+    its slot while it was copied. One that stays where it is until the next is asked for (a
+    triggered camera's) is copied by `writes` while the acquisition goes on."""
+    timing = timing or Timing()
+    record = merge.records[exposure.record]
+    assert record.stream is not None
+    for attempt in range(STREAM_ATTEMPTS):
+        with timing("camera"):
+            frame = frame_of()
+        if frame.held and writes is not None:
+            with timing("write"):
+                writes.later(record.stream, time_index, exposure.first_channel, z_index, frame)
+            break
+        with timing("write"):
+            record.stream.write(time_index, exposure.first_channel, z_index, frame)
+        if frame.valid():
+            break
+        logger.warning(
+            "%s: the camera reused the slot while it was copied, taken again (%d)",
+            exposure.detector.name,
+            attempt + 1,
+        )
+    else:
+        raise RuntimeError(f"{exposure.detector.name}: no exposure held still long enough to copy")
+    ended = datetime.now(timezone.utc)
+    with timing("bookkeeping"):
+        now = store.state()
+        for offset in range(len(exposure.detector.colors) or 1):
+            record.planes.append(
+                AcquiredPlane(
+                    time_index, exposure.first_channel + offset, z_index, started, ended, now
+                )
+            )
+
+
+def _light(targets: Mapping[str, Any], lit: dict[str, Any], values: Values) -> None:
+    """Set the lights to `targets`, sending only what differs from what they were last set to
+    here (`lit`): each is a write on the bus, and most exposures light as the last did."""
+    changed = {name: value for name, value in targets.items() if name not in lit or lit[name] != value}
+    if changed:
+        values.set(changed)
+        lit.update(changed)
+
+
+def _trigger(named: list[str], detector_manager: protocols.DetectorManager) -> list[str]:
+    """The detectors that expose each frame only when it is captured, for the whole acquisition
+    (`begin_triggered`): never one exposed before it was asked for, while the stage still moved
+    or the light changed, and no camera started for each."""
+    begin = getattr(detector_manager, "begin_triggered", None)
+    if begin is None:
+        return []
+    triggered = []
+    for name in named:
+        state = detector_manager.get_detector_state(name)
+        if state is None or not state.is_active:
+            detector_manager.activate_detector(name)
+        if begin(name):
+            triggered.append(name)
+    return triggered
 
 
 def _activate(exposure: _Exposure, detector_manager: protocols.DetectorManager) -> None:
@@ -878,7 +1009,7 @@ def acquire(
             record.data
             for merge in merges
             for record in merge.records.values()
-            if record.data is not None
+            if record.data is not None and not _streamable(record, store)
         ]
     )
 
@@ -903,7 +1034,15 @@ def acquire(
     for stream in streams:
         detector_manager.start_stream(stream.detector.name)
         stream.started = datetime.now(timezone.utc)
+    opened: list[RecordStream] = []
+    timing = Timing()
+    writes = Writes()
+    lit: dict[str, Any] = {}  # what the lights were last set to here: only changes are sent
+    triggered: list[str] = []
     try:
+        with timing("setup"):
+            opened += _open_streams(merges, store)
+            triggered += _trigger(named, detector_manager)
         for due_s, due in events:
             wait = started_at + due_s - time.monotonic()
             if wait > 0:
@@ -912,6 +1051,8 @@ def acquire(
                 stream.blocks += detector_manager.read_stream(stream.detector.name)
 
             hook_manager.execute_all(plan.t_hooks or [])
+            if plan.t_hooks:
+                lit.clear()  # a hook may have set a light
 
             order = list(range(len(plan.positions)))
             if plan.order == PositionOrder.RANDOM:
@@ -919,10 +1060,13 @@ def acquire(
 
             for position_index in order:
                 merge = merges[position_index]
-                values.set(merge.targets, task=task)
-                # Position hooks run there (an autofocus may refocus); the stacks are centred on where
-                # it is afterwards.
-                _position_hooks(plan, merge, firsts, values, hook_manager)
+                with timing("move"):
+                    values.set(merge.targets, task=task)
+                    # Position hooks run there (an autofocus may refocus); the stacks are centred on
+                    # where it is afterwards.
+                    _position_hooks(plan, merge, firsts, values, hook_manager)
+                if plan.p_hooks:
+                    lit.clear()
                 bases = {
                     sweep.name: float(values[sweep.name])
                     for sweep in merge.sweeps.values()
@@ -939,8 +1083,10 @@ def acquire(
                     # The detector steps what sweeps: the routine only brings it to the first plane.
                     for lighting, time_index in lightings:
                         task.pausepoint()
-                        _sweep_to(merge, bases, merge.offsets[0], values, task)
-                        values.set(lighting.targets)
+                        with timing("move"):
+                            _sweep_to(merge, bases, merge.offsets[0], values, task)
+                        with timing("light"):
+                            _light(lighting.targets, lit, values)
                         exposure = lighting.exposures[0]
                         _activate(exposure, detector_manager)
                         begun = datetime.now(timezone.utc)
@@ -949,35 +1095,63 @@ def acquire(
                                 exposure.detector.name, len(merge.offsets)
                             )
                         ):
-                            _keep(merge, exposure, images, time_index, z_index, begun, store)
+                            if merge.records[exposure.record].stream is not None:
+                                _stream_in(
+                                    merge, exposure, lambda images=images: FrameMemory.of_array(images),
+                                    time_index, z_index, begun, store,
+                                )
+                            else:
+                                _keep(merge, exposure, images, time_index, z_index, begun, store)
                             begun = datetime.now(timezone.utc)
                             done += 1
+                            timing.exposures += 1
+                            with timing("bookkeeping"):
+                                task.progress(
+                                    int(done / total * 90),
+                                    f"{due_s:g} s, P{position_index + 1}, Z{z_index + 1}: "
+                                    f"{lighting.channel.name or 'channel'} ({done}/{total})",
+                                )
+                    continue
+
+                for z_index, offset in enumerate(merge.offsets):
+                    with timing("move"):
+                        _sweep_to(merge, bases, offset, values, task)
+                        hook_manager.execute_all(plan.z_hooks or [])
+                    if plan.z_hooks:
+                        lit.clear()
+
+                    for lighting, time_index in lightings:
+                        task.pausepoint()
+                        with timing("light"):
+                            _light(lighting.targets, lit, values)
+                        _expose(
+                            merge, lighting, time_index, z_index, store, detector_manager,
+                            timing, writes,
+                        )
+                        done += 1
+                        timing.exposures += 1
+                        with timing("bookkeeping"):
                             task.progress(
                                 int(done / total * 90),
                                 f"{due_s:g} s, P{position_index + 1}, Z{z_index + 1}: "
                                 f"{lighting.channel.name or 'channel'} ({done}/{total})",
                             )
-                    continue
-
-                for z_index, offset in enumerate(merge.offsets):
-                    _sweep_to(merge, bases, offset, values, task)
-                    hook_manager.execute_all(plan.z_hooks or [])
-
-                    for lighting, time_index in lightings:
-                        task.pausepoint()
-                        values.set(lighting.targets)
-                        _expose(merge, lighting, time_index, z_index, store, detector_manager)
-                        done += 1
-                        task.progress(
-                            int(done / total * 90),
-                            f"{due_s:g} s, P{position_index + 1}, Z{z_index + 1}: "
-                            f"{lighting.channel.name or 'channel'} ({done}/{total})",
-                        )
+        with timing("write"):
+            writes.wait()  # the last exposure is in its stream
+        timing.stop()
         for stream in streams:
             stream.blocks += detector_manager.read_stream(stream.detector.name)
+    except BaseException:
+        writes.close()
+        for record_stream in opened:  # nothing half-taken is kept: the store drops it
+            record_stream.abort()
+        raise
     finally:
         # However it ended: a failure leaves no sample lit for as long as nobody looks, and no
-        # stream recording.
+        # stream recording; no write still reads a camera's slot as it is let run free.
+        writes.close()
+        for name in triggered:
+            detector_manager.end_triggered(name)  # type: ignore[attr-defined]
         for stream in streams:
             detector_manager.stop_stream(stream.detector.name)
         _lights_off(values)
@@ -989,7 +1163,7 @@ def acquire(
         )
         label = merge.position.name or f"P{merge.index + 1}"
         for key, record in merge.records.items():
-            assert record.data is not None and record.placed is not None
+            assert (record.data is not None or record.stream is not None) and record.placed is not None
             assert record.cadence is not None
             parts = [plan.name, *([] if len(merges) == 1 else [label]), key]
             mounted_at = space.state.samples[record.sample].mounted_at
@@ -1018,6 +1192,9 @@ def acquire(
                         mount_id=space.state.samples[record.sample].mount_id,
                         mounted_at=mounted_at,
                         mount=zyx_rows(space.mount(record.sample)),
+                        stream=record.stream,
+                        shape=record.streamed[0],
+                        dtype=record.streamed[1],
                     )
                 )
             )
@@ -1026,5 +1203,17 @@ def acquire(
         for record in (_stream_record(plan, stream, space, store) for stream in streams)
         if record is not None
     ]
-    task.progress(100, message=f"Acquisition complete: {len(datasets)} datasets")
+    show = getattr(store, "show", None)
+    if show is not None and datasets:
+        # A scene of the run: a view of what it stored, so a failure here loses nothing.
+        scene = f"{plan.name or 'acquisition'} {started_wall.astimezone():%Y-%m-%d %H:%M}"
+        try:
+            show(scene, datasets)
+        except Exception:  # noqa: BLE001 - the datasets are stored; only the view is missing
+            logger.exception("acquisition %s: no scene made of it", scene)
+    logger.info("acquisition %s: %s", plan.name or "", timing.summary())
+    task.progress(
+        100,
+        message=f"Acquisition complete: {len(datasets)} datasets; {timing.summary()}",
+    )
     return datasets

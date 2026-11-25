@@ -4,9 +4,9 @@ An acquisition makes one record per position and detector: along the detector's 
 on the sample by its own route through the coordinate graph.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Protocol, runtime_checkable
+from typing import Any, Callable, Mapping, Optional, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -40,15 +40,68 @@ class AcquiredPlane:
 
 
 @dataclass(frozen=True)
+class FrameMemory:
+    """One exposure in memory, by address: what a streaming store copies from, with no copy made
+    before (a camera's ring slot, or an array). Its colors are interleaved, (height, width,
+    colors), or planar, (colors, height, width)."""
+
+    address: int
+    nbytes: int
+    height: int
+    width: int
+    colors: int
+    bytes_per_sample: int
+    planar: bool
+    keep: Any = field(default=None, repr=False)
+    """What keeps the memory there (the ring slot's handle, the array)."""
+    valid: Callable[[], bool] = field(default=lambda: True, repr=False)
+    """Whether it still holds this exposure: a camera may reuse its slot (check after copying)."""
+    held: bool = False
+    """Whether it stays there until the next exposure is asked for (a triggered camera's slot):
+    it may then be copied while what comes next (a move, a light) is done."""
+
+    @classmethod
+    def of_array(cls, images: np.ndarray) -> "FrameMemory":
+        """`images` as `capture_channels` gives them, (colors, y, x) or (y, x), by address."""
+        data = np.ascontiguousarray(images)
+        planes = data if data.ndim == 3 else data[np.newaxis]
+        colors, height, width = planes.shape
+        return cls(
+            address=data.ctypes.data,
+            nbytes=data.nbytes,
+            height=height,
+            width=width,
+            colors=colors,
+            bytes_per_sample=data.itemsize,
+            planar=True,
+            keep=data,
+        )
+
+
+class RecordStream(Protocol):
+    """A record written while it is taken: each exposure goes to the store as it comes, and
+    nothing of it is held until the end."""
+
+    def write(self, t: int, c0: int, z: int, frame: FrameMemory) -> None:
+        """Copy `frame` in as time `t`, channels `c0` on (one per color), plane `z`; it is free
+        again once this returns."""
+        ...
+
+    def abort(self) -> None:
+        """Nothing of it is kept: the acquisition failed."""
+        ...
+
+
+@dataclass(frozen=True)
 class AcquiredRecord:
     """What one detector acquired at one position, along its own axes."""
 
     name: str
     position: int
     detector: str
-    data: np.ndarray
+    data: Optional[np.ndarray]
     """Along `axes`, as the detector delivered it: a mirrored camera's images are not turned, its
-    `registration` says so."""
+    `registration` says so. None when it was streamed (`stream`)."""
     axes: tuple[Axis, ...]
     """``t``, ``c``, the detector's own axes but space (``m``), the plane ``z``, its space (``y``,
     ``x``): ``(t, c, z, y, x)`` of a camera, ``(t, c, m, z, y, x)`` timing photons; a thermometer's
@@ -77,6 +130,11 @@ class AcquiredRecord:
         (0.0, 0.0, 1.0, 0.0),
     )
     """``z, y, x`` stage micrometres to sample micrometres, for that mounting."""
+    stream: Optional[RecordStream] = None
+    """Where its pixels went as they were taken, when the store streamed them (`data` is None)."""
+    shape: tuple[int, ...] = ()
+    """Its shape and type, when it was streamed (there is no `data` to read them from)."""
+    dtype: str = ""
 
     @property
     def dims(self) -> tuple[str, ...]:
@@ -104,4 +162,17 @@ class DatasetStore(Protocol):
 
     def publish(self, acquired: AcquiredRecord) -> AcquiredDataset:
         """Store one record, with its anchors and its place on the sample."""
+        ...
+
+
+@runtime_checkable
+class StreamingDatasetStore(DatasetStore, Protocol):
+    """A store that takes a record's exposures as they come (`RecordStream`), so an acquisition
+    holds none of them until its end: what `acquire` uses where a store offers it."""
+
+    def stream(
+        self, shape: tuple[int, ...], dtype: str, dims: tuple[str, ...], colors: int
+    ) -> RecordStream:
+        """Begin a record of `shape` (``t, c, z, y, x``) and `dtype`, `colors` channels an
+        exposure."""
         ...

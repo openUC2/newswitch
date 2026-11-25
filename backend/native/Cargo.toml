@@ -1,0 +1,24 @@
+[package]
+name = "newswitch_native"
+version = "0.1.0"
+edition = "2021"
+description = "newswitch's native parts: frames written as zarr v3 shards straight to S3 (mikro's datalayer)"
+publish = false
+
+[lib]
+name = "newswitch_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py312"] }
+object_store = { version = "0.12", features = ["aws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+async-trait = "0.1"
+bytes = "1"
+zstd = "0.13"
+crc32c = "0.6"
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"

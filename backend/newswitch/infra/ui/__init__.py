@@ -67,6 +67,22 @@ AGENT_BLOKS: dict[str, tuple[str, str, bool]] = {
         "Acquire: channels on a stack of planes, over a grid of tiles, some times, into mikro.",
         False,
     ),
+    "test-speed": (
+        "test-speed.bsx",
+        (
+            "Speed test: tiles around where the stage is, each exposure triggered once the stage "
+            "stopped; how long an exposure took, and in which phase."
+        ),
+        False,
+    ),
+    "acquire-lit": (
+        "acquire-lit.bsx",
+        (
+            "Acquire with the light on: switch a light on and set the exposure, look at the live "
+            "image, pick the channels, acquire."
+        ),
+        False,
+    ),
     "calibrate-holder": (
         "calibrate-holder.bsx",
         (

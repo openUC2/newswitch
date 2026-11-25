@@ -26,10 +26,11 @@ from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 import numpy as np
-from lovekit import VideoStream, to_rgba
+from lovekit import I420Frame, VideoStream, to_rgba
 from lovekit.api.schema import Stream
 from lovekit.lovekit import Lovekit
 
+from newswitch.infra.streaming.test_pattern import timestamp_rgba
 from newswitch.protocols.frame_sink import FrameSink
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,8 @@ MAX_FPS = 15.0
 STREAM_MAX_WIDTH = 1024
 #: What a stream's encoder may spend, in bits per second: enough for a binned frame at MAX_FPS.
 STREAM_BITRATE = 2_500_000
+#: How large the test pattern is (``simulate: debug``): the size a stream sends at most, 3:2.
+TEST_PATTERN_SIZE = (STREAM_MAX_WIDTH, STREAM_MAX_WIDTH * 2 // 3)
 #: Every how many pixels (per axis) the contrast stretch is sampled.
 STRETCH_SAMPLE = 4
 
@@ -58,11 +61,22 @@ def binned(frame: np.ndarray, max_width: int = STREAM_MAX_WIDTH) -> np.ndarray:
         return frame
     rows, cols = height // factor // 2 * 2, width // factor // 2 * 2
     view = frame[: rows * factor, : cols * factor]
-    if view.ndim == 2 and view.dtype.kind in "ui":
-        # Summed in integers, rows then columns, and divided once: half the time of a float mean.
-        rows_summed = view.reshape(rows, factor, cols * factor).sum(axis=1, dtype=np.uint32)
-        summed = rows_summed.reshape(rows, cols, factor).sum(axis=2, dtype=np.uint32)
-        return summed.astype(np.float32) * np.float32(1.0 / (factor * factor))
+    if view.dtype.kind in "ui":
+        # Added up in integers, rows then columns, one slice at a time, and divided once: a third
+        # of the time of numpy's sum over an axis, a sixth of a float mean. 8-bit frames add up in
+        # 16 bits while they fit. A color frame's channels ride along (y, x, c).
+        rest = frame.shape[2:]
+        fits = view.dtype.itemsize == 1 and factor * factor * 255 < 2**16
+        wide = np.uint16 if fits else np.uint32
+        by_rows = view.reshape(rows, factor, cols * factor, *rest)
+        summed = by_rows[:, 0].astype(wide)
+        for k in range(1, factor):
+            summed += by_rows[:, k]
+        by_cols = summed.reshape(rows, cols, factor, *rest)
+        total = by_cols[:, :, 0].copy()
+        for k in range(1, factor):
+            total += by_cols[:, :, k]
+        return total.astype(np.float32) * np.float32(1.0 / (factor * factor))
     shape = (rows, factor, cols, factor, *frame.shape[2:])
     return view.reshape(shape).mean(axis=(1, 3), dtype=np.float32)
 
@@ -111,10 +125,16 @@ class CameraStream:
 class LovekitSink:
     """Takes the detectors' frames and keeps the newest per detector, for lovekit."""
 
-    def __init__(self, cameras: Sequence[CameraStream] = ()) -> None:
-        """A sink for `cameras`, the detectors it publishes."""
+    def __init__(self, cameras: Sequence[CameraStream] = (), test_pattern: bool = False) -> None:
+        """A sink for `cameras`, the detectors it publishes.
+
+        Args:
+            test_pattern: Each stream sends the time it sends instead of its camera's frames
+                (`newswitch.infra.streaming.test_pattern`): to test the network, not the camera.
+        """
         self.cameras = list(cameras)
-        self._newest: dict[str, np.ndarray] = {}
+        self.test_pattern = test_pattern
+        self._newest: dict[str, np.ndarray | I420Frame] = {}
         self._lock = threading.Lock()
         self.offered: dict[str, int] = {}
         """How many new frames each detector had (the publisher sends the newest it takes)."""
@@ -127,6 +147,16 @@ class LovekitSink:
         with self._lock:
             self._newest[detector] = frame
 
+    #: How wide a frame handed over ready to encode (`broadcast_i420`) may be: what is sent.
+    i420_width = STREAM_MAX_WIDTH
+
+    def broadcast_i420(self, detector: str, width: int, height: int, data: np.ndarray) -> None:
+        """Keep a frame already scaled to the stream (at most `i420_width` wide) and converted to
+        I420 by the camera's driver as the newest of `detector`: it is sent as it is, with no
+        conversion here (a camera that converts natively, straight from its ring, offers it)."""
+        with self._lock:
+            self._newest[detector] = I420Frame(width, height, data)
+
     def wants(self, detector: str) -> bool:
         """Whether a new frame of `detector` is wanted: not while the last one is still untaken,
         as it would only replace it. A detector asks before it copies a frame (a 6 MP frame at
@@ -135,7 +165,7 @@ class LovekitSink:
             self.offered[detector] = self.offered.get(detector, 0) + 1
             return detector not in self._newest
 
-    def take(self, detector: str) -> Optional[np.ndarray]:
+    def take(self, detector: str) -> Optional[np.ndarray | I420Frame]:
         """The newest frame of `detector` since the last take, or None."""
         with self._lock:
             return self._newest.pop(detector, None)
@@ -160,7 +190,13 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
         raise TypeError(f"lovekit publishes a LovekitSink, not {type(sink).__name__}")
     declared = [
         VideoStream(
-            camera.key, title=camera.title, max_framerate=MAX_FPS, max_bitrate=STREAM_BITRATE
+            camera.key,
+            title=camera.title,
+            max_framerate=MAX_FPS,
+            max_bitrate=STREAM_BITRATE,
+            # One full-size layer: few viewers watch it, and every layer more is another software
+            # encoding on the agent's machine (the Pi 5 encodes no video in hardware).
+            simulcast=False,
         )
         for camera in sink.cameras
     ]
@@ -172,9 +208,27 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
         while not published.stopped.is_set():
             started_round = time.perf_counter()
             sent_any = False
+            if sink.test_pattern:
+                for camera in sink.cameras:
+                    started = time.perf_counter()
+                    rgba = timestamp_rgba(*TEST_PATTERN_SIZE, frame=stats.total(camera.key) + 1)
+                    drawn = time.perf_counter()
+                    await published[camera.key].send(rgba)
+                    stats.add(camera.key, rgba[..., 0], drawn - started, time.perf_counter() - drawn)
+                stats.report(sink)
+                busy = time.perf_counter() - started_round
+                await asyncio.sleep(max(0.0, 1.0 / MAX_FPS - busy))
+                continue
             for camera in sink.cameras:
                 frame = sink.take(camera.detector)
-                if frame is not None:
+                if isinstance(frame, I420Frame):
+                    # Scaled and converted by the camera's driver already: sent as it is.
+                    started = time.perf_counter()
+                    await published[camera.key].send(frame)
+                    plane = frame.data[: frame.width * frame.height].reshape(frame.height, frame.width)
+                    stats.add(camera.key, plane, 0.0, time.perf_counter() - started)
+                    sent_any = True
+                elif frame is not None:
                     # Binned and converted off the event loop, which also runs the agent's
                     # actions and state updates.
                     started = time.perf_counter()
@@ -217,11 +271,17 @@ class _Stats:
         self.shape: dict[str, tuple[int, ...]] = {}
         self.offered_before: dict[str, int] = {}
         self.last: dict[str, np.ndarray] = {}
+        self.totals: dict[str, int] = {}
+
+    def total(self, key: str) -> int:
+        """How many frames `key` has sent since the stream started."""
+        return self.totals.get(key, 0)
 
     def add(
         self, key: str, frame: np.ndarray, convert: float, send: float
     ) -> None:
         self.last[key] = frame
+        self.totals[key] = self.totals.get(key, 0) + 1
         shape = frame.shape
         self.sent[key] = self.sent.get(key, 0) + 1
         self.convert[key] = self.convert.get(key, 0.0) + convert

@@ -345,6 +345,9 @@ class UC2CanBus:
         client = await self._require_client()
         speed_steps = int(abs((speed or self.config.default_speed) * self.scale_for_axis(axis)))
         steps = self.to_steps(axis, target)
+        if is_absolute and self._resting_at(client, axis, steps):
+            # Already there: a move would never say it runs, and be waited out (`MOVE_START_S`).
+            return self.to_units(axis, steps)
         final_steps = await self._move_and_wait(
             client,
             node=self.node_for_axis(axis),
@@ -357,6 +360,16 @@ class UC2CanBus:
         if is_absolute:
             self._known_steps[axis.upper()] = final_steps
         return self.to_units(axis, final_steps)
+
+    def _resting_at(self, client: "AsyncUC2Client", axis: str, steps: int) -> bool:
+        """Whether `axis` stands still at `steps`: where it is believed to be (`_believed`), its
+        node seen not running."""
+        if self._known_steps.get(axis.upper()) != steps:
+            return False
+        motor = client.sync._listener.get_motor(  # noqa: SLF001 - TPDO cache
+            self.node_for_axis(axis), self.sub_for_axis(axis)
+        )
+        return bool(motor is not None and motor.seen and not motor.running)
 
     async def _move_and_wait(
         self,

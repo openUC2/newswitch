@@ -1,0 +1,128 @@
+<Blok kind="agent" context="panel">
+<local name="picked" default={[]} />
+<local name="columns" kind="STRING" default="3" persist />
+<local name="rows" kind="STRING" default="3" persist />
+<local name="overlap" default={0.1} persist />
+<local name="times" kind="STRING" default="1" persist />
+<local name="name" kind="STRING" default="speed" persist />
+<foreach items={list.compact(value: [{
+    tiles: math.mul(a: math.max(values: [1, val.to_number(value: columns)]), b: math.max(values: [1, val.to_number(value: rows)])),
+    repeats: math.max(values: [1, val.to_number(value: times)]),
+    run: self.tasks.acquire_mda
+}])} let="mda" key={"mda"}>
+<div className="flex flex-col gap-3 p-3">
+
+    <Text size="xs" tone="muted">A speed test: tiles around where the stage is, each exposure taken once the stage has stopped and the light is set (the camera triggered for each). Afterwards: how long an exposure took, and in which phase. The stage moves: be at the microscope.</Text>
+
+    <!-- light and exposure -->
+    <Card className="gap-3 py-3">
+        <div className="flex items-center gap-2 px-4">
+            <Icon name="zap" size={16} className="text-primary" />
+            <Text size="sm" weight="semibold" className="flex-1">Light and exposure</Text>
+        </div>
+        <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+            <if when={light.power_variable}>
+                <div className="flex items-center gap-2 border-t px-4 pt-3">
+                    <Text size="sm" className="w-16" truncate>{light.name}</Text>
+                    <Slider className="flex-1" value={light.power} min={0} max={light.max_power} step={math.div(light.max_power, 100)} onCommit={self.tune(name: light.power_variable, to: event.value)} />
+                    <Text size="xs" tone="muted" mono className="w-10 text-right">{str.concat(values: [fmt.number(value: math.mul(math.div(light.power, light.max_power), 100), digits: 0), " %"])}</Text>
+                    <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: light.lit_power)}>lit</Button>
+                    <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: 0)}>off</Button>
+                </div>
+            </if>
+        </foreach>
+        <foreach items={self.DetectorState.detectors} let="detector" key={detector.name}>
+            <foreach items={list.compact(value: [obj.get(value: self.TuneState.tunes, key: str.concat(values: [detector.name, ".exposure"]))])} let="exposure" key={detector.name}>
+                <div className="flex items-center gap-2 border-t px-4 pt-3">
+                    <Text size="sm" className="w-16" truncate>exposure</Text>
+                    <Slider className="flex-1" value={exposure.current} min={exposure.minimum} max={math.min(values: [exposure.maximum, 20])} step={exposure.step ?? 0.1} onCommit={self.tune(name: exposure.name, to: event.value)} />
+                    <Text size="xs" mono className="w-16 text-right">{str.concat(values: [fmt.number(value: exposure.current, digits: 2), " ms"])}</Text>
+                </div>
+            </foreach>
+        </foreach>
+    </Card>
+
+    <!-- live -->
+    <Card className="gap-2 py-3">
+        <div className="flex items-center justify-between gap-2 px-4">
+            <div className="flex items-center gap-2">
+                <Icon name="video" size={16} className="text-primary" />
+                <Text size="sm" weight="semibold">Live</Text>
+                <foreach items={list.compact(value: [self.MoveState.moves.stage])} let="stage" key={"stage"}>
+                    <Text size="xs" tone="muted" mono>{str.concat(values: ["stage x ", fmt.number(value: stage.x.current, digits: 0), " µm, y ", fmt.number(value: stage.y.current, digits: 0), " µm"])}</Text>
+                </foreach>
+            </div>
+            <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" icon="play" disabled={self.DetectorState.is_acquiring} onClick={self.start_live_view()}>Live</Button>
+                <Button size="sm" variant="ghost" icon="pause" disabled={self.DetectorState.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
+            </div>
+        </div>
+        <foreach items={list.compact(value: [list.at(value: self.CameraStreams.streams, index: 0)])} let="stream" key={"stream"}>
+            <StructureDisplay value={stream} variant="card" />
+        </foreach>
+    </Card>
+
+    <!-- what to take -->
+    <Card className="gap-3 py-3">
+        <div className="flex items-center gap-2 px-4">
+            <Icon name="grid" size={16} className="text-primary" />
+            <Text size="sm" weight="semibold" className="flex-1">Tiles</Text>
+            <Text size="xs" tone="muted" mono>{str.concat(values: [list.len(value: picked), " × ", mda.tiles, " × ", mda.repeats, " = ", math.mul(a: list.len(value: picked), b: math.mul(a: mda.tiles, b: mda.repeats)), " exposures"])}</Text>
+        </div>
+        <if when={list.len(value: self.OpticsState.channels) > 0}>
+            <ToggleGroup multiple bind={picked} variant="outline" size="sm" className="flex flex-wrap justify-start gap-1 px-4">
+                <foreach items={self.OpticsState.channels} let="channel" key={channel.name}>
+                    <ToggleGroupItem value={channel.name}>{channel.name}</ToggleGroupItem>
+                </foreach>
+            </ToggleGroup>
+        </if>
+        <Grid columns={3} gap="0.5rem" padding="0 1rem">
+            <Field label="Columns"><Input type="number" bind={columns} /></Field>
+            <Field label="Rows"><Input type="number" bind={rows} /></Field>
+            <Field label="Times"><Input type="number" bind={times} /></Field>
+        </Grid>
+        <div className="flex items-center gap-2 px-4">
+            <Text size="xs" tone="muted" className="w-14">Overlap</Text>
+            <Slider className="flex-1" bind={overlap} min={0} max={0.5} step={0.05} disabled={mda.tiles == 1} />
+            <Text size="xs" mono className="w-10 text-right">{fmt.percent(value: overlap, digits: 0)}</Text>
+        </div>
+        <div className="flex flex-wrap items-end gap-3 px-4">
+            <Field label="Name" className="min-w-40 flex-1"><Input bind={name} /></Field>
+            <Button icon="play" disabled={list.len(value: picked) == 0 || mda.run.running} onClick={self.acquire_mda(
+                channels: picked,
+                columns: val.to_number(value: columns),
+                rows: val.to_number(value: rows),
+                overlap: overlap,
+                times: val.to_number(value: times),
+                every_s: 0,
+                name: name
+            )}>Run</Button>
+        </div>
+    </Card>
+
+    <!-- how fast -->
+    <Card className="gap-2 py-3">
+        <div className="flex items-center gap-2 px-4">
+            <Icon name="gauge" size={16} className="text-primary" />
+            <Text size="sm" weight="semibold" className="flex-1">How fast</Text>
+        </div>
+        <if when={mda.run.running}>
+            <div className="flex flex-col gap-1 px-4">
+                <Progress value={mda.run.progress} max={100} />
+                <Text size="xs" tone="muted">{mda.run.message ?? "Starting"}</Text>
+            </div>
+        </if>
+        <if when={mda.run.failed}>
+            <Alert variant="destructive" icon="alert-triangle" title="The run failed" className="mx-4" description={mda.run.error ?? ""} />
+        </if>
+        <if when={mda.run.done}>
+            <Text size="sm" mono className="px-4">{mda.run.message ?? "Done"}</Text>
+            <Text size="xs" tone="muted" className="px-4">Per exposure, in ms: move (stage), light, camera (trigger until the frame is in), write (waiting for the last copy), bookkeeping (state, progress), other.</Text>
+        </if>
+        <if when={mda.run.running == false && mda.run.done == false && mda.run.failed == false}>
+            <Text size="xs" tone="muted" className="px-4">Pick a channel, switch on its light, and run.</Text>
+        </if>
+    </Card>
+</div>
+</foreach>
+</Blok>

@@ -18,10 +18,10 @@ dependencies = [
     "pint>=0.25.2",
     "pydantic>=2.11.4",
     "pyserial-asyncio>=0.6",
-    "arkitekt==18.5.0",
-    "arkitekt-fastapi==4.1.0",
-    "arkitekt-runtime==10.7.0",
-    "arkitekt-spec==12.8.0",
+    "arkitekt==18.5.2",
+    "arkitekt-fastapi==4.1.1",
+    "arkitekt-runtime==10.7.3",
+    "arkitekt-spec==12.10.2",
     "koil>=3.4.1",
     "pyyaml>=6",
     "scipy>=1.17.0",
@@ -58,19 +58,28 @@ uc2 = [
 # server through rekuest, the cameras streamed through lovekit (newswitch.infra.streaming), its images
 # and their metadata in the mikro that server provides.
 agent = [
-    "arkitekt[rekuest,lovekit]==18.5.0",
+    "arkitekt[rekuest,lovekit]==18.5.2",
     # The server's lovekit speaks the v6 API (no publishToken): the client has to be 6 too.
-    "lovekit>=6.0.0",
-    "mikro==14.0.1",
+    "lovekit>=6.3.0",
+    "mikro==14.2.0",
 ]
 # Talking to a mikro in FastAPI mode (`newswitch.infra.mikro.connection`), where nothing
 # provides one: where it is comes from MIKRO_URL and friends.
 mikro = [
-    "mikro==14.0.1",
+    "mikro==14.2.0",
 ]
 camera = [
     "uc2-cam-py @ git+https://github.com/openUC2/UC2_cam_py.git@ccfb0e9dd00930d959e918a6a7dd6635c31ef142 ; sys_platform == 'linux' and python_version == '3.12'",
 ]
+# newswitch's native parts (backend/native, Rust): acquisitions streamed into mikro exposure by
+# exposure, straight from the camera's ring slot (newswitch.infra.mikro.stream). Building it needs a
+# Rust toolchain (rustup); without it, acquisitions are written to mikro at their end, as before.
+native = [
+    "newswitch-native ; python_version >= '3.12'",
+]
+
+[tool.uv.sources]
+newswitch-native = { path = "native" }
 
 [tool.uv]
 dev-dependencies =  [

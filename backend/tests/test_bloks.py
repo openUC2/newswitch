@@ -166,7 +166,7 @@ def test_agent_mode_shows_its_own_bloks() -> None:
     declared = app.registry.get_declared_bloks()
     assert set(declared) == set(AGENT_BLOKS)
     assert {"view-microscope", "view-acquire"} <= set(declared)
-    assert {"test-stage", "test-detectors", "test-lights", "test-bus", "calibrate-holder"} <= set(declared)
+    assert {"test-stage", "test-detectors", "test-lights", "test-bus", "calibrate-holder", "acquire-lit", "test-speed"} <= set(declared)
     # Only the microscope view is shown first; the test views are there to pick.
     assert [name for name, blok in declared.items() if blok.default] == ["view-microscope"]
     # Written for the base catalog: it runs wherever bloks are drawn, Orkestrator among them.

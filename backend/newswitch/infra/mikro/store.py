@@ -12,6 +12,9 @@ registration edge   a BY_DIMENSION onto the sample's space, the record's parts a
 Importing this needs the extra ``mikro``.
 """
 
+import importlib.util
+import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -39,6 +42,8 @@ from newswitch.instrument.spec import Instrument
 from newswitch.microscope.parts import Microscope
 from newswitch.models.acquisition import AcquiredDataset
 from newswitch.models.space import DimensionPart
+from newswitch.infra.mikro import histograms
+from newswitch.infra.mikro.stream import MikroRecordStream, placeholder
 from newswitch.protocols.dataset_store import AcquiredChannel, AcquiredPlane, AcquiredRecord
 
 #: The axes a dataset shares with the stage's space.
@@ -200,6 +205,23 @@ def _anchor_of_plane(
     )
 
 
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _Shown:
+    """What a scene needs of a dataset: the sample space it is placed in, the color of each of its
+    channels (None: not a color camera's), and its histograms by time point and channel."""
+
+    space: str
+    colors: tuple[str | None, ...]
+    histograms: Mapping[tuple[int, int], Any]
+
+
+#: The color a channel is drawn in, by the camera color it is.
+_DRAWN = {"r": (255, 0, 0), "g": (0, 255, 0), "b": (0, 0, 255)}
+
+
 class MikroDatasetStore:
     """Stores what an acquisition merged in mikro, in the space of the sample it was taken of.
 
@@ -215,6 +237,80 @@ class MikroDatasetStore:
         self.instrument = instrument
         self.microscope = microscope
         self._mounted: set[tuple[str, tuple[tuple[float, ...], ...]]] = set()
+        self._shown: dict[str, _Shown] = {}
+        self._histograms: Mapping[tuple[int, int], Any] = {}  # of the dataset being written
+        """What a scene of each dataset published needs: where it is, its channels and contrast."""
+
+    def show(self, name: str, datasets: list[AcquiredDataset]) -> list[str]:
+        """A new scene of what one acquisition stored, named `name`: over the space of each sample
+        it took (one scene a sample), a layer for each dataset, a color camera's as one RGB layer,
+        any other's a layer per channel, each with its contrast from its histograms. The ids of the
+        scenes made.
+
+        A scene is a view: what cannot be drawn is logged and left out, the datasets stay.
+        """
+        by_space: dict[str, list[tuple[str, _Shown]]] = {}
+        for dataset in datasets:
+            shown = self._shown.get(dataset.id)
+            if shown is not None:
+                by_space.setdefault(shown.space, []).append((dataset.id, shown))
+        scenes = []
+        for space, members in by_space.items():
+            scene = self.client.create_scene(name=name, coordinate_system=space)
+            drawn = 0
+            for order, (dataset, shown) in enumerate(members):
+                try:
+                    self._layers(str(scene.id), dataset, shown, order)
+                    drawn += 1
+                except Exception:  # noqa: BLE001 - a scene is a view; the data is stored
+                    logger.exception("scene %s: dataset %s not drawn", name, dataset)
+            logger.info(
+                "scene %s (%s): %d of %d datasets drawn", scene.id, name, drawn, len(members)
+            )
+            scenes.append(str(scene.id))
+        return scenes
+
+    def _layers(self, scene: str, dataset: str, shown: _Shown, order: int) -> None:
+        """Draw `dataset` into `scene`: RGB where its channels are a color camera's red, green and
+        blue (in that order), else a layer per channel in its color."""
+        whole = self.client.create_lens(dataset=dataset)
+
+        def channel(c: int) -> str:
+            return str(
+                self.client.create_lens(
+                    lens=whole.id, slices=[schema.SliceInput(axis="c", start=c, stop=c + 1)]
+                ).id
+            )
+
+        colors = list(shown.colors)
+        c = 0
+        while c < len(colors):
+            if colors[c : c + 3] == ["r", "g", "b"]:
+                windows = [histograms.contrast(shown.histograms, c + k) for k in range(3)]
+                lows = [w[0] for w in windows if w is not None]
+                highs = [w[1] for w in windows if w is not None]
+                self.client.create_rgb_layer(
+                    lens=whole.id,
+                    scene=scene,
+                    red_lens=channel(c),
+                    green_lens=channel(c + 1),
+                    blue_lens=channel(c + 2),
+                    clim_min=min(lows) if lows else None,
+                    clim_max=max(highs) if highs else None,
+                    order=order,
+                )
+                c += 3
+                continue
+            window = histograms.contrast(shown.histograms, c)
+            self.client.create_intensity_layer(
+                lens=channel(c),
+                scene=scene,
+                color=_DRAWN.get(colors[c] or ""),
+                clim_min=window[0] if window else None,
+                clim_max=window[1] if window else None,
+                order=order,
+            )
+            c += 1
 
     def check(self) -> None:
         """A client is there: it connects with its first call, so a mikro that is down is only
@@ -224,21 +320,73 @@ class MikroDatasetStore:
         """What the running microscope is set to now."""
         return self.microscope.values.snapshot()
 
+    @property
+    def streams(self) -> bool:
+        """Whether records are streamed (`stream`): with newswitch's native module built (the
+        extra "native"), else they are written at the end of the acquisition."""
+        return importlib.util.find_spec("newswitch_native") is not None
+
+    def stream(
+        self, shape: tuple[int, ...], dtype: str, dims: tuple[str, ...], colors: int
+    ) -> MikroRecordStream:
+        """A record of `shape` written into mikro's datalayer exposure by exposure, natively from
+        where each is (`newswitch.infra.mikro.stream`)."""
+        return MikroRecordStream(self.client, shape, dtype, dims, colors)
+
+    def _create_dataset(
+        self, acquired: AcquiredRecord, data: Any, anchors: list[Any]  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401 - mikro's ArrayDataset
+        """The dataset of `acquired`: of `data` uploaded now, or of the store it was streamed
+        into (`acquired.stream`), declared against a placeholder of its shape so mikro checks its
+        axes and layout as for any array."""
+        names, axes, types = dataset_axes(self.instrument, acquired)
+        streamed = acquired.stream is not None
+        array = placeholder(acquired.shape, acquired.dtype) if streamed else data
+        level_zero, scales = dataset_arrays(
+            array, levels=1, method="mean", dims=names, types=types
+        )
+        if not streamed:
+            self._histograms = histograms.counted(data, names)
+            return self.client.create_array_dataset(
+                data=level_zero,
+                scales=scales,
+                name=acquired.name,
+                axes=axes,
+                anchors=[*anchors, *histograms.anchors(self._histograms)],
+            )
+        store = acquired.stream.finish()  # type: ignore[union-attr]
+        # Counted natively while it was written: complete now that it is stored.
+        self._histograms = acquired.stream.histograms  # type: ignore[union-attr]
+        anchors = [*anchors, *histograms.anchors(self._histograms)]
+        variables = {
+            "input": {
+                "data": level_zero,
+                "scales": scales,
+                "name": acquired.name,
+                "axes": axes,
+                "anchors": anchors,
+            }
+        }
+        serialized = self.client._serialize(schema.CreateArrayDatasetMutation, variables)
+        serialized["input"]["data"] = store  # what the upload middleware would have put there
+        result = self.client.rath.query(
+            schema.CreateArrayDatasetMutation.Meta.document,
+            serialized,
+            headers=self.client._headers(None),
+        )
+        return schema.CreateArrayDatasetMutation.model_validate(
+            result.data, context=self.client._origin()
+        ).create_array_dataset
+
     def publish(self, acquired: AcquiredRecord) -> AcquiredDataset:
         """Write `acquired`: what it took, its anchors, and its place on the sample.
 
         The sample's space is found again by its reference, so every record of one mounting lands
         in the same one, whatever detector took it.
         """
-        names, axes, types = dataset_axes(self.instrument, acquired)
-        level_zero, scales = dataset_arrays(
-            acquired.data, levels=1, method="mean", dims=names, types=types
-        )
-        dataset = self.client.create_array_dataset(
-            data=level_zero,
-            scales=scales,
-            name=acquired.name,
-            axes=axes,
+        dataset = self._create_dataset(
+            acquired,
+            acquired.data,
             anchors=[
                 *anchors_of_channels(self.instrument, acquired),
                 *(
@@ -283,6 +431,11 @@ class MikroDatasetStore:
                 name=f"mount {acquired.mount_id}",
             )
             self._mounted.add((acquired.mount_id, acquired.mount))
+        self._shown[str(dataset.id)] = _Shown(
+            space=str(sample.id),
+            colors=tuple(channel.color for channel in acquired.channels),
+            histograms=self._histograms,
+        )
         return AcquiredDataset(
             id=str(dataset.id),
             name=acquired.name,

@@ -123,3 +123,7 @@ backend/.arkitekt/
 # local only: camera SDK packages, leftover device files of main
 backend/external/
 backend/configs/
+
+# ---------- Native (Rust) ----------
+# The build folder of backend/native (cargo / maturin)
+backend/native/target/

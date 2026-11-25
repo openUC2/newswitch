@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "newswitch-native"
+version = "0.1.0"
+description = "newswitch's native parts: frames written as zarr v3 shards straight to S3"
+requires-python = ">=3.12"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "newswitch_native"

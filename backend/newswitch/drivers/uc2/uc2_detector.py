@@ -33,7 +33,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import koil
 import numpy as np
@@ -41,6 +41,7 @@ import uc2_cam_py
 
 from newswitch.drivers import readout as windows_of
 from newswitch.models.devices import AxisWindow, Detector
+from newswitch.protocols.dataset_store import FrameMemory
 from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo
 from newswitch.states.detector import DetectorState
 
@@ -55,6 +56,8 @@ CAMERA_LOCK = "camera_parameters"
 LIVE = "live"
 #: Holder of every camera while its debug window is shown (from startup until `close`).
 DEBUG = "debug"
+#: Holder of a camera while an acquisition fires each of its frames (`begin_triggered`).
+TRIGGERED = "triggered"
 
 #: Pause between two looks into the ring buffer while waiting for an image (s).
 POLL_INTERVAL_S = 0.002
@@ -76,6 +79,8 @@ class _OpenCamera:
     lock: threading.Lock = field(default_factory=threading.Lock)
     """Serializes starting, stopping and geometry changes."""
     holders: set[object] = field(default_factory=set)
+    triggered: bool = False
+    """Whether each frame is exposed only when one is captured (its software trigger, fired)."""
 
 
 def _sample_type(pixel_format: str) -> str:
@@ -119,6 +124,24 @@ def _mirror(detector: Detector, camera: uc2_cam_py.Camera) -> None:
     )
     windows_of.apply(detector, windows, camera.binning)
     _mirror_recording(detector, camera)
+
+
+#: Pixel formats a frame is handed to a stream in natively (`ImgData.to_i420`), with whether
+#: they are BGR: 8 bits, which need no contrast stretch to be seen. Deeper mono formats keep the
+#: stretch of the stream's own conversion (`newswitch.infra.streaming.lovekit.stream_rgba`).
+_NATIVE_FORMATS = {"RGB8": False, "BGR8": True, "Mono8": False}
+
+
+def _natively(sink: object, camera: uc2_cam_py.Camera, colored: bool) -> Optional[bool]:
+    """Whether a frame of `camera` goes to `sink` converted natively, and if so whether it is
+    BGR; None when it does not (the sink takes no I420, the format needs a stretch, or a color
+    camera whose detector is described without colors, which the stream shows gray)."""
+    if not hasattr(sink, "broadcast_i420"):
+        return None
+    bgr = _NATIVE_FORMATS.get(camera.pixel_format)
+    if bgr is None or (camera.pixel_format != "Mono8" and not colored):
+        return None
+    return bgr
 
 
 def _plane(data: np.ndarray) -> np.ndarray:
@@ -353,6 +376,99 @@ class UC2DetectorManager:
             return np.moveaxis(data, -1, 0)
         return _plane(data)
 
+    def begin_triggered(self, name: str) -> bool:
+        """Keep `name`'s camera acquiring, each frame exposed only when one is captured (its
+        software trigger, fired by the capture), until `end_triggered`: so a frame is never one
+        exposed before it was asked for (while the stage still moved, or the light changed), the
+        camera is not started for each, and no frame is sent unasked. False if it has no
+        software trigger: captures then wait for a frame of the running camera, as before.
+        """
+        detector = self._get_active_detector(name)
+        if detector is None:
+            raise ValueError(f"No active detector {name}")
+        cam = self._open_camera(detector.name)
+        switch = getattr(cam.camera, "set_software_trigger", None)
+        if switch is None or cam.triggered:
+            return cam.triggered
+        with cam.lock:
+            if not switch(True):
+                logger.warning("%s: no software trigger, frames are waited for", name)
+                return False
+            cam.triggered = True
+        self._hold(cam, TRIGGERED)
+        return True
+
+    def end_triggered(self, name: str) -> None:
+        """Let `name`'s camera run free again (`begin_triggered`), and stop it unless another
+        needs it."""
+        cam = self._cameras.get(name)
+        if cam is None or not cam.triggered:
+            return
+        with cam.lock:
+            cam.triggered = False
+            try:
+                cam.camera.set_software_trigger(False)
+            except Exception:  # noqa: BLE001 - the camera is let go of regardless
+                logger.exception("%s: could not run free again", name)
+        self._release(cam, TRIGGERED)
+
+    @staticmethod
+    def _request(cam: _OpenCamera) -> int:
+        """When an exposure is asked for: a triggered camera is fired for it, now."""
+        requested_ns = time.monotonic_ns()
+        if cam.triggered and not cam.camera.fire():
+            raise RuntimeError(f"camera {cam.camera.serial} refused its software trigger")
+        return requested_ns
+
+    def capture_frame(self, name: str) -> FrameMemory:
+        """One exposure, as `capture_channels`, but where the camera put it: its ring slot, by
+        address, not copied (a streaming store copies it once, natively). Check `valid` after
+        copying: the camera may reuse the slot meanwhile.
+
+        A color camera whose detector is described without colors gives their mean, copied, as
+        `capture_channels` does.
+        """
+        detector = self._get_active_detector(name)
+        if detector is None:
+            raise ValueError(f"No active detector {name}")
+        cam = self._open_camera(detector.name)
+        token = object()
+        self._hold(cam, token)
+        try:
+            image = self._wait_for_slot(cam.camera, self._request(cam))
+        finally:
+            self._release(cam, token)
+        data = image.data
+        if data.ndim == 3 and not detector.has_axis("c"):
+            return FrameMemory.of_array(_plane(np.array(data)))
+        height, width = data.shape[:2]
+        return FrameMemory(
+            address=data.ctypes.data,
+            nbytes=data.nbytes,
+            height=height,
+            width=width,
+            colors=data.shape[2] if data.ndim == 3 else 1,
+            bytes_per_sample=data.itemsize,
+            planar=False,
+            keep=image,
+            valid=image.is_valid,
+            held=cam.triggered,
+        )
+
+    @staticmethod
+    def _wait_for_slot(camera: uc2_cam_py.Camera, requested_ns: int) -> Any:  # noqa: ANN401
+        """The first image that arrived one exposure after `requested_ns`, in its ring slot (a
+        view, not copied), consistent when found."""
+        earliest_ns = requested_ns + int((camera.exposure_time_ms or 0.0) * 1e6)
+        timeout_s = _capture_timeout(camera)
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            image = camera.get_last_image()
+            if image is not None and image.time_before_ns >= earliest_ns and image.is_valid():
+                return image
+            time.sleep(POLL_INTERVAL_S)
+        raise TimeoutError(f"no image from camera {camera.serial} within {timeout_s:.1f} s")
+
     def capture_stack(self, name: str, planes: int) -> Iterator[np.ndarray]:
         """The cameras run free, so nothing here can step a stage (`parts.check_wired`)."""
         raise ValueError(f"Detector {name} delivers no z: no camera is triggered")
@@ -396,11 +512,10 @@ class UC2DetectorManager:
         if detector is None:
             raise ValueError(f"No active detector {name}")
         cam = self._open_camera(detector.name)
-        requested_ns = time.monotonic_ns()
         token = object()
         self._hold(cam, token)
         try:
-            return self._wait_for_image(detector.name, cam.camera, requested_ns)
+            return self._wait_for_image(detector.name, cam.camera, self._request(cam))
         finally:
             self._release(cam, token)
 
@@ -622,10 +737,22 @@ class UC2DetectorManager:
         if wants is not None and not wants(name):
             last_sent[name] = image.time_ns  # seen: the next new image is asked about again
             return
+        colored = image.data.ndim == 3 and self._require_detector(name).has_axis("c")
+        native = _natively(sink, camera, colored)
+        if native is not None:
+            # Scaled and converted to I420 natively, straight from the ring slot, without the
+            # GIL: no copy of the whole frame, no conversion in Python.
+            width, height, data = image.to_i420(sink.i420_width, bgr=native)  # type: ignore[attr-defined]
+            if image.is_valid():
+                last_sent[name] = image.time_ns
+                sink.broadcast_i420(name, width, height, data)  # type: ignore[attr-defined]
+            return
         data = image.data.copy()
         if image.is_valid():
             last_sent[name] = image.time_ns
-            sink.broadcast_sync(name, _plane(data))
+            # A color camera's live view stays in color when its detector is described in color;
+            # what else asks for one image (a snapshot, an autofocus) gets its colors' mean.
+            sink.broadcast_sync(name, data if colored else _plane(data))
 
     def stop_acquire_live(self) -> None:
         """Stop the live stream: clear `DetectorState.is_acquiring` and release the cameras.

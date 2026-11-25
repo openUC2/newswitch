@@ -180,3 +180,42 @@ def test_a_position_reported_again_publishes_nothing() -> None:
         published.append(values.move_state.moves is not before)
     assert told == [-7.5, -2.0]
     assert published == [True, False, False, True, False]
+
+
+@pytest.mark.asyncio
+async def test_a_canopen_move_to_where_an_axis_rests_sends_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A motor already at its target never says it runs: moved anyway, it was waited out
+    (`MOVE_START_S`, 0.6 s), each tile, for each axis a tile does not change."""
+    from types import SimpleNamespace
+
+    from uc2canopen.client import MotorState
+
+    bus = UC2CanBus(state=UC2State(), config=UC2CanBusConfig(steps_per_um_x=12.5))
+    motor = MotorState(position=125, running=False, seen=True)
+    client = SimpleNamespace(sync=SimpleNamespace(_listener=SimpleNamespace(get_motor=lambda node, sub: motor)))
+    moved: list[int] = []
+
+    async def require_client(timeout: float = 30.0) -> SimpleNamespace:
+        return client
+
+    async def move_and_wait(client: object, node: int, sub: int, steps: int, **_: object) -> int:
+        moved.append(steps)
+        return steps
+
+    monkeypatch.setattr(bus, "_require_client", require_client)
+    monkeypatch.setattr(bus, "_move_and_wait", move_and_wait)
+
+    assert await bus.amove_axis("X", 10.0, is_absolute=True) == pytest.approx(10.0)
+    assert moved == [125]  # where it is is not known yet: moved
+    assert await bus.amove_axis("X", 10.0, is_absolute=True) == pytest.approx(10.0)
+    assert moved == [125]  # it rests there: nothing sent
+    motor.running = True
+    await bus.amove_axis("X", 10.0, is_absolute=True)
+    assert moved == [125, 125]  # still running: moved, and waited for
+    motor.running = False
+    await bus.amove_axis("X", 20.0, is_absolute=True)
+    assert moved == [125, 125, 250]
+    await bus.amove_axis("X", 0.0, is_absolute=False)
+    assert moved[-1] == 0  # a relative move is always sent

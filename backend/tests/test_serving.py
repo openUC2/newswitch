@@ -258,3 +258,69 @@ def test_a_saturated_frame_is_white_and_a_black_one_black() -> None:
 
     assert stream_rgba(np.full((64, 64), 4088, dtype=np.uint16))[0, 0, 0] >= 250
     assert stream_rgba(np.full((64, 64), 8, dtype=np.uint16))[0, 0, 0] <= 1
+
+
+def test_a_color_frame_is_binned_per_channel_and_sent_in_color() -> None:
+    """A color camera's (y, x, 3) frame keeps its colors: each channel averaged on its own."""
+    import numpy as np
+
+    from newswitch.infra.streaming.lovekit import binned, stream_rgba
+
+    frame = np.zeros((12, 18, 3), dtype=np.uint8)
+    frame[..., 0] = 200  # red
+    frame[:, :9, 2] = 90  # blue on the left half
+    small = binned(frame, max_width=6)
+    assert small.shape == (4, 6, 3)
+    assert np.allclose(small[..., 0], 200) and np.allclose(small[:, :3, 2], 90)
+    assert np.allclose(small[:, 3:, 2], 0) and np.allclose(small[..., 1], 0)
+    rgba = stream_rgba(frame, max_width=6)
+    assert rgba.shape == (4, 6, 4) and tuple(rgba[0, 0, :3]) == (200, 0, 90)
+
+
+def test_a_frame_converted_natively_is_sent_as_it_is_in_one_layer() -> None:
+    """A camera that scales and converts to I420 itself hands that over: it goes out unchanged,
+    and every stream is published as one layer (no simulcast to encode on the agent)."""
+    from lovekit import I420Frame
+
+    sink = LovekitSink([CameraStream("main", "main", "Main")])
+    lovekit = FakeLovekit()
+    declared: list = []
+    publish = lovekit.publish
+
+    def recording(streams: list) -> FakePublished:
+        declared.extend(streams)
+        return publish(streams)
+
+    lovekit.publish = recording  # type: ignore[method-assign]
+    data = np.arange(8 * 4 * 3 // 2, dtype=np.uint8)
+
+    async def run() -> None:
+        task = asyncio.create_task(publish_camera_streams(lovekit, sink, CameraStreams()))  # type: ignore[arg-type]
+        while lovekit.published is None:
+            await asyncio.sleep(0)
+        sink.broadcast_i420("main", 8, 4, data)
+        await asyncio.sleep(0.3)
+        lovekit.published.stopped.set()
+        await asyncio.wait_for(task, timeout=2)
+
+    asyncio.run(run())
+    assert lovekit.published is not None
+    [frame] = lovekit.published.tracks["main"].frames
+    assert isinstance(frame, I420Frame) and (frame.width, frame.height) == (8, 4)
+    assert frame.data is data
+    assert [stream.simulcast for stream in declared] == [False]
+
+
+def test_only_eight_bit_frames_go_natively_and_color_only_for_color_detectors() -> None:
+    from types import SimpleNamespace
+
+    from newswitch.drivers.uc2.uc2_detector import _natively
+
+    takes = SimpleNamespace(broadcast_i420=lambda *a: None)
+    camera = lambda fmt: SimpleNamespace(pixel_format=fmt)  # noqa: E731
+    assert _natively(takes, camera("RGB8"), colored=True) is False
+    assert _natively(takes, camera("BGR8"), colored=True) is True
+    assert _natively(takes, camera("Mono8"), colored=False) is False
+    assert _natively(takes, camera("RGB8"), colored=False) is None  # shown gray: numpy's mean
+    assert _natively(takes, camera("Mono12"), colored=False) is None  # needs the stretch
+    assert _natively(object(), camera("RGB8"), colored=True) is None  # a sink taking no I420

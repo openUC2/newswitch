@@ -1,0 +1,140 @@
+<Blok kind="agent" context="panel">
+<local name="picked" default={[]} />
+<local name="z_range" kind="STRING" default="0" persist />
+<local name="z_step" kind="STRING" default="2" persist />
+<local name="times" kind="STRING" default="1" persist />
+<local name="every_s" kind="STRING" default="0" persist />
+<local name="name" kind="STRING" default="lit" persist />
+<foreach items={list.compact(value: [{
+    planes: val.to_number(value: z_range) > 0 && val.to_number(value: z_step) > 0
+        ? math.max(values: [2, math.add(a: math.round(value: math.div(a: val.to_number(value: z_range), b: val.to_number(value: z_step))), b: 1)])
+        : 1,
+    repeats: math.max(values: [1, val.to_number(value: times)]),
+    run: self.tasks.acquire_mda
+}])} let="mda" key={"mda"}>
+<div className="flex flex-col gap-3 p-3">
+
+    <Text size="xs" tone="muted">Switch the light on, look at the live image, then acquire: each channel is taken at the power its light has now and the exposure its camera has now. Afterwards the lights are switched off.</Text>
+
+    <!-- light and exposure -->
+    <Card className="gap-3 py-3">
+        <div className="flex items-center gap-2 px-4">
+            <Icon name="zap" size={16} className="text-primary" />
+            <Text size="sm" weight="semibold" className="flex-1">Light</Text>
+        </div>
+        <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+            <if when={light.power_variable}>
+                <div className="flex flex-col gap-2 border-t px-4 pt-3">
+                    <div className="flex items-center gap-2">
+                        <div className="size-3 shrink-0">
+                            <Logo viewBox="0 0 10 10" width="100%" height="100%" title={light.name}>
+                                <Circle cx={5} cy={5} r={5} fill={str.concat(values: ["spectrum-", light.color])} fillOpacity={light.on ? 1 : 0.25} />
+                            </Logo>
+                        </div>
+                        <Text size="sm" weight="semibold" className="flex-1" truncate>{light.name}</Text>
+                        <Badge variant={light.on ? "default" : "secondary"}>{light.on ? "on" : "off"}</Badge>
+                        <Switch checked={light.on} onChange={self.tune(name: light.power_variable, to: light.on ? 0 : light.lit_power)} />
+                    </div>
+                    <Slider value={light.power} min={0} max={light.max_power} step={math.div(light.max_power, 100)} onCommit={self.tune(name: light.power_variable, to: event.value)} />
+                    <div className="flex items-center gap-1">
+                        <Text size="xs" tone="muted" mono className="flex-1">{str.concat(values: [fmt.number(value: math.mul(math.div(light.power, light.max_power), 100), digits: 0), " %"])}</Text>
+                        <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: light.lit_power)}>lit</Button>
+                        <Button size="xs" variant="outline" onClick={self.tune(name: light.power_variable, to: 0)}>off</Button>
+                    </div>
+                </div>
+            </if>
+        </foreach>
+        <foreach items={self.DetectorState.detectors} let="detector" key={detector.name}>
+            <foreach items={list.compact(value: [obj.get(value: self.TuneState.tunes, key: str.concat(values: [detector.name, ".exposure"]))])} let="exposure" key={detector.name}>
+                <div className="flex items-center gap-2 border-t px-4 pt-3">
+                    <Icon name="clock" size={14} className="text-muted-foreground" />
+                    <Text size="xs" className="w-24" truncate>{str.concat(values: [detector.name, " exposure"])}</Text>
+                    <Slider className="flex-1" value={exposure.current} min={exposure.minimum} max={math.min(values: [exposure.maximum, 100])} step={exposure.step ?? 0.1} onCommit={self.tune(name: exposure.name, to: event.value)} />
+                    <Text size="xs" mono className="w-16 text-right">{str.concat(values: [fmt.number(value: exposure.current, digits: 2), " ms"])}</Text>
+                </div>
+            </foreach>
+        </foreach>
+    </Card>
+
+    <!-- what the camera sees -->
+    <Card className="gap-2 py-3">
+        <div className="flex items-center justify-between gap-2 px-4">
+            <div className="flex items-center gap-2">
+                <Icon name="video" size={16} className="text-primary" />
+                <Text size="sm" weight="semibold">Live</Text>
+            </div>
+            <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" icon="play" disabled={self.DetectorState.is_acquiring} onClick={self.start_live_view()}>Live</Button>
+                <Button size="sm" variant="ghost" icon="pause" disabled={self.DetectorState.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
+            </div>
+        </div>
+        <foreach items={list.compact(value: [list.at(value: self.CameraStreams.streams, index: 0)])} let="stream" key={"stream"}>
+            <StructureDisplay value={stream} variant="card" />
+        </foreach>
+    </Card>
+
+    <!-- channels -->
+    <Card className="gap-2 py-3">
+        <div className="flex items-center gap-2 px-4">
+            <Icon name="layers" size={16} className="text-primary" />
+            <Text size="sm" weight="semibold" className="flex-1">Channels</Text>
+            <Badge variant="secondary">{str.concat(values: [list.len(value: picked), " picked"])}</Badge>
+        </div>
+        <if when={list.len(value: self.OpticsState.channels) > 0}>
+            <ToggleGroup multiple bind={picked} variant="outline" size="sm" className="flex flex-wrap justify-start gap-1 px-4">
+                <foreach items={self.OpticsState.channels} let="channel" key={channel.name}>
+                    <ToggleGroupItem value={channel.name}>{str.concat(values: [channel.name, obj.get(value: obj.get(value: self.SourceState.sources, key: channel.source) ?? {on: false}, key: "on") ? " · light on" : " · light off"])}</ToggleGroupItem>
+                </foreach>
+            </ToggleGroup>
+            <Text size="xs" tone="muted" className="px-4">A channel whose light is off is taken at its preset (lit) power.</Text>
+        <else>
+            <Text size="sm" tone="muted" className="px-4">No light reaches a camera: there is nothing to image.</Text>
+        </else>
+        </if>
+    </Card>
+
+    <!-- run -->
+    <Card className="gap-3 py-3">
+        <Grid columns={2} gap="0.5rem" padding="0 1rem">
+            <Field label="Times"><Input type="number" bind={times} /></Field>
+            <Field label="Every (s)"><Input type="number" bind={every_s} disabled={mda.repeats == 1} /></Field>
+            <Field label="Stack range (µm)"><Input type="number" bind={z_range} /></Field>
+            <Field label="Stack step (µm)"><Input type="number" bind={z_step} /></Field>
+        </Grid>
+        <div className="flex flex-wrap items-end gap-3 px-4">
+            <Field label="Name" className="min-w-40 flex-1"><Input bind={name} /></Field>
+            <Text size="sm" tone="muted" mono>{str.concat(values: [list.len(value: picked), " × ", mda.planes, " × ", mda.repeats, " = ", math.mul(a: list.len(value: picked), b: math.mul(a: mda.planes, b: mda.repeats)), " images"])}</Text>
+            <Button icon="play" disabled={list.len(value: picked) == 0 || mda.run.running} onClick={self.acquire_mda(
+                channels: picked,
+                z_range_um: val.to_number(value: z_range),
+                z_step_um: val.to_number(value: z_step),
+                times: val.to_number(value: times),
+                every_s: val.to_number(value: every_s),
+                name: name
+            )}>Acquire</Button>
+        </div>
+        <if when={mda.run.running}>
+            <div className="flex flex-col gap-1 px-4">
+                <Progress value={mda.run.progress} max={100} />
+                <Text size="xs" tone="muted">{mda.run.message ?? "Starting"}</Text>
+            </div>
+        </if>
+        <if when={mda.run.failed}>
+            <Alert variant="destructive" icon="alert-triangle" title="The acquisition failed" className="mx-4" description={mda.run.error ?? ""} />
+        </if>
+        <if when={mda.run.done}>
+            <div className="flex flex-col gap-1 px-4">
+                <Text size="xs" tone="muted">{mda.run.message ?? "Done"}</Text>
+                <foreach items={mda.run.returns.datasets ?? []} let="dataset" key={dataset.id}>
+                    <div className="flex items-center gap-2">
+                        <Icon name="database" size={14} className="text-muted-foreground" />
+                        <Text size="sm" truncate className="flex-1">{dataset.name}</Text>
+                        <Text size="xs" tone="muted" mono>{dataset.detector}</Text>
+                    </div>
+                </foreach>
+            </div>
+        </if>
+    </Card>
+</div>
+</foreach>
+</Blok>
