@@ -135,6 +135,9 @@ class AcquiredRecord:
     shape: tuple[int, ...] = ()
     """Its shape and type, when it was streamed (there is no `data` to read them from)."""
     dtype: str = ""
+    pyramid: bool = False
+    """Whether it is stored at coarser resolutions too (`AcquisitionPlan.pyramid`): its stream's
+    levels when streamed."""
 
     @property
     def dims(self) -> tuple[str, ...]:
@@ -171,8 +174,13 @@ class StreamingDatasetStore(DatasetStore, Protocol):
     holds none of them until its end: what `acquire` uses where a store offers it."""
 
     def stream(
-        self, shape: tuple[int, ...], dtype: str, dims: tuple[str, ...], colors: int
+        self,
+        shape: tuple[int, ...],
+        dtype: str,
+        dims: tuple[str, ...],
+        colors: int,
+        pyramid: bool = False,
     ) -> RecordStream:
         """Begin a record of `shape` (``t, c, z, y, x``) and `dtype`, `colors` channels an
-        exposure."""
+        exposure; with its coarser levels too when `pyramid`."""
         ...

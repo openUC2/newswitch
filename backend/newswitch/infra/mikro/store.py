@@ -37,17 +37,29 @@ from mikro.api.schema import (
 )
 from mikro.inputs.lightpath import in_out
 
+from newswitch.infra.mikro import histograms
+from newswitch.infra.mikro.stream import (
+    MikroRecordStream,
+    Reduction,
+    in_flight_limit,
+    placeholder,
+    pyramid_levels,
+)
 from newswitch.instrument import spec
 from newswitch.instrument.spec import Instrument
 from newswitch.microscope.parts import Microscope
 from newswitch.models.acquisition import AcquiredDataset
 from newswitch.models.space import DimensionPart
-from newswitch.infra.mikro import histograms
-from newswitch.infra.mikro.stream import MikroRecordStream, placeholder
 from newswitch.protocols.dataset_store import AcquiredChannel, AcquiredPlane, AcquiredRecord
 
 #: The axes a dataset shares with the stage's space.
 SPATIAL = ("z", "y", "x")
+#: How a dataset's pyramid is made (`AcquisitionPlan.pyramid`): the max of each 2 x 2 in y and x,
+#: so thin bright structures stay visible zoomed out; ``z`` keeps its planes.
+PYRAMID_REDUCTION: Reduction = "max"
+PYRAMID_AXES = ("y", "x")
+#: What each reduction is recorded as on a level's edge (`mikro.pyramid`'s names for them).
+_SCALE_METHODS = {"max": "MAX", "mean": "AREA", "nearest": "NEAREST"}
 
 #: What an axis of each type says it is, beside its name.
 _DESCRIPTIONS = {
@@ -239,6 +251,7 @@ class MikroDatasetStore:
         self._mounted: set[tuple[str, tuple[tuple[float, ...], ...]]] = set()
         self._shown: dict[str, _Shown] = {}
         self._histograms: Mapping[tuple[int, int], Any] = {}  # of the dataset being written
+        self._budget: Any = None  # what every stream waits on together (`stream`)
         """What a scene of each dataset published needs: where it is, its channels and contrast."""
 
     def show(self, name: str, datasets: list[AcquiredDataset]) -> list[str]:
@@ -327,11 +340,40 @@ class MikroDatasetStore:
         return importlib.util.find_spec("newswitch_native") is not None
 
     def stream(
-        self, shape: tuple[int, ...], dtype: str, dims: tuple[str, ...], colors: int
+        self,
+        shape: tuple[int, ...],
+        dtype: str,
+        dims: tuple[str, ...],
+        colors: int,
+        pyramid: bool = False,
     ) -> MikroRecordStream:
         """A record of `shape` written into mikro's datalayer exposure by exposure, natively from
-        where each is (`newswitch.infra.mikro.stream`)."""
-        return MikroRecordStream(self.client, shape, dtype, dims, colors)
+        where each is (`newswitch.infra.mikro.stream`); with its pyramid when `pyramid`, each
+        level made by the native writer as the exposure is stored."""
+        levels = pyramid_levels(shape[-2], shape[-1], PYRAMID_REDUCTION) if pyramid else 1
+        return MikroRecordStream(
+            self.client,
+            shape,
+            dtype,
+            dims,
+            colors,
+            budget=self.budget(),
+            levels=levels,
+            reduction=PYRAMID_REDUCTION,
+        )
+
+    def budget(self) -> Any:  # noqa: ANN401 - a newswitch_native.InFlightBudget
+        """The one budget every record streamed waits on, however many positions and cameras
+        stream at once: sized to the memory available now (`in_flight_limit`), as each stream is
+        opened, so a machine that has less for it lends it less."""
+        from newswitch_native import InFlightBudget
+
+        limit = in_flight_limit()
+        if self._budget is None:
+            self._budget = InFlightBudget(limit)
+        elif self._budget.pending_bytes == 0:  # nothing of an earlier acquisition is held
+            self._budget.limit = limit
+        return self._budget
 
     def _create_dataset(
         self, acquired: AcquiredRecord, data: Any, anchors: list[Any]  # noqa: ANN401
@@ -341,11 +383,20 @@ class MikroDatasetStore:
         axes and layout as for any array."""
         names, axes, types = dataset_axes(self.instrument, acquired)
         streamed = acquired.stream is not None
-        array = placeholder(acquired.shape, acquired.dtype) if streamed else data
-        level_zero, scales = dataset_arrays(
-            array, levels=1, method="mean", dims=names, types=types
-        )
         if not streamed:
+            levels = 1
+            if acquired.pyramid and set(PYRAMID_AXES) <= set(names):
+                levels = pyramid_levels(
+                    data.shape[names.index("y")], data.shape[names.index("x")], PYRAMID_REDUCTION
+                )
+            level_zero, scales = dataset_arrays(
+                data,
+                levels=levels,
+                method=PYRAMID_REDUCTION,
+                axes=PYRAMID_AXES if levels > 1 else None,
+                dims=names,
+                types=types,
+            )
             self._histograms = histograms.counted(data, names)
             return self.client.create_array_dataset(
                 data=level_zero,
@@ -354,9 +405,26 @@ class MikroDatasetStore:
                 axes=axes,
                 anchors=[*anchors, *histograms.anchors(self._histograms)],
             )
-        store = acquired.stream.finish()  # type: ignore[union-attr]
+        level_zero, _ = dataset_arrays(
+            placeholder(acquired.shape, acquired.dtype), levels=1, dims=names, types=types
+        )
+        stream: MikroRecordStream = acquired.stream  # type: ignore[assignment]
+        pyramid = stream.levels
+        scales = [
+            schema.ScaleInput(
+                level=level.level,
+                array=dataset_arrays(
+                    placeholder(level.shape, acquired.dtype), levels=1, dims=names, types=types
+                )[0],
+                scale_method=schema.ScaleMethod(_SCALE_METHODS[stream.reduction]),
+                scale=level.scale,
+                translation=level.translation,
+            )
+            for level in pyramid
+        ]
+        store = stream.finish()
         # Counted natively while it was written: complete now that it is stored.
-        self._histograms = acquired.stream.histograms  # type: ignore[union-attr]
+        self._histograms = stream.histograms
         anchors = [*anchors, *histograms.anchors(self._histograms)]
         variables = {
             "input": {
@@ -369,6 +437,8 @@ class MikroDatasetStore:
         }
         serialized = self.client._serialize(schema.CreateArrayDatasetMutation, variables)
         serialized["input"]["data"] = store  # what the upload middleware would have put there
+        for sent, level in zip(serialized["input"].get("scales") or [], pyramid):
+            sent["array"] = level.store  # each level's own store, as its data's
         result = self.client.rath.query(
             schema.CreateArrayDatasetMutation.Meta.document,
             serialized,

@@ -3946,6 +3946,24 @@
                 "kind": "STRING"
               },
               {
+                "key": "pyramid",
+                "label": null,
+                "description": "Also store each dataset at coarser resolutions (the max of each 2 x 2, halved until one 256 tile), so a viewer zooms out without reading every pixel; built as each exposure is stored, about a third more to upload.",
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "validators": [],
+                "default": false,
+                "widget": null,
+                "requires": null,
+                "kind": "BOOL"
+              },
+              {
                 "key": "m_hooks",
                 "label": null,
                 "description": "What to run at the start (e.g., an autofocus).",
@@ -4593,7 +4611,7 @@
       "provenanceAudience": null,
       "effects": "UNKNOWN",
       "execution": "PLAIN",
-      "codeHash": "77961c03ce816c803ffdcede6ed579518e8973e579996075772d7b82184ccc40",
+      "codeHash": "f29b169005d8a329bd934986acb1ebab69decfbf4c26585bf8dc43f29883d1d4",
       "logo": null,
       "asks": null,
       "informs": null,

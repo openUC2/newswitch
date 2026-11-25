@@ -1,8 +1,8 @@
 """What an acquisition is asked to do: a plan, a region scan."""
 
 from dataclasses import dataclass
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 from arkitekt import model_field, withValidator
 
@@ -127,6 +127,12 @@ class AcquisitionPlan:
     name: str = model_field(
         default="acquisition",
         description="Name of the datasets; with several positions, each gets its position's.",
+    )
+    pyramid: bool = model_field(
+        default=False,
+        description="Also store each dataset at coarser resolutions (the max of each 2 x 2, "
+        "halved until one 256 tile), so a viewer zooms out without reading every pixel; built "
+        "as each exposure is stored, about a third more to upload.",
     )
     m_hooks: list[Hook] = model_field(
         default_factory=list, description="What to run at the start (e.g., an autofocus)."

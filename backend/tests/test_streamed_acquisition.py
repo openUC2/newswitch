@@ -18,8 +18,8 @@ from newswitch.protocols.dataset_store import (
     FrameMemory,
     StreamingDatasetStore,
 )
-from tests.test_acquire import LASER, LED, RecordingStore, acquire, built
 from tests.conftest import acquisition as plan
+from tests.test_acquire import LASER, LED, RecordingStore, acquire, built
 
 native = pytest.importorskip("newswitch_native")
 DIMS = ["t", "c", "z", "y", "x"]
@@ -88,6 +88,105 @@ def test_writing_waits_for_what_is_not_yet_stored(tmp_path: Path) -> None:
     assert upload.pending_bytes == 0
 
 
+def test_uploads_sharing_a_budget_are_bounded_together(tmp_path: Path) -> None:
+    """Records streamed at once (every position, every camera) never hold more than their one
+    budget unstored, all of them together; and a budget that grows lets waiting writes through."""
+    frame = np.ones((512, 512), np.uint16)
+    budget = native.InFlightBudget(frame.nbytes)
+    uploads = [
+        native.ShardedUpload.local(str(tmp_path / f"r{k}"), [6, 1, 1, 512, 512], "uint16", DIMS, 1, budget=budget)
+        for k in range(3)
+    ]
+    for t in range(6):
+        for upload in uploads:
+            upload.write(t, 0, 0, frame.ctypes.data, frame.nbytes, 512, 512, 1, 2)
+            assert budget.pending_bytes <= frame.nbytes
+    for upload in uploads:
+        upload.finish()
+    assert budget.pending_bytes == 0
+    budget.limit = 3 * frame.nbytes
+    assert budget.limit == 3 * frame.nbytes
+
+
+def test_what_may_be_in_flight_is_a_gigabyte_or_half_the_memory_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from newswitch.infra.mikro import stream as streaming
+
+    monkeypatch.setattr(streaming, "available_memory", lambda: 6 * 1024**3)
+    assert streaming.in_flight_limit() == 1024**3
+    monkeypatch.setattr(streaming, "available_memory", lambda: 1024**3)
+    assert streaming.in_flight_limit() == 512 * 1024**2
+
+
+@pytest.mark.parametrize("reduction", ["max", "mean", "nearest"])
+@pytest.mark.parametrize("dtype", [np.uint8, np.uint16])
+def test_a_pyramid_written_natively_is_mikros_own(
+    tmp_path: Path, reduction: str, dtype: Any  # noqa: ANN401
+) -> None:
+    """Each level, made of each exposure as it is written, is what `mikro.dataset_arrays` makes of
+    the whole record halving y and x: its pixels (odd edges trimmed, or kept by a stride), and its
+    shape as `level_shapes` says, placed as `placement` says."""
+    from mikro import dataset_arrays
+
+    from newswitch.infra.mikro.stream import level_shapes, placement
+
+    shape = (2, 4, 3, 101, 67)  # two exposures of two interleaved colors, odd y and x
+    rng = np.random.default_rng(1)
+    data = rng.integers(0, np.iinfo(dtype).max, shape, dtype=dtype)
+    upload = native.ShardedUpload.local(
+        str(tmp_path / "0"), list(shape), np.dtype(dtype).name, DIMS, 2, reduction=reduction
+    )
+    shapes = level_shapes(shape, 3, reduction)  # type: ignore[arg-type]
+    for k in (1, 2):
+        assert tuple(upload.add_level_local(str(tmp_path / str(k)))) == shapes[k]
+    assert upload.levels == 3
+    for t in range(2):
+        for z in range(3):
+            for c0 in (0, 2):
+                frame = np.ascontiguousarray(data[t, c0 : c0 + 2, z].transpose(1, 2, 0))
+                upload.write(t, c0, z, frame.ctypes.data, frame.nbytes, 101, 67, 2, frame.itemsize)
+    upload.finish()
+    _, scales = dataset_arrays(data, levels=3, method=reduction, axes=("y", "x"), dims=DIMS)  # type: ignore[arg-type]
+    for k, expected in enumerate(scales, start=1):
+        level = zarr.open_array(str(tmp_path / str(k)), mode="r")
+        assert level.shape == shapes[k]
+        assert np.array_equal(level[...], np.asarray(expected.array.data))
+        assert (expected.scale, expected.translation) == placement(k, 5, reduction)  # type: ignore[arg-type]
+
+
+def test_a_level_is_added_before_any_frame_and_while_it_can_be_halved(tmp_path: Path) -> None:
+    upload = native.ShardedUpload.local(str(tmp_path / "0"), [1, 1, 1, 4, 3], "uint8", DIMS, 1)
+    assert upload.add_level_local(str(tmp_path / "1")) == [1, 1, 1, 2, 1]
+    with pytest.raises(ValueError, match="not halved again"):
+        upload.add_level_local(str(tmp_path / "2"))
+    frame = np.zeros((4, 3), np.uint8)
+    upload.write(0, 0, 0, frame.ctypes.data, frame.nbytes, 4, 3, 1, 1)
+    upload.finish()
+    later = native.ShardedUpload.local(str(tmp_path / "a"), [1, 1, 1, 8, 8], "uint8", DIMS, 1)
+    frame = np.zeros((8, 8), np.uint8)
+    later.write(0, 0, 0, frame.ctypes.data, frame.nbytes, 8, 8, 1, 1)
+    with pytest.raises(ValueError, match="before the first frame"):
+        later.add_level_local(str(tmp_path / "b"))
+    with pytest.raises(ValueError, match="max, mean or nearest"):
+        native.ShardedUpload.local(str(tmp_path / "c"), [1, 1, 1, 8, 8], "uint8", DIMS, 1, reduction="median")
+
+
+def test_a_pyramid_is_halved_until_it_fits_a_tile() -> None:
+    from newswitch.infra.mikro.stream import level_shapes, placement, pyramid_levels
+
+    assert pyramid_levels(256, 200) == 1
+    assert pyramid_levels(512, 512) == 2  # 512 -> 256
+    assert pyramid_levels(3000, 4000) == 5  # 4000 -> 2000 -> 1000 -> 500 -> 250
+    assert pyramid_levels(1, 100000) == 1  # an edge that cannot be halved
+    assert level_shapes((1, 3, 2, 101, 67), 3) == [
+        (1, 3, 2, 101, 67), (1, 3, 2, 50, 33), (1, 3, 2, 25, 16)
+    ]
+    assert level_shapes((1, 1, 1, 101, 67), 2, "nearest")[1] == (1, 1, 1, 51, 34)
+    assert placement(2, 5) == ((1.0, 1.0, 1.0, 4.0, 4.0), (0.0, 0.0, 0.0, 1.5, 1.5))
+    assert placement(2, 5, "nearest")[1] == (0.0,) * 5
+
+
 # --- the acquisition, into a store that streams --------------------------------------------------
 
 
@@ -122,12 +221,24 @@ class StreamingStore(RecordingStore):
     root: Path = Path()
     opened: list[LocalStream] = field(default_factory=list)
     fail_after: int | None = None
+    pyramids: list[bool] = field(default_factory=list)
 
     def stream(
-        self, shape: tuple[int, ...], dtype: str, dims: tuple[str, ...], colors: int
+        self,
+        shape: tuple[int, ...],
+        dtype: str,
+        dims: tuple[str, ...],
+        colors: int,
+        pyramid: bool = False,
     ) -> LocalStream:
-        folder = self.root / f"record-{len(self.opened)}"
+        from newswitch.infra.mikro.stream import pyramid_levels
+
+        record = self.root / f"record-{len(self.opened)}"
+        folder = record / "0"
         upload = native.ShardedUpload.local(str(folder), list(shape), dtype, list(dims), colors)
+        self.pyramids.append(pyramid)
+        for k in range(1, pyramid_levels(shape[-2], shape[-1]) if pyramid else 1):
+            upload.add_level_local(str(record / str(k)))
         stream = LocalStream(folder, upload)
         if self.fail_after is not None:
             written = []
@@ -169,6 +280,43 @@ def test_a_streaming_store_gets_every_exposure_as_it_is_taken(tmp_path: Path) ->
         assert all(pixels[t, 0, z].max() > 0 for t in range(2) for z in range(3))  # every plane came
 
 
+def test_a_plan_with_a_pyramid_streams_each_record_with_its_levels(tmp_path: Path) -> None:
+    """`AcquisitionPlan.pyramid` reaches the store's streams, and every exposure reaches every
+    level: a 512 camera's halved once, to one tile."""
+    m = built(tmp_path, "dual-camera")
+    store = StreamingStore(root=tmp_path / "zarr")
+    acquire(
+        m,
+        plan(
+            [AcquisitionChannel(detectors=["camera_green"], name="green", set_to={**LASER})],
+            planes=[-2.0, 0.0, 2.0],
+            pyramid=True,
+        ),
+        store,
+    )
+    assert store.pyramids == [True]
+    [acquired] = store.published
+    assert acquired.pyramid
+    [stream] = store.opened
+    assert stream.upload.levels == 2
+    pixels = stream.finish()
+    coarse = zarr.open_array(str(tmp_path / "zarr" / "record-0" / "1"), mode="r")[...]
+    assert coarse.shape == (1, 1, 3, 256, 256)
+    assert np.array_equal(coarse, pixels.reshape(1, 1, 3, 256, 2, 256, 2).max(axis=(4, 6)))
+
+
+def test_a_plan_without_a_pyramid_streams_level_0_only(tmp_path: Path) -> None:
+    m = built(tmp_path, "dual-camera")
+    store = StreamingStore(root=tmp_path / "zarr")
+    acquire(
+        m,
+        plan([AcquisitionChannel(detectors=["camera_green"], name="green", set_to={**LASER})]),
+        store,
+    )
+    assert store.pyramids == [False] and store.opened[0].upload.levels == 1
+    assert not store.published[0].pyramid
+
+
 def test_a_failed_acquisition_drops_what_it_streamed(tmp_path: Path) -> None:
     m = built(tmp_path, "dual-camera")
     store = StreamingStore(root=tmp_path / "zarr", fail_after=2)
@@ -195,8 +343,16 @@ class FakeUpload:
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         self.args, self.kwargs, self.writes, self.credentials = args, kwargs, [], []
+        self.added: list[tuple[Any, ...]] = []
         self.fail = False
+        self.shape = list(args[6])
         FakeUpload.made.append({"args": args, "kwargs": kwargs, "upload": self})
+
+    def add_level_s3(self, *args: Any) -> list[int]:  # noqa: ANN401
+        self.added.append(args)
+        *rest, height, width = self.shape
+        self.shape = [*rest, height // 2, width // 2]
+        return self.shape
 
     @classmethod
     def s3(cls, *args: Any, **kwargs: Any) -> "FakeUpload":  # noqa: ANN401
@@ -205,8 +361,8 @@ class FakeUpload:
     def write(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         self.writes.append((args, kwargs))
 
-    def set_credentials(self, *args: Any) -> None:  # noqa: ANN401
-        self.credentials.append(args)
+    def set_credentials(self, *args: Any, level: int = 0) -> None:  # noqa: ANN401
+        self.credentials.append(args if level == 0 else (*args, level))
 
     def finish(self) -> int:
         if self.fail:
@@ -229,19 +385,20 @@ class FakeMikro:
             certificates=["PEM"],
         )
 
-    def _grant(self, n: int) -> Any:  # noqa: ANN401
+    def _grant(self, n: int, store: str = "store-1") -> Any:  # noqa: ANN401
         return SimpleNamespace(
             access_key=f"AK{n}", secret_key=f"SK{n}", session_token=f"T{n}", bucket="zarr",
-            key=f"user/{n}", store="store-1", expires_in=self.expires_in,
+            key=f"user/{n}", store=store, expires_in=self.expires_in,
         )
 
     def request_zarr_upload(self, **kwargs: Any) -> Any:  # noqa: ANN401
         self.calls.append(("request", kwargs))
-        return self._grant(1)
+        n = sum(1 for call in self.calls if call[0] == "request")
+        return self._grant(1, f"store-{n}")
 
     def refresh_zarr_upload(self, store_id: str) -> Any:  # noqa: ANN401
         self.calls.append(("refresh", store_id))
-        return self._grant(2)
+        return self._grant(2, store_id)
 
     def finish_zarr_upload(self, store_id: str, valid: bool) -> Any:  # noqa: ANN401
         self.calls.append(("finish", (store_id, valid)))
@@ -303,6 +460,48 @@ def test_what_could_not_be_stored_is_dropped(fake_native: type[FakeUpload]) -> N
     assert [call for call in client.calls if call[0] == "finish"] == [("finish", ("store-1", False))]
 
 
+def test_a_mikro_stream_with_a_pyramid_has_a_grant_for_each_level(
+    fake_native: type[FakeUpload], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each level its own store, of its shape: each refreshed with its level, each finished; and
+    all of them dropped when anything was not stored."""
+    from newswitch.infra.mikro import stream as streaming
+
+    client = FakeMikro(expires_in=100)
+    stream = streaming.MikroRecordStream(client, (1, 1, 1, 64, 48), "uint16", tuple(DIMS), 1, levels=3)  # type: ignore[arg-type]
+    assert [kwargs["shape"] for name, kwargs in client.calls if name == "request"] == [
+        (1, 1, 1, 64, 48), (1, 1, 1, 32, 24), (1, 1, 1, 16, 12)
+    ]
+    [made] = fake_native.made
+    assert made["kwargs"]["reduction"] == "max"
+    assert [args[:2] for args in made["upload"].added] == [("zarr", "user/1"), ("zarr", "user/1")]
+    assert [(level.level, level.store, level.shape) for level in stream.levels] == [
+        (1, "store-2", (1, 1, 1, 32, 24)), (2, "store-3", (1, 1, 1, 16, 12))
+    ]
+    later = streaming.time.monotonic() + 80
+    monkeypatch.setattr(streaming.time, "monotonic", lambda: later)
+    stream.write(0, 0, 0, FrameMemory.of_array(np.zeros((64, 48), np.uint16)))
+    assert [call for call in client.calls if call[0] == "refresh"] == [
+        ("refresh", "store-1"), ("refresh", "store-2"), ("refresh", "store-3")
+    ]
+    assert made["upload"].credentials == [
+        ("AK2", "SK2", "T2"), ("AK2", "SK2", "T2", 1), ("AK2", "SK2", "T2", 2)
+    ]
+    assert stream.finish() == "store-1"
+    assert [call for call in client.calls if call[0] == "finish"] == [
+        ("finish", (f"store-{n}", True)) for n in (1, 2, 3)
+    ]
+
+    client = FakeMikro()
+    failing = streaming.MikroRecordStream(client, (1, 1, 1, 64, 48), "uint16", tuple(DIMS), 1, levels=2)  # type: ignore[arg-type]
+    failing.upload.fail = True  # type: ignore[attr-defined]
+    with pytest.raises(RuntimeError, match="403"):
+        failing.finish()
+    assert [call for call in client.calls if call[0] == "finish"] == [
+        ("finish", ("store-1", False)), ("finish", ("store-2", False))
+    ]
+
+
 def test_a_streamed_record_is_declared_with_its_store(fake_native: type[FakeUpload]) -> None:
     """The dataset mutation is checked against an array of the record's shape, as any, and sent
     with the store the record went into as its data."""
@@ -340,6 +539,80 @@ def test_a_streamed_record_is_declared_with_its_store(fake_native: type[FakeUplo
     [histogram] = [a for a in sent[0]["input"]["anchors"] if a.get("valueHistogram")]
     assert histogram["valueHistogram"]["min"] == 7.0 and histogram["valueHistogram"]["max"] == 9.0
     assert ("finish", ("store-1", True)) in client.calls
+
+
+def test_a_streamed_pyramid_is_declared_with_each_levels_store_and_place(
+    fake_native: type[FakeUpload],
+) -> None:
+    from mikro.api import schema
+
+    from newswitch.infra.mikro.store import MikroDatasetStore
+    from newswitch.instrument import spec
+    from newswitch.models.space import Axis
+
+    sent: list[dict[str, Any]] = []
+    client = FakeMikro()
+
+    def query(document: str, variables: dict[str, Any], headers: Any = None) -> Any:  # noqa: ANN401
+        sent.append(variables)
+        raise RuntimeError("stop here")
+
+    client._serialize = lambda op, variables: schema.CreateArrayDatasetMutation.Arguments(**variables).model_dump(  # type: ignore[attr-defined]
+        by_alias=True, exclude_unset=True
+    )
+    client.rath = SimpleNamespace(query=query)  # type: ignore[attr-defined]
+    client._headers = lambda task: None  # type: ignore[attr-defined]
+    instrument = spec.load(Path(__file__).parent.parent / "instruments" / "johannes-frame")
+    store = MikroDatasetStore(client, instrument, SimpleNamespace())  # type: ignore[arg-type]
+    shape = (1, 3, 1, 1024, 768)  # 1024 -> 512 -> 256: three levels
+    record_stream = store.stream(shape, "uint8", tuple(DIMS), 3, pyramid=True)
+    other = store.stream((1, 1, 1, 64, 64), "uint8", tuple(DIMS), 1)
+    budgets = [made["kwargs"]["budget"] for made in fake_native.made]
+    assert len(budgets) == 2 and budgets[0] is budgets[1]  # one for every record streamed
+    acquired = AcquiredRecord(
+        name="run camera", position=0, detector="camera", data=None,
+        axes=tuple(Axis(name, kind) for name, kind in zip(DIMS, ("TIME", "CHANNEL", "SPACE", "SPACE", "SPACE"))),
+        channels=(), planes=(), registration=(), calibrated=False,
+        stream=record_stream, shape=shape, dtype="uint8", pyramid=True,
+    )
+    with pytest.raises(RuntimeError, match="stop here"):
+        store._create_dataset(acquired, None, anchors=[])
+    scales = sent[0]["input"]["scales"]
+    assert sent[0]["input"]["data"] == "store-1"
+    assert [(s["level"], s["array"], s["scaleMethod"]) for s in scales] == [
+        (1, "store-2", "MAX"), (2, "store-3", "MAX")
+    ]
+    assert scales[1]["scale"] == (1.0, 1.0, 1.0, 4.0, 4.0)
+    assert scales[1]["translation"] == (0.0, 0.0, 0.0, 1.5, 1.5)
+    assert [call for call in client.calls if call[0] == "finish"] == [
+        ("finish", (f"store-{n}", True)) for n in (1, 2, 3)
+    ]
+
+
+def test_a_record_held_in_memory_is_declared_with_the_same_pyramid() -> None:
+    """Without the native writer the pyramid is mikro's own, made the same way: max of 2 x 2,
+    y and x only, until one tile."""
+    from newswitch.infra.mikro.store import MikroDatasetStore
+    from newswitch.instrument import spec
+    from newswitch.models.space import Axis
+
+    created: list[dict[str, Any]] = []
+    client = SimpleNamespace(create_array_dataset=lambda **kwargs: created.append(kwargs))
+    instrument = spec.load(Path(__file__).parent.parent / "instruments" / "johannes-frame")
+    store = MikroDatasetStore(client, instrument, SimpleNamespace())  # type: ignore[arg-type]
+    data = np.random.default_rng(2).integers(0, 255, (1, 1, 2, 600, 300), dtype=np.uint8)
+    axes = tuple(Axis(name, kind) for name, kind in zip(DIMS, ("TIME", "CHANNEL", "SPACE", "SPACE", "SPACE")))
+    for pyramid, levels in ((False, 0), (True, 2)):  # 600 -> 300 -> 150
+        acquired = AcquiredRecord(
+            name="run camera", position=0, detector="camera", data=data, axes=axes,
+            channels=(), planes=(), registration=(), calibrated=False, pyramid=pyramid,
+        )
+        store._create_dataset(acquired, data, anchors=[])
+        scales = created[-1]["scales"]
+        assert len(scales) == levels
+    assert [s.array.shape for s in scales] == [(1, 1, 2, 300, 150), (1, 1, 2, 150, 75)]
+    assert all(s.scale_method == "MAX" for s in scales)
+    assert np.array_equal(np.asarray(scales[0].array.data), data.reshape(1, 1, 2, 300, 2, 150, 2).max(axis=(4, 6)))
 
 
 # --- histograms and the scene of a run ------------------------------------------------------------

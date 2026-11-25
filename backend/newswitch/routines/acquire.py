@@ -43,10 +43,10 @@ from newswitch.protocols.dataset_store import (
     AcquiredChannel,
     AcquiredPlane,
     AcquiredRecord,
+    DatasetStore,
     FrameMemory,
     RecordStream,
     StreamingDatasetStore,
-    DatasetStore,
 )
 from newswitch.routines.pace import Timing, Writes
 from newswitch.services.space import AXIS_TYPES, SpaceManager
@@ -681,6 +681,7 @@ def _stream_record(
         mount_id=sample.mount_id,
         mounted_at=sample.mounted_at,
         mount=zyx_rows(space.mount(stream.sample)),
+        pyramid=plan.pyramid,
     )
 
 
@@ -760,9 +761,11 @@ def _streamable(record: _Record, store: DatasetStore) -> bool:
     )
 
 
-def _open_streams(merges: list[_Merge], store: DatasetStore) -> list[RecordStream]:
+def _open_streams(
+    merges: list[_Merge], store: DatasetStore, pyramid: bool = False
+) -> list[RecordStream]:
     """A stream for every record that goes so, its array never made (`data` was planned only:
-    `np.empty` holds no memory until written)."""
+    `np.empty` holds no memory until written); building its coarser levels too when `pyramid`."""
     opened = []
     for merge in merges:
         for record in merge.records.values():
@@ -771,7 +774,7 @@ def _open_streams(merges: list[_Merge], store: DatasetStore) -> list[RecordStrea
             assert record.data is not None
             shape, dtype = tuple(int(n) for n in record.data.shape), str(record.data.dtype)
             record.stream = store.stream(  # type: ignore[attr-defined]
-                shape, dtype, record.dims, len(record.detector.colors) or 1
+                shape, dtype, record.dims, len(record.detector.colors) or 1, pyramid=pyramid
             )
             record.streamed = (shape, dtype)
             record.data = None
@@ -1041,7 +1044,7 @@ def acquire(
     triggered: list[str] = []
     try:
         with timing("setup"):
-            opened += _open_streams(merges, store)
+            opened += _open_streams(merges, store, plan.pyramid)
             triggered += _trigger(named, detector_manager)
         for due_s, due in events:
             wait = started_at + due_s - time.monotonic()
@@ -1195,6 +1198,7 @@ def acquire(
                         stream=record.stream,
                         shape=record.streamed[0],
                         dtype=record.streamed[1],
+                        pyramid=plan.pyramid,
                     )
                 )
             )

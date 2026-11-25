@@ -11,13 +11,20 @@ through Python.
 
 The grant is refreshed (``refreshZarrUpload``) on the next write once three quarters of its time
 have passed: from the acquisition's own thread, which can call the server; a timer's could not.
+
+A record may be stored with its pyramid (``levels``): each coarser level an array of its own, with
+a grant of its own, which the native writer makes of each exposure as it stores it (``y`` and
+``x`` halved, by ``reduction``: `mikro.pyramid`'s). Each level states where it sits in level 0's
+grid (`placement`), as `mikro.dataset_arrays` would have.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import time
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from mikro import Mikro
 
@@ -25,14 +32,95 @@ from newswitch.protocols.dataset_store import FrameMemory
 
 logger = logging.getLogger(__name__)
 
-#: How much of a record may be written and not yet stored: what a write waits for beyond it.
-MAX_IN_FLIGHT_BYTES = 256 * 1024 * 1024
+#: How much may be written and not yet stored, over every record streamed at once (they share
+#: one `newswitch_native.InFlightBudget`): what a write waits for beyond it. About twenty 12 MP
+#: color frames with their pyramids: a z-stack's burst, taken at the camera's pace while the
+#: upload catches up. Less where memory is short (`in_flight_limit`).
+MAX_IN_FLIGHT_BYTES = 1024**3
+#: The share of the memory available that frames in flight may take: the rest of the run, and
+#: what else runs on the machine, must not be pushed into swap by them.
+IN_FLIGHT_SHARE = 0.5
 #: When in a grant's life it is refreshed, as a share of it.
 REFRESH_AT = 0.75
+#: A pyramid is halved until its coarsest level fits one tile of this side (the writer's inner
+#: chunk): what a viewer reads at once.
+TILE = 256
+
+Reduction = Literal["max", "mean", "nearest"]
+
+
+def available_memory() -> int:
+    """The bytes of memory available now without swapping (the kernel's ``MemAvailable``: free,
+    and what the page cache would give back), or the free pages where that is not known."""
+    try:
+        with open("/proc/meminfo") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+
+
+def in_flight_limit() -> int:
+    """How much streamed records may hold unstored: `MAX_IN_FLIGHT_BYTES`, or `IN_FLIGHT_SHARE`
+    of the memory available now if that is less."""
+    return min(MAX_IN_FLIGHT_BYTES, int(available_memory() * IN_FLIGHT_SHARE))
+
+
+def _halved(n: int, reduction: Reduction) -> int:
+    """An extent halved as `reduction` does it: a stride keeps an odd edge's last sample, a
+    reduction of pairs leaves it out."""
+    return (n + 1) // 2 if reduction == "nearest" else n // 2
+
+
+def pyramid_levels(height: int, width: int, reduction: Reduction = "max") -> int:
+    """How many levels a pyramid of a `height` x `width` record has, level 0 included: halved
+    until one fits a tile (or an edge could not be halved again)."""
+    levels = 1
+    while max(height, width) > TILE and min(height, width) >= 2:
+        height, width = _halved(height, reduction), _halved(width, reduction)
+        levels += 1
+    return levels
+
+
+def level_shapes(
+    shape: tuple[int, ...], levels: int, reduction: Reduction = "max"
+) -> list[tuple[int, ...]]:
+    """The shape of each level of a ``(..., y, x)`` record of `shape`, level 0 first."""
+    shapes = [tuple(int(n) for n in shape)]
+    for _ in range(levels - 1):
+        *rest, height, width = shapes[-1]
+        shapes.append((*rest, _halved(height, reduction), _halved(width, reduction)))
+    return shapes
+
+
+def placement(
+    level: int, rank: int, reduction: Reduction = "max"
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Where `level` of a ``(..., y, x)`` pyramid of `rank` axes sits in level 0's grid: its scale
+    and translation per axis, as `mikro.pyramid` tracks them (a pair's reduction centres its
+    voxel half a voxel in, a stride keeps voxel 0)."""
+    factor = float(2**level)
+    shift = 0.0 if reduction == "nearest" else (factor - 1) / 2
+    return (1.0,) * (rank - 2) + (factor, factor), (0.0,) * (rank - 2) + (shift, shift)
+
+
+@dataclass(frozen=True)
+class Level:
+    """A coarser level of a streamed record: the store it went into, its shape, and where it sits
+    in level 0's grid."""
+
+    level: int
+    store: str
+    shape: tuple[int, ...]
+    scale: tuple[float, ...]
+    translation: tuple[float, ...]
 
 
 class MikroRecordStream:
-    """One record's array, written into mikro's datalayer exposure by exposure."""
+    """One record's array, written into mikro's datalayer exposure by exposure: with each level of
+    its pyramid, if it has one."""
 
     def __init__(
         self,
@@ -41,9 +129,13 @@ class MikroRecordStream:
         dtype: str,
         dims: tuple[str, ...],
         colors: int,
-        max_in_flight_bytes: int = MAX_IN_FLIGHT_BYTES,
+        budget: Any = None,  # noqa: ANN401 - a newswitch_native.InFlightBudget
+        levels: int = 1,
+        reduction: Reduction = "max",
     ) -> None:
-        """Ask mikro for a grant for an array of `shape` and `dtype`, and open it.
+        """Ask mikro for a grant for an array of `shape` and `dtype` (and one for each of its
+        `levels` but the first, of that level's shape), and open them: waiting on `budget`, which
+        other records share, or on one of its own (`in_flight_limit`).
 
         Raises:
             ImportError: newswitch's native module is not built (``just native``).
@@ -51,42 +143,77 @@ class MikroRecordStream:
         from newswitch_native import ShardedUpload
 
         self.client = client
-        self.grant = client.request_zarr_upload(shape=tuple(int(n) for n in shape))
-        self._granted_at = time.monotonic()
-        datalayer = client.datalayer
-        self.upload = ShardedUpload.s3(
-            datalayer.endpoint_url,
-            self.grant.bucket,
-            self.grant.key,
-            self.grant.access_key,
-            self.grant.secret_key,
-            self.grant.session_token,
-            [int(n) for n in shape],
-            dtype,
-            list(dims),
-            colors,
-            proxy=datalayer.proxy,
-            certificates=list(datalayer.certificates or []),
-            max_in_flight_bytes=max_in_flight_bytes,
-        )
+        self.reduction: Reduction = reduction
+        self.shapes = level_shapes(shape, levels, reduction)
+        self.grants: list[Any] = []
+        self._granted_at: list[float] = []
         self.finished = False
+        try:
+            for level_shape in self.shapes:
+                self.grants.append(client.request_zarr_upload(shape=level_shape))
+                self._granted_at.append(time.monotonic())
+            datalayer = client.datalayer
+            first = self.grants[0]
+            self.upload = ShardedUpload.s3(
+                datalayer.endpoint_url,
+                first.bucket,
+                first.key,
+                first.access_key,
+                first.secret_key,
+                first.session_token,
+                list(self.shapes[0]),
+                dtype,
+                list(dims),
+                colors,
+                proxy=datalayer.proxy,
+                certificates=list(datalayer.certificates or []),
+                max_in_flight_bytes=in_flight_limit(),
+                reduction=reduction,
+                budget=budget,
+            )
+            for grant, level_shape in zip(self.grants[1:], self.shapes[1:]):
+                made = self.upload.add_level_s3(
+                    grant.bucket, grant.key, grant.access_key, grant.secret_key, grant.session_token
+                )
+                if tuple(made) != level_shape:
+                    raise RuntimeError(f"a level of {tuple(made)}, granted as {level_shape}")
+        except Exception:
+            self._drop()
+            raise
+
+    @property
+    def grant(self) -> Any:  # noqa: ANN401 - mikro's grant
+        """Level 0's grant."""
+        return self.grants[0]
 
     @property
     def store(self) -> str:
         """The store's id: what a dataset is made of."""
-        return str(self.grant.store)
+        return str(self.grants[0].store)
+
+    @property
+    def levels(self) -> list[Level]:
+        """Its pyramid's coarser levels (none without one): each in its store, placed."""
+        rank = len(self.shapes[0])
+        return [
+            Level(k, str(grant.store), shape, *placement(k, rank, self.reduction))
+            for k, (grant, shape) in enumerate(zip(self.grants, self.shapes))
+            if k > 0
+        ]
 
     def refresh_if_due(self) -> None:
-        """Renew the grant once three quarters of it have passed: from a thread that can call
+        """Renew each grant once three quarters of it have passed: from a thread that can call
         the server."""
-        lifetime = float(self.grant.expires_in or 0)
-        if lifetime and time.monotonic() - self._granted_at > REFRESH_AT * lifetime:
-            self.grant = self.client.refresh_zarr_upload(store_id=self.store)
-            self._granted_at = time.monotonic()
-            self.upload.set_credentials(
-                self.grant.access_key, self.grant.secret_key, self.grant.session_token
-            )
-            logger.info("mikro upload %s: credentials refreshed", self.store)
+        for k, grant in enumerate(self.grants):
+            lifetime = float(grant.expires_in or 0)
+            if lifetime and time.monotonic() - self._granted_at[k] > REFRESH_AT * lifetime:
+                store = str(grant.store)
+                grant = self.grants[k] = self.client.refresh_zarr_upload(store_id=store)
+                self._granted_at[k] = time.monotonic()
+                self.upload.set_credentials(
+                    grant.access_key, grant.secret_key, grant.session_token, level=k
+                )
+                logger.info("mikro upload %s: credentials refreshed", store)
 
     def write(self, t: int, c0: int, z: int, frame: FrameMemory) -> None:
         """Copy `frame` in (natively, from its address) as time `t`, channels `c0` on, plane `z`."""
@@ -105,20 +232,26 @@ class MikroRecordStream:
         )
 
     def finish(self) -> str:
-        """Wait until every exposure is stored and have mikro check the store; its id.
+        """Wait until every exposure is stored (at every level) and have mikro check each store;
+        level 0's id.
 
         Raises:
-            RuntimeError: Something was not stored; mikro is told to drop the store.
+            RuntimeError: Something was not stored; mikro is told to drop every store.
         """
         try:
             stored = self.upload.finish()
         except Exception:
             self.abort()
             raise
-        self.client.finish_zarr_upload(store_id=self.store, valid=True)
+        for grant in self.grants:
+            self.client.finish_zarr_upload(store_id=str(grant.store), valid=True)
         self.finished = True
         logger.info(
-            "mikro upload %s: %.1f MB stored; %s", self.store, stored / 1e6, self.described()
+            "mikro upload %s: %.1f MB stored in %d level(s); %s",
+            self.store,
+            stored / 1e6,
+            len(self.grants),
+            self.described(),
         )
         return self.store
 
@@ -148,7 +281,7 @@ class MikroRecordStream:
         return of_native(self.upload.histograms())
 
     def abort(self) -> None:
-        """Drop the store: mikro deletes what arrived and frees its quota."""
+        """Drop every store: mikro deletes what arrived and frees its quota."""
         if self.finished:
             return
         self.finished = True
@@ -156,10 +289,16 @@ class MikroRecordStream:
             self.upload.finish()
         except Exception:  # noqa: BLE001 - what failed is what is being dropped
             pass
-        try:
-            self.client.finish_zarr_upload(store_id=self.store, valid=False)
-        except Exception:  # noqa: BLE001 - dropping must not hide why the acquisition failed
-            logger.exception("mikro upload %s: could not be dropped", self.store)
+        self._drop()
+
+    def _drop(self) -> None:
+        """Have mikro drop each store granted."""
+        self.finished = True
+        for grant in self.grants:
+            try:
+                self.client.finish_zarr_upload(store_id=str(grant.store), valid=False)
+            except Exception:  # noqa: BLE001 - dropping must not hide why the acquisition failed
+                logger.exception("mikro upload %s: could not be dropped", grant.store)
 
 
 def placeholder(shape: tuple[int, ...], dtype: str) -> Any:  # noqa: ANN401 - an array view
