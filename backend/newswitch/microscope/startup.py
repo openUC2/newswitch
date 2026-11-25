@@ -53,6 +53,7 @@ async def provide_core(
     CacheManager,
 ]:
     """What every microscope has."""
+    # TODO: build the microscope here
     m = run.microscope
     return (
         m.io,

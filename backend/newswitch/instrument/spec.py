@@ -301,7 +301,10 @@ class Simulation:
 
     transmit: Fraction  # light going straight through (transmitted light)
     reflect: Fraction  # light coming back the way it came (epi)
-    pattern: Pattern
+    pattern: Pattern | None = None  # its beads; None: none
+    slide: SimulatedSlide | None = None
+    """An opaque slide with holes lying on the mounted holder (a calibration slide): transmitted
+    light passes only through its holes."""
     fluorophore: Annotated[Fluorophore, BeforeValidator(_from_library("fluorophores"))] | None = (
         None
     )
@@ -313,6 +316,12 @@ class Simulation:
     def _absorbs_what_it_emits(self) -> Self:
         if (self.fluorophore is None) != (self.absorbed is None):
             raise ValueError("a fluorophore and how much it absorbed come together")
+        return self
+
+    @model_validator(mode="after")
+    def _is_something(self) -> Self:
+        if self.pattern is None and self.slide is None:
+            raise ValueError("a simulation has beads (pattern) or a slide, or both")
         return self
 
 
@@ -390,6 +399,26 @@ class Holder:
         if self.kind == "mea" and "electrode" not in self.grids:
             raise ValueError("an electrode array has its electrodes (grids: {electrode: ...})")
         return self
+
+
+@dataclass(frozen=True, config=STRICT)
+class SimulatedSlide:
+    """A slide from the library lying centred in a place of the mounted holder, opaque but for
+    its places, which are holes: what a simulated pinhole slide is. Light passing straight
+    through the sample passes only there."""
+
+    holder: Annotated[Holder, BeforeValidator(_from_library("holders"))]
+    at: str
+    """The place of the mounted holder it lies in: ``<grid>:<name>``, as ``slot:A1``."""
+
+    def holes(self) -> list[tuple[float, float, float]]:
+        """Its holes from its middle, in millimetres, as ``(x, y, radius)``."""
+        found = []
+        for grid in self.holder.grids.values():
+            radius = (grid.place.diameter or grid.place.size or 0.0) / 2.0
+            for x, y in grid.places().values():
+                found.append((x - self.holder.extent.x / 2, y - self.holder.extent.y / 2, radius))
+        return found
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -503,6 +532,16 @@ class SampleHolder:
             )
         if self.holders and self.mounted is None:
             raise ValueError("with holders, one is mounted to start with (mounted:)")
+        return self
+
+    @model_validator(mode="after")
+    def _slides_lie_in_the_mounted_holder(self) -> Self:
+        for name, simulation in self.simulations.items():
+            if simulation.slide is None:
+                continue
+            if self.mounted is None:
+                raise ValueError(f"simulations: {name}: a slide lies in a holder, and none is mounted")
+            _place_of(self.holders[self.mounted].holder, simulation.slide.at, f"simulations: {name}: at")
         return self
 
     @model_validator(mode="after")
@@ -804,7 +843,9 @@ def _in_one_unit(data: Any) -> Any:  # noqa: ANN401 - raw input of any shape
     if not isinstance(data, Mapping):
         return data
     stated = {
-        key: data[key] for key in ("initial", "step", "min", "max") if data.get(key) is not None
+        key: data[key]
+        for key in ("initial", "step", "min", "max", "lit")
+        if data.get(key) is not None
     }
     if not any(isinstance(value, str) for value in stated.values()):
         return data
@@ -867,6 +908,9 @@ class Tune:
     step: Number | None = None
     min: Number | None = None
     max: Number | None = None
+    lit: Number | None = None
+    """A source's power, what it comes on at when nothing says otherwise (it was never on since
+    the start, and an acquisition or a switch turns it on): its maximum when not stated."""
     unit: str = ""  # what its numbers are in, from how they are stated
 
     @model_validator(mode="before")
@@ -876,7 +920,12 @@ class Tune:
 
     @model_validator(mode="after")
     def _starts_in_range(self) -> Self:
-        return _starts_in_range(self)
+        _starts_in_range(self)
+        if self.lit is not None and (
+            self.lit <= 0 or (self.max is not None and self.lit > self.max)
+        ):
+            raise ValueError(f"lit {self.lit} is not a power it can come on at (0 < lit <= max)")
+        return self
 
 
 @dataclass(frozen=True, config=STRICT, kw_only=True)
@@ -1459,7 +1508,8 @@ class Instrument:
         section is and in a volume where the plane is, and no sample is treated differently for
         being either.
         """
-        half = self.simulation_at(state, sample).pattern.depth / 2.0
+        pattern = self.simulation_at(state, sample).pattern
+        half = 0.0 if pattern is None else pattern.depth / 2.0  # a bare slide is thin
         at = sum(float(state[move.name]) for move in self.sample_moves(sample))
         sheets = self.sheet_moves(sample)
         has_sheet = any(

@@ -8,7 +8,8 @@ typed events a real transport would.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from newswitch.drivers.uc2.event_broker import UC2EventBroker
@@ -39,6 +40,18 @@ _VIRTUAL_KINDS = {
 }
 
 
+#: Which node of a board's node map is what kind of satellite.
+_NODE_FIELDS = {
+    "node_a": "motor",
+    "node_x": "motor",
+    "node_y": "motor",
+    "node_z": "motor",
+    "node_laser": "laser",
+    "node_led": "led",
+    "node_galvo": "galvo",
+}
+
+
 @dataclass
 class VirtualUC2BusConfig:
     """Configuration for the simulated UC2 bus."""
@@ -49,6 +62,44 @@ class VirtualUC2BusConfig:
     galvo_range: int = 4095  # 12-bit DAC
     objective_slots: int = 2
     fake_nodes: Optional[list[int]] = None  # None -> [11, 12, 13, 20, 21]
+    node_kinds: Optional[dict[int, str]] = None
+    """What each node is (a board's node map); None: uc2canopen's defaults."""
+    homing: dict[str, dict[str, int]] = field(default_factory=dict)
+    """How each axis homes, as a real board's ``homing``: here only its ``release`` (steps backed
+    off from the endstop) matters."""
+    steps_per_um: dict[str, float] = field(default_factory=dict)
+    """Steps per micrometre by axis, to turn a release in steps into where the axis ends."""
+    allow_motion: bool = True
+    port_board: bool = True
+    """Whether the board is on a port (the serial master); a CAN bus has none."""
+
+    @classmethod
+    def from_board(cls, options: Mapping[str, Any], transport: str) -> "VirtualUC2BusConfig":
+        """The virtual twin of a board, from the options it is built with (`bus_options`): its node
+        map, how its axes home and how many steps they take, whether it may move. What only the
+        link needs (channel, bitrate, port) means nothing here."""
+        kinds = {
+            int(options[name]): kind for name, kind in _NODE_FIELDS.items() if name in options
+        }
+        steps = {
+            axis: float(options[key])
+            for axis, key in (
+                ("X", "steps_per_um_x"),
+                ("Y", "steps_per_um_y"),
+                ("Z", "steps_per_um_z"),
+                ("A", "steps_per_deg_a"),
+            )
+            if key in options
+        }
+        homing = {str(axis).upper(): dict(how) for axis, how in options.get("homing", {}).items()}
+        return cls(
+            fake_nodes=sorted(kinds) if kinds else None,
+            node_kinds=kinds or None,
+            homing=homing,
+            steps_per_um=steps,
+            allow_motion=bool(options.get("allow_motion", True)),
+            port_board=transport != "canopen",
+        )
 
 
 class VirtualUC2Bus:
@@ -67,6 +118,8 @@ class VirtualUC2Bus:
         self.state = state
         self.config = config or VirtualUC2BusConfig()
         self.firmware = firmware
+        self.has_port_board = self.config.port_board
+        kinds = self.config.node_kinds or _VIRTUAL_KINDS
         self._board = UC2Node(
             can_id=1,
             kind="master",
@@ -79,10 +132,10 @@ class VirtualUC2Bus:
         self._nodes = {
             can_id: UC2Node(
                 can_id=can_id,
-                kind=_VIRTUAL_KINDS.get(can_id, "motor"),
+                kind=kinds.get(can_id, "motor"),
                 status="idle",
                 firmware="virtual",
-                image=f"esp32_UC2_canopen_slave_{_VIRTUAL_KINDS.get(can_id, 'motor')}_release.bin",
+                image=f"esp32_UC2_canopen_slave_{kinds.get(can_id, 'motor')}_release.bin",
                 build="virtual",
                 mac=f"02:00:00:00:00:{can_id:02X}",
             )
@@ -92,7 +145,7 @@ class VirtualUC2Bus:
         """What was flashed, in order: None for the board, else the node id."""
         self._broker = UC2EventBroker()
         self._positions: dict[str, float] = {axis: 0.0 for axis in STAGE_AXES}
-        self._lasers: dict[int, int] = {}
+        self._lasers: dict[Any, int] = {}
         self._galvo_xy: tuple[int, int] = (0, 0)
         self._galvo_scanning = False
         self._objective_slot = 1
@@ -119,6 +172,7 @@ class VirtualUC2Bus:
         acceleration: Optional[float] = None,
     ) -> float:
         """Simulate a constant-velocity move, emitting telemetry and MotionDone."""
+        self._may_move("amove_axis")
         self._broker.bind_loop()
         speed = speed or self.config.default_speed
         start = self._positions[axis]
@@ -145,11 +199,33 @@ class VirtualUC2Bus:
         """Interrupt a running simulated move."""
         self._stop_flags[axis].set()
 
+    def _may_move(self, what: str) -> None:
+        """Refuse motion as a real board with ``allow_motion: false`` does.
+
+        Raises:
+            PermissionError: Its motion is disabled.
+        """
+        if not self.config.allow_motion:
+            raise PermissionError(
+                f"{what}: motion is disabled on this board (allow_motion: false); nothing was sent"
+            )
+
+    def released(self, axis: str) -> float:
+        """Where homing leaves `axis`: the endstop (0), less the back-off its homing states, in
+        micrometres (degrees for A)."""
+        release = self.config.homing.get(axis.upper(), {}).get("release", 0)
+        steps_per_unit = self.config.steps_per_um.get(axis.upper())
+        return release / steps_per_unit if release and steps_per_unit else 0.0
+
     async def ahome_axis(self, axis: str) -> None:
-        """Simulate homing: drive to zero and emit homing status transitions."""
+        """Simulate homing: drive to the endstop (0), back off as its homing says, and emit the
+        homing status transitions."""
+        self._may_move("ahome_axis")
         self._broker.bind_loop()
         self._broker.publish(HomingChanged(axis=axis, status=1))
         await self.amove_axis(axis, 0.0, is_absolute=True)
+        if self.released(axis):
+            await self.amove_axis(axis, self.released(axis), is_absolute=True)
         self._broker.publish(HomingChanged(axis=axis, status=2))
 
     async def aget_position(self, axis: str) -> float:
@@ -164,7 +240,9 @@ class VirtualUC2Bus:
         return [wanting(self._nodes[can_id], self.firmware) for can_id in sorted(self._nodes)]
 
     async def aidentify(self) -> Optional[UC2Node]:
-        """The simulated master on the port."""
+        """The simulated master on the port; none on a CAN bus, which has no board on a port."""
+        if not self.has_port_board:
+            return None
         return wanting(self._board, self.firmware, board=True)
 
     # -- firmware ------------------------------------------------------------------
@@ -208,8 +286,8 @@ class VirtualUC2Bus:
     # -- illumination ---------------------------------------------------------------
 
     async def aset_laser(self, channel: int, value: int, node: Optional[int] = None) -> None:
-        """Store the simulated laser PWM value."""
-        self._lasers[channel] = value
+        """Store the simulated laser PWM value, of its node's channel."""
+        self._lasers[(node, channel)] = value
 
     async def aled_fill(self, r: int, g: int, b: int) -> None:
         """Simulate filling the LED matrix (no-op beyond bookkeeping)."""

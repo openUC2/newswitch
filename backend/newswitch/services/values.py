@@ -38,6 +38,12 @@ def _in_range(variable: Variable, value: float) -> float:
 _READS_AS = {"um": "µm", "deg": "°"}
 
 
+def _preset(instrument: Any, source: str) -> float | None:  # noqa: ANN401 - the instrument
+    """What a source comes on at, as its description states it (its power's ``lit``)."""
+    tune = instrument.variables.get(f"{source}.power")
+    return getattr(tune, "lit", None)
+
+
 def _copied(entries: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
     """Copies of what is kept here: publishing turns an entry into another class, for good."""
     return {cube: {short: replace(e) for short, e in by.items()} for cube, by in entries.items()}
@@ -80,6 +86,7 @@ class Values:
             self._values[name] = driver.start(self._values[name])
         self._lit = {
             source: self._values.get(f"{source}.power", 0.0)
+            or _preset(instrument, source)
             or instrument.cubes[source].element_at(self._values).max_power
             for source in instrument.sources()
         }

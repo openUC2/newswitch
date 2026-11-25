@@ -36,10 +36,13 @@ cubes:
     tunes:
       power: {actuator: laser-0, initial: 0 mW, step: 1 mW, max: 50 mW}
 
-  led:     # the illumination board's white LED, from below
-    element: {kind: source, emits: led, spectrum: {center: 550 nm, width: 200 nm}, max_power: 50 nW}
+  led:     # the illumination board's white LED, from below. Its power on the sample is a guess, set
+           # so that the simulated camera sees what the real one does: 40 % (PWM 409) at 2 ms makes
+           # the pinhole bright, with the slide black
+    element: {kind: source, emits: led, spectrum: {center: 550 nm, width: 200 nm}, max_power: 5 uW}
     tunes:
-      power: {actuator: led-white, initial: 0 mW, step: 1 nW, max: 50 nW}
+      # lit: what it comes on at, e.g. for an acquisition, unless it was on at something else
+      power: {actuator: led-white, initial: 0 mW, step: 10 nW, max: 5 uW, lit: 2 uW}
 
   ring:    # the illumination board's RGB ring array, filled white, from below
     element: {kind: source, emits: led, spectrum: {center: 550 nm, width: 200 nm}, max_power: 50 nW}
@@ -49,8 +52,12 @@ cubes:
   stage:
     element:
       kind: sample
-      simulation: gfp-beads
-      simulations:   # what the simulated camera sees until the real one is wired
+      simulation: calibration-slide   # what a simulated run (simulate: virtual) has on the stage
+      simulations:
+        calibration-slide:   # what is on the frame: the pinhole slide in slot 1, black but for its holes
+          transmit: 0.9
+          reflect: 1.0e-6
+          slide: {holder: pinhole-slide, at: "slot:A1"}
         gfp-beads:
           fluorophore: egfp
           absorbed: 1.0e-4
@@ -68,7 +75,7 @@ cubes:
         mark: pinhole:B1         # its middle pinhole, 0.3 mm: a bright disc on black
         home: [Z, X, Y, A]       # A, the turret: homed, the 4x is in the light path
         values:
-          led.power: 20 nW
+          led.power: 2 uW        # PWM 409 of 1023
           stage.z: -3520 um      # the 4x in focus on the slide (ImSwitch)
           camera.exposure: 2 ms
     moves:
@@ -99,7 +106,9 @@ cubes:
         b: {center: 460 nm, width: 70 nm}
     tunes:
       frame_rate: {initial: 30 Hz, min: 1 Hz, max: 60 Hz, step: 1 Hz}
-      exposure: {initial: 100 ms, step: 10 ms, min: 1 ms, max: 10 s}
+      # 0.3 ms: the transmitted LED at its lit power (2 uW) through an empty stage fills the camera
+      # to about 55 % (measured 2026-11-24: 0.2 ms 37 %, 0.4 ms 74 %, 0.6 ms saturated)
+      exposure: {initial: 0.3 ms, step: 0.1 ms, min: 0.03 ms, max: 10 s}
       gain: {initial: 0 dB, step: 1 dB, min: 0 dB, max: 24 dB}
       binning: {initial: 1, min: 1, max: 4, step: 1}
 
@@ -172,7 +181,13 @@ hardware:
   cameras:
     # MV-CS060-10UC-PRO. store_image_data: false, or uc2_cam_py records every frame to
     # camera_recording_dir (about 1 GB in minutes of live view at full size)
-    camera: {protocol: usb3-vision, vendor: HikRobot, serial_number: "DB0833733", store_image_data: false}
+    # pixel_format RGB8: the camera debayers, frames come as (y, x, 3) 8-bit color (it also offers
+    # Mono8/10/12, BGR8 and BayerRG8/10/12); needs uc2_cam_py with the HikRobot pixel_format option.
+    # white_balance: fixed and neutral. The camera's own (continuous) balance drifts with what it
+    # sees, and boosted red: an image whose colors depend on the last one. Blue is near 0 anyway: the
+    # detection path's long-pass dichroic (lp_500) lets almost none through.
+    camera: {protocol: usb3-vision, vendor: HikRobot, serial_number: "DB0833733", store_image_data: false,
+             vendor_options: {pixel_format: RGB8, white_balance: {red: 1.0, green: 1.0, blue: 1.0}}}
 
 settings:
   simulate: unwired

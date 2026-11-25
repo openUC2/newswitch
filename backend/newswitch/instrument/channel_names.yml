@@ -45,8 +45,9 @@ dyes:
   - {name: Cy7, excitation: [700 nm, 760 nm], emission: [760 nm, 840 nm]}
 dye_otherwise: Fluorescence
 
-# Channels that end up with one name: add these, in order, until they differ.
-apart_by: [detector, sample, swaps]
+# Channels that end up with one name: add these, in order, until they differ. The source last:
+# two lights alike (a white LED and a white ring) are two channels, of two names.
+apart_by: [detector, sample, swaps, source]
 
 # The whole of what a path does, as a channel's description reads.
 describe: "{source} {excitation_nm} · {side} · {band_nm} · {detector} · {sample}"

@@ -73,6 +73,27 @@ dev-frontend:
 agent *args:
     cd backend && uv run --extra agent python app.py {{args}}
 
+# A rig's description run as its digital twin: its drivers on a virtual board, cameras rendered,
+# nothing real touched (NEWSWITCH_SIMULATE=virtual). It is its own device to the server
+# (ARKITEKT_DEVICE_ID, unless set: <host>-<instrument>-twin) with its own mesh node (its state in
+# backend/.arkitekt/state-<instrument>-twin: one node per state folder), so it runs beside the real
+# rig rather than taking over its connection; the first start asks for a login.
+#   just twin johannes-frame --url <server>
+twin instrument *args:
+    cd backend && NEWSWITCH_CONFIG=instruments/{{instrument}} NEWSWITCH_SIMULATE=virtual ARKITEKT_DEVICE_ID="${ARKITEKT_DEVICE_ID:-$(hostname)-{{instrument}}-twin}" XDG_STATE_HOME="${XDG_STATE_HOME:-$PWD/.arkitekt/state-{{instrument}}-twin}" uv run --extra agent python app.py {{args}}
+
+# The network tested, not the camera: any description, everything simulated, each camera's stream
+# sending the time it sends and a frame number (NEWSWITCH_SIMULATE=debug), as its own device with
+# its own mesh node too (<host>-<instrument>-debug).
+#   just debug-stream johannes-frame --url <server>
+debug-stream instrument *args:
+    cd backend && NEWSWITCH_CONFIG=instruments/{{instrument}} NEWSWITCH_SIMULATE=debug ARKITEKT_DEVICE_ID="${ARKITEKT_DEVICE_ID:-$(hostname)-{{instrument}}-debug}" XDG_STATE_HOME="${XDG_STATE_HOME:-$PWD/.arkitekt/state-{{instrument}}-debug}" uv run --extra agent python app.py {{args}}
+
+# newswitch's native module (backend/native, Rust): acquisitions streamed into mikro exposure by
+# exposure, straight from the camera's ring. Needs a Rust toolchain (rustup, in ~/.cargo/bin).
+native:
+    cd backend && PATH="$HOME/.cargo/bin:$PATH" uv pip install --reinstall-package newswitch-native ./native
+
 # The UC2 bus of the description NEWSWITCH_CONFIG names: what is on it, and its firmware.
 # Talks to the port itself: stop whatever holds it (a server, ImSwitch) first. Needs the extra 'uc2'.
 #   just uc2 scan | status | flash --dry-run | flash [--node 11] [--no-board] [--yes]

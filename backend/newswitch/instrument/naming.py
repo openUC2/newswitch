@@ -62,7 +62,7 @@ class Dye:
     emission: tuple[Nanometres, Nanometres]
 
 
-Part = Literal["detector", "sample", "swaps"]
+Part = Literal["detector", "sample", "swaps", "source"]
 
 
 @dataclass(frozen=True, config=STRICT)

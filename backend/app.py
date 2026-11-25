@@ -143,7 +143,9 @@ async def provide_lovekit_sink(current: Run) -> Tuple[FrameSink, CameraStreams]:
     Optional there.)
     """
     cameras = cameras_of(current.instrument)
-    return (LovekitSink(cameras) if cameras else None), CameraStreams()  # pyright: ignore[reportReturnType]
+    test_pattern = current.settings.simulate == "debug"  # the network tested, not the cameras
+    sink = LovekitSink(cameras, test_pattern=test_pattern) if cameras else None
+    return sink, CameraStreams()  # pyright: ignore[reportReturnType]
 
 
 async def provide_dataset_store(current: Run, client: Mikro) -> DatasetStore:
@@ -158,7 +160,7 @@ def load_run() -> Run:
     Raises:
         SpecError: None is named, or what is named is no valid description.
     """
-    return Run.of(load_settings())
+    return Run.of(load_settings()) #TODO: make this more functional, i want a load_run that takes a path and returns a run,
 
 
 #: newswitch, as arkitekt finds it (``arkitekt ... app``, ``$ARKITEKT_APP``). Global, and declared
@@ -173,7 +175,7 @@ app = App(
 
 # --- models: what travels by value in arguments, returns and states
 for model in MODELS:
-    app.register_model(model)
+    app.register_model(model) #TODO: do we really need all these models to be registered?
 
 # --- what every microscope has: files, hooks, the expanse, calibration, light paths
 app.register_state(IOState, required_locks=[locks.IO])

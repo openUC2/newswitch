@@ -161,10 +161,16 @@ def write_mount(path: Path, sample: str, holder: str, mount: Mount) -> None:
 
 
 def _description_file() -> Optional[Path]:
-    """The description this run was started with, if any."""
-    from newswitch.settings import load_settings
+    """The description this run was started with, if a measured mount is written into it: not
+    when the run is simulated (``simulate: everything`` or ``virtual``), whose mount says nothing
+    of the real microscope the description is of."""
+    from newswitch.settings import SIMULATED, load_settings
 
-    named = load_settings().instrument
+    settings = load_settings()
+    if settings.simulate in SIMULATED:
+        logger.info("a simulated run (%s): the mount is not written down", settings.simulate)
+        return None
+    named = settings.instrument
     if named is None:
         return None
     return named / "microscope.yml" if named.is_dir() else named

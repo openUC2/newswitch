@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import CAMERA_PROTOCOLS
 from newswitch.instrument.spec import Drive, Instrument, Probe, Sensor
+from newswitch.settings import SIMULATED, Simulate
 from newswitch.models.devices import Detector, DetectorAxis
 
 
@@ -121,9 +122,7 @@ def cameras(instrument: Instrument) -> tuple[list[Detector], dict[str, dict[str,
     return (found, vendor_options) if found else None
 
 
-def check_wired(
-    instrument: Instrument, simulate: Literal["everything", "unwired", "nothing"]
-) -> None:
+def check_wired(instrument: Instrument, simulate: Simulate) -> None:
     """Check that what is not to be simulated can be reached.
 
     With nothing to simulate, a variable with no driver has nothing to take it anywhere, and a
@@ -135,7 +134,7 @@ def check_wired(
     problems = [
         f"the probe {name}: no driver reads a probe yet, so it is simulated or nothing"
         for name in instrument.probes()
-        if simulate != "everything"
+        if simulate not in SIMULATED
     ]
     if simulate == "nothing":
         problems += [
@@ -157,7 +156,7 @@ def check_wired(
             for name in instrument.detectors()
             if name not in instrument.hardware.cameras
         ]
-    if simulate != "everything":
+    if simulate not in SIMULATED:
         # A rig really wired this way while the software steps too would move twice per plane.
         problems += [
             f"{drive.source} -> {drive.target}: no driver can arm this wire yet"

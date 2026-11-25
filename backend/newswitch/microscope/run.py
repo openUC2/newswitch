@@ -28,13 +28,13 @@ class Run:
 
     settings: Settings
     instrument: Optional[Instrument] = None
-    mikro: Optional[MikroConnection] = None
+    mikro: Optional[MikroConnection] = None  #TODO: lets dicuss if we should overwrite this with services instead of passig it int an use
     """Where a mikro is, in FastAPI mode (`newswitch.infra.mikro.app`)."""
 
     @classmethod
     def of(cls, settings: Settings, mikro: Optional[MikroConnection] = None) -> Run:
         """The run of `settings`, on the instrument they came from."""
-        return cls(settings, load_devices(settings), mikro)
+        return cls(settings, load_devices(settings), mikro) # TODO: same here no of method
 
     @cached_property
     def microscope(self) -> Microscope:

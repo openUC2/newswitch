@@ -10,9 +10,10 @@ while it runs lives in its states.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import Literal, Optional, TYPE_CHECKING, get_args
 
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
@@ -23,6 +24,13 @@ if TYPE_CHECKING:
 BACKEND_DIR = Path(__file__).parent.parent
 #: Names the instrument newswitch runs on.
 CONFIG_ENV_VAR = "NEWSWITCH_CONFIG"
+#: Runs the description named with another `Settings.simulate` than it states: ``virtual`` runs a
+#: rig's description as its digital twin, without touching the file.
+SIMULATE_ENV_VAR = "NEWSWITCH_SIMULATE"
+
+Simulate = Literal["everything", "virtual", "debug", "unwired", "nothing"]
+#: The modes in which no hardware is reached at all.
+SIMULATED: tuple[str, ...] = ("everything", "virtual", "debug")
 
 
 class Settings(BaseModel):
@@ -31,10 +39,16 @@ class Settings(BaseModel):
     # a misspelled key is an error, not ignored
     model_config = ConfigDict(extra="forbid")
 
-    simulate: Literal["everything", "unwired", "nothing"]
-    """What has no hardware: all of it, to run a description dry; what its ``hardware`` section
-    does not wire, so that a real camera can sit beside a simulated stage; or nothing, so that what
-    is not wired is refused."""
+    simulate: Simulate
+    """What has no hardware: all of it, to run a description dry (``everything``: its variables
+    simulated, its ``hardware`` section left aside); all of it, but with its drivers running on
+    virtual boards and simulated cameras (``virtual``: the digital twin of a rig, its homing and
+    wiring included); all of it, as ``everything``, but each camera's stream sending the time it
+    sends instead of the camera's frames (``debug``: to test the network, `infra.streaming.
+    test_pattern`); what its ``hardware``
+    section does not wire, so that a real camera can sit beside a simulated stage (``unwired``);
+    or nothing, so that what is not wired is refused.
+    ``$NEWSWITCH_SIMULATE`` overrides it for a run."""
     db_path: str
     """SQLite file of the arkitekt agent (state history, journal); relative to the working
     directory."""
@@ -67,6 +81,7 @@ def load_settings(named: Optional[str] = None) -> Settings:
     Raises:
         SpecError: None is named, or what is named is no valid description.
     """
+    #TODO: no local imports
     from newswitch.instrument import spec
     from newswitch.instrument.errors import SpecError
 
@@ -78,7 +93,36 @@ def load_settings(named: Optional[str] = None) -> Settings:
     path = Path(named).expanduser()
     if not path.is_absolute():
         path = BACKEND_DIR / path
-    return spec.load(path).settings.model_copy(update={"instrument": path})
+    settings = spec.load(path).settings.model_copy(update={"instrument": path}) #TODO: this is weird
+    override = os.environ.get(SIMULATE_ENV_VAR) #TO: no no overrwide, this is a bad idea, it should be passed in as an argument to load_settings
+    if override:
+        if override not in get_args(Simulate):
+            raise SpecError(
+                f"{SIMULATE_ENV_VAR}={override!r} is no simulation mode: one of " #TODO: should be vlaidated py pydanic
+                f"{', '.join(get_args(Simulate))}"
+            )
+        if override != settings.simulate:
+            logging.getLogger(__name__).info(
+                "%s: simulate %s instead of %s (%s), with files of its own",
+                path.name,
+                override,
+                settings.simulate,
+                SIMULATE_ENV_VAR,
+            )
+            settings = settings.model_copy(update={"simulate": override, **_apart(settings, override)})
+    return settings
+
+
+def _apart(settings: Settings, mode: str) -> dict[str, object]:
+    """The files of a run in `mode` beside the one its description is for: its own agent database,
+    image and cache folders (the cache is cleared on start), so a twin running beside the rig
+    disturbs none of the rig's."""
+    db = Path(settings.db_path)
+    return {
+        "db_path": str(db.with_name(f"{db.stem}.{mode}{db.suffix}")),
+        "image_dir": settings.image_dir / mode,
+        "cache_dir": settings.cache_dir / mode,
+    }
 
 
 def load_devices(config: Settings) -> Instrument | None:

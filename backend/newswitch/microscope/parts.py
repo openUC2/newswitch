@@ -18,7 +18,7 @@ from newswitch.drivers.base import Driver, Simulated, build_driver
 from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
+from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch import models
 from newswitch.instrument import parts as instrument_parts
 from newswitch.instrument.errors import SpecError
@@ -39,7 +39,7 @@ from newswitch.services.metadata import MetadataManager
 from newswitch.services.optics import OpticsManager
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
-from newswitch.settings import Settings
+from newswitch.settings import SIMULATED, Settings
 from newswitch.states.autofocus import AutofocusState
 from newswitch.states.calibration import CalibrationState
 from newswitch.states.detector import DetectorState
@@ -113,12 +113,16 @@ def bus_options(hardware: Hardware) -> dict[str, Any]:
 
 
 def build_uc2_bus(settings: Settings, instrument: Instrument, uc2_state: UC2State) -> UC2BusManager:
-    """The bus of the board: simulated when everything is, else REST or CANopen, as it says. Each
-    is told the firmware the description names, which is no option of its link."""
+    """The bus of the board: simulated when everything is, virtual like the board when the rig runs
+    as its twin, else REST or CANopen, as it says. Each is told the firmware the description names,
+    which is no option of its link."""
     board = instrument.hardware.board
     assert board is not None
-    if settings.simulate == "everything":
+    if settings.simulate in ("everything", "debug"):
         return VirtualUC2Bus(state=uc2_state, firmware=board.firmware)
+    if settings.simulate == "virtual":
+        config = VirtualUC2BusConfig.from_board(bus_options(instrument.hardware), board.transport)
+        return VirtualUC2Bus(state=uc2_state, config=config, firmware=board.firmware)
     logger.info("UC2 transport: %s", board.transport)
     options = bus_options(instrument.hardware)
     where = f"boards.{board.name}"
@@ -140,12 +144,12 @@ def build_detector_manager(
 ) -> DetectorManager:
     """Real cameras through uc2_cam_py, as the description wires them, else rendering from the optics.
 
-    With ``simulate: everything`` a description's cameras are not opened. Without the extra "camera"
+    With ``simulate: everything`` or ``virtual`` a description's cameras are not opened. Without the extra "camera"
     (uc2_cam_py not importable) the optics stand in with a warning on ``unwired``, and it is an error
     on ``nothing``. A camera that cannot be opened is an error: startup fails.
     ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
     """
-    found = None if settings.simulate == "everything" else instrument_parts.cameras(instrument)
+    found = None if settings.simulate in SIMULATED else instrument_parts.cameras(instrument)
     if found:
         cameras, vendor_options = found
         try:
@@ -196,7 +200,7 @@ def build_drivers(
                 drivers[name] = DetectorTune(detector, variable.cube, short)
             continue
         actuator = instrument.hardware.actuators.get(variable.actuator or "")
-        if settings.simulate == "everything" or actuator is None:
+        if settings.simulate in ("everything", "debug") or actuator is None:
             continue
         drivers[name] = build_driver(actuator.driver, variable, actuator.options, {"bus": bus})
     return drivers
@@ -233,7 +237,7 @@ class Microscope:
     acquisition: Optional[protocols.AcquisitionManager]
 
 
-def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Microscope:
+def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Microscope: # TODO: shis should be actually inside the startup hook and not called by a method of the run, lets class based patterns
     """Build everything `instrument` has.
 
     Args:

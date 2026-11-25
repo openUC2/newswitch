@@ -19,7 +19,7 @@ from scipy import ndimage
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.predict import Answer
 from newswitch.instrument.space import holder_to_stage
-from newswitch.instrument.spec import Instrument, Pattern, Probe, Stain
+from newswitch.instrument.spec import Instrument, Pattern, Probe, SimulatedSlide, Stain, _place_of
 from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
 
 #: The hidden errors, in an instrument's folder.
@@ -69,6 +69,8 @@ def _beads(pattern: Pattern) -> np.ndarray:
 
 #: How far a bead's light is drawn, in widths of it; how dim one may be before it is not.
 _REACH_SIGMAS = 4.0
+#: What a simulation without beads (a bare slide) has of them: none.
+_NO_BEADS = Pattern(beads=0, radius="1 um", depth="1 um")  # type: ignore[arg-type]
 _FAINTEST = 1e-3
 #: How many pixels of a frame are worth drawing bead by bead, narrowest first. The rest are blurred
 #: together, so that a frame far out of focus, where each would paint all of it, costs no more.
@@ -205,7 +207,7 @@ class Simulator:
         electrical = simulation.electrical
         if electrical is None:
             return out.astype(np.float32)
-        y, x, depth = self.beads_in_sample(simulation.pattern, sample)
+        y, x, depth = self.beads_in_sample(simulation.pattern or _NO_BEADS, sample)
         columns_um = (grid.a1.x + np.arange(grid.columns) * grid.pitch.x) * 1000.0
         rows_um = (grid.a1.y + np.arange(grid.rows) * grid.pitch.y) * 1000.0
         dy = y[:, None, None] - rows_um[None, :, None]
@@ -288,7 +290,8 @@ class Simulator:
             answer,
             answer.electrons_by_source,
             *self._view(detector, state, answer),
-            self._through(self._stains(detector, state, answer), answer.band_nm or 550.0),
+            self._through(self._stains(detector, state, answer), answer.band_nm or 550.0)
+            * self._opening(detector, state, answer),
         )
 
     def render_colors(self, detector: str, state: Mapping[str, Any]) -> dict[str, np.ndarray]:
@@ -300,13 +303,14 @@ class Simulator:
         view = self._view(detector, state, answer)
         colors = self.instrument.cubes[detector].element_at(state).colors
         stains = self._stains(detector, state, answer)
+        opening = self._opening(detector, state, answer)
         return {
             color: self._expose(
                 detector,
                 answer,
                 electrons,
                 *view,
-                self._through(stains, colors[color].center),
+                self._through(stains, colors[color].center) * opening,
             )
             for color, electrons in answer.electrons_by_color.items()
         }
@@ -347,9 +351,10 @@ class Simulator:
         """What of the sample lands on each pixel, how far each is from the middle (0 to 1), where
         each is from the middle along x and y in micrometres of the sample, and how much a bead takes
         of what passes through it."""
-        pattern = self.instrument.simulation_at(
-            state, self.instrument.seen_sample(detector, state)
-        ).pattern
+        pattern = (
+            self.instrument.simulation_at(state, self.instrument.seen_sample(detector, state)).pattern
+            or _NO_BEADS
+        )
         width, height = answer.size
         columns, rows = np.meshgrid(np.arange(width, dtype=float), np.arange(height, dtype=float))
         centred = np.stack([columns - (width - 1) / 2, rows - (height - 1) / 2])
@@ -380,22 +385,79 @@ class Simulator:
             through = through * (1.0 - stain.darkens * amount * there)
         return through
 
-    def _slice(
-        self, detector: str, state: Mapping[str, Any], answer: Answer, pattern: Pattern
-    ) -> np.ndarray:
-        """What of the sample lands on each pixel: each bead lit as far as it is, spread as far as
-        it is out of focus, and with its light conserved."""
-        # the camera is mounted slightly turned
+    def _sensor(
+        self, detector: str, state: Mapping[str, Any], answer: Answer
+    ) -> tuple[np.ndarray, tuple[float, float]]:
+        """How a pixel steps on the stage as the camera truly is (slightly turned, by the truth),
+        and how far the filter's wedge shifts the image on the sensor, in pixels."""
         angle = math.radians(self.truth.get("camera_rotation_deg", {}).get(detector, 0.0))
         turn = np.array([[math.cos(angle), -math.sin(angle)], [math.sin(angle), math.cos(angle)]])
         to_sample = turn @ np.array(answer.pixel_to_stage)
-        # the filter's wedge shifts the whole image on the sensor
         wedge = self.truth.get("filter_wedge_px")
         shift = (
             wedge["shift"]
             if wedge and state.get(wedge["variable"]) == wedge["slot"]
             else (0.0, 0.0)
         )
+        return to_sample, shift
+
+    def holes_on_stage(self, slide: SimulatedSlide, sample: str) -> np.ndarray:
+        """Where `slide`'s holes truly are on `sample`'s stage, as ``(x, y, radius)`` in
+        micrometres: in its place of the mounted holder, through the mount as it truly is (as
+        `beads_on_stage`)."""
+        holder_name = self.mounted(sample)
+        if holder_name is None:
+            return np.zeros((3, 0))
+        mounted = self.instrument.sample_holder(sample).holders[holder_name]
+        at_x, at_y = _place_of(mounted.holder, slide.at, "at")
+        holes = np.array(
+            [[(at_x + x) * 1000.0, (at_y + y) * 1000.0, r * 1000.0] for x, y, r in slide.holes()]
+        ).T.reshape(3, -1)
+        offset = self.truth.get("mount_offset_um", {})
+        if sample in offset:
+            offset = offset[sample]
+        matrix = holder_to_stage(mounted.mount, (offset.get("x", 0.0), offset.get("y", 0.0)))
+        on_stage = matrix[:2, :2] @ holes[:2] + matrix[:2, 3:4]
+        return np.stack([on_stage[0], on_stage[1], holes[2]])
+
+    def _opening(
+        self, detector: str, state: Mapping[str, Any], answer: Answer
+    ) -> np.ndarray | float:
+        """How much of the light passing straight through the sample reaches each pixel past an
+        opaque slide: all of it inside its holes, none elsewhere, the edge pixels in part. 1 with
+        no slide."""
+        sample = self.instrument.seen_sample(detector, state)
+        slide = self.instrument.simulation_at(state, sample).slide
+        if slide is None:
+            return 1.0
+        to_sample, shift = self._sensor(detector, state, answer)
+        width, height = answer.size
+        x, y, radius = self.holes_on_stage(slide, sample)
+        columns, rows = np.linalg.inv(to_sample) @ np.stack(
+            [x - answer.centre[0], y - answer.centre[1]]
+        )
+        columns = columns + (width - 1) / 2 + shift[0]
+        rows = rows + (height - 1) / 2 + shift[1]
+        pixel_um = math.hypot(to_sample[0, 0], to_sample[1, 0])
+        opening = np.zeros((height, width))
+        for column, row, reach in zip(columns, rows, radius / pixel_um):
+            left, right = max(int(column - reach) - 1, 0), min(int(column + reach) + 2, width)
+            top, bottom = max(int(row - reach) - 1, 0), min(int(row + reach) + 2, height)
+            if left >= right or top >= bottom:
+                continue
+            across = np.arange(left, right) - column
+            down = np.arange(top, bottom) - row
+            distance = np.hypot(across[np.newaxis, :], down[:, np.newaxis])
+            inside = np.clip(reach + 0.5 - distance, 0.0, 1.0)
+            opening[top:bottom, left:right] = np.maximum(opening[top:bottom, left:right], inside)
+        return opening
+
+    def _slice(
+        self, detector: str, state: Mapping[str, Any], answer: Answer, pattern: Pattern
+    ) -> np.ndarray:
+        """What of the sample lands on each pixel: each bead lit as far as it is, spread as far as
+        it is out of focus, and with its light conserved."""
+        to_sample, shift = self._sensor(detector, state, answer)
         width, height = answer.size
         field = np.zeros((height, width))
         sample = self.instrument.seen_sample(detector, state)

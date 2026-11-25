@@ -261,7 +261,7 @@ at the working directory.
 
 ```yaml
 settings:
-  simulate: everything               # everything | unwired | nothing, see "How it reaches hardware"
+  simulate: everything               # everything | virtual | debug | unwired | nothing, see "How it reaches hardware"
   db_path: arkitekt_agent.db         # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images   # where the file IO writes
   cache_dir: /tmp/newswitch/cache    # acquired frames; cleared on every start
@@ -444,11 +444,15 @@ the free memory is refused too, and stopping one part way keeps nothing.
 
 ## How it reaches hardware
 
-`settings.simulate` says what has no hardware:
+`settings.simulate` says what has no hardware. `NEWSWITCH_SIMULATE` overrides it for one run without
+touching the file, so a rig's description runs as its twin with `NEWSWITCH_SIMULATE=virtual` (`just
+twin`) and as a stream check with `NEWSWITCH_SIMULATE=debug`:
 
 | Value | Means |
 | --- | --- |
 | `everything` | Run a description dry: its `hardware` section opens nothing, apart from a board giving it the UC2 actions on a virtual bus. |
+| `virtual` | A rig's digital twin: its own drivers run on a virtual board shaped like its own (node map, homing with its back-off, steps per µm, `allow_motion`), and its cameras are rendered. Homing moves the stage, and a sample simulation with a `slide` (an opaque slide whose places are holes, e.g. `pinhole-slide` in `slot:A1`) shows a calibration slide, so `calibrate_mount` runs end to end; a twin never writes a mount into the description. |
+| `debug` | As `everything`, but each camera's stream (the agent's lovekit stream) sends the time it sends, a frame number and a bar sweeping across once a second, drawn at the stream's size: no camera, optics or conversion behind it. Held against a clock, what a viewer shows is the encoder, the network and the decoder alone; a skipped number is a frame lost on the way. |
 | `unwired` | What the section wires is real, the rest simulated: a real camera beside a simulated stage. Detectors are all real or all simulated, and without `uc2_cam_py` the optics stand in, with a warning. |
 | `nothing` | What the section does not wire stops the start, and every such thing is listed. So does a wired camera without `uc2_cam_py`: nothing here shows a rendered image in its place. |
 
