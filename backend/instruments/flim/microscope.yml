@@ -33,6 +33,7 @@ cubes:
   stage:
     element:
       kind: sample
+      depth: 4 um  # a section: thin, but not flat
       simulation: gfp-beads
       simulations:   # what can be on it; simulation: says which is
         gfp-beads:

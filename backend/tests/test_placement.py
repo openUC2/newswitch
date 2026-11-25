@@ -122,7 +122,7 @@ def test_the_rendered_image_moves_with_the_camera(instrument: spec.Instrument) -
     centre = simulator._answer("camera_green", moved).centre
     assert abs(centre[0]) == pytest.approx(6.5)
     matched = {**start, "stage.x": centre[0], "stage.y": centre[1]}
-    pattern = instrument.simulation_at(start, "stage").pattern
+    pattern = simulator.simulation_of("stage").pattern
 
     def beads(state: dict[str, Any]) -> np.ndarray:
         return simulator._slice(

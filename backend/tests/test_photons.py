@@ -11,6 +11,7 @@ import yaml
 
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument
+from newswitch.simulation import light
 from newswitch.simulation.simulator import SimulatedMicroscope
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
@@ -30,7 +31,7 @@ def described(tmp_path: Path, change: Callable[[dict[str, Any]], Any]) -> spec.I
 
 def electrons(instrument: spec.Instrument, detector: str = "camera_green") -> float:
     """What the laser makes at `detector`, per milliwatt and millisecond."""
-    entry = tracing.coupling(instrument, detector, instrument.initial_state())
+    entry = light.traced(instrument, detector, instrument.initial_state())
     return entry["laser_488"]["electrons_per_mw_ms"]
 
 
@@ -109,8 +110,9 @@ def test_more_na_collects_more(tmp_path: Path) -> None:
 def test_the_full_chain_by_hand(tmp_path: Path) -> None:
     """A bead's electrons per milliwatt and millisecond, multiplied out factor by factor."""
     instrument = described(tmp_path, lambda d: None)
-    grid = tracing.wavelengths(instrument)
-    sample = instrument.simulation_at(instrument.initial_state(), "stage")
+    grid = light.grid(instrument)
+    holder = instrument.sample_holder("stage")
+    sample = holder.simulations[holder.simulation]
     photons = 1e-6 * 488e-9 / (6.62607015e-34 * 299792458.0)
     laser = tracing.gaussian(grid, 488.0, 2.0)
     laser = laser / laser.sum()

@@ -16,10 +16,21 @@ import numpy as np
 from scipy import ndimage
 
 from newswitch.instrument.compiler import compile_instrument
+from newswitch.instrument.errors import SpecError
 from newswitch.instrument.predict import Answer
 from newswitch.instrument.space import holder_to_stage
-from newswitch.instrument.spec import Instrument, Pattern, Probe, SimulatedSlide, Stain, place_of
+from newswitch.instrument.spec import (
+    Instrument,
+    Pattern,
+    PointDetector,
+    Probe,
+    SimulatedSlide,
+    Simulation,
+    Stain,
+    place_of,
+)
 from newswitch.instrument.tracing import depth_of_field_um, gaussian
+from newswitch.simulation import light
 from newswitch.simulation.truth import load_truth, optical_errors
 
 #: What the air beside the sample is, unless the truth says otherwise.
@@ -131,16 +142,42 @@ class Simulator:
     """Renders what a detector sees under some state of the instrument."""
 
     def __init__(self, instrument: Instrument) -> None:
-        """A simulator of `instrument`, with its hidden errors if it has any."""
+        """A simulator of `instrument`, with its hidden errors if it has any.
+
+        Raises:
+            SpecError: A simulation lacks what the simulator needs to draw it (`problems`).
+        """
+        found = problems(instrument)
+        if found:
+            raise SpecError(f"{instrument.name}: {'; '.join(found)}")
         self.instrument = instrument
         self.truth = load_truth(instrument)
-        self._table = compile_instrument(instrument, optical_errors(instrument))
+        self._grid = light.grid(instrument)
+        self._table = compile_instrument(instrument, optical_errors(instrument), self._grid)
+        self.on: dict[str, str] = {
+            sample: instrument.sample_holder(sample).simulation for sample in instrument.samples()
+        }
+        """Which of its simulations is on each sample: what its holder says, until `put`."""
         self._bead_positions: dict[tuple[Pattern, str, str | None], np.ndarray] = {}
         self._noise = np.random.default_rng(11)
         self.mounted: Callable[[str], str | None] = lambda sample: (
             self.instrument.sample_holder(sample).mounted
         )
         """Which holder each sample is mounted on: the space says (`newswitch.services.space`)."""
+
+    def simulation_of(self, sample: str) -> Simulation:
+        """What is on `sample` now."""
+        return self.instrument.sample_holder(sample).simulations[self.on[sample]]
+
+    def put(self, sample: str, simulation: str) -> None:
+        """Put another of its simulations on `sample`.
+
+        Raises:
+            KeyError: Its holder has no such simulation.
+        """
+        if simulation not in self.instrument.sample_holder(sample).simulations:
+            raise KeyError(f"{sample}: no simulation {simulation!r}")
+        self.on[sample] = simulation
 
     def read_point(self, probe: str) -> float:
         """What a probe at a point reads now, as its model says, strayed by its noise.
@@ -187,7 +224,7 @@ class Simulator:
             )
             return noise.normal(0.0, element.model.noise, (n, rows, columns)).astype(np.float32)
         out = noise.normal(0.0, element.model.noise, (n, grid.rows, grid.columns))
-        simulation = self.instrument.simulation_at(state, sample)
+        simulation = self.simulation_of(sample)
         electrical = simulation.electrical
         if electrical is None:
             return out.astype(np.float32)
@@ -313,9 +350,7 @@ class Simulator:
         counts = self._electrons(
             answer, answer.electrons_by_source, *self._view(detector, state, answer)
         )
-        fluorophore = self.instrument.simulation_at(
-            state, self.instrument.seen_sample(detector, state)
-        ).fluorophore
+        fluorophore = self.simulation_of(self.instrument.seen_sample(detector, state)).fluorophore
         if fluorophore is None:
             shares = np.zeros(bins.size)
             shares[0] = 1.0
@@ -327,7 +362,15 @@ class Simulator:
         return self._noise.poisson(expected).clip(0, 65535).astype(np.uint16)
 
     def _answer(self, detector: str, state: Mapping[str, Any]) -> Answer:
-        return self._table.answer(detector, {**state, f"{detector}.binning": 1})
+        """What the optics make of what is on the sample `detector` sees: its light, and how deep
+        it is."""
+        simulation = self.simulation_of(self.instrument.seen_sample(detector, state))
+        return self._table.answer(
+            detector,
+            {**state, f"{detector}.binning": 1},
+            couple=lambda found: light.coupling(found, simulation, self._grid),
+            depth_um=0.0 if simulation.pattern is None else simulation.pattern.depth,
+        )
 
     def _view(
         self, detector: str, state: Mapping[str, Any], answer: Answer
@@ -336,8 +379,7 @@ class Simulator:
         each is from the middle along x and y in micrometres of the sample, and how much a bead takes
         of what passes through it."""
         pattern = (
-            self.instrument.simulation_at(state, self.instrument.seen_sample(detector, state)).pattern
-            or _NO_BEADS
+            self.simulation_of(self.instrument.seen_sample(detector, state)).pattern or _NO_BEADS
         )
         width, height = answer.size
         columns, rows = np.meshgrid(np.arange(width, dtype=float), np.arange(height, dtype=float))
@@ -353,8 +395,8 @@ class Simulator:
         """Each stain, with how much of it lands on each pixel."""
         return [
             (stain, np.minimum(self._slice(detector, state, answer, stain.pattern), 1.0))
-            for stain in self.instrument.simulation_at(
-                state, self.instrument.seen_sample(detector, state)
+            for stain in self.simulation_of(
+                self.instrument.seen_sample(detector, state)
             ).stains.values()
         ]
 
@@ -411,7 +453,7 @@ class Simulator:
         opaque slide: all of it inside its holes, none elsewhere, the edge pixels in part. 1 with
         no slide."""
         sample = self.instrument.seen_sample(detector, state)
-        slide = self.instrument.simulation_at(state, sample).slide
+        slide = self.simulation_of(sample).slide
         if slide is None:
             return 1.0
         to_sample, shift = self._sensor(detector, state, answer)
@@ -568,8 +610,13 @@ class SimulatedMicroscope:
         self.state: dict[str, Any] = instrument.initial_state()
 
     def set(self, values: Mapping[str, Any]) -> None:
-        """Set variables by their full names, such as ``{"stage.x": 10.0}``."""
+        """Set variables by their full names, such as ``{"stage.x": 10.0}``; and what is on a
+        sample, as ``{"stage.simulation": "dye-only"}``."""
         for name, value in values.items():
+            sample, _, what = name.partition(".")
+            if what == "simulation" and sample in self.simulator.on:
+                self.simulator.put(sample, value)
+                continue
             if name not in self.state:
                 raise KeyError(name)
             self.state[name] = value
@@ -577,3 +624,20 @@ class SimulatedMicroscope:
     def image(self, detector: str) -> np.ndarray:
         """Take an image with `detector`."""
         return self.simulator.render(detector, self.state)
+
+
+def problems(instrument: Instrument) -> list[str]:
+    """What the simulator cannot draw of `instrument`: a detector timing its photons (FLIM) needs
+    the lifetime of every fluorophore it can see."""
+    found = []
+    for detector in instrument.detectors():
+        element = instrument.cubes[detector].element
+        if not isinstance(element, PointDetector) or not element.axes:
+            continue
+        found += [
+            f"{detector}: the simulation {name!r} needs its fluorophore's lifetime"
+            for sample in instrument.samples_of(detector)
+            for name, simulation in instrument.sample_holder(sample).simulations.items()
+            if simulation.fluorophore is not None and simulation.fluorophore.lifetime is None
+        ]
+    return found

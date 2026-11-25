@@ -134,7 +134,7 @@ def expected_pickup(m: Microscope) -> np.ndarray:
     """How strongly each electrode picks up the cells, as the cells and the sample say: (8, 8)."""
     assert m.detector is not None
     simulator = m.detector.simulator  # type: ignore[attr-defined]
-    simulation = m.values.instrument.simulation_at(m.values.snapshot(), "stage")  # type: ignore[union-attr]
+    simulation = m.detector.simulator.simulation_of("stage")  # type: ignore[union-attr]
     y, x, depth = simulator.beads_in_sample(simulation.pattern, "stage")
     rows = A1 + np.arange(8) * PITCH
     distance = np.sqrt(

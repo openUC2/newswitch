@@ -36,18 +36,20 @@ def colors(microscope: SimulatedMicroscope) -> dict[str, np.ndarray]:
 
 def test_it_is_a_thin_section_the_stage_focuses(microscope: SimulatedMicroscope) -> None:
     """Thin, so that it leaves focus as a whole."""
-    assert (
-        microscope.simulator.instrument.simulation_at(microscope.state, "stage").pattern.depth
-        == 4.0
-    )
+    assert microscope.simulator.simulation_of("stage").pattern.depth == 4.0
     roles = Roles(microscope.simulator.instrument)
     assert [move.name for move in roles.focuses("camera")] == ["stage.z"]
 
 
 def test_nothing_on_the_slide_is_about_white(microscope: SimulatedMicroscope) -> None:
     """Without stains the three bands are about as bright: the light is white."""
-    state = {**microscope.state, "stage.simulation": "empty-slide"}
-    rendered = microscope.simulator.render_colors("camera", state)
+    simulator = microscope.simulator
+    on = simulator.on["stage"]
+    simulator.put("stage", "empty-slide")
+    try:
+        rendered = simulator.render_colors("camera", microscope.state)
+    finally:
+        simulator.put("stage", on)
     means = [float(image.astype(float).mean() - 100.0) for image in rendered.values()]
     assert max(means) / min(means) < 1.3
 

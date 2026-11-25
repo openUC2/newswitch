@@ -36,6 +36,8 @@ rules:
   - {name: "{source} · {detector}"}   # nothing above held
 
 # Dyes, by where they are excited and where they emit: a name a microscopist knows the channel by.
+# They also decide which channels of emitted light there are (compiler.reach): a source excites a
+# dye here, and the way to a detector lets through its emission. A pair matching none has no channel.
 dyes:
   - {name: DAPI, excitation: [340 nm, 410 nm], emission: [420 nm, 490 nm]}
   - {name: GFP, excitation: [460 nm, 505 nm], emission: [495 nm, 560 nm]}

@@ -211,3 +211,28 @@ def test_only_the_simulation_reads_the_truth() -> None:
         if "truth.yml" in path.read_text() or "simulation.truth" in path.read_text()
     }
     assert {r for r in readers if not r.startswith("newswitch.simulation")} == set()
+
+
+#: What a description says of what the simulator draws on a sample: its schema stays in the
+#: description (`newswitch.instrument.spec`), and only the simulation reads it.
+SAMPLE_SIMULATION_NAMES = {"Simulation", "Fluorophore", "Pattern", "Stain", "Electrical", "SimulatedSlide"}
+SAMPLE_SIMULATION_FIELDS = {"simulation", "simulations", "fluorophore", "pattern", "stains", "electrical"}
+
+
+def test_only_the_simulation_reads_what_is_simulated_on_a_sample() -> None:
+    """The optics predict from the design alone: what a simulated sample emits, reflects or looks
+    like is the simulator's (`newswitch.simulation`), never what the runtime publishes."""
+    readers: set[str] = set()
+    for path in sorted(PACKAGE.rglob("*.py")):
+        module = _module_of(path)
+        if module.startswith(("newswitch.simulation", "newswitch.tools")) or module == (
+            "newswitch.instrument.spec"
+        ):
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr in SAMPLE_SIMULATION_FIELDS:
+                readers.add(f"{module}: .{node.attr}")
+            elif isinstance(node, ast.alias) and node.name in SAMPLE_SIMULATION_NAMES:
+                readers.add(f"{module}: {node.name}")
+    assert readers == set()

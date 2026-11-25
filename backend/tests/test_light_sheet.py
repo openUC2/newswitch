@@ -15,7 +15,7 @@ from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.predict import Compiled
 from newswitch.instrument.roles import Roles
-from newswitch.instrument.tracing import coupling
+from newswitch.instrument.tracing import transfer, wavelengths
 from newswitch.microscope.parts import build_microscope
 from newswitch.models.acquisition import (
     AcquisitionChannel,
@@ -67,32 +67,30 @@ def test_its_thickness_and_reach_come_from_the_lens(
 
 
 def test_its_only_channel_is_fluorescence(instrument: spec.Instrument, table: Compiled) -> None:
-    """Across the camera's view no light reaches it directly, however much the sample lets through."""
-    state = instrument.initial_state()
-    channel = table.channels(state)[0]
-    assert (channel.source, channel.detector) == ("laser_488", "camera")
-    assert channel.band_nm == pytest.approx(517.0, abs=2.0)
-    assert table.channels({**state, "stage.simulation": "empty-slide"}) == []
+    """Across the camera's view no light reaches it directly, however much the sample lets
+    through: what reaches it is emitted, in the band its filter passes of GFP's emission."""
+    [channel] = table.channels(instrument.initial_state())
+    assert (channel.source, channel.detector, channel.kind) == ("laser_488", "camera", "emitted")
+    assert channel.band_nm == pytest.approx(525.0, abs=2.0)
 
 
 def test_a_sample_leaving_the_sheet_goes_dark(instrument: spec.Instrument, table: Compiled) -> None:
     """At the rate its waist says."""
-    state = {**instrument.initial_state(), "stage.simulation": "gfp-section"}
-    at_focus = table.answer("camera", state).light
-    moved = table.answer("camera", {**state, "stage.z": 5.0}).light
+    state = instrument.initial_state()
+    at_focus = table.answer("camera", state, depth_um=4.0).light
+    moved = table.answer("camera", {**state, "stage.z": 5.0}, depth_um=4.0).light
     waist = 0.488 / (math.pi * 0.02)
     # 4 um deep, so its nearest part has gone 3 um.
     assert moved / at_focus == pytest.approx(math.exp(-2.0 * (3.0 / waist) ** 2))
 
 
-def test_the_stage_moving_the_light_is_calculated(table: Compiled) -> None:
-    """What impacts what comes out of the optics: nothing declares it."""
+def test_the_stage_moving_the_light_is_calculated(tmp_path: Path) -> None:
+    """What impacts what comes out of the optics: nothing declares it. A thin section leaves the
+    sheet as the stage moves it."""
+    section = spec.load(edited(tmp_path, thin))
     changes = next(
         row["changes"]
-        for row in impacts(
-            table.instrument,
-            {**table.instrument.initial_state(), "stage.simulation": "gfp-section"},
-        )
+        for row in impacts(section, section.initial_state())
         if row["variable"] == "stage.z" and row["detector"] == "camera"
     )
     assert "light" in changes
@@ -163,14 +161,23 @@ def test_a_sheet_that_cannot_work_is_refused_when_parsed(
 
 def test_a_sheet_is_in_the_table_only_where_there_is_one(instrument: spec.Instrument) -> None:
     """Every other instrument's table stays as it was."""
-    arriving = coupling(instrument, "camera", instrument.initial_state())
-    assert "sheet" in arriving["laser_488"]
+
+    def shapes(of: spec.Instrument, detector: str) -> dict[str, Any]:
+        grid = wavelengths(of)
+        return {s: found.shape for s, found in transfer(of, detector, of.initial_state(), grid).items()}
+
+    assert "sheet" in shapes(instrument, "camera")["laser_488"]
     other = spec.load(INSTRUMENT.parent / "dual-camera")
-    arriving = coupling(other, "camera_green", other.initial_state())
-    assert all("sheet" not in entry for entry in arriving.values())
+    assert all("sheet" not in shape for shape in shapes(other, "camera_green").values())
 
 
 # --- two things move along z: the sheet, and the stage
+
+
+def thin(data: dict[str, Any]) -> None:
+    """The stage takes a 4 um section rather than a volume, with one on it."""
+    data["cubes"]["stage"]["element"]["depth"] = "4 um"
+    data["cubes"]["stage"]["element"]["simulation"] = "gfp-section"
 
 
 def single_bead(tmp_path: Path, deep: str = "1 um") -> spec.Instrument:
@@ -212,10 +219,7 @@ def test_in_a_volume_the_sheet_focuses_and_the_stage_goes_through(
 def test_in_a_thin_section_the_stage_focuses(tmp_path: Path) -> None:
     """The same law: the sheet can only miss it, and it is the section that leaves focus."""
 
-    def change(data: dict[str, Any]) -> None:
-        data["cubes"]["stage"]["element"]["simulation"] = "gfp-section"
-
-    roles = Roles(spec.load(edited(tmp_path, change)))
+    roles = Roles(spec.load(edited(tmp_path, thin)))
     assert {"blur", "light"} <= set(roles.found["camera", "stage"]["stage.z"])
     assert sorted(roles.found["camera", "stage"]["sheet_lens.z"]) == ["light"]
     assert [move.name for move in roles.focuses("camera")] == ["stage.z"]
@@ -255,7 +259,7 @@ def test_far_out_of_focus_a_bead_is_drawn_as_it_would_be_near(tmp_path: Path) ->
     state = {**instrument.initial_state(), "laser_488.power": 5.0, "stage.z": 100.0}
     state["sheet_lens.z"] = 100.0
     answer = simulator._answer("camera", state)
-    pattern = instrument.simulation_at(state, "stage").pattern
+    pattern = simulator.simulation_of("stage").pattern
     field = simulator._slice("camera", state, answer, pattern)
 
     y, x, depth = _beads(pattern)

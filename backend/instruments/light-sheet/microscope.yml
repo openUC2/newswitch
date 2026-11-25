@@ -27,6 +27,7 @@ cubes:
   stage:
     element:
       kind: sample
+      depth: 200 um  # a volume: where in it the light lands is what is seen
       simulation: gfp-beads
       simulations:   # what can be on it; simulation: says which is
         gfp-beads:

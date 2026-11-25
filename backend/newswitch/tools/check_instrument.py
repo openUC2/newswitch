@@ -114,36 +114,25 @@ def main(argv: list[str] | None = None) -> None:
     for drive in instrument.drives:
         report.info("  wire: %s -> %s", drive.source, drive.target)
 
-    _heading("=== The channels each simulation has: calculated, nothing declared these")
-    for sample in instrument.samples():
-        for simulation in instrument.sample_holder(sample).simulations:
-            current = {**state, instrument.simulation_key(sample): simulation}
-            found = compiled.channels(current)
-            named = channel_names(instrument, found, current, lambda name, slot: f"{name}={slot}")
-            for channel, (name, _) in zip(found, named):
-                if channel.sample != sample:
-                    continue
-                swaps = ", ".join(f"{name}={slot}" for name, slot in channel.swaps.items())
-                report.info(
-                    "  %s: %s: %s: %s -> %s, %.4g electrons at full power, at %.0f nm%s",
-                    sample,
-                    simulation,
-                    name,
-                    channel.source,
-                    channel.detector,
-                    channel.electrons,
-                    channel.band_nm,
-                    f", with {swaps}" if swaps else "",
-                )
+    _heading("=== The channels: calculated from the design, nothing declared these")
+    found = compiled.channels(state)
+    named = channel_names(instrument, found, state, lambda name, slot: f"{name}={slot}")
+    for channel, (name, _) in zip(found, named):
+        swaps = ", ".join(f"{name}={slot}" for name, slot in channel.swaps.items())
+        report.info(
+            "  %s: %s (%s): %s -> %s, %.4g electrons at full power on the reference, at %.0f nm%s",
+            channel.sample,
+            name,
+            channel.kind,
+            channel.source,
+            channel.detector,
+            channel.electrons,
+            channel.band_nm,
+            f", with {swaps}" if swaps else "",
+        )
 
     _heading("=== What each detector will see, for each combination of swaps")
     for current in instrument.swap_states():
-        if any(
-            current[instrument.simulation_key(sample)]
-            != instrument.sample_holder(sample).simulation
-            for sample in instrument.samples()
-        ):
-            continue
         swaps = {
             v.name: current[v.name] for v in instrument.variables.values() if v.verb == "swaps"
         }

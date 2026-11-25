@@ -500,6 +500,10 @@ class SampleHolder:
     kind: Literal["sample"]
     simulation: str
     simulations: Annotated[dict[str, Simulation], Field(min_length=1)]
+    depth: Annotated[Micrometres, Field(gt=0.0)] | None = None
+    """How deep a sample it takes: a section is thin (none: thin), a volume is not. Where in it a
+    light sheet or a focus lands (`Instrument.lit_um`). What a simulation draws is the
+    simulator's alone; nothing the optics predict depends on it."""
     holders: dict[str, MountedHolder] = field(default_factory=dict)
     mounted: str | None = None
     calibration: Calibration | None = None
@@ -1257,33 +1261,14 @@ class Instrument:
         }
 
     def initial_state(self) -> dict[str, Any]:
-        """Every variable at its initial value, and what each sample's holder says is on it."""
-        return {
-            **{name: variable.initial for name, variable in self.variables.items()},
-            **{
-                self.simulation_key(sample): self.sample_holder(sample).simulation
-                for sample in self.samples()
-            },
-        }
+        """Every variable at its initial value."""
+        return {name: variable.initial for name, variable in self.variables.items()}
 
     def swap_states(self) -> Iterator[dict[str, Any]]:
-        """Every combination of the samples' simulations and of what the swaps can put in place.
-
-        The rest is at its initial value.
-        """
+        """Every combination of what the swaps can put in place; the rest at its initial value."""
         swaps = [variable for variable in self.variables.values() if variable.verb == "swaps"]
-        samples = self.samples()
-        on_them = [list(self.sample_holder(sample).simulations) for sample in samples]
-        for simulations in itertools.product(*on_them):
-            for values in itertools.product(*(list(v.slots) for v in swaps)):
-                yield {
-                    **self.initial_state(),
-                    **{
-                        self.simulation_key(sample): simulation
-                        for sample, simulation in zip(samples, simulations)
-                    },
-                    **{v.name: value for v, value in zip(swaps, values)},
-                }
+        for values in itertools.product(*(list(v.slots) for v in swaps)):
+            yield {**self.initial_state(), **{v.name: value for v, value in zip(swaps, values)}}
 
     def detectors(self) -> list[str]:
         """The cubes of the detectors of light, in the order they are described."""
@@ -1466,15 +1451,6 @@ class Instrument:
         assert isinstance(element, SampleHolder), f"{sample!r} holds no sample"
         return element
 
-    def simulation_key(self, sample: str) -> str:
-        """Where a state says what is on `sample`'s holder: ``"stage.simulation"``. No variable
-        changes it."""
-        return f"{sample}.simulation"
-
-    def simulation_keys(self) -> list[str]:
-        """Where a state says what is on each sample's holder."""
-        return [self.simulation_key(sample) for sample in self.samples()]
-
     def sheet_moves(self, sample: str) -> list[Move]:
         """What moves a light sheet through `sample`: a move along the axis, of anything on the way
         to it."""
@@ -1500,16 +1476,23 @@ class Instrument:
             if variable.verb == "moves" and variable.along == "axis"
         ]
 
-    def lit_um(self, state: Mapping[str, Any], focus_um: float = 0.0, *, sample: str) -> float:
+    def lit_um(
+        self,
+        state: Mapping[str, Any],
+        focus_um: float = 0.0,
+        *,
+        sample: str,
+        depth_um: float | None = None,
+    ) -> float:
         """Where the part of the sample that is seen is along the axis.
 
         The part nearest the plane the light makes of it: a sheet's, or else where the optics
         focus, having taken that `focus_um` towards the lens. So in a thin section it is where the
         section is and in a volume where the plane is, and no sample is treated differently for
-        being either.
+        being either. How deep it is, its holder says (`SampleHolder.depth`), or `depth_um`.
         """
-        pattern = self.simulation_at(state, sample).pattern
-        half = 0.0 if pattern is None else pattern.depth / 2.0  # a bare slide is thin
+        depth = self.sample_holder(sample).depth if depth_um is None else depth_um
+        half = (depth or 0.0) / 2.0  # with none stated, it is thin
         at = sum(float(state[move.name]) for move in self.sample_moves(sample))
         sheets = self.sheet_moves(sample)
         has_sheet = any(
@@ -1519,10 +1502,6 @@ class Instrument:
         )
         plane = sum(float(state[move.name]) for move in sheets) if has_sheet else -focus_um
         return min(max(plane, at - half), at + half)
-
-    def simulation_at(self, state: Mapping[str, Any], sample: str) -> Simulation:
-        """What is on `sample`'s holder under `state`."""
-        return self.sample_holder(sample).simulations[state[self.simulation_key(sample)]]
 
     def scanner_of(self, detector: str) -> str | None:
         """The cube whose events walk `detector` through an image, if there is one."""
@@ -1756,12 +1735,6 @@ def _microtime_problems(instrument: Instrument) -> list[str]:
                     f"{detector}: a window of {window:g} ps does not fit in a pulse period of "
                     f"{1e12 / rate:g} ps"
                 )
-        problems += [
-            f"{detector}: the simulation {name!r} needs its fluorophore's lifetime"
-            for sample in instrument.samples_of(detector)
-            for name, simulation in instrument.sample_holder(sample).simulations.items()
-            if simulation.fluorophore is not None and simulation.fluorophore.lifetime is None
-        ]
     return problems
 
 

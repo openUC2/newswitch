@@ -70,12 +70,15 @@ def test_it_has_two_samples_each_seen_by_its_own_camera(instrument: spec.Instrum
 
 
 def test_each_sample_says_what_is_on_it(instrument: spec.Instrument) -> None:
-    """A state holds the simulation of each, and the compiled table keeps them apart."""
+    """The simulator keeps what is on each, apart; the state, and what the optics compile, hold
+    the variables alone."""
+    from newswitch.simulation.simulator import Simulator
+
+    simulator = Simulator(instrument)
+    assert simulator.on == {"stage_a": "gfp-beads", "stage_b": "he-section"}
     state = instrument.initial_state()
-    assert state[instrument.simulation_key("stage_a")] == "gfp-beads"
-    assert state[instrument.simulation_key("stage_b")] == "he-section"
-    other = {**state, instrument.simulation_key("stage_b"): "something-else"}
-    assert state_key(instrument, state) != state_key(instrument, other)
+    assert not any(name.endswith(".simulation") for name in state)
+    assert state_key(instrument, state) == state_key(instrument, instrument.initial_state())
 
 
 # --- what each camera sees

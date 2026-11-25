@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -35,7 +35,6 @@ from newswitch.instrument.spec import (
     Edge,
     Element,
     Filter,
-    Fluorophore,
     Instrument,
     Lens,
     LongPass,
@@ -100,8 +99,9 @@ def _curve_wavelengths(curve: Curve) -> list[float]:
     return []
 
 
-def wavelengths(instrument: Instrument) -> np.ndarray:
-    """The spectrum everything of `instrument` is computed on, in nanometres."""
+def wavelengths(instrument: Instrument, extra: Iterable[float] = ()) -> np.ndarray:
+    """The spectrum everything of `instrument` is computed on, in nanometres: what its parts
+    state, and `extra` (what a simulated sample emits, for the simulator)."""
     stated: list[float] = []
     for element in _elements(instrument):
         match element:
@@ -113,13 +113,7 @@ def wavelengths(instrument: Instrument) -> np.ndarray:
                 stated += _curve_wavelengths(element.curve)
             case Sensor():
                 stated += [color.center for color in element.colors.values()]
-    for simulation in (
-        simulation
-        for sample in instrument.samples()
-        for simulation in instrument.sample_holder(sample).simulations.values()
-    ):
-        if simulation.fluorophore is not None:
-            stated += [simulation.fluorophore.excitation, simulation.fluorophore.emission]
+    stated += list(extra)
     low = max(math.floor(min(stated, default=550.0) - _MARGIN), 1)
     high = math.ceil(max(stated, default=550.0) + _MARGIN)
     return np.arange(float(low), float(high) + 1.0, 1.0)
@@ -210,18 +204,6 @@ def depth_of_field_um(instrument: Instrument, detector: str, state: Mapping[str,
     return wavelength_um * lens.index / lens.na**2
 
 
-def _emitted(
-    fluorophore: Fluorophore | None, absorbed: float | None, on_sample: np.ndarray, grid: np.ndarray
-) -> np.ndarray:
-    """How many photons a bead emits, in all directions, for the photons on it."""
-    if fluorophore is None or absorbed is None:
-        return np.zeros(grid.shape)
-    excitation = gaussian(grid, fluorophore.excitation, fluorophore.excitation_width)
-    emission = gaussian(grid, fluorophore.emission, fluorophore.emission_width)
-    emission = emission / emission.sum()
-    return (on_sample * excitation).sum() * absorbed * fluorophore.quantum_yield * emission
-
-
 def design_wavelength(instrument: Instrument, detector: str, state: Mapping[str, Any]) -> float:
     """The wavelength a route is traced at: what its filters pass, whatever is on the sample.
 
@@ -258,25 +240,33 @@ def _sheet(lens: Element, along: str, wavelength_nm: float) -> dict[str, Any]:
     }
 
 
-def coupling(
-    instrument: Instrument, detector: str, state: Mapping[str, Any]
-) -> dict[str, dict[str, Any]]:
-    """How many electrons each source makes at `detector`, per milliwatt and millisecond.
+@dataclass(frozen=True)
+class Transfer:
+    """What the optics do with one source's light on its way to a detector, whatever the sample:
+    per milliwatt and millisecond, its photons landing on the sample by each route (with the side
+    they land from), and what each way to the detector lets through."""
 
-    That is for a bead, if all of the source's light landed on it: how much does depends on the
-    pixel, and `predict.assemble` says. A source on the same side as the detector reaches it by what
-    the sample reflects and by what it emits; one on the other side by what it lets through, and
-    also by what it emits; a sheet, from across, only by what it emits. Of what is emitted, only
-    what the objective gathers goes on; what passes straight through stays in its cone.
-    """
-    grid = wavelengths(instrument)
+    lit: tuple[tuple[str | None, np.ndarray], ...]
+    detection: tuple[np.ndarray, ...]
+    qe: float
+    gathered: float  # the share of what a point emits that the objective gathers
+    colors: Mapping[str, np.ndarray]  # a color sensor's channels, each its band on the grid
+    shape: Mapping[str, Any]  # a sheet, a field (field_um) or a spot
+
+
+def transfer(
+    instrument: Instrument, detector: str, state: Mapping[str, Any], grid: np.ndarray
+) -> dict[str, Transfer]:
+    """What every source's light goes through to reach `detector`, with nothing said of what it
+    lands on: what the sample does is `couple`'s."""
     stage = instrument.seen_sample(detector, state)
-    sample = instrument.simulation_at(state, stage)
     detection = instrument.detection_routes(detector, state)
     element = instrument.cubes[detector].element_at(state)
     colors = element.colors if isinstance(element, Sensor) else {}
     gathered = collected(_objective(instrument, detection, state))
-    result: dict[str, dict[str, Any]] = {}
+    through = tuple(_route_transmission(instrument, edges, state, grid) for edges in detection)
+    bands = {name: gaussian(grid, color.center, color.width) for name, color in colors.items()}
+    found: dict[str, Transfer] = {}
     for source in instrument.sources():
         emitter = instrument.cubes[source].element_at(state)
         spectrum = np.sum(
@@ -285,50 +275,102 @@ def coupling(
         spectrum = spectrum / spectrum.sum()
         # photons per milliwatt and millisecond: a microjoule's worth, at its wavelength
         photons = 1e-6 * emitter.wavelength * 1e-9 / _HC
-        arriving = np.zeros(grid.shape)
-        unchanged = np.zeros(grid.shape)  # of that, what the sample only let through or reflected
+        lit: list[tuple[str | None, np.ndarray]] = []
         shape: dict[str, Any] = {}
         for edges in instrument.routes(instrument.illumination, source, stage):
-            on_sample = photons * spectrum * _route_transmission(instrument, edges, state, grid)
-            side = edges[-1].side
-            direct = (
-                0.0
-                if side == "orthogonal"
-                else (sample.reflect if side == "epi" else sample.transmit)
+            lit.append(
+                (edges[-1].side, photons * spectrum * _route_transmission(instrument, edges, state, grid))
             )
-            emitted = _emitted(sample.fluorophore, sample.absorbed, on_sample, grid)
-            arriving = arriving + on_sample * direct + emitted * gathered
-            unchanged = unchanged + on_sample * direct
-            if side == "orthogonal":
+            if edges[-1].side == "orthogonal":
                 lens = instrument.cubes[edges[-1].source].element_at(state)
                 shape["sheet"] = _sheet(lens, edges[-1].along, emitter.wavelength)
             if edges[-1].field is not None:
                 shape["field_um"] = edges[-1].field * 1000.0
             else:
                 shape["spot"] = True
-        through = np.zeros(grid.shape)
-        for edges in detection:
-            through = through + arriving * _route_transmission(instrument, edges, state, grid)
-        through = through * element.readout.qe
-        passed = np.zeros(grid.shape)
-        for edges in detection:
-            passed = passed + unchanged * _route_transmission(instrument, edges, state, grid)
-        total = float(through.sum())
-        mean = float((through * grid).sum() / total) if total > 0.0 else None
-        result[source] = {
-            "electrons_per_mw_ms": total,
-            "band_mean_nm": mean,
-            "direct_share": float(passed.sum() * element.readout.qe / total)
-            if total > 0.0
-            else 0.0,
-            **shape,
+        found[source] = Transfer(
+            tuple(lit), through, element.readout.qe, gathered, bands, shape
+        )
+    return found
+
+
+#: What a sample sends back of the light landing on it from one side, as a share of it.
+Direct = Callable[[str | None], float]
+#: What a sample emits, in all directions, for the photons landing on it.
+Emits = Callable[[np.ndarray], np.ndarray]
+
+
+def couple(
+    found: Transfer, grid: np.ndarray, direct: Direct, emits: Emits
+) -> dict[str, Any]:
+    """How many electrons a source makes at the detector, per milliwatt and millisecond, on a
+    sample that sends back `direct` of what lands on it and emits what `emits` says.
+
+    That is for a bead, if all of the source's light landed on it: how much does depends on the
+    pixel, and `predict.assemble` says. A source on the same side as the detector reaches it by what
+    the sample reflects and by what it emits; one on the other side by what it lets through, and
+    also by what it emits; a sheet, from across, only by what it emits. Of what is emitted, only
+    what the objective gathers goes on; what passes straight through stays in its cone.
+    """
+    arriving = np.zeros(grid.shape)
+    unchanged = np.zeros(grid.shape)  # of that, what the sample only let through or reflected
+    for side, on_sample in found.lit:
+        back = 0.0 if side == "orthogonal" else direct(side)
+        arriving = arriving + on_sample * back + emits(on_sample) * found.gathered
+        unchanged = unchanged + on_sample * back
+    through = np.zeros(grid.shape)
+    for route in found.detection:
+        through = through + arriving * route
+    through = through * found.qe
+    passed = np.zeros(grid.shape)
+    for route in found.detection:
+        passed = passed + unchanged * route
+    total = float(through.sum())
+    mean = float((through * grid).sum() / total) if total > 0.0 else None
+    result = {
+        "electrons_per_mw_ms": total,
+        "band_mean_nm": mean,
+        "direct_share": float(passed.sum() * found.qe / total) if total > 0.0 else 0.0,
+        **found.shape,
+    }
+    if found.colors:
+        result["colors"] = {
+            name: float((through * band).sum()) for name, band in found.colors.items()
         }
-        if colors:
-            result[source]["colors"] = {
-                name: float((through * gaussian(grid, color.center, color.width)).sum())
-                for name, color in colors.items()
-            }
     return result
+
+
+def _box(grid: np.ndarray, windows: Iterable[tuple[float, float]]) -> np.ndarray:
+    """1 within any of `windows`, 0 elsewhere."""
+    inside = np.zeros(grid.shape, dtype=bool)
+    for low, high in windows:
+        inside |= (grid >= low) & (grid <= high)
+    return inside.astype(float)
+
+
+def reference_coupling(
+    found: Transfer, reach: Mapping[str, Any] | None, grid: np.ndarray
+) -> dict[str, Any]:
+    """`couple` against a stated reference rather than a sample: for a channel of light sent
+    straight back (`reach` kind ``direct``), a sample that sends back all of it; for one of light
+    emitted, a dye absorbing all of what lands in its excitation windows and emitting it, evenly,
+    in its emission windows, and nothing sent back; where no channel is, nothing.
+
+    So what the optics say of a channel does not depend on a simulated sample: how bright a real
+    one is, is the sample's.
+    """
+    if reach is None:
+        return couple(found, grid, lambda side: 0.0, lambda on_sample: np.zeros(grid.shape))
+    if reach["kind"] == "direct":
+        return couple(found, grid, lambda side: 1.0, lambda on_sample: np.zeros(grid.shape))
+    excitation = _box(grid, reach["excitation"])
+    emission = _box(grid, reach["emission"])
+    emission = emission / emission.sum() if emission.sum() > 0.0 else emission
+
+    def emits(on_sample: np.ndarray) -> np.ndarray:
+        return (on_sample * excitation).sum() * emission
+
+    return couple(found, grid, lambda side: 0.0, emits)
 
 
 def _prescription_surfaces(path: str) -> list[dict[str, Any]]:

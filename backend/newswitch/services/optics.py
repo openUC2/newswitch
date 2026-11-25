@@ -231,16 +231,20 @@ class OpticsManager:
         ]
         side = sides[0] if sides else None
         entries = self.table.states[state_key(self.instrument, values)]
-        # What arrives of it at a detector that sees a sample it lights: elsewhere, nothing does.
-        seeing, arriving = next(
-            (
-                (detector, entry["coupling"][name])
-                for detector, entry in entries.items()
-                if name in entry["coupling"] and self.instrument.sample_of(detector, values) in lit
-            ),
-            (None, {}),
+        # How it lands on a sample a detector sees, and in which band a channel of it arrives
+        # there (the design's: `compiler.reach`), preferring a detector it makes one at.
+        seeing_it = [
+            (detector, entry)
+            for detector, entry in entries.items()
+            if name in entry["transfer"] and self.instrument.sample_of(detector, values) in lit
+        ]
+        seeing, entry = next(
+            ((d, e) for d, e in seeing_it if name in e["reach"]),
+            seeing_it[0] if seeing_it else (None, None),
         )
-        band = arriving.get("band_mean_nm")
+        arriving = {} if entry is None else dict(entry["transfer"][name].shape)
+        reach = None if entry is None else entry["reach"].get(name)
+        band = None if reach is None else reach["band_nm"]
         found = {
             "name": name,
             "side": side,

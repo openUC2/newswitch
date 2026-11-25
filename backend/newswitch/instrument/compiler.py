@@ -13,9 +13,12 @@ from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
 
+import numpy as np
+
 from newswitch.instrument import tracing
+from newswitch.instrument.naming import Naming, library_naming
 from newswitch.instrument.predict import Answer, Compiled, assemble, state_key
-from newswitch.instrument.spec import Instrument, Variable
+from newswitch.instrument.spec import Instrument, Source, Variable
 
 #: How much of a change counts: below these, a nudge did not matter.
 TOLERANCES = {
@@ -35,7 +38,13 @@ def traced_answer(instrument: Instrument, detector: str, state: Mapping[str, Any
     Raises:
         Dark: The switches send no light to it under `state`.
     """
-    return assemble(instrument, detector, state, *_trace(instrument, detector, state))
+    grid = tracing.wavelengths(instrument)
+    imaging, found, reach = _trace(instrument, detector, state, grid)
+    coupling = {
+        source: tracing.reference_coupling(found[source], reach.get(source), grid)
+        for source in found
+    }
+    return assemble(instrument, detector, state, imaging, coupling)
 
 
 def traced_or_dark(
@@ -70,15 +79,109 @@ def changes_between(
     return found
 
 
+#: How much of a dye's emission the way to a detector must let through somewhere for the dye to
+#: be seen there.
+EMISSION_PASSES = 0.05
+
+
+def _passed(
+    instrument: Instrument, detector: str, state: Mapping[str, Any], grid: np.ndarray
+) -> np.ndarray:
+    """The most any open way from the sample to `detector` lets through, at each wavelength."""
+    sample = instrument.seen_sample(detector, state)
+    passed = np.zeros(grid.shape)
+    for route in instrument.open_routes(instrument.detection, sample, detector, state):
+        curve = np.ones(grid.shape)
+        for edge in route:
+            curve = curve * tracing.transmission(
+                instrument.cubes[edge.source].element_at(state), edge.via, grid
+            )
+        passed = np.maximum(passed, curve)
+    return passed
+
+
+def reach(
+    instrument: Instrument,
+    detector: str,
+    source: str,
+    state: Mapping[str, Any],
+    found: tracing.Transfer,
+    grid: np.ndarray,
+    naming: Naming | None = None,
+) -> dict[str, Any] | None:
+    """Whether `source` makes a channel at `detector`, from the design alone, and of what kind.
+
+    ``direct``: light landing on the sample from the detector's side or through it, of which the
+    way to the detector lets through at least `Naming.blocked_below` of the source's own (a
+    reflection, a brightfield). ``emitted``: a dye of the naming's (`channel_names.yml`) excited
+    by one of the source's lines, whose emission the way lets through at least `EMISSION_PASSES`
+    of somewhere. With its band: the mean of what arrives, for a direct one; of what the way passes
+    of those dyes' emission, for an emitted one. None: no channel, whatever is on the sample.
+    """
+    rules = naming or library_naming()
+    if not found.lit or sum(float(on.sum()) for _, on in found.lit) <= 0.0:
+        return None
+    emitter = instrument.cubes[source].element_at(state)
+    assert isinstance(emitter, Source)
+    wide = np.arange(rules.spectrum[0], rules.spectrum[1] + 1.0, 1.0)
+    passed = _passed(instrument, detector, state, wide)
+    own = np.sum([tracing.gaussian(wide, line.center, line.width) for line in emitter.spectrum], axis=0)
+    own = own / own.sum()
+    sides = {side for side, _ in found.lit}
+    if sides & {"epi", "transmitted"} and float((own * passed).sum()) >= rules.blocked_below:
+        arriving = sum(on for side, on in found.lit if side in ("epi", "transmitted"))
+        through = sum(arriving * route for route in found.detection)
+        total = float(np.sum(through))
+        if total > 0.0:
+            return {
+                "kind": "direct",
+                "band_nm": float((through * grid).sum() / total),
+                "dyes": (),
+                "excitation": (),
+                "emission": (),
+            }
+    dyes = [
+        dye
+        for dye in rules.dyes
+        if any(dye.excitation[0] <= line.center <= dye.excitation[1] for line in emitter.spectrum)
+        and float(
+            passed[(wide >= dye.emission[0]) & (wide <= dye.emission[1])].max(initial=0.0)
+        )
+        >= EMISSION_PASSES
+    ]
+    if not dyes:
+        return None
+    windows = np.zeros(wide.shape)
+    for dye in dyes:
+        windows = np.maximum(windows, (wide >= dye.emission[0]) & (wide <= dye.emission[1]))
+    seen = passed * windows
+    return {
+        "kind": "emitted",
+        "band_nm": float((seen * wide).sum() / seen.sum()),
+        "dyes": tuple(dye.name for dye in dyes),
+        "excitation": tuple(dye.excitation for dye in dyes),
+        "emission": tuple(dye.emission for dye in dyes),
+    }
+
+
 def _trace(
     instrument: Instrument,
     detector: str,
     state: Mapping[str, Any],
+    grid: np.ndarray,
     errors: tracing.Errors = tracing.Errors(),
-) -> tuple[dict[str, float], dict[str, dict[str, Any]]]:
-    coupling = tracing.coupling(instrument, detector, state)
+) -> tuple[dict[str, float], dict[str, tracing.Transfer], dict[str, dict[str, Any]]]:
+    """What the optics do for `detector` under `state`: its image, what each source's light goes
+    through, and the channels the sources make there."""
+    found = tracing.transfer(instrument, detector, state, grid)
+    reached = {
+        source: found_reach
+        for source, transfer in found.items()
+        if (found_reach := reach(instrument, detector, source, state, transfer, grid)) is not None
+    }
     wavelength = tracing.design_wavelength(instrument, detector, state)
-    return asdict(tracing.imaging(instrument, detector, state, wavelength, errors)), coupling
+    imaging = asdict(tracing.imaging(instrument, detector, state, wavelength, errors))
+    return imaging, found, reached
 
 
 #: How far from focus a detector's blur per micrometre is measured.
@@ -235,14 +338,7 @@ def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
     switch: a calibration on one sample is none on another, however alike the two objectives.
     """
     found: dict[str, set[str]] = {detector: set() for detector in instrument.detectors()}
-    on_them = {
-        instrument.simulation_key(sample): instrument.sample_holder(sample).simulation
-        for sample in instrument.samples()
-    }
-    states = [
-        s for s in instrument.swap_states() if all(s[key] == on for key, on in on_them.items())
-    ]
-    for state in states:
+    for state in instrument.swap_states():
         for detector in instrument.detectors():
             before = traced_or_dark(instrument, detector, state)
             for name, variable in instrument.variables.items():
@@ -263,25 +359,32 @@ def influences(instrument: Instrument) -> dict[str, frozenset[str]]:
     return {detector: frozenset(names) for detector, names in found.items()}
 
 
-def compile_instrument(instrument: Instrument, errors: tracing.Errors | None = None) -> Compiled:
-    """What `instrument` does, for every simulation and combination of swaps.
+def compile_instrument(
+    instrument: Instrument,
+    errors: tracing.Errors | None = None,
+    wavelengths: np.ndarray | None = None,
+) -> Compiled:
+    """What `instrument` does, for every combination of swaps: whatever is on its samples.
 
     With `errors`, what a microscope with those errors really does, so that a simulator can render
-    it. Those are passed in: the compiler itself knows only the description.
+    it; with `wavelengths`, on that spectrum (one holding what a simulated sample emits). Those are
+    passed in: the compiler itself knows only the description.
     """
     applied = errors or tracing.Errors()
+    grid = tracing.wavelengths(instrument) if wavelengths is None else wavelengths
     states: dict[str, dict[str, Any]] = {}
     for state in instrument.swap_states():
         entry = {}
         for detector in instrument.detectors():
             if instrument.sample_of(detector, state) is None:
                 continue  # the switches send its light elsewhere: it sees nothing to trace
-            imaging, coupling = _trace(instrument, detector, state, applied)
+            imaging, found, reached = _trace(instrument, detector, state, grid, applied)
             entry[detector] = {
                 "imaging": imaging,
-                "coupling": coupling,
+                "transfer": found,
+                "reach": reached,
                 "moves": _moves(instrument, detector, state, imaging, applied),
                 "focus": _focus_response(instrument, detector, state, applied),
             }
         states[state_key(instrument, state)] = entry
-    return Compiled(instrument, states)
+    return Compiled(instrument, states, grid)

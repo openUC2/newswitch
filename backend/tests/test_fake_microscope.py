@@ -153,11 +153,20 @@ def test_a_source_blocked_by_the_filter_reaches_nothing(instrument: spec.Instrum
     assert ("laser_488", "camera_a") in found
 
 
-def test_the_dichroic_keeps_the_laser_from_the_camera(instrument: spec.Instrument) -> None:
-    """What arrives from the laser is the sample's emission, not the laser."""
-    from newswitch.instrument.tracing import coupling
+def test_the_dichroic_keeps_the_laser_from_the_camera(
+    instrument: spec.Instrument, compiled: Compiled
+) -> None:
+    """The laser's channel is of what is emitted, not of the laser: so the design says, and what
+    arrives on the simulated beads is their emission."""
+    from newswitch.simulation import light
 
-    arriving = coupling(instrument, "camera_a", instrument.initial_state())
+    [laser] = [
+        c
+        for c in compiled.channels(instrument.initial_state())
+        if c.source == "laser_488" and c.detector == "camera_a"
+    ]
+    assert laser.kind == "emitted"
+    arriving = light.traced(instrument, "camera_a", instrument.initial_state())
     assert arriving["laser_488"]["band_mean_nm"] == pytest.approx(515.0, abs=5.0)
 
 

@@ -47,13 +47,27 @@ A source's power goes up to its `max_power`, whatever else its tune states.
 ## What is on the stage
 
 The sample holder is a cube like any other. Its `simulations` name what can be on it, at least one,
-and its `simulation` says which is. That is what a simulated run draws, and what predictions assume
-on real hardware too.
+and its `simulation` says which is. That is what a simulated run draws, and nothing else: what the
+optics predict and publish (pixel size, focus, which channels there are) follows from the design
+alone, as on a real instrument, which does not know what is mounted. Only `newswitch/simulation`
+reads a simulation (`tests/test_layering.py`).
+
+What the design does say of the sample is how deep a one the stage takes: `depth`, for a volume
+(a light sheet or a focused spot then lands somewhere in it, and the stage moves through it rather
+than out of focus); none for a section, which is thin.
+
+A channel is a source whose light the design brings to a detector: **direct** where the way to it
+lets through at least `blocked_below` of the source's own light, from the detector's side or
+through the sample (a reflection, a brightfield), and **emitted** where a dye of
+`newswitch/instrument/channel_names.yml` is excited by one of the source's lines and the way lets
+its emission through. Its electrons are those of a reference sample (one sending back all the
+light, or a dye emitting all it takes up), never a prediction of a real one.
 
 ```yaml
 stage:
   element:
     kind: sample
+    depth: 200 um           # a volume; none: a thin section
     simulation: gfp-beads   # which of its simulations is on it
     simulations:
       gfp-beads:

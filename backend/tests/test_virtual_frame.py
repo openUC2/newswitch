@@ -232,5 +232,7 @@ def test_two_lights_alike_are_two_channels_of_two_names(tmp_path: Path) -> None:
     path does, they were one name, and picking it could take the ring (the LED then off)."""
     m = build_microscope(run_settings(tmp_path, simulate="virtual"), spec.load(FRAME))
     names = {channel.source: channel.name for channel in m.optics_state.channels}
-    assert set(names) == {"led", "ring"} and len(set(names.values())) == 2
+    # and the laser's fluorescence, which the design has whatever is simulated on the stage
+    assert set(names) == {"laser", "led", "ring"} and len(set(names.values())) == 3
     assert names["led"].endswith("· led") and names["ring"].endswith("· ring")
+    assert names["laser"].startswith("GFP")

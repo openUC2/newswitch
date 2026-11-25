@@ -1,6 +1,6 @@
-"""What is on the sample holder: which channels there are, and what is drawn, follow from it."""
+"""What is on the sample holder decides what is drawn, never which channels there are: those follow
+from the design alone, as on a real instrument, which does not know what is mounted."""
 
-import dataclasses
 import shutil
 from pathlib import Path
 
@@ -10,6 +10,7 @@ import yaml
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.predict import Compiled
+from newswitch.simulation import light
 from newswitch.simulation.simulator import SimulatedMicroscope
 
 INSTRUMENT = Path(__file__).parent.parent / "instruments" / "dual-camera"
@@ -21,76 +22,72 @@ def instrument() -> spec.Instrument:
     return spec.load(INSTRUMENT)
 
 
-def channels(compiled: Compiled, simulation: str) -> set[tuple[str, str]]:
-    """Which source reaches which detector under `simulation`."""
-    instrument = compiled.instrument
-    (sample,) = instrument.samples()
-    state = {**instrument.initial_state(), instrument.simulation_key(sample): simulation}
-    return {(channel.source, channel.detector) for channel in compiled.channels(state)}
+def channels(compiled: Compiled) -> dict[tuple[str, str], str]:
+    """Which source makes a channel at which detector, and of which kind."""
+    state = compiled.instrument.initial_state()
+    return {(c.source, c.detector): c.kind for c in compiled.channels(state)}
 
 
-def under(instrument: spec.Instrument, simulation: str) -> spec.Instrument:
-    """`instrument` with `simulation` on its sample's holder."""
-    (sample,) = instrument.samples()
-    cube = instrument.cubes[sample]
-    holder = dataclasses.replace(instrument.sample_holder(sample), simulation=simulation)
-    cubes = {**instrument.cubes, sample: dataclasses.replace(cube, element=holder)}
-    return dataclasses.replace(instrument, cubes=cubes)
-
-
-def test_the_channels_are_found_from_the_optics(instrument: spec.Instrument) -> None:
-    """The fluorescence and the transmitted light each reach the camera whose filter passes them."""
-    assert channels(compile_instrument(instrument), "gfp-beads") == {
-        ("laser_488", "camera_green"),
-        ("led_625", "camera_red"),
-    }
-
-
-def test_without_a_fluorophore_there_is_no_fluorescence_channel(
-    instrument: spec.Instrument,
-) -> None:
-    """Only what passes through the slide is left."""
-    assert channels(compile_instrument(instrument), "empty-slide") == {("led_625", "camera_red")}
-
-
-def test_a_filter_keeps_a_reflection_from_being_a_channel(instrument: spec.Instrument) -> None:
-    """With an emission filter in place, what a slide reflects of the laser never arrives."""
-    assert ("laser_488", "camera_green") not in channels(
-        compile_instrument(instrument), "empty-slide"
-    )
-
-
-def test_with_no_filter_a_reflection_is_a_channel() -> None:
-    """An open wheel lets through what the dichroic leaks of the laser: it does in a real one too."""
-    compiled = compile_instrument(spec.load(INSTRUMENT.parent / "fake-microscope"))
-    assert ("laser_488", "camera_a") in channels(compiled, "empty-slide")
-
-
-def test_a_sample_letting_nothing_through_has_no_transmitted_channel(tmp_path: Path) -> None:
-    """A sample's numbers decide what is a channel: the light paths stay as they are."""
+def edited(tmp_path: Path, simulation: dict) -> spec.Instrument:
+    """The dual camera with its gfp-beads simulation changed as `simulation` says."""
     copy = tmp_path / "instrument"
     shutil.copytree(INSTRUMENT, copy)
     path = copy / spec.DESCRIPTION
     data = yaml.safe_load(path.read_text())
-    data["cubes"]["stage"]["element"]["simulations"]["gfp-beads"]["transmit"] = 0.0
+    data["cubes"]["stage"]["element"]["simulations"]["gfp-beads"].update(simulation)
     path.write_text(yaml.safe_dump(data))
-    opaque = spec.load(copy)
-    compiled = compile_instrument(opaque)
-    assert channels(compiled, "gfp-beads") == {("laser_488", "camera_green")}
+    return spec.load(copy)
 
 
-def test_impacts_are_those_of_the_simulation_picked(instrument: spec.Instrument) -> None:
-    """What a change does depends on what is on the holder."""
+def test_the_channels_are_found_from_the_optics(instrument: spec.Instrument) -> None:
+    """The fluorescence and the transmitted light each reach the camera whose filter passes them."""
+    assert channels(compile_instrument(instrument)) == {
+        ("laser_488", "camera_green"): "emitted",
+        ("led_625", "camera_red"): "direct",
+    }
 
-    def light_changes(picked: spec.Instrument) -> bool:
-        return "light" in next(
-            row["changes"]
-            for row in impacts(picked, picked.initial_state())
-            if row["variable"] == "laser_488.power" and row["detector"] == "camera_green"
-        )
 
-    assert light_changes(instrument)
-    assert not light_changes(under(instrument, "empty-slide"))
+def test_the_channels_do_not_depend_on_what_is_simulated(
+    instrument: spec.Instrument, tmp_path: Path
+) -> None:
+    """A sample letting nothing through, emitting nothing: the light paths, and so the channels,
+    stay as they are. How bright one is, is the sample's."""
+    dark = edited(tmp_path, {"transmit": 0.0, "fluorophore": None, "absorbed": None})
+    assert channels(compile_instrument(dark)) == channels(compile_instrument(instrument))
+
+
+def test_a_filter_keeps_a_reflection_from_being_a_channel(instrument: spec.Instrument) -> None:
+    """With an emission filter in place, what a slide reflects of the laser never arrives: the
+    laser's channel is of what is emitted."""
+    assert channels(compile_instrument(instrument))[("laser_488", "camera_green")] == "emitted"
+
+
+def test_with_no_filter_the_dichroic_alone_decides() -> None:
+    """An open wheel: the dichroic keeps all but a trace of the laser out, and lets a dye's
+    emission through, so the laser's channel is of what is emitted."""
+    compiled = compile_instrument(spec.load(INSTRUMENT.parent / "fake-microscope"))
+    assert compiled.instrument.initial_state()["filter_wheel.slot"] == 1  # Open
+    assert channels(compiled)[("laser_488", "camera_a")] == "emitted"
+
+
+def test_what_a_sample_does_decides_how_much_arrives(
+    instrument: spec.Instrument, tmp_path: Path
+) -> None:
+    """The simulated light: no fluorophore, no electrons from the laser at the green camera."""
+    state = instrument.initial_state()
+    beads = light.traced(instrument, "camera_green", state)
+    empty = light.traced(instrument, "camera_green", state, "empty-slide")
+    assert beads["laser_488"]["electrons_per_mw_ms"] > 1e3 * empty["laser_488"]["electrons_per_mw_ms"]
+
+
+def test_impacts_are_those_of_the_design(instrument: spec.Instrument) -> None:
+    """What a change does is the optics': the laser's power changes the light of its channel,
+    whatever is on the holder."""
+    assert "light" in next(
+        row["changes"]
+        for row in impacts(instrument, instrument.initial_state())
+        if row["variable"] == "laser_488.power" and row["detector"] == "camera_green"
+    )
 
 
 def test_a_simulation_decides_what_is_drawn(instrument: spec.Instrument) -> None:

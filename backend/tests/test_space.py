@@ -238,7 +238,7 @@ def bead_misses(
     simulator = microscope.detector.simulator
     if sample is None:
         (sample,) = simulator.instrument.samples()
-    pattern = simulator.instrument.simulation_at(microscope.values.snapshot(), sample).pattern
+    pattern = simulator.simulation_of(sample).pattern
     bead_y, bead_x, _ = simulator.beads_in_sample(pattern, sample)
     return [
         float(np.min(np.hypot(bead_x - x, bead_y - y)))

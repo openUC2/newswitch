@@ -58,11 +58,23 @@ def test_a_long_pass_is_said_as_one() -> None:
     assert set(names("rgb-camera").values()) == {"GFP · 488/>500", "Brightfield RGB"}
 
 
-def test_a_name_is_of_the_path_not_of_the_sample() -> None:
-    """An empty slide makes no channel of its own: what is left is named as before."""
-    full = names("light-sheet")
-    empty = names("light-sheet", **{"stage.simulation": "empty-slide"})
-    assert all(full[key] == name for key, name in empty.items())
+def test_a_name_is_of_the_path_not_of_the_sample(tmp_path: Path) -> None:
+    """Whatever is simulated on the stage, the channels and their names are the same: the light
+    path alone says (`compiler.reach`), as on a real instrument, which does not know what is
+    mounted."""
+    instrument = spec.load(INSTRUMENTS / "light-sheet")
+    data = yaml.safe_load((INSTRUMENTS / "light-sheet" / spec.DESCRIPTION).read_text())
+    data["cubes"]["stage"]["element"]["simulation"] = "empty-slide"
+    data.pop("ui", None)
+    (tmp_path / spec.DESCRIPTION).write_text(yaml.safe_dump(data))
+    empty = spec.load(tmp_path / spec.DESCRIPTION)
+    state = instrument.initial_state()
+
+    def named(of: spec.Instrument) -> list[str]:
+        found = compile_instrument(of).channels(state)
+        return [name for name, _ in channel_names(of, found, state, lambda n, s: f"{n}={s}")]
+
+    assert named(empty) == named(instrument) != []
 
 
 def custom(change: Any) -> Any:  # noqa: ANN401 - a Naming

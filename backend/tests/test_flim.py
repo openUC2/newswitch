@@ -96,7 +96,6 @@ def test_a_counting_detector_has_no_offset(instrument: spec.Instrument) -> None:
             lambda d: d["cubes"]["laser_488"]["element"].update(repetition="100 MHz"),
             "does not fit in a pulse period of 10000 ps",
         ),
-        (lambda d: fluorophore(d).pop("lifetime"), "needs its fluorophore's lifetime"),
         (lambda d: fluorophore(d).update(lifetime="3 mm"), "lifetime"),
         (lambda d: d["cubes"]["laser_488"]["signals"].pop("out"), "sends no signal 'sync'"),
     ],
@@ -107,6 +106,15 @@ def test_flim_that_cannot_work_is_refused_when_parsed(
     """Naming what is missing."""
     with pytest.raises(spec.SpecError, match=finding):
         spec.load(edited(tmp_path, change))
+
+
+def test_a_simulated_fluorophore_without_its_lifetime_is_refused_by_the_simulator(
+    tmp_path: Path,
+) -> None:
+    """The description of a real FLIM rig does not need it: only drawing the decay does."""
+    instrument = spec.load(edited(tmp_path, lambda d: fluorophore(d).pop("lifetime")))
+    with pytest.raises(spec.SpecError, match="needs its fluorophore's lifetime"):
+        SimulatedMicroscope(instrument)
 
 
 def test_what_expects_one_image_gets_one(microscope: Microscope) -> None:
