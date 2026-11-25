@@ -11,10 +11,10 @@ from koil import unkoil
 from newswitch.drivers.uc2 import firmware
 from newswitch.drivers.uc2.actuators import Turret
 from newswitch.drivers.uc2.dispatch import dispatch_uc2_events
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.models.uc2 import STAGE_AXES, UC2Node
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.services.values import Values
+from newswitch.simulation.uc2_bus import VirtualUC2Bus
 from newswitch.states.uc2 import UC2State
 
 logger = logging.getLogger(__name__)

@@ -3,9 +3,9 @@
 import pytest
 from arkitekt import Task
 
+from newswitch.calibration.models import CalibratedLightPath
 from newswitch.microscope.parts import Microscope
 from newswitch.models.acquisition import AcquiredDataset, AcquisitionChannel, AcquisitionPlan
-from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.hooks import SoftwareAutofocusHook, ZCalibrationHook
 from newswitch.protocols import UnsupportedHook
 from newswitch.protocols.dataset_store import AcquiredRecord

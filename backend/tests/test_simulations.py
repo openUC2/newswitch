@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.predict import Compiled
+from newswitch.simulation.simulator import SimulatedMicroscope
 
 INSTRUMENT = Path(__file__).parent.parent / "instruments" / "dual-camera"
 

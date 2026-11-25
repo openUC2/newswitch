@@ -46,7 +46,7 @@ questions we now need answered:
    optikit design and is never consulted.
 2. **What was the system doing at 14:32:07?** `CalibratedLightPath` already keys
    on a `light_path_state_hash`
-   ([backend/newswitch/models/calibration.py](../backend/newswitch/models/calibration.py)),
+   ([backend/newswitch/calibration/models.py](../backend/newswitch/calibration/models.py)),
    but nothing computes that hash from anything real, and nothing is written to
    disk.
 3. **How do I add a new kind of state?** Today: a new `uc2_*` dict, a new branch,

@@ -3,9 +3,9 @@
 import numpy as np
 
 from newswitch import protocols, states
+from newswitch.calibration.affine import calibrate_pixel_to_stage
+from newswitch.calibration.models import CalibratedLightPath
 from newswitch.models.devices import Detector
-from newswitch.routines.affine_matrix import calibrate_pixel_to_stage
-from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import AffineMatrix
 from newswitch.services.stage import Stage, stage_of
 from newswitch.services.values import Values

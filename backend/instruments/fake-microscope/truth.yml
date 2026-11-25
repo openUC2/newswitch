@@ -1,6 +1,6 @@
-# What the microscope really is: read by the simulator alone (newswitch/drivers/optics). The compiler and the predictions must
-# never see this, or comparing them with the images would prove nothing. Each error exercises
-# something different.
+# What the microscope really is: read by the simulator alone (newswitch/simulation/truth.py). The
+# compiler and the predictions must never see this, or comparing them with the images would prove
+# nothing. Each error exercises something different.
 
 objective_focal_error: 1.02   # both objectives are 2% longer than their label: a scale error
 camera_rotation_deg:          # the cameras are mounted slightly turned: nominally nothing

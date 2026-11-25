@@ -10,13 +10,13 @@ import pytest
 from arkitekt_spec.declare.catalogs import CatalogWarning
 
 from main_fastapi import create_fastapi_registry
+from newswitch.calibration.affine import pixel_shift
+from newswitch.calibration.light_path import calibrate_light_path
 from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.infra.ui import UI_TOLERATED
+from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.devices import AxisWindow
-from newswitch.instrument import spec
-from newswitch.routines.affine_matrix import pixel_shift
-from newswitch.routines.calibration import calibrate_light_path
 from newswitch.settings import Settings, load_devices, load_settings
 from tests.conftest import run_settings
 

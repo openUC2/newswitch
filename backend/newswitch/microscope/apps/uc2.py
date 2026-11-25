@@ -3,13 +3,13 @@
 from arkitekt import App
 
 from newswitch.actions import uc2
-from newswitch.routines.mount_calibration import calibrate_mount
+from newswitch.calibration.mount import calibrate_mount
+from newswitch.calibration.states import MountCalibrationState
 from newswitch.microscope import locks
 from newswitch.microscope.apps import core, detector, values
 from newswitch.microscope.run import Run
 from newswitch.microscope.startup import provide_mount_calibration, provide_uc2
 from newswitch.protocols.uc2 import UC2BusManager
-from newswitch.states.mount_calibration import MountCalibrationState
 from newswitch.states.uc2 import UC2State
 
 app = App("newswitch", app_context=Run)

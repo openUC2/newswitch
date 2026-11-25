@@ -7,13 +7,13 @@ import pytest
 from newswitch.drivers.base import Driver
 from newswitch.drivers.uc2.actuators import Turret, Wheel, WheelConfig
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.instrument import spec
 from newswitch.models.uc2 import BusError
+from newswitch.reference import REFERENCE_INSTRUMENT
 from newswitch.services.values import Values
+from newswitch.simulation.uc2_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
-from newswitch.reference import REFERENCE_INSTRUMENT
 
 
 def make_virtual_bus() -> VirtualUC2Bus:
@@ -182,9 +182,9 @@ class RecordingLeds:
 
 def test_an_led_array_fills_with_its_color_scaled_by_the_power() -> None:
     """Half the full scale is half its color; none turns it off; it starts off, telling it nothing."""
-    from newswitch.drivers.uc2.actuators import LedArray, LedArrayConfig
-
     import koil
+
+    from newswitch.drivers.uc2.actuators import LedArray, LedArrayConfig
 
     leds = RecordingLeds()
     driver = LedArray(leds, LedArrayConfig(r=255, g=128, b=0), maximum=50.0)  # type: ignore[arg-type]

@@ -9,7 +9,6 @@ import pytest
 import yaml
 from arkitekt import Task
 
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import spec
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.parts import check_wired
@@ -23,6 +22,7 @@ from newswitch.models.acquisition import (
 )
 from newswitch.models.space import Position
 from newswitch.routines.acquire import acquire as run_plan
+from newswitch.simulation.detector import SimulatedDetectorManager
 from tests.conftest import acquisition, run_settings
 from tests.test_acquire import RecordingStore, sample_of
 from tests.test_simulated_detector import RecordingBroadcaster, wait_until

@@ -438,7 +438,7 @@ class MountedHolder:
     mount: Mount
 
 
-def _place_of(holder: Holder, place: str, what: str) -> tuple[float, float]:
+def place_of(holder: Holder, place: str, what: str) -> tuple[float, float]:
     """Where `place` (``"<grid>:<name>"``, as ``slot:A1``) of `holder` is, in millimetres from its
     origin.
 
@@ -484,7 +484,7 @@ class Calibration:
 
     def mark_on_slide(self) -> tuple[float, float]:
         """The mark from the slide's middle, in millimetres."""
-        x, y = _place_of(self.slide, self.mark, "mark")
+        x, y = place_of(self.slide, self.mark, "mark")
         return x - self.slide.extent.x / 2, y - self.slide.extent.y / 2
 
 
@@ -511,7 +511,7 @@ class SampleHolder:
         assert self.calibration is not None
         calibration = self.calibration
         holder = self.holders[calibration.holder].holder
-        x, y = _place_of(holder, calibration.at, "at")
+        x, y = place_of(holder, calibration.at, "at")
         dx, dy = calibration.mark_on_slide()
         return x + dx, y + dy
 
@@ -541,7 +541,7 @@ class SampleHolder:
                 continue
             if self.mounted is None:
                 raise ValueError(f"simulations: {name}: a slide lies in a holder, and none is mounted")
-            _place_of(self.holders[self.mounted].holder, simulation.slide.at, f"simulations: {name}: at")
+            place_of(self.holders[self.mounted].holder, simulation.slide.at, f"simulations: {name}: at")
         return self
 
     @model_validator(mode="after")
@@ -554,7 +554,7 @@ class SampleHolder:
                 f"calibration: holder {calibration.holder!r} is none of the holders "
                 f"{sorted(self.holders)}"
             )
-        _place_of(self.holders[calibration.holder].holder, calibration.at, "calibration: at")
+        place_of(self.holders[calibration.holder].holder, calibration.at, "calibration: at")
         calibration.mark_on_slide()
         return self
 
@@ -754,7 +754,7 @@ class Probe:
     It sits `at` a point on a stage insert, beside the sample, and moves with that stage; or it
     `reads` a grid of what the sample is mounted on (an electrode array's electrodes), and is where
     those are. With `sampling`, each reading is a block of samples in time. What a simulated one
-    reads, its `model` says, and the simulator knows (`newswitch.drivers.simulator`).
+    reads, its `model` says, and the simulator knows (`newswitch.simulation.simulator`).
     """
 
     kind: Literal["probe"]

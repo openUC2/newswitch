@@ -14,13 +14,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from newswitch.drivers.simulator import SimulatedMicroscope
-from newswitch.instrument.naming import channel_names
+from newswitch.calibration.affine import calibrate_pixel_to_stage, pixel_shift
 from newswitch.instrument.compiler import compile_instrument, difference, impacts
+from newswitch.instrument.naming import channel_names
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import load
 from newswitch.logging_setup import console, setup_logging
-from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
+from newswitch.simulation.simulator import SimulatedMicroscope
 
 #: How far apart prediction and measurement may be before it is worth saying so.
 SCALE_TOLERANCE_PERCENT = 0.5

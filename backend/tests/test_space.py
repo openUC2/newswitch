@@ -4,9 +4,9 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
+from arkitekt import Task
 from scipy import ndimage
 
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument.space import (
     SPATIAL,
     CoordinateGraph,
@@ -19,14 +19,12 @@ from newswitch.instrument.space import (
     spatial_affine,
     translation,
 )
-from newswitch.models.space import Axis, CoordinateSystem, DimensionPart, Transformation
-from arkitekt import Task
-
 from newswitch.microscope.parts import Microscope
 from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.models.devices import AxisWindow
-from newswitch.models.space import Position
+from newswitch.models.space import Axis, CoordinateSystem, DimensionPart, Position, Transformation
 from newswitch.routines.acquire import acquire as run_plan
+from newswitch.simulation.detector import SimulatedDetectorManager
 from tests.conftest import acquisition
 from tests.test_acquire import RecordingStore, sample_of
 

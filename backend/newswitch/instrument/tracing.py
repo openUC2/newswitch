@@ -125,7 +125,8 @@ def wavelengths(instrument: Instrument) -> np.ndarray:
     return np.arange(float(low), float(high) + 1.0, 1.0)
 
 
-def _gaussian(grid: np.ndarray, center: float, width: float) -> np.ndarray:
+def gaussian(grid: np.ndarray, center: float, width: float) -> np.ndarray:
+    """A line of full width at half maximum `width` around `center`, on `grid`; 1 at its peak."""
     return np.exp(-0.5 * ((grid - center) / (width / 2.355)) ** 2)
 
 
@@ -215,8 +216,8 @@ def _emitted(
     """How many photons a bead emits, in all directions, for the photons on it."""
     if fluorophore is None or absorbed is None:
         return np.zeros(grid.shape)
-    excitation = _gaussian(grid, fluorophore.excitation, fluorophore.excitation_width)
-    emission = _gaussian(grid, fluorophore.emission, fluorophore.emission_width)
+    excitation = gaussian(grid, fluorophore.excitation, fluorophore.excitation_width)
+    emission = gaussian(grid, fluorophore.emission, fluorophore.emission_width)
     emission = emission / emission.sum()
     return (on_sample * excitation).sum() * absorbed * fluorophore.quantum_yield * emission
 
@@ -279,7 +280,7 @@ def coupling(
     for source in instrument.sources():
         emitter = instrument.cubes[source].element_at(state)
         spectrum = np.sum(
-            [_gaussian(grid, line.center, line.width) for line in emitter.spectrum], axis=0
+            [gaussian(grid, line.center, line.width) for line in emitter.spectrum], axis=0
         )
         spectrum = spectrum / spectrum.sum()
         # photons per milliwatt and millisecond: a microjoule's worth, at its wavelength
@@ -324,7 +325,7 @@ def coupling(
         }
         if colors:
             result[source]["colors"] = {
-                name: float((through * _gaussian(grid, color.center, color.width)).sum())
+                name: float((through * gaussian(grid, color.center, color.width)).sum())
                 for name, color in colors.items()
             }
     return result

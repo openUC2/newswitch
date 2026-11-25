@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import yaml
 
+from newswitch.calibration.light_path import calibrate_light_path
 from newswitch.instrument import spec
 from newswitch.instrument.tracing import collected
 from newswitch.microscope.parts import Microscope, build_microscope
@@ -23,7 +24,6 @@ from newswitch.models.acquisition import (
     AcquisitionStack,
 )
 from newswitch.routines.autofocus import autofocus_sweep
-from newswitch.routines.calibration import calibrate_light_path
 from newswitch.services.stage import stage_of
 from tests.conftest import run_settings
 from tests.test_acquire import StateStore, acquire

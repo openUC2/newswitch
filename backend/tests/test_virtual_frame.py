@@ -10,16 +10,16 @@ import koil
 import numpy as np
 import pytest
 
-from newswitch.drivers.simulator import SimulatedMicroscope
+from newswitch.calibration.mount import bright_spot, calibrate_mount
+from newswitch.calibration.states import MountCalibrationState
 from newswitch.drivers.uc2.actuators import Laser, LedArray, Stepper
 from newswitch.drivers.uc2.dispatch import dispatch_uc2_events
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument import spec
 from newswitch.instrument.errors import SpecError
 from newswitch.microscope.parts import build_microscope
-from newswitch.routines.mount_calibration import bright_spot, calibrate_mount
 from newswitch.settings import CONFIG_ENV_VAR, SIMULATE_ENV_VAR, load_settings
-from newswitch.states.mount_calibration import MountCalibrationState
+from newswitch.simulation.simulator import SimulatedMicroscope
+from newswitch.simulation.uc2_bus import VirtualUC2Bus
 from tests.conftest import run_settings
 
 FRAME = Path(__file__).parent.parent / "instruments" / "johannes-frame"

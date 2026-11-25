@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import shutil
-import dataclasses
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -13,17 +13,17 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from newswitch.drivers.base import Simulated, SimulatedMove
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.drivers.uc2.actuators import Laser, Stepper, Turret, Wheel
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument import hardware, parts, spec
 from newswitch.microscope.parts import build_drivers, build_microscope, build_uc2_bus, bus_options
-from newswitch.settings import Settings
-from newswitch.states.uc2 import UC2State
 from newswitch.reference import REFERENCE_INSTRUMENT
+from newswitch.settings import Settings
+from newswitch.simulation.detector import SimulatedDetectorManager
+from newswitch.simulation.drivers import Simulated, SimulatedMove
+from newswitch.simulation.uc2_bus import VirtualUC2Bus
+from newswitch.states.uc2 import UC2State
 from tests.conftest import run_settings, wired_only
 
 README = Path(__file__).parent.parent / "instruments" / "README.md"

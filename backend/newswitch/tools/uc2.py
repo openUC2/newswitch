@@ -25,12 +25,12 @@ from typing import Optional
 from newswitch.drivers.uc2 import firmware as fw
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument.hardware import Firmware
 from newswitch.logging_setup import console, setup_logging
 from newswitch.models.uc2 import UC2Node
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.settings import CONFIG_ENV_VAR
+from newswitch.simulation.uc2_bus import VirtualUC2Bus
 from newswitch.states.uc2 import UC2State
 
 #: What this tool reports: to stdout, and into the log file.

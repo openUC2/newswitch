@@ -9,14 +9,14 @@ from newswitch.actions.uc2 import home_objective
 from newswitch.drivers.uc2.actuators import Stepper, StepperConfig, Turret
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.dispatch import apply_uc2_event
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.instrument import spec
 from newswitch.models.uc2 import BusError, EStopChanged, MotionDone, NodeSeen, PositionUpdate
 from newswitch.protocols.uc2 import UC2BusManager
+from newswitch.reference import REFERENCE_INSTRUMENT
 from newswitch.services.values import Values
+from newswitch.simulation.uc2_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
-from newswitch.reference import REFERENCE_INSTRUMENT
 
 
 def make_virtual_bus() -> VirtualUC2Bus:

@@ -238,7 +238,7 @@ def test_the_table_follows_a_move_along_the_axis(
 @pytest.fixture(scope="module")
 def microscope(instrument: spec.Instrument):  # noqa: ANN201
     """The fake hardware, with its hidden errors."""
-    from newswitch.drivers.simulator import SimulatedMicroscope
+    from newswitch.simulation.simulator import SimulatedMicroscope
 
     return SimulatedMicroscope(instrument)
 
@@ -263,7 +263,7 @@ def test_the_images_reveal_what_the_description_does_not_say(
 
 def test_the_filter_wedge_is_an_effect_the_model_has_no_notion_of(microscope, compiled) -> None:  # noqa: ANN001
     """The design says nothing moves, and the images say otherwise: it can tell the two apart."""
-    from newswitch.routines.affine_matrix import pixel_shift
+    from newswitch.calibration.affine import pixel_shift
 
     assert "position" not in changes(compiled, "filter_wheel.slot")
     microscope.set({"filter_wheel.slot": 1})

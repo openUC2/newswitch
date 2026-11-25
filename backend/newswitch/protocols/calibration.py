@@ -6,7 +6,7 @@ Defines the protocol for illumination/LED control and associated state.
 
 from typing import Protocol, runtime_checkable
 
-from newswitch.models.calibration import CalibratedLightPath
+from newswitch.calibration.models import CalibratedLightPath
 from newswitch.protocols.base import Manager
 
 

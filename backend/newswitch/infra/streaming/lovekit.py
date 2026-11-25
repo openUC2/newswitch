@@ -30,8 +30,8 @@ from lovekit import I420Frame, VideoStream, to_rgba
 from lovekit.api.schema import Stream
 from lovekit.lovekit import Lovekit
 
-from newswitch.infra.streaming.test_pattern import timestamp_rgba
 from newswitch.protocols.frame_sink import FrameSink
+from newswitch.simulation.test_pattern import timestamp_rgba
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class LovekitSink:
 
         Args:
             test_pattern: Each stream sends the time it sends instead of its camera's frames
-                (`newswitch.infra.streaming.test_pattern`): to test the network, not the camera.
+                (`newswitch.simulation.test_pattern`): to test the network, not the camera.
         """
         self.cameras = list(cameras)
         self.test_pattern = test_pattern

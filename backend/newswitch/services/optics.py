@@ -16,17 +16,17 @@ from typing import Any
 
 import numpy as np
 
+from newswitch.calibration.models import CalibratedLightPath
+from newswitch.calibration.states import CalibrationState
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument, influences
 from newswitch.instrument.naming import channel_names
 from newswitch.instrument.predict import Answer, state_key
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument
-from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
-from newswitch.services.element_facts import facts_of, spectrum_color
 from newswitch.models.optics import ChannelSwap, DetectorOptics, OpticalChannel, SourceOptics
-from newswitch.states.calibration import CalibrationState
+from newswitch.services.element_facts import facts_of, spectrum_color
 from newswitch.states.detector import DetectorState
 from newswitch.states.optics import OpticsState
 

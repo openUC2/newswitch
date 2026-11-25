@@ -15,14 +15,14 @@ from typing import Literal
 
 import pytest
 
-from newswitch.microscope import parts as microscope
 from newswitch.actions.detector import close_detector
 from newswitch.infra.streaming import FrameBroadcaster
-from newswitch.settings import Settings
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import spec
+from newswitch.microscope import parts as microscope
 from newswitch.microscope.parts import build_detector_manager
 from newswitch.protocols import DetectorManager
+from newswitch.settings import Settings
+from newswitch.simulation.detector import SimulatedDetectorManager
 from newswitch.states.detector import DetectorState
 from tests.conftest import run_settings
 

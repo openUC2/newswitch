@@ -7,8 +7,8 @@ import koil
 import pytest
 
 from newswitch.actions.values import move_home
-from newswitch.drivers.base import MAX_REPORTS, REPORTS_PER_S, SimulatedMove
 from newswitch.microscope.parts import Microscope
+from newswitch.simulation.drivers import MAX_REPORTS, REPORTS_PER_S, SimulatedMove
 
 
 def moved(speed: float | None, start: float, to: float, task: object = None) -> list[float]:

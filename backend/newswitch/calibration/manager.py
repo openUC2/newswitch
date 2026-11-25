@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from newswitch.models.calibration import CalibratedLightPath
-from newswitch.states.calibration import CalibrationState
+from newswitch.calibration.models import CalibratedLightPath
+from newswitch.calibration.states import CalibrationState
 
 
 class CalibrationManager:

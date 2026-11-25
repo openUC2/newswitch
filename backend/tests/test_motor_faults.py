@@ -15,13 +15,14 @@ import numpy as np
 import pytest
 from arkitekt import Task
 
-from newswitch.drivers.base import Report, Simulated, register_driver
+from newswitch.drivers.base import Report, register_driver
 from newswitch.instrument import spec
 from newswitch.instrument.spec import Variable
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.routines.acquire import acquire
 from newswitch.routines.autofocus import run_autofocus
+from newswitch.simulation.drivers import Simulated
 from newswitch.states.autofocus import AutofocusState
 from tests.conftest import acquisition, run_settings
 from tests.test_acquire import RecordingStore

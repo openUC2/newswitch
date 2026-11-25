@@ -14,17 +14,17 @@ import numpy as np
 import pytest
 import yaml
 
+from newswitch.drivers import readout
 from newswitch.infra.streaming import FrameBroadcaster
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import parts, spec
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.drivers import readout
 from newswitch.models.devices import AxisWindow
 from newswitch.protocols import DetectorManager
 from newswitch.protocols.detector import DetectorFrame
-from newswitch.services.values import Values
-from newswitch.states.detector import DetectorState
 from newswitch.reference import REFERENCE_INSTRUMENT
+from newswitch.services.values import Values
+from newswitch.simulation.detector import SimulatedDetectorManager
+from newswitch.states.detector import DetectorState
 from tests.conftest import run_settings
 
 FAKE = Path(__file__).parent.parent / "instruments" / "fake-microscope"

@@ -9,14 +9,12 @@ from .acquisition import (
     PositionOrder,
     ScanOrder,
 )
-from .calibration import CalibratedLightPath
 from .devices import AxisWindow, Detector, DetectorAxis
 from .frames import ArrayMetadata, Frame, Image, Metadata, Scale
 from .hooks import Hook, RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 from .io import FileFormat, FileHandle
 from .light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
 from .optics import ChannelSwap, DetectorOptics, OpticalChannel, SourceOptics
-from .values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
 from .uc2 import (
     STAGE_AXES,
     BusError,
@@ -28,6 +26,7 @@ from .uc2 import (
     PositionUpdate,
     UC2Event,
 )
+from .values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
 
 __all__ = [
     "PositionOrder",
@@ -40,7 +39,6 @@ __all__ = [
     "ArrayMetadata",
     "BusError",
     "ButtonPressed",
-    "CalibratedLightPath",
     "Detector",
     "DetectorAxis",
     "EStopChanged",

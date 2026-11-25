@@ -1,7 +1,7 @@
 """What is really there, and the images it really makes.
 
-The only place that may read ``truth.yml``: how the real thing differs from its description. An
-instrument without one is exactly what it says. It renders from what the compiler finds: errors the
+It alone takes in ``truth.yml`` (`newswitch.simulation.truth`): how the real thing differs from its
+description. An instrument without one is exactly what it says. It renders from what the compiler finds: errors the
 optics can express go in there, and it adds what the description has no notion of. Everything else
 has to find those out from the images, as with a real instrument.
 """
@@ -13,17 +13,15 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 import numpy as np
-import yaml
 from scipy import ndimage
 
 from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.predict import Answer
 from newswitch.instrument.space import holder_to_stage
-from newswitch.instrument.spec import Instrument, Pattern, Probe, SimulatedSlide, Stain, _place_of
-from newswitch.instrument.tracing import Errors, _gaussian, depth_of_field_um
+from newswitch.instrument.spec import Instrument, Pattern, Probe, SimulatedSlide, Stain, place_of
+from newswitch.instrument.tracing import depth_of_field_um, gaussian
+from newswitch.simulation.truth import load_truth, optical_errors
 
-#: The hidden errors, in an instrument's folder.
-TRUTH = "truth.yml"
 #: What the air beside the sample is, unless the truth says otherwise.
 AIR_TEMPERATURE_C = 22.0
 
@@ -41,20 +39,6 @@ def _spike(samples: int) -> np.ndarray:
     t = np.linspace(0.0, 1.0, max(samples, 2))
     wave = -np.exp(-(((t - 0.25) / 0.08) ** 2)) + 0.4 * np.exp(-(((t - 0.55) / 0.15) ** 2))
     return wave / -wave.min()
-
-
-def load_truth(instrument: Instrument) -> dict[str, Any]:
-    """The hidden errors of `instrument`; none when it has no truth file."""
-    path = instrument.folder / TRUTH
-    return (yaml.safe_load(path.read_text()) or {}) if path.is_file() else {}
-
-
-def optical_errors(instrument: Instrument) -> Errors | None:
-    """The errors the tracer can apply; None when there are none."""
-    truth = load_truth(instrument)
-    if not truth:
-        return None
-    return Errors(objective_focal_factor=truth.get("objective_focal_error", 1.0))
 
 
 def _beads(pattern: Pattern) -> np.ndarray:
@@ -381,7 +365,7 @@ class Simulator:
         """What `stains` let through to each pixel, of light of `wavelength_nm`."""
         through: np.ndarray | float = 1.0
         for stain, there in stains:
-            amount = float(_gaussian(np.array(wavelength_nm), stain.center, stain.width))
+            amount = float(gaussian(np.array(wavelength_nm), stain.center, stain.width))
             through = through * (1.0 - stain.darkens * amount * there)
         return through
 
@@ -409,7 +393,7 @@ class Simulator:
         if holder_name is None:
             return np.zeros((3, 0))
         mounted = self.instrument.sample_holder(sample).holders[holder_name]
-        at_x, at_y = _place_of(mounted.holder, slide.at, "at")
+        at_x, at_y = place_of(mounted.holder, slide.at, "at")
         holes = np.array(
             [[(at_x + x) * 1000.0, (at_y + y) * 1000.0, r * 1000.0] for x, y, r in slide.holes()]
         ).T.reshape(3, -1)

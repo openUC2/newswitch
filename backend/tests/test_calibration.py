@@ -8,14 +8,13 @@ import numpy as np
 import pytest
 from scipy import ndimage
 
+from newswitch.calibration.affine import calibrate_pixel_to_stage, pixel_shift
+from newswitch.calibration.light_path import _measure, calibrate_light_path
+from newswitch.calibration.models import CalibratedLightPath
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.light_path import LightPathSnapshot
-from newswitch.routines.affine_matrix import calibrate_pixel_to_stage, pixel_shift
-from newswitch.routines.calibration import _measure, calibrate_light_path
 from tests.conftest import run_settings
-
 
 TWO_CAMERAS = Path(__file__).parent.parent / "instruments" / "dual-camera"
 

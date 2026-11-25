@@ -1,4 +1,4 @@
-"""Measuring a holder's mount from a calibration slide (newswitch.routines.mount_calibration)."""
+"""Measuring a holder's mount from a calibration slide (newswitch.calibration.mount)."""
 
 import shutil
 from pathlib import Path
@@ -9,10 +9,10 @@ import koil
 import numpy as np
 import pytest
 
+from newswitch.calibration import mount as mc
 from newswitch.instrument import spec
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.spec import Mount
-from newswitch.routines import mount_calibration as mc
 
 FRAME = Path(__file__).parent.parent / "instruments" / "johannes-frame"
 
@@ -198,7 +198,7 @@ def run(
     task: Task | None = None,
     state: Any = None,  # noqa: ANN401
 ) -> Any:  # noqa: ANN401
-    from newswitch.states.mount_calibration import MountCalibrationState
+    from newswitch.calibration.states import MountCalibrationState
 
     copy = tmp_path / "frame"
     shutil.copytree(FRAME, copy)
@@ -250,7 +250,7 @@ def test_no_mark_says_where_it_was_looked_for(tmp_path: Path, monkeypatch: pytes
 def test_it_holds_once_homed_with_the_light_where_the_mark_should_be(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from newswitch.states.mount_calibration import MountCalibrationState
+    from newswitch.calibration.states import MountCalibrationState
 
     frame = Frame(mark_um=(18700.0, 41800.0))
     task, state = Task(frame), MountCalibrationState()
@@ -268,7 +268,7 @@ def test_it_holds_once_homed_with_the_light_where_the_mark_should_be(
 def test_a_denied_hold_stops_it_before_anything_is_looked_for(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from newswitch.states.mount_calibration import MountCalibrationState
+    from newswitch.calibration.states import MountCalibrationState
 
     frame = Frame(mark_um=(18700.0, 41800.0))
     state = MountCalibrationState()

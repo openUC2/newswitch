@@ -17,10 +17,10 @@ import koil
 import numpy as np
 
 from newswitch.drivers import readout as windows_of
-from newswitch.drivers.simulator import Simulator
 from newswitch.instrument.spec import Instrument
 from newswitch.models.devices import AxisWindow, Detector
 from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo
+from newswitch.simulation.simulator import Simulator
 from newswitch.states.detector import DetectorState
 
 if TYPE_CHECKING:

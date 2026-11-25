@@ -11,9 +11,9 @@ import pytest
 import yaml
 from arkitekt import Task
 
-from newswitch.actions import values as actions
-from newswitch.drivers.base import Simulated, register_driver
 from main_fastapi import create_fastapi_registry
+from newswitch.actions import values as actions
+from newswitch.drivers.base import register_driver
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import influences
 from newswitch.instrument.roles import Roles
@@ -21,6 +21,7 @@ from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.routines.autofocus import run_autofocus
 from newswitch.services.stage import stage_of, where
 from newswitch.services.values import Values
+from newswitch.simulation.drivers import Simulated
 from tests.conftest import run_settings, wired_only
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"

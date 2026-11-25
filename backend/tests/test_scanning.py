@@ -9,22 +9,21 @@ from typing import Any
 import numpy as np
 import pytest
 import yaml
-
 from arkitekt import Task
 
-from newswitch.drivers.simulator import SimulatedMicroscope
+from newswitch.instrument import parts, spec
+from newswitch.instrument.compiler import compile_instrument
 from newswitch.instrument.roles import Roles
+from newswitch.instrument.tracing import scan_um_per_degree
 from newswitch.microscope.parts import build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.routines.acquire import acquire as run_plan
 from newswitch.routines.autofocus import run_autofocus
+from newswitch.simulation.simulator import SimulatedMicroscope
 from newswitch.states.autofocus import AutofocusState
+from newswitch.tools.check_instrument import measure
 from tests.conftest import acquisition, run_settings
 from tests.test_acquire import RecordingStore
-from newswitch.instrument import parts, spec
-from newswitch.instrument.compiler import compile_instrument
-from newswitch.instrument.tracing import scan_um_per_degree
-from newswitch.tools.check_instrument import measure
 
 INSTRUMENT = Path(__file__).parent.parent / "instruments" / "point-scanner"
 

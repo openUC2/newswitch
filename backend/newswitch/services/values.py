@@ -18,12 +18,13 @@ from typing import Any
 
 from arkitekt import Task
 
-from newswitch.drivers.base import Driver, Report, Simulated, SimulatedMove
+from newswitch.drivers.base import Driver, Report
 from newswitch.instrument import spec
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument, Variable
 from newswitch.models.values import LightSource, MoveValue, SwapOption, SwapValue, TuneValue
 from newswitch.services.element_facts import facts_of, spectrum_color
+from newswitch.simulation.drivers import Simulated, SimulatedMove
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
 

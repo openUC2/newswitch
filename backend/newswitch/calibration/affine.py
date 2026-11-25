@@ -1,20 +1,7 @@
 """Estimation and validation of the 3D affine matrix mapping pixel to stage coordinates."""
 
-from dataclasses import dataclass
-
 import numpy as np
 from scipy import ndimage
-
-
-@dataclass
-class AffineMatrix:
-    """A fitted 4x4 pixel-to-stage affine matrix together with its least-squares fit quality."""
-
-    matrix: np.ndarray
-    residuals: np.ndarray
-    rank: int
-    singular_values: np.ndarray
-
 
 #: How many times `pixel_shift` measures again on what two images have in common.
 _SHIFT_ROUNDS = 6

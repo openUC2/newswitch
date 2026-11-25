@@ -13,13 +13,12 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import newswitch.drivers.uc2.actuators  # noqa: F401 - makes the uc2.* drivers available
-from newswitch import protocols, states
-from newswitch.drivers.base import Driver, Simulated, build_driver
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
+from newswitch import models, protocols, states
+from newswitch.calibration.manager import CalibrationManager
+from newswitch.calibration.states import CalibrationState
+from newswitch.drivers.base import Driver, build_driver
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus, VirtualUC2BusConfig
-from newswitch import models
 from newswitch.instrument import parts as instrument_parts
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.hardware import Hardware
@@ -30,7 +29,6 @@ from newswitch.protocols.io import IOManager
 from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.services.acquisition import AcquisitionManager
 from newswitch.services.cache.local_cache import LocalCacheConfig, LocalCacheManager
-from newswitch.services.calibration import CalibrationManager
 from newswitch.services.expanse import ExpanseManager
 from newswitch.services.hooks.manager import PythonHookManager
 from newswitch.services.hooks.software_autofocus import software_autofocus_hook
@@ -40,8 +38,10 @@ from newswitch.services.optics import OpticsManager
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
 from newswitch.settings import SIMULATED, Settings
+from newswitch.simulation.detector import SimulatedDetectorManager
+from newswitch.simulation.drivers import Simulated
+from newswitch.simulation.uc2_bus import VirtualUC2Bus, VirtualUC2BusConfig
 from newswitch.states.autofocus import AutofocusState
-from newswitch.states.calibration import CalibrationState
 from newswitch.states.detector import DetectorState
 from newswitch.states.io import IOState
 from newswitch.states.optics import OpticsState

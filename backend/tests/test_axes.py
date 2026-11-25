@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from newswitch.drivers.simulated_detector import SimulatedDetectorManager
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.devices import AxisWindow
+from newswitch.simulation.detector import SimulatedDetectorManager
 from tests.conftest import run_settings
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"

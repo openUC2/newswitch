@@ -9,9 +9,9 @@ import numpy as np
 import pytest
 import yaml
 
-from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument
+from newswitch.simulation.simulator import SimulatedMicroscope
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 BASE = yaml.safe_load((INSTRUMENTS / "dual-camera" / spec.DESCRIPTION).read_text())
@@ -112,11 +112,11 @@ def test_the_full_chain_by_hand(tmp_path: Path) -> None:
     grid = tracing.wavelengths(instrument)
     sample = instrument.simulation_at(instrument.initial_state(), "stage")
     photons = 1e-6 * 488e-9 / (6.62607015e-34 * 299792458.0)
-    laser = tracing._gaussian(grid, 488.0, 2.0)
+    laser = tracing.gaussian(grid, 488.0, 2.0)
     laser = laser / laser.sum()
     reflected = 1.0 - tracing.curve_at(instrument.cubes["dichroic"].element.curve, grid)
-    excited = (laser * reflected * tracing._gaussian(grid, 488.0, 20.0)).sum()
-    emission = tracing._gaussian(grid, 515.0, 25.0)
+    excited = (laser * reflected * tracing.gaussian(grid, 488.0, 20.0)).sum()
+    emission = tracing.gaussian(grid, 515.0, 25.0)
     emission = emission / emission.sum()
     passed = (
         tracing.curve_at(instrument.cubes["dichroic"].element.curve, grid)

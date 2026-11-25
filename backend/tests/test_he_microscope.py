@@ -8,12 +8,12 @@ import numpy as np
 import pytest
 from arkitekt import Task
 
-from newswitch.drivers.simulator import SimulatedMicroscope
 from newswitch.instrument import spec
 from newswitch.instrument.roles import Roles
 from newswitch.microscope.parts import build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
 from newswitch.routines.acquire import acquire as run_plan
+from newswitch.simulation.simulator import SimulatedMicroscope
 from tests.conftest import acquisition, run_settings
 from tests.test_acquire import RecordingStore
 

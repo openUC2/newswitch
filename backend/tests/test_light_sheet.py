@@ -8,14 +8,14 @@ from typing import Any
 import numpy as np
 import pytest
 import yaml
-
 from arkitekt import Task
 
-from newswitch.drivers.simulator import SimulatedMicroscope, _add_blurred, _beads
+from newswitch.calibration.affine import calibrate_pixel_to_stage
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, impacts
 from newswitch.instrument.predict import Compiled
 from newswitch.instrument.roles import Roles
+from newswitch.instrument.tracing import coupling
 from newswitch.microscope.parts import build_microscope
 from newswitch.models.acquisition import (
     AcquisitionChannel,
@@ -25,9 +25,8 @@ from newswitch.models.acquisition import (
 )
 from newswitch.routines.acquire import acquire as run_plan
 from newswitch.routines.autofocus import run_autofocus
+from newswitch.simulation.simulator import SimulatedMicroscope, _add_blurred, _beads
 from newswitch.states.autofocus import AutofocusState
-from newswitch.instrument.tracing import coupling
-from newswitch.routines.affine_matrix import calibrate_pixel_to_stage
 from newswitch.tools.check_instrument import _stage_moves
 from tests.conftest import acquisition, run_settings
 from tests.test_acquire import RecordingStore, sample_of

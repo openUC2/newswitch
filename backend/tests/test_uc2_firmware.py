@@ -12,10 +12,10 @@ from pydantic import TypeAdapter
 
 from newswitch.drivers.uc2 import firmware as fw
 from newswitch.drivers.uc2.rest_bus import UC2RestBus
-from newswitch.drivers.uc2.virtual_bus import VirtualUC2Bus
 from newswitch.instrument import spec
 from newswitch.instrument.hardware import Board, Firmware, FirmwarePin
 from newswitch.models.uc2 import UC2Node
+from newswitch.simulation.uc2_bus import VirtualUC2Bus
 from newswitch.states.uc2 import UC2State
 
 FAKE = Path(__file__).parent.parent / "instruments" / "fake-microscope"

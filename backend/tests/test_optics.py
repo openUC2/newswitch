@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from newswitch.calibration.models import CalibratedLightPath
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import difference, influences
 from newswitch.instrument.predict import Answer
 from newswitch.microscope.parts import Microscope, build_microscope
-from newswitch.models.calibration import CalibratedLightPath
 from newswitch.models.devices import AxisWindow
 from newswitch.models.optics import DetectorOptics
 from newswitch.routines.autofocus import autofocus_sweep

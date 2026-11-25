@@ -3,8 +3,9 @@ that serves them (``app.py``; FastAPI through `newswitch.microscope.apps.models`
 
 from newswitch import models
 from newswitch.actions import uc2
-from newswitch.models.calibration import CalibratedLightPath, MeasuredMount
+from newswitch.calibration.models import CalibratedLightPath, MeasuredMount
 from newswitch.models.devices import AxisWindow, Detector, DetectorAxis
+from newswitch.models.hooks import RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 from newswitch.models.space import (
     Axis,
     CoordinateSystem,
@@ -12,13 +13,12 @@ from newswitch.models.space import (
     DimensionPart,
     HolderShape,
     MeasuredPoint,
+    PlaceShape,
     Position,
     SampleSpace,
     Transformation,
-    PlaceShape,
 )
 from newswitch.models.uc2 import UC2Node
-from newswitch.models.hooks import RegisteredHook, SoftwareAutofocusHook, ZCalibrationHook
 
 #: Every model, in the order they are registered.
 MODELS: tuple[type, ...] = (

@@ -12,10 +12,10 @@ import numpy as np
 import pytest
 import yaml
 
-from newswitch.drivers.simulator import Simulator
 from newswitch.instrument import spec
 from newswitch.instrument.compiler import compile_instrument, traced_answer
 from newswitch.instrument.roles import Roles
+from newswitch.simulation.simulator import Simulator
 
 INSTRUMENTS = Path(__file__).parent.parent / "instruments"
 

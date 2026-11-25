@@ -10,11 +10,11 @@ import yaml
 from mikro import dataset_arrays
 from mikro.api import schema
 
-from newswitch.drivers.simulator import SimulatedMicroscope
+from newswitch.infra.mikro.store import _optical_element, dataset_axes
 from newswitch.instrument import spec
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.models.acquisition import AcquisitionChannel
-from newswitch.infra.mikro.store import _optical_element, dataset_axes
+from newswitch.simulation.simulator import SimulatedMicroscope
 from tests.conftest import run_settings
 from tests.test_acquire import acquire, plan
 
