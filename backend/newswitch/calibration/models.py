@@ -1,29 +1,8 @@
-"""A calibrated light path: how large a detector's pixels are on the sample, as measured."""
+"""What a calibration found: where a holder sits, and how far that is from its design."""
 
 from dataclasses import dataclass
 
 from arkitekt import model_field
-
-from newswitch.models.light_path import AffineMatrix
-
-
-@dataclass
-class CalibratedLightPath:
-    """How a step along a column and along a row moves on the sample, for one light path."""
-
-    affine_matrix: AffineMatrix = model_field(
-        default_factory=lambda: [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
-        ],
-        description="Pixel to sample micrometres, without where it looks: its 2x2 is the scale",
-    )
-    key: str = model_field(
-        default="",
-        description="Of what changes where a pixel looks: this matrix holds for as long as it does",
-    )
 
 
 @dataclass
@@ -40,5 +19,17 @@ class MeasuredMount:
     )
     pixel_um: float = model_field(default=0.0, description="Image scale measured on the way")
     saved_to: str | None = model_field(
-        default=None, description="The description it was written into, if it was"
+        default=None, description="The calibration store it was kept in, if it was"
     )
+
+
+@dataclass
+class CalibratedMount:
+    """How far a holder sits from where its design puts it (its `mount`): what is kept of it."""
+
+    sample: str = model_field(description="The sample, by the cube holding it")
+    holder: str = model_field(description="Which of its holders")
+    offset_x_um: float = model_field(default=0.0, description="Off its design's place, along x")
+    offset_y_um: float = model_field(default=0.0, description="... and along y")
+    rotation_deg: float = model_field(default=0.0, description="Turned further than its design says")
+    measured: str = model_field(default="", description="When it was measured, ISO 8601")

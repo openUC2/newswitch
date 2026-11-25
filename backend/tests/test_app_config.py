@@ -94,6 +94,7 @@ def test_unknown_key_is_an_error(tmp_path: Path) -> None:
         "db_path",
         "image_dir",
         "cache_dir",
+        "calibration_dir",
         "camera_recording_dir",
         "camera_debug_window",
     ],

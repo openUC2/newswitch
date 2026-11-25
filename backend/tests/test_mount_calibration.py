@@ -10,6 +10,9 @@ import numpy as np
 import pytest
 
 from newswitch.calibration import mount as mc
+from newswitch.calibration.manager import CalibrationManager
+from newswitch.calibration.states import CalibrationState
+from newswitch.calibration.store import CalibrationStore
 from newswitch.instrument import spec
 from newswitch.instrument.errors import SpecError
 from newswitch.instrument.spec import Mount
@@ -60,26 +63,29 @@ def test_the_mount_is_where_the_stage_is_less_the_mark() -> None:
     assert (turned.x, turned.y) == (pytest.approx(1.0), pytest.approx(0.0))
 
 
-def test_the_mount_is_written_into_the_description_and_nothing_else(tmp_path: Path) -> None:
-    copy = tmp_path / "johannes-frame"
-    shutil.copytree(FRAME, copy)
-    path = copy / "microscope.yml"
-    before = path.read_text().splitlines()
-    mc.write_mount(path, "stage", "slides", mc.mount_of(0.25, -1.5))
-    after = path.read_text().splitlines()
-    changed = [(a, b) for a, b in zip(before, after) if a != b]
-    assert len(before) == len(after) and len(changed) == 1
-    assert "mount: {x: 0.25 mm, y: -1.5 mm}" in changed[0][1]
-    assert changed[0][1].lstrip().startswith("slides:")
-    mounted = spec.load(copy).sample_holder("stage").holders["slides"].mount
-    assert (mounted.x, mounted.y) == (0.25, -1.5)
+def test_what_is_kept_is_of_one_design(tmp_path: Path) -> None:
+    """A store of another design is stale: nothing of it is applied, and the next calibration
+    replaces it."""
+    instrument = spec.load(FRAME)
+    kept = keeping(instrument, tmp_path)
+    nominal = instrument.sample_holder("stage").holders["slides"].mount
+    kept.set_mount("stage", "slides", mc.mount_of(nominal.x + 0.1, nominal.y - 0.2))
+    assert not kept.state.stale and kept.state.stored_design == instrument.design_hash()
+    path = kept.store.path
+    path.write_text(path.read_text().replace(instrument.design_hash(), "another-design"))
+    later = keeping(instrument, tmp_path)
+    assert later.state.stale and later.state.stored_design == "another-design"
+    assert later.mount("stage", "slides") is None and later.state.mounts == []
+    later.set_mount("stage", "slides", mc.mount_of(nominal.x, nominal.y))
+    assert not later.state.stale and later.store.load().design == instrument.design_hash()
 
 
-def test_a_mount_that_is_not_there_is_not_written(tmp_path: Path) -> None:
-    path = tmp_path / "microscope.yml"
-    path.write_text("cubes:\n  stage:\n    element: {kind: sample}\n")
-    with pytest.raises(ValueError, match="no holders"):
-        mc.write_mount(path, "stage", "slides", mc.mount_of(0.0, 0.0))
+def test_without_a_store_a_calibration_holds_until_the_next_start() -> None:
+    instrument = spec.load(FRAME)
+    kept = CalibrationManager(CalibrationState(), instrument)
+    nominal = instrument.sample_holder("stage").holders["slides"].mount
+    assert kept.set_mount("stage", "slides", mc.mount_of(nominal.x + 0.1, nominal.y)) is None
+    assert kept.mount("stage", "slides").x == pytest.approx(nominal.x + 0.1)
 
 
 # --- the description ------------------------------------------------------------------------------
@@ -200,17 +206,22 @@ def run(
 ) -> Any:  # noqa: ANN401
     from newswitch.calibration.states import MountCalibrationState
 
-    copy = tmp_path / "frame"
-    shutil.copytree(FRAME, copy)
-    monkeypatch.setattr(mc, "_description_file", lambda: copy / "microscope.yml")
     task = task or Task(frame)
     state = state if state is not None else MountCalibrationState()
+    kept = keeping(frame.instrument, tmp_path)
     with koil.Koil():
-        result = mc.calibrate_mount(Space(frame), frame, frame, frame, state, task)  # type: ignore[arg-type]
-    return result, copy
+        result = mc.calibrate_mount(Space(frame), frame, frame, frame, kept, state, task)  # type: ignore[arg-type]
+    return result, kept
 
 
-def test_the_mount_is_measured_used_and_written_down(
+def keeping(instrument: spec.Instrument, tmp_path: Path) -> CalibrationManager:
+    """What is calibrated of `instrument`, kept in a store under `tmp_path`."""
+    return CalibrationManager(
+        CalibrationState(), instrument, CalibrationStore(tmp_path / "calibration", instrument.name)
+    )
+
+
+def test_the_mount_is_measured_used_and_kept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # the holder sits at (0.3, 1.2) mm: its slot 1 pinhole at (18.7, 41.8) mm on the stage, some
@@ -226,8 +237,15 @@ def test_the_mount_is_measured_used_and_written_down(
     ]
     assert result.pixel_um == pytest.approx(0.6, rel=0.01)
     assert frame.mounts == [mc.mount_of(result.x_mm, result.y_mm)]
-    written = spec.load(copy).sample_holder("stage").holders["slides"].mount
-    assert (written.x, written.y) == (result.x_mm, result.y_mm)
+    # kept as how far it is from the design's mount, which stays as it is
+    assert result.saved_to == str(copy.store.path)
+    [offset] = copy.store.load().mounts
+    assert (offset.offset_x_um, offset.offset_y_um) == (
+        pytest.approx(result.shift_um[0], abs=0.01),
+        pytest.approx(result.shift_um[1], abs=0.01),
+    )
+    again = keeping(frame.instrument, tmp_path).mount("stage", "slides")
+    assert (again.x, again.y) == (pytest.approx(result.x_mm), pytest.approx(result.y_mm))
     # the light and the exposure are taken back; the focus too
     assert frame.settings == {"led.power": 0.0, "camera.exposure": 100.0}
     assert frame.position["stage.z"] == 0.0
@@ -284,6 +302,9 @@ def test_the_frame_starts_with_its_calibration_in_the_state() -> None:
 
     from newswitch.microscope.startup import provide_mount_calibration
 
-    state = asyncio.run(provide_mount_calibration(SimpleNamespace(instrument=spec.load(FRAME))))  # type: ignore[arg-type]
+    instrument = spec.load(FRAME)
+    space = SimpleNamespace(mounted_holder=lambda holder, sample: instrument.sample_holder(sample).holders[holder])
+    run = SimpleNamespace(instrument=instrument, microscope=SimpleNamespace(space=space))
+    state = asyncio.run(provide_mount_calibration(run))  # type: ignore[arg-type]
     assert (state.sample, state.holder, state.at, state.mark) == ("stage", "slides", "slot:A1", "pinhole:B1")
     assert state.slide.startswith("openUC2's pinhole slide") and not state.busy

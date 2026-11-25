@@ -153,6 +153,7 @@ settings:
   db_path: arkitekt_agent.db     # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache   # cleared on every start
+  calibration_dir: data/calibration
   camera_recording_dir: data/recordings   # only cameras with store_image_data record
   camera_debug_window: true      # real cameras only: a window per camera, acquiring from startup on
 

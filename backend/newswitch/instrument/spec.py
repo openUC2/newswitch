@@ -11,7 +11,9 @@ all reported at once with their path in the file.
 
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import field
 from pathlib import Path
@@ -428,6 +430,11 @@ class Mount:
     x: Millimetres
     y: Millimetres
     rotation: Degrees = 0.0
+
+    @classmethod
+    def of(cls, x_mm: float, y_mm: float, rotation_deg: float = 0.0) -> Mount:
+        """A mount from numbers: millimetres, and degrees."""
+        return cls(x=f"{x_mm!r} mm", y=f"{y_mm!r} mm", rotation=f"{rotation_deg!r} deg")  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True, config=STRICT)
@@ -1259,6 +1266,17 @@ class Instrument:
             for cube in self.cubes.values()
             for variable in cube.variables.values()
         }
+
+    def design_hash(self) -> str:
+        """What a calibration of this microscope is of: a digest of everything it is built as
+        (its parts, light paths, wiring and hardware, with what its library entries say), and
+        not of how a run behaves (``settings``), its views (``ui``) or where its file lies. A
+        calibration stored under another digest is of another design."""
+        data = _INSTRUMENT.dump_python(self, mode="json")
+        for key in ("settings", "ui", "folder"):
+            data.pop(key, None)
+        text = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(text.encode()).hexdigest()
 
     def initial_state(self) -> dict[str, Any]:
         """Every variable at its initial value."""

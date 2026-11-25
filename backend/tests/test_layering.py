@@ -119,11 +119,7 @@ def _everything_but(*allowed: str) -> tuple[str, ...]:
 PENDING: dict[str, set[str]] = {
     "design": set(),
     "simulation": set(),
-    "calibration": {
-        "newswitch.protocols.calibration -> newswitch.calibration",
-        "newswitch.protocols.optics -> newswitch.calibration",
-        "newswitch.services.optics -> newswitch.calibration",
-    },
+    "calibration": set(),
     "apart": set(),
 }
 
@@ -198,9 +194,7 @@ def test_only_the_simulation_and_the_root_read_the_simulation_mode() -> None:
                 and getattr(node, "id", getattr(node, "name", None)) == "SIMULATED"
             ):
                 readers.add(module)
-    # the mount calibration asks so as not to write a twin's mount into the description: it goes
-    # when what is calibrated is kept in the calibration's own store
-    assert readers == {"newswitch.calibration.mount"}
+    assert readers == set()
 
 
 def test_only_the_simulation_reads_the_truth() -> None:

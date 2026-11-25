@@ -105,7 +105,8 @@ async def provide_mount_calibration(run: Run) -> MountCalibrationState:
         calibration = holding.calibration
         if calibration is None:
             continue
-        mounted = holding.holders[calibration.holder]
+        # where it is taken to sit now: as calibrated, where it was (else as the design says)
+        mounted = run.microscope.space.mounted_holder(calibration.holder, sample)
         return MountCalibrationState(
             sample=sample,
             holder=calibration.holder,

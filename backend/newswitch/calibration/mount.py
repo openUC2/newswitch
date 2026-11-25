@@ -6,8 +6,9 @@ the place of its origin on the stage, counted from where homing puts the stage; 
 in an image (`newswitch.instrument.spec.Calibration`). Where the mark is on the holder is known,
 then. The stage is homed, taken to where the mount puts the mark, the mark is looked for and
 brought into the middle of the image: there the stage is at the mark, and the mount is where the
-stage is less where the mark is on the holder. It is used at once and written into the
-description, which stays the one place a holder's position is stated.
+stage is less where the mark is on the holder. It is used at once and kept in the calibration
+store (`newswitch.calibration.store`), as how far it is from where the design puts it: the
+description stays the design, the same for every copy of the microscope.
 
 The stage's own 0 is where homing puts it: nothing of the sample is measured from anywhere else.
 """
@@ -15,9 +16,7 @@ The stage's own 0 is where homing puts it: nothing of the sample is measured fro
 
 import logging
 import math
-import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterator, Optional
 
 import numpy as np
@@ -110,71 +109,7 @@ def mount_from(stage_um: tuple[float, float], mark_mm: tuple[float, float], rota
 
 def mount_of(x_mm: float, y_mm: float, rotation: float = 0.0) -> Mount:
     """A mount from numbers: millimetres, and degrees."""
-    return Mount(x=f"{x_mm!r} mm", y=f"{y_mm!r} mm", rotation=f"{rotation!r} deg")  # type: ignore[arg-type]
-
-
-def _mm(value: float) -> str:
-    return f"{value:.3f}".rstrip("0").rstrip(".") + " mm"
-
-
-def write_mount(path: Path, sample: str, holder: str, mount: Mount) -> None:
-    """Write `mount` as the mount of `holder` of the cube `sample` into the description at `path`,
-    leaving the rest of it as it is.
-
-    Raises:
-        ValueError: The description does not state that mount as ``mount: {...}`` on one line.
-    """
-    lines = path.read_text().splitlines(keepends=True)
-    stated = f"x: {_mm(mount.x)}, y: {_mm(mount.y)}"
-    if mount.rotation:
-        stated += f", rotation: {mount.rotation:g} deg"
-
-    def indent(line: str) -> int:
-        return len(line) - len(line.lstrip())
-
-    def find(start: int, stop: int, key: str) -> int:
-        for index in range(start, stop):
-            if re.match(rf"\s*{re.escape(key)}:(\s|$)", lines[index]):
-                return index
-        raise ValueError(f"{path}: no {key}: where the mount of {sample}'s {holder} is")
-
-    def end_of(start: int) -> int:
-        for index in range(start + 1, len(lines)):
-            if lines[index].strip() and not lines[index].lstrip().startswith("#"):
-                if indent(lines[index]) <= indent(lines[start]):
-                    return index
-        return len(lines)
-
-    cube = find(find(0, len(lines), "cubes"), len(lines), sample)
-    holders = find(cube, end_of(cube), "holders")
-    entry = find(holders, end_of(holders), holder)
-    for index in range(entry, end_of(entry)):
-        found = re.search(r"mount:\s*\{[^}]*\}", lines[index])
-        if found:
-            lines[index] = (
-                lines[index][: found.start()] + f"mount: {{{stated}}}" + lines[index][found.end() :]
-            )
-            path.write_text("".join(lines))
-            return
-    raise ValueError(f"{path}: the mount of {sample}'s {holder} is not stated as mount: {{...}}")
-
-
-def _description_file() -> Optional[Path]:
-    """The description this run was started with, if a measured mount is written into it: not
-    when the run is simulated (``simulate: everything`` or ``virtual``), whose mount says nothing
-    of the real microscope the description is of."""
-    import os
-
-    from newswitch.settings import SIMULATE_ENV_VAR, SIMULATED, load_settings
-
-    settings = load_settings(simulate=os.environ.get(SIMULATE_ENV_VAR))
-    if settings.simulate in SIMULATED:
-        logger.info("a simulated run (%s): the mount is not written down", settings.simulate)
-        return None
-    named = settings.instrument
-    if named is None:
-        return None
-    return named / "microscope.yml" if named.is_dir() else named
+    return Mount.of(x_mm, y_mm, rotation)
 
 
 def _quantity(instrument: Instrument, name: str, stated: str) -> Any:  # noqa: ANN401
@@ -214,6 +149,7 @@ def calibrate_mount(
     values: Values,
     detector_manager: protocols.DetectorManager,
     uc2_bus: UC2BusManager,
+    calibration_manager: protocols.CalibrationManager,
     mount_calibration: MountCalibrationState,
     task: Task,
     sample: Optional[str] = None,
@@ -226,11 +162,11 @@ def calibrate_mount(
     goes where the holder's mount puts the mark and holds: someone checks that the stage was homed
     and the light falls on the calibration slide's mark, and approves. Then it looks for the mark
     around there, brings it into the middle of the image and takes the mount from where the stage
-    is. The mount is used from then on, and written into the description.
+    is. The mount is used from then on, and kept in the calibration store.
 
     Args:
         sample: Which sample, by the cube holding it; may be left out when there is one.
-        save: Write the mount into the description (else it holds until the next start).
+        save: Keep the mount in the calibration store (else it holds until the next start).
         confirm: Hold for a person to check the light is on the mark before looking for it.
 
     Raises:
@@ -352,12 +288,9 @@ def calibrate_mount(
 
         mount = mount_from((x, y), mark, mounted.mount.rotation)
         space.set_mount(calibration.holder, mount, sample)
-        saved = None
-        if save:
-            path = _description_file()
-            if path is not None:
-                write_mount(path, sample, calibration.holder, mount)
-                saved = str(path)
+        saved = (
+            calibration_manager.set_mount(sample, calibration.holder, mount) if save else None
+        )
         pixel_um = 1.0 / math.sqrt(abs(np.linalg.det(follows)))
         shift = [(mount.x - mounted.mount.x) * 1e3, (mount.y - mounted.mount.y) * 1e3]
         logger.info(

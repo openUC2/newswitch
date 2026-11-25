@@ -16,16 +16,21 @@ from typing import Any
 
 import numpy as np
 
-from newswitch.calibration.models import CalibratedLightPath
-from newswitch.calibration.states import CalibrationState
 from newswitch.instrument import spec, tracing
 from newswitch.instrument.compiler import compile_instrument, influences
 from newswitch.instrument.naming import channel_names
 from newswitch.instrument.predict import Answer, state_key
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument
-from newswitch.models.light_path import LightEdge, LightElement, LightPath, LightPathSnapshot
+from newswitch.models.light_path import (
+    CalibratedLightPath,
+    LightEdge,
+    LightElement,
+    LightPath,
+    LightPathSnapshot,
+)
 from newswitch.models.optics import ChannelSwap, DetectorOptics, OpticalChannel, SourceOptics
+from newswitch.protocols.calibration import CalibrationManager
 from newswitch.services.element_facts import facts_of, spectrum_color
 from newswitch.states.detector import DetectorState
 from newswitch.states.optics import OpticsState
@@ -52,15 +57,16 @@ class OpticsManager:
         self,
         state: OpticsState,
         detector_state: DetectorState,
-        calibration_state: CalibrationState,
+        calibration: CalibrationManager | None = None,
         instrument: Instrument | None = None,
         values: Callable[[], Mapping[str, Any]] | None = None,
         roles: Roles | None = None,
     ) -> None:
-        """A manager of `instrument`'s optics, whose current values `values` gives."""
+        """A manager of `instrument`'s optics, whose current values `values` gives; a detector's
+        pixels are where `calibration` measured them, where it did."""
         self.state = state
         self.detector_state = detector_state
-        self.calibration_state = calibration_state
+        self.calibration = calibration
         self.instrument = instrument
         self.values = values or dict
         self.table = None if instrument is None else compile_instrument(instrument)
@@ -167,10 +173,10 @@ class OpticsManager:
     ) -> tuple[CalibratedLightPath, bool]:
         """Where `detector`'s pixels would be under `values`, and whether that was measured."""
         snapshot = self.snapshot(self._path(detector, values), values)
-        try:
-            return self.calibration_state.get_calibrated_path(snapshot), True
-        except ValueError:
-            return self.predicted(detector, values), False
+        found = None if self.calibration is None else self.calibration.light_path(snapshot.key)
+        if found is not None:
+            return found, True
+        return self.predicted(detector, values), False
 
     def depth_of_field_um(self, detector: str) -> float:
         """How deep what `detector` sees sharply is, from its objective's NA."""

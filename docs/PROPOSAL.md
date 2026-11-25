@@ -235,10 +235,12 @@ calibrated, and kept in newswitch's calibration store (§1).
 
 ## 4 · What changes in newswitch
 
-1. **A calibration store**, per microscope and per design commit, as the calibrated light paths are
-   kept today: the holder's offset from its nominal mount, focus offsets, the image-to-stage mapping,
-   the offset between the objectives. It is applied on top of the description at start.
-   `calibrate_mount` today writes the mount into `microscope.yml`; it moves to the store.
+1. **A calibration store**, per microscope and per design (done, 2026-11-25:
+   `newswitch/calibration/store.py`, `settings.calibration_dir/<name>.yml`, keyed by
+   `Instrument.design_hash`): the holder's offset from its nominal mount and the image-to-stage
+   mapping of each light path (which until then were kept in memory only, and lost at every
+   start); focus offsets and the offset between the objectives to follow. It is applied on top of
+   the description at start. `calibrate_mount` no longer writes the mount into `microscope.yml`.
 2. **A CI check** generates every microscope from its DSN and fails on any diff to the committed
    `microscope.yml`. That check is what makes "deterministic" a guarantee.
 3. **More calibration routines** beside `calibrate_mount` and `calibrate_light_path`: focus per
@@ -253,4 +255,6 @@ calibrated, and kept in newswitch's calibration store (§1).
 - **Invalidation:** a calibration belongs to a design commit. When the design changes, is it voided
   as a whole, or only where the change touches it (a new holder voids the holder offset, not the
   focus)?
+  For now (2026-11-25) as a whole: the store is of one `Instrument.design_hash`, and a store of
+  another design is shown stale and not applied.
 okay

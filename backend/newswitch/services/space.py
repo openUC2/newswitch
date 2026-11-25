@@ -74,6 +74,7 @@ from newswitch.models.space import (
     Transformation,
     PlaceShape,
 )
+from newswitch.protocols.calibration import CalibrationManager
 from newswitch.services.optics import OpticsManager
 from newswitch.services.values import Values
 from newswitch.states.detector import DetectorState
@@ -149,8 +150,10 @@ class SpaceManager:
         values: Values | None,
         optics: OpticsManager,
         detector_state: DetectorState,
+        calibration: CalibrationManager | None = None,
     ) -> None:
-        """A space of `values`, placed by `optics`, with the windows of `detector_state`."""
+        """A space of `values`, placed by `optics`, with the windows of `detector_state`; each
+        holder where `calibration` measured it, where it did, else where the design says."""
         self.state = state
         self.values = values
         self.optics = optics
@@ -162,7 +165,14 @@ class SpaceManager:
         samples: dict[str, SampleSpace] = {}
         for sample in [] if self.instrument is None else self.instrument.samples():
             holder = self.instrument.sample_holder(sample)
-            self._holders[sample] = dict(holder.holders)
+            self._holders[sample] = {
+                name: (
+                    mounted
+                    if calibration is None or (measured := calibration.mount(sample, name)) is None
+                    else MountedHolder(holder=mounted.holder, mount=measured)
+                )
+                for name, mounted in holder.holders.items()
+            }
             # Every start is a mounting of its own: what is on a stage now need not be what was
             # before, and the mount lives in memory only.
             samples[sample] = SampleSpace(

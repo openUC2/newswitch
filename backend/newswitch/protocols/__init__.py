@@ -14,8 +14,8 @@ from .expanse import ExpanseManager
 from .frame_sink import FrameSink
 from .hook_manager import HookContext, HookHandler, HookManager, UnsupportedHook
 from .io import IOManager
-from .optics import OpticsManager
 from .metadata import MetadataManager
+from .optics import OpticsManager
 from .uc2 import UC2BusManager
 
 __all__ = [

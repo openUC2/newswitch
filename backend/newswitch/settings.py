@@ -58,6 +58,10 @@ class Settings(BaseModel):
     cache_dir: Path
     """Folder acquired frames are cached in (`services.cache.LocalCacheManager`); cleared
     when the microscope starts."""
+    calibration_dir: Path
+    """Folder the calibration store is kept in (`newswitch.calibration.store`): what was measured
+    of this copy of the microscope, one file per microscope (``<name>.yml``), applied at every
+    start while the design is the one it was measured on. Kept: never cleared."""
     camera_recording_dir: Optional[Path]
     """Folder the cameras record into (see `drivers.uc2.uc2_detector`). null: the default of
     uc2_cam_py (``~/UC2_recordings``)."""
@@ -73,7 +77,7 @@ class Settings(BaseModel):
         """Whether each camera's stream sends a test pattern instead of its frames (``debug``)."""
         return self.simulate == "debug"
 
-    @field_validator("instrument", "camera_recording_dir", "image_dir", "cache_dir")
+    @field_validator("instrument", "camera_recording_dir", "image_dir", "cache_dir", "calibration_dir")
     @classmethod
     def _relative_to_backend(cls, path: Optional[Path]) -> Optional[Path]:
         if path is None or path.is_absolute():
@@ -122,13 +126,14 @@ def load_settings(named: Optional[str] = None, simulate: Optional[str] = None) -
 
 def _apart(settings: Settings, mode: str) -> dict[str, object]:
     """The files of a run in `mode` beside the one its description is for: its own agent database,
-    image and cache folders (the cache is cleared on start), so a twin running beside the rig
-    disturbs none of the rig's."""
+    image, cache and calibration folders (the cache is cleared on start), so a twin running beside
+    the rig disturbs none of the rig's, and what it calibrates is never taken for the rig's."""
     db = Path(settings.db_path)
     return {
         "db_path": str(db.with_name(f"{db.stem}.{mode}{db.suffix}")),
         "image_dir": settings.image_dir / mode,
         "cache_dir": settings.cache_dir / mode,
+        "calibration_dir": settings.calibration_dir / mode,
     }
 
 

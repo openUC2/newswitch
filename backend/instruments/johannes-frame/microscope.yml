@@ -16,10 +16,12 @@
 # The stage: 0 is where homing puts it (each axis has one endstop: X and Y count away from theirs,
 # Z towards the sample), and the stage's dimensions are its limits. What is on it is the holder,
 # from the library (newswitch/instrument/holders), mounted where its `mount` says: its origin on
-# the stage. That is measured with the calibration slide (calibrate_mount: home, find the
-# slide's middle pinhole, centre it) and written back here, so this is the one place it is
-# stated. Until the stage is homed, its positions are the boards' own count, which they keep over
-# a restart (NVS) but which is wrong after a move by hand or lost steps.
+# the stage. Where it really sits on this frame is measured with the calibration slide
+# (calibrate_mount: home, find the slide's middle pinhole, centre it) and kept in newswitch's
+# calibration store (settings.calibration_dir), as how far it is from this `mount`, which is
+# not written again: it stands for the design's value until the DSN states one. Until the stage
+# is homed, its positions are the boards' own count, which they keep over a restart (NVS) but
+# which is wrong after a move by hand or lost steps.
 #
 # The optics and the sources' spectra below are placeholders
 # (the rgb-camera's): measure the objective, tube lens and filters of this frame and state them.
@@ -65,7 +67,8 @@ cubes:
           reflect: 1.0e-6
           pattern: {beads: 3600, radius: 2 um, depth: 4 um}
       holders:
-        # measured 2026-11-23 with the pinhole slide in slot 1 (ImSwitch, 2026-11-09: -0.056, 1.439)
+        # measured 2026-11-23 with the pinhole slide in slot 1 (ImSwitch, 2026-11-09: -0.056, 1.439);
+        # what calibrate_mount measures from now on is kept apart (the calibration store)
         slides: {holder: heidstar-4-slide, mount: {x: -0.059 mm, y: 1.486 mm}}
       mounted: slides
       calibration:
@@ -194,6 +197,7 @@ settings:
   db_path: arkitekt_agent.db
   image_dir: /tmp/newswitch/images
   cache_dir: /tmp/newswitch/cache
+  calibration_dir: data/calibration
   camera_recording_dir: data/recordings
   camera_debug_window: false
 

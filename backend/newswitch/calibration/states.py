@@ -3,15 +3,29 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from newswitch.calibration.models import CalibratedLightPath, MeasuredMount
-from newswitch.models.light_path import LightPathSnapshot
+from newswitch.calibration.models import CalibratedMount, MeasuredMount
+from newswitch.models.light_path import CalibratedLightPath, LightPathSnapshot
 
 
 @dataclass
 class CalibrationState:
-    """The light paths measured: how large a detector's pixels are on the sample, per setup."""
+    """What is calibrated of this copy of the microscope, as its calibration store keeps it: the
+    light paths measured (how large a detector's pixels are on the sample, per setup) and how far
+    each holder sits from its design's place."""
 
     calibrated_light_paths: list[CalibratedLightPath] = field(default_factory=lambda: [])
+    mounts: list[CalibratedMount] = field(default_factory=lambda: [])
+    design: str = ""
+    """The design it is of (`Instrument.design_hash`)."""
+    stale: bool = False
+    """The store holds calibrations of another design: none of them is applied until they are
+    measured again."""
+    stored_design: Optional[str] = None
+    """The design the store's calibrations are of, when it holds any."""
+    saved: Optional[str] = None
+    """When the store was last written, ISO 8601."""
+    store: Optional[str] = None
+    """Where it is kept; None: nowhere, it lives as long as the run."""
 
     def get_calibrated_path(self, light_path_state: LightPathSnapshot) -> CalibratedLightPath:
         """Get the calibrated light path for a given light path configuration."""

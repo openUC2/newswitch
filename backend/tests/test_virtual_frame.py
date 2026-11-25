@@ -47,6 +47,7 @@ def test_the_switch_runs_a_description_otherwise_without_touching_it(
     # beside the rig, with files of its own: the rig's cache is not cleared by the twin's start
     assert twin.db_path.endswith("arkitekt_agent.virtual.db") and twin.db_path != rig.db_path
     assert twin.cache_dir == rig.cache_dir / "virtual" and twin.image_dir == rig.image_dir / "virtual"
+    assert twin.calibration_dir == rig.calibration_dir / "virtual"
     assert load_settings(simulate="unwired") == rig  # what the file says: nothing changes
     with pytest.raises(SpecError, match="no simulation mode"):
         load_settings(simulate="sometimes")
@@ -115,19 +116,19 @@ def test_the_simulated_slide_is_black_but_for_its_pinholes() -> None:
 
 
 @pytest.mark.usefixtures("views_beside_copies")
-def test_calibrating_the_twin_finds_where_its_holder_truly_is_and_writes_nothing(
+def test_calibrating_the_twin_finds_where_its_holder_truly_is_and_keeps_it_apart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The truth puts the holder 150 / -80 µm off its description: the whole calibration (homing,
-    the hold approved, search, centring) finds that, and the description stays as it was."""
+    the hold approved, search, centring) finds that, and keeps it in the twin's own store (never
+    the rig's); the description stays as it was. The twin's next start mounts it there."""
     copy = tmp_path / "johannes-frame"
     shutil.copytree(FRAME, copy)
     (copy / "truth.yml").write_text("mount_offset_um: {x: 150.0, y: -80.0}\n")
     before = (copy / "microscope.yml").read_text()
-    monkeypatch.setenv(CONFIG_ENV_VAR, str(copy))
-    monkeypatch.setenv(SIMULATE_ENV_VAR, "virtual")
     instrument = spec.load(copy)
-    m = build_microscope(run_settings(tmp_path, simulate="virtual"), instrument)
+    twin = run_settings(tmp_path, simulate="virtual", calibration_dir=tmp_path / "calibration" / "virtual")
+    m = build_microscope(twin, instrument)
     described = instrument.sample_holder("stage").holders["slides"].mount
     holds: list[str] = []
     task = SimpleNamespace(
@@ -141,7 +142,7 @@ def test_calibrating_the_twin_finds_where_its_holder_truly_is_and_writes_nothing
         dispatch = asyncio.ensure_future(dispatch_uc2_events(m.uc2_bus, m.values, m.uc2_state))
         try:
             return await koil.run_threaded(
-                calibrate_mount, m.space, m.values, m.detector, m.uc2_bus, state, task
+                calibrate_mount, m.space, m.values, m.detector, m.uc2_bus, m.calibration, state, task
             )
         finally:
             pump.cancel()
@@ -151,8 +152,11 @@ def test_calibrating_the_twin_finds_where_its_holder_truly_is_and_writes_nothing
     assert len(holds) == 1 and "Homed (Z, X, Y, A)" in holds[0]
     assert result.x_mm == pytest.approx(described.x + 0.150, abs=0.003)
     assert result.y_mm == pytest.approx(described.y - 0.080, abs=0.003)
-    assert result.saved_to is None and state.last == result
+    assert state.last == result
+    assert result.saved_to == str(tmp_path / "calibration" / "virtual" / "johannes-frame.yml")
     assert (copy / "microscope.yml").read_text() == before
+    again = build_microscope(twin, instrument).space.mounted_holder("slides", "stage").mount
+    assert (again.x, again.y) == (pytest.approx(result.x_mm), pytest.approx(result.y_mm))
 
 
 # --- the debug simulation: the stream tested, not the camera ---------------------------------

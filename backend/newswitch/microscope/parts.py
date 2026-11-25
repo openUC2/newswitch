@@ -16,6 +16,7 @@ import newswitch.drivers.uc2.actuators  # noqa: F401 - makes the uc2.* drivers a
 from newswitch import models, protocols, states
 from newswitch.calibration.manager import CalibrationManager
 from newswitch.calibration.states import CalibrationState
+from newswitch.calibration.store import CalibrationStore
 from newswitch.drivers.base import Driver, Report, build_driver
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
@@ -301,20 +302,30 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         state=io_state, config=LocalFileConfig(base_path=str(settings.image_dir))
     )
     calibration_state = CalibrationState()
-    calibration = CalibrationManager(calibration_state=calibration_state)
+    calibration = CalibrationManager(
+        calibration_state=calibration_state,
+        instrument=instrument,
+        store=None
+        if instrument is None
+        else CalibrationStore(settings.calibration_dir, instrument.name),
+    )
 
     optics_state = OpticsState()
     optics = OpticsManager(
         state=optics_state,
         detector_state=detector_state,
-        calibration_state=calibration_state,
+        calibration=calibration,
         instrument=instrument,
         values=None if values is None else values.snapshot,
         roles=None if values is None else values.roles,
     )
     space_state = SpaceState()
     space = SpaceManager(
-        state=space_state, values=values, optics=optics, detector_state=detector_state
+        state=space_state,
+        values=values,
+        optics=optics,
+        detector_state=detector_state,
+        calibration=calibration,
     )
 
     if isinstance(detector, SimulatedDetectorManager):

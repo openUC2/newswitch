@@ -7,8 +7,7 @@ Defines the protocol for what the optics find, and the light paths they make.
 from collections.abc import Mapping
 from typing import Any, Protocol, runtime_checkable
 
-from newswitch.calibration.models import CalibratedLightPath
-from newswitch.models.light_path import LightPath, LightPathSnapshot
+from newswitch.models.light_path import CalibratedLightPath, LightPath, LightPathSnapshot
 from newswitch.protocols.base import Manager
 
 

@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Protocol, Type, runtime_checkable
 
 from newswitch.models.hooks import Hook
-from newswitch.protocols.optics import OpticsManager
 from newswitch.protocols.base import Manager
+from newswitch.protocols.optics import OpticsManager
 
 from .detector import DetectorManager
 from .io import IOManager

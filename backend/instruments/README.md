@@ -279,9 +279,20 @@ settings:
   db_path: arkitekt_agent.db         # state history and journal of the arkitekt agent
   image_dir: /tmp/newswitch/images   # where the file IO writes
   cache_dir: /tmp/newswitch/cache    # acquired frames; cleared on every start
+  calibration_dir: data/calibration  # what was calibrated of this copy; kept, never cleared
   camera_recording_dir: data/recordings   # null: uc2_cam_py's own default
   camera_debug_window: true          # real cameras: a window each, acquiring from startup on
 ```
+
+**What is calibrated** is kept apart from the description, which stays the design (the same for
+every copy of a microscope): in `calibration_dir/<name>.yml`, the calibration store
+(`newswitch/calibration/store.py`). It holds the light paths measured (`calibrate_light_path`: a
+detector's pixels on the sample, per setup) and how far each holder was measured from its design's
+`mount` (`calibrate_mount`), and the design they are of (`Instrument.design_hash`: everything but
+`settings`, `ui` and where the file lies). Each start applies it while the design is that one;
+once the design changes, none of it is (`CalibrationState.stale`) until it is measured again. A run
+in another mode than the file states (`NEWSWITCH_SIMULATE`, the twin) keeps its own, in
+`calibration_dir/<mode>`, so a twin's calibration is never taken for the rig's.
 
 ## What it shows
 

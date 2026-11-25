@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from arkitekt import model_field
+
 #: A 4x4 pose.
 AffineMatrix = list[list[float]]
 
@@ -53,3 +55,23 @@ class LightPathSnapshot:
     """Of everything set on the way, so that two images with the same setup can be told apart."""
     elements: list[LightElement] = field(default_factory=list)
     edges: list[LightEdge] = field(default_factory=list)
+
+
+@dataclass
+class CalibratedLightPath:
+    """How a step along a column and along a row moves on the sample, for one light path: as the
+    optics predict it, or as it was measured (`newswitch.calibration`)."""
+
+    affine_matrix: AffineMatrix = model_field(
+        default_factory=lambda: [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        description="Pixel to sample micrometres, without where it looks: its 2x2 is the scale",
+    )
+    key: str = model_field(
+        default="",
+        description="Of what changes where a pixel looks: this matrix holds for as long as it does",
+    )
