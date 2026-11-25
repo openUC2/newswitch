@@ -5,7 +5,7 @@
 
 The agent (``app.py``) is the standard way to run newswitch; this serves the same microscope to the
 newswitch frontend instead of Orkestrator. `create_fastapi_registry` registers it: the global
-microscope registry the agent merges too (`newswitch.microscope.registry.app`: every part, whatever
+microscope registry the agent includes too (`newswitch.microscope.registry.app`: every part, whatever
 the instrument has), a
 `FrameBroadcaster` as the detectors' `FrameSink` (the websocket live view streams from it), and the
 description's ``ui`` bloks checked against the frontend's catalog. Those are the instrument's own,
@@ -69,12 +69,12 @@ def create_fastapi_registry(instrument: Instrument | None, with_mikro: bool = Fa
             does in agent mode.
     """
     app = App(registry.IDENTIFIER, registry.VERSION, app_context=Run)
-    app.registry.merge(registry.app.registry)  # the microscope: every part
+    app.include(registry.app)  # the microscope: every part
     app.register_startup(provide_frame_broadcaster)
     if with_mikro:
         from newswitch.infra.mikro import app as mikro_app  # needs the extra mikro
 
-        app.registry.merge(mikro_app.app.registry)
+        app.include(mikro_app.app)
     else:
         app.register_startup(provide_no_dataset_store)
     declare_ui(app, instrument)

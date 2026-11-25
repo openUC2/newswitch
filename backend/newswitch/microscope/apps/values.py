@@ -11,7 +11,7 @@ from newswitch.services.values import Values
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
 
 app = App("newswitch", app_context=Run)
-app.registry.merge(core.app.registry)
+app.include(core.app)
 app.register_state(MoveState)
 app.register_state(SwapState)
 app.register_state(TuneState)

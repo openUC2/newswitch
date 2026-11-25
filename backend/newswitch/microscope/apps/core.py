@@ -25,7 +25,7 @@ from newswitch.states.optics import OpticsState
 from newswitch.states.space import SpaceState
 
 app = App("newswitch", app_context=Run)
-app.registry.merge(models.app.registry)
+app.include(models.app)
 
 app.register_state(IOState, required_locks=[locks.IO])
 app.register_state(HookState, required_locks=[locks.HOOKS])

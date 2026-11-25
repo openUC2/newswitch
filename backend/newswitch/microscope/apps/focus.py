@@ -12,7 +12,7 @@ from newswitch.routines.region_scan import scan_region
 from newswitch.states.autofocus import AutofocusState
 
 app = App("newswitch", app_context=Run)
-app.registry.merge(values.app.registry).merge(detector.app.registry)
+app.include(values.app, detector.app)
 
 app.register_state(AutofocusState)
 app.register_startup(provide_focus)

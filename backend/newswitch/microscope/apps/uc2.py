@@ -13,7 +13,7 @@ from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.states.uc2 import UC2State
 
 app = App("newswitch", app_context=Run)
-app.registry.merge(core.app.registry).merge(values.app.registry).merge(detector.app.registry)
+app.include(core.app, values.app, detector.app)
 
 app.register_state(UC2State)
 app.register_context(UC2BusManager)

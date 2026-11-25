@@ -1,6 +1,6 @@
 """A mikro client for FastAPI mode, configured by hand.
 
-In agent mode arkitekt provides mikro (`mikro_service`, ``app.py``). FastAPI mode has no
+In agent mode arkitekt provides mikro (the client `Mikro`, ``app.py``). FastAPI mode has no
 server to ask, so where mikro is comes from the environment, like the backend's own host and port,
 and the token stays out of the committed settings. Unset, newswitch runs without one.
 

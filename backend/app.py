@@ -35,8 +35,8 @@ import sys
 from typing import Tuple
 
 from arkitekt import App, run
-from lovekit import lovekit_service
-from mikro import Mikro, mikro_service
+from lovekit import Lovekit
+from mikro import Mikro
 
 from newswitch.actions.core import clear_expanse
 from newswitch.actions.detector import (
@@ -170,7 +170,7 @@ app = App(
     VERSION,
     description=DESCRIPTION,
     app_context=Run,
-    services=(lovekit_service, mikro_service),
+    clients=[Lovekit, Mikro],
 )
 
 # --- models: what travels by value in arguments, returns and states

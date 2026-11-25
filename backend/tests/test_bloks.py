@@ -193,7 +193,7 @@ def test_agent_mode_refuses_a_newswitch_component() -> None:
 
     # A fresh app with what the agent's holds: the global one is not declared on from outside.
     app = App("newswitch", app_context=agent.Run)
-    app.registry.merge(agent.app.registry)
+    app.include(agent.app)
     broken = BlokEntry(bsx=orkestrator_blok("<StageControl />"))
     with pytest.raises(ValueError, match="StageControl"):
         declare_bloks(app, "agent", {"broken": broken}, AGENT_CATALOGS)

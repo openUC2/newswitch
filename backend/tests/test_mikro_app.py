@@ -48,8 +48,7 @@ def test_the_client_lives_as_long_as_the_agent(
 
     async def lifetime() -> None:
         hook = mikro_app.provide_mikro(run)
-        provided, store = await anext(hook)
-        assert provided is client
+        store = await anext(hook)
         assert isinstance(store, MikroDatasetStore) and store.client is client
         assert client.events == ["entered"]
         with pytest.raises(StopAsyncIteration):

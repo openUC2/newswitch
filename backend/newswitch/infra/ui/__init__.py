@@ -31,7 +31,7 @@ import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
-from arkitekt import ORKESTRATOR_CATALOG_ID, App, checking_catalogs
+from arkitekt import ORKESTRATOR_CATALOG_ID, App, AppDeclarationError, checking_catalogs
 from arkitekt_spec.declare.app import source_catalog
 from arkitekt_spec.declare.catalogs import CatalogWarning
 
@@ -185,16 +185,36 @@ def declare_bloks(
             raise ValueError(
                 f"{section}.bloks.{name} is written for {_catalog_label(catalog)}, not {wanted}"
             )
-        with checking_catalogs(), warnings.catch_warnings():
-            warnings.simplefilter("error", CatalogWarning)
-            for code in tolerated:
-                warnings.filterwarnings(
-                    "ignore", message=rf".*\[{re.escape(code)}\]$", category=CatalogWarning
-                )
-            try:
-                app.blok(name, entry.bsx, description=entry.description, default=entry.default)
-            except CatalogWarning as finding:
-                raise ValueError(f"{section}.bloks.{name}: {finding}") from None
+        _check_blok(app, section, name, entry, tolerated)
+        app.blok(name, entry.bsx, description=entry.description, default=entry.default)
+
+
+def _check_blok(
+    app: App, section: str, name: str, entry: BlokEntry, tolerated: Iterable[str]
+) -> None:
+    """Refuse `entry` now, before it is declared on `app`.
+
+    arkitekt checks a blok when its app is assembled, not when it is declared (19): `app` would
+    take it and fail later, at its run. So it is declared on a probe that includes `app`, and the
+    probe assembled with every catalog finding an error, but those whose code is in `tolerated`.
+
+    Raises:
+        ValueError: The blok's catalog or the language refuses it.
+    """
+    probe = App(app.identifier, app_context=app.app_context)
+    probe.include(app)
+    probe.blok(name, entry.bsx, description=entry.description, default=entry.default)
+    with checking_catalogs(), warnings.catch_warnings():
+        warnings.simplefilter("error", CatalogWarning)
+        for code in tolerated:
+            warnings.filterwarnings(
+                "ignore", message=rf".*\[{re.escape(code)}\]$", category=CatalogWarning
+            )
+        try:
+            probe.declaration()
+        except AppDeclarationError as problems:
+            findings = "; ".join(str(problem) for problem in problems.exceptions)
+            raise ValueError(f"{section}.bloks.{name}: {findings}") from None
 
 
 def declare_ui(

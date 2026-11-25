@@ -12,7 +12,7 @@ from newswitch.protocols.detector import DetectorManager
 from newswitch.states.detector import DetectorState
 
 app = App("newswitch", app_context=Run)
-app.registry.merge(core.app.registry)
+app.include(core.app)
 app.register_state(DetectorState, required_locks=[locks.DETECTOR])
 app.register_context(DetectorManager, locks=[locks.DETECTOR])
 app.register_context(AcquisitionManager, locks=[locks.EXPANSE, locks.IO])

@@ -15,7 +15,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -33,7 +35,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -51,7 +55,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -82,7 +88,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -191,7 +199,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -235,13 +245,17 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         },
         {
           "key": "detector",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Which detector to show; without one, a choice of those that are on."
         }
@@ -259,7 +273,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -329,7 +345,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -347,7 +365,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -406,13 +426,22 @@
       "props": [
         {
           "key": "background",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Background color of the scene. Defaults to #020617."
         },
         {
           "key": "children",
-          "kind": "LIST",
+          "port": {
+            "kind": "LIST",
+            "children": [
+              {
+                "key": "..."
+              }
+            ]
+          },
           "required": false,
           "description": "Scene layers: StageAxis, StagePlane, FramesLayer, ImagesLayer, LivesLayer, LightPathLayer, FrameLightPathLayer, StagePositioner, RectangleDrawer."
         }
@@ -430,19 +459,30 @@
       "props": [
         {
           "key": "children",
-          "kind": "LIST",
+          "port": {
+            "kind": "LIST",
+            "children": [
+              {
+                "key": "..."
+              }
+            ]
+          },
           "required": false,
           "description": "A StageScene and the panels floating over it."
         },
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         },
         {
           "key": "sample",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Which sample it shows, by the cube holding it (SpaceState.samples). Left out: the first, and a picker switches between several."
         }
@@ -460,7 +500,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -478,7 +520,9 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         }
@@ -496,13 +540,17 @@
       "props": [
         {
           "key": "className",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": false,
           "description": "Extra Tailwind classes appended to the element."
         },
         {
           "key": "name",
-          "kind": "STRING",
+          "port": {
+            "kind": "STRING"
+          },
           "required": true,
           "description": "The variable: stage.z, objective.slot, laser_488.power."
         }

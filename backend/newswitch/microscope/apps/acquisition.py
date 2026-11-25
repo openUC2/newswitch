@@ -9,8 +9,7 @@ from newswitch.routines.acquire import acquire
 from newswitch.routines.mda import acquire_mda
 
 app = App("newswitch", app_context=Run)
-app.registry.merge(values.app.registry)
-app.registry.merge(detector.app.registry)
+app.include(values.app, detector.app)
 
 # Stated, so nothing is inferred from what it takes: everything it depends on staying as it is.
 app.register_action(acquire, locks=[locks.MOTION, locks.SWAP, locks.TUNE, locks.DETECTOR])
