@@ -694,6 +694,27 @@ websockets): files the `IOManager`, cache the `CacheManager`, the live view the
 
 ## 7. Module reference (backend)
 
+**Runtime, simulation, calibration.** One design, three concerns, kept apart
+(`tests/test_layering.py` checks every rule):
+
+```
+instrument/     the design: the description and what follows from it. Imports none of the rest
+services/ drivers/ routines/ actions/   the runtime: runs the design on real hardware
+simulation/     pretends to be the microscope (the twin), hiding how its copy differs (truth.yml)
+calibration/    measures how a copy differs from its design, and keeps it (the store)
+microscope/     the composition root: the only place that reads settings.simulate, picks a
+                real part or a simulated one, and loads the calibration store
+```
+
+- The runtime never imports `simulation/` or `calibration/`. What no driver reaches gets the driver
+  the root hands `Values` for it (`unwired`); what is calibrated is read through
+  `protocols/calibration.py`.
+- What the optics predict and publish follows from the design alone. A sample's `simulations`
+  are read by `simulation/` only.
+- `simulation/` and `calibration/` never import each other. The twin's hidden deviation and the
+  measured one meet only in a test: calibrating the twin finds its truth
+  (`tests/test_virtual_frame.py`).
+
 | Path | Role |
 |---|---|
 | `main.py` | **Start here**: the steps both ways of serving share (registry, serve, settings, instrument); `python main.py [arkitekt\|fastapi]`, the agent by default. |
