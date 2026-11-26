@@ -121,7 +121,7 @@ ui:
                 <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border/60 bg-card/80 p-1 shadow-xl backdrop-blur past:hidden">
                     <Button icon="play" size="sm" variant="ghost" className="rounded-full" onClick={self.start_live_view()}>Scan</Button>
                     <Button icon="square" size="sm" variant="ghost" className="rounded-full" onClick={self.stop_live_view()}>Stop</Button>
-                    <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+                    <if when={!list.contains(value: list.pluck(value: obj.values(value: self.optics.detectors), key: "calibrated"), item: true)}>
                         <Button icon="wand" size="sm" variant="ghost" className="rounded-full text-warning" onClick={self.calibrate_light_path()}>Calibrate</Button>
                     </if>
                     <Button icon="camera" size="sm" className="rounded-full bg-spectrum-blue text-background hover:bg-spectrum-blue/80" onClick={self.capture_image()}>One frame</Button>
@@ -137,7 +137,7 @@ ui:
                             <span className="text-xl font-semibold tracking-tight">Point scanner</span>
                         </div>
                         <div className="flex gap-1.5">
-                            <if when={list.contains(value: list.pluck(value: obj.values(value: self.SourceState.sources), key: "on"), item: true)}>
+                            <if when={list.contains(value: list.pluck(value: obj.values(value: self.source.sources), key: "on"), item: true)}>
                                 <div className="flex items-center gap-1.5 rounded-full border border-spectrum-cyan/40 bg-spectrum-cyan/10 px-2.5 py-1 text-[11px] text-spectrum-cyan">
                                     <span className="size-1.5 animate-pulse rounded-full bg-spectrum-cyan shadow-[0_0_8px_2px] shadow-spectrum-cyan/60" />
                                     <span>Beam on</span>
@@ -149,7 +149,7 @@ ui:
                                 </div>
                             </else>
                             </if>
-                            <if when={self.DetectorState.is_acquiring}>
+                            <if when={self.detector.is_acquiring}>
                                 <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
                                     <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
                                     <span>Scanning</span>
@@ -158,7 +158,7 @@ ui:
                         </div>
                     </div>
 
-                    <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+                    <foreach items={obj.values(value: self.source.sources)} let="light" key={light.name}>
                         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-xl">
                             <div className="relative h-[244px] w-full">
                                 <Logo viewBox="0 0 640 372" width="100%" height="100%" title="The beam path: out through the scanner, and back through it to the pinhole. Not to scale.">
@@ -177,10 +177,10 @@ ui:
                                     <Line x1={100} y1={30} x2={100} y2={62} stroke="ink" strokeWidth={5} strokeLinecap="round" />
                                     <Line x1={100} y1={82} x2={100} y2={114} stroke="ink" strokeWidth={5} strokeLinecap="round" />
                                     <SvgText x={100} y={140} text="pinhole" textAnchor="middle" fill="muted" fontSize={16} />
-                                    <SvgText x={100} y={160} text={self.OpticsState.elements.pinhole.facts.diameter} textAnchor="middle" fill="muted" fontSize={16} />
+                                    <SvgText x={100} y={160} text={self.optics.elements.pinhole.facts.diameter} textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Rect x={126} y={56} width={18} height={32} rx={3} fill="spectrum-green" fillOpacity={0.25} stroke="spectrum-green" strokeOpacity={0.8} strokeWidth={1.5} />
-                                    <SvgText x={135} y={24} text={self.OpticsState.elements.filter_green.label} textAnchor="middle" fill="muted" fontSize={16} />
+                                    <SvgText x={135} y={24} text={self.optics.elements.filter_green.label} textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Line x1={154} y1={94} x2={198} y2={36} stroke="ink" strokeWidth={4} strokeLinecap="round" />
                                     <SvgText x={206} y={108} text="dichroic" fill="muted" fontSize={16} />
@@ -195,18 +195,18 @@ ui:
                                     <SvgText x={402} y={24} text="tube" textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Polygon points="456,30 512,44 526,56 526,74 512,86 456,100" fill="muted" fillOpacity={0.18} stroke="muted" strokeOpacity={0.7} strokeWidth={1.5} />
-                                    <SvgText x={490} y={24} text={str.concat(values: ["NA ", self.OpticsState.elements.objective.facts.na])} textAnchor="middle" fill="muted" fontSize={16} />
+                                    <SvgText x={490} y={24} text={str.concat(values: ["NA ", self.optics.elements.objective.facts.na])} textAnchor="middle" fill="muted" fontSize={16} />
 
                                     <Rect x={590} y={26} width={18} height={78} rx={3} fill="spectrum-green" fillOpacity={0.3} stroke="spectrum-green" strokeOpacity={0.9} strokeWidth={1.5} />
                                     <SvgText x={599} y={124} text="sample" textAnchor="middle" fill="spectrum-green" fontSize={16} fontWeight="600" />
 
                                     <!-- what the scan does on the sample -->
-                                    <G opacity={self.DetectorState.is_acquiring ? 1 : 0.4}>
+                                    <G opacity={self.detector.is_acquiring ? 1 : 0.4}>
                                         <Rect x={448} y={142} width={166} height={166} rx={4} fill="spectrum-blue" fillOpacity={0.06} stroke="spectrum-blue" strokeOpacity={0.6} strokeWidth={1.5} />
                                         <Polyline points="460,158 602,158 460,180 602,180 460,202 602,202 460,224 602,224 460,246 602,246 460,268 602,268 460,290 602,290" fill="none" stroke="spectrum-cyan" strokeWidth={2} />
                                         <Circle cx={602} cy={290} r={6} fill="ink" />
                                     </G>
-                                    <SvgText x={531} y={332} text={str.concat(values: [self.OpticsState.elements.galvo.facts.steps, ", row by row"])} textAnchor="middle" fill="spectrum-blue" fontSize={16} />
+                                    <SvgText x={531} y={332} text={str.concat(values: [self.optics.elements.galvo.facts.steps, ", row by row"])} textAnchor="middle" fill="spectrum-blue" fontSize={16} />
                                     <SvgText x={20} y={332} text="Every pixel is a moment: the image" fill="muted" fontSize={16} />
                                     <SvgText x={20} y={354} text="only exists once the scan has passed." fill="muted" fontSize={16} />
                                 </Logo>
@@ -214,15 +214,15 @@ ui:
                             <div className="relative grid grid-cols-3 divide-x divide-border/50 border-t border-border/50">
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Per step</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{self.OpticsState.elements.galvo.facts.per_step}</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{self.optics.elements.galvo.facts.per_step}</span>
                                 </div>
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{fmt.number(value: self.OpticsState.detectors.pmt.pixel_um, digits: 2)} µm</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{fmt.number(value: self.optics.detectors.pmt.pixel_um, digits: 2)} µm</span>
                                 </div>
                                 <div className="flex flex-col px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Field</span>
-                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{fmt.number(value: self.OpticsState.detectors.pmt.field_width_um, digits: 0)} µm</span>
+                                    <span className="text-lg font-semibold tabular-nums text-spectrum-blue">{fmt.number(value: self.optics.detectors.pmt.field_width_um, digits: 0)} µm</span>
                                 </div>
                             </div>
                             <div className="relative border-t border-border/50 p-4">
@@ -245,7 +245,7 @@ ui:
                         </div>
                     </foreach>
 
-                    <foreach items={self.DetectorState.detectors} let="pmt" key={pmt.name}>
+                    <foreach items={self.detector.detectors} let="pmt" key={pmt.name}>
                         <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex flex-col">
@@ -268,18 +268,18 @@ ui:
                                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Frame time</span>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.pmt.exposure.current, digits: 0)}</span>
-                                        <span className="text-xs text-muted-foreground">{self.TuneState.tunes.pmt.exposure.unit}</span>
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.tune.tunes.pmt.exposure.current, digits: 0)}</span>
+                                        <span className="text-xs text-muted-foreground">{self.tune.tunes.pmt.exposure.unit}</span>
                                     </div>
-                                    <Slider className="min-w-0" step={self.TuneState.tunes.pmt.exposure.step} value={self.TuneState.tunes.pmt.exposure.current} min={self.TuneState.tunes.pmt.exposure.minimum} max={self.TuneState.tunes.pmt.exposure.maximum} onCommit={self.tune(name: "pmt.exposure", to: event.value)} />
+                                    <Slider className="min-w-0" step={self.tune.tunes.pmt.exposure.step} value={self.tune.tunes.pmt.exposure.current} min={self.tune.tunes.pmt.exposure.minimum} max={self.tune.tunes.pmt.exposure.maximum} onCommit={self.tune(name: "pmt.exposure", to: event.value)} />
                                 </div>
                                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Gain</span>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.TuneState.tunes.pmt.gain.current, digits: 1)}</span>
-                                        <span className="text-xs text-muted-foreground">{self.TuneState.tunes.pmt.gain.unit}</span>
+                                        <span className="text-xl font-semibold tabular-nums">{fmt.number(value: self.tune.tunes.pmt.gain.current, digits: 1)}</span>
+                                        <span className="text-xs text-muted-foreground">{self.tune.tunes.pmt.gain.unit}</span>
                                     </div>
-                                    <Slider className="min-w-0" step={self.TuneState.tunes.pmt.gain.step} value={self.TuneState.tunes.pmt.gain.current} min={self.TuneState.tunes.pmt.gain.minimum} max={self.TuneState.tunes.pmt.gain.maximum} onCommit={self.tune(name: "pmt.gain", to: event.value)} />
+                                    <Slider className="min-w-0" step={self.tune.tunes.pmt.gain.step} value={self.tune.tunes.pmt.gain.current} min={self.tune.tunes.pmt.gain.minimum} max={self.tune.tunes.pmt.gain.maximum} onCommit={self.tune(name: "pmt.gain", to: event.value)} />
                                 </div>
                             </div>
                             <span className="mt-2 block text-[11px] text-muted-foreground">A longer frame collects more light per pixel, and scans slower.</span>
@@ -291,16 +291,16 @@ ui:
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Stage z, which plane</span>
                                 <div className="flex items-baseline gap-1.5">
-                                    <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.current, digits: 1)}</span>
+                                    <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage.z.current, digits: 1)}</span>
                                     <span className="text-sm text-muted-foreground">µm</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5 rounded-full bg-spectrum-green/15 px-2.5 py-1 text-[11px] font-medium text-spectrum-green">
                                 <span className="size-1.5 rounded-full bg-spectrum-green" />
-                                <span>A {fmt.number(value: self.OpticsState.detectors.pmt.depth_of_field_um, digits: 1)} µm section</span>
+                                <span>A {fmt.number(value: self.optics.detectors.pmt.depth_of_field_um, digits: 1)} µm section</span>
                             </div>
                         </div>
-                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={1} value={self.MoveState.moves.stage.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
+                        <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={1} value={self.move.moves.stage.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
                         <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
                             <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -10.0)}>-10</Button>
                             <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -1.0)}>-1</Button>

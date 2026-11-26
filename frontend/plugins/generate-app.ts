@@ -836,6 +836,16 @@ ${optimisticExports.join('\n')}
 `;
 };
 
+/**
+ * What a state's symbols are named after: its key, as a type, ending in `State`. A backend names
+ * its states short (`detector`, `move`); `DetectorState`, `useDetectorState` keep them apart from
+ * the models they hold (`Detector`) and from the action hooks (`useMove`).
+ */
+const toStateSymbol = (key: string) => {
+  const name = toPascal(key);
+  return name.endsWith('State') ? name : `${name}State`;
+};
+
 const generateStateContent = (
   key: string,
   stateDefinition: StateSchemaImplementation,
@@ -847,7 +857,7 @@ const generateStateContent = (
     subSchemas: new Map<string, string>(),
     symbolPrefix,
   };
-  const baseName = toPascal(key);
+  const baseName = toStateSymbol(key);
   const generatedName = withSymbolPrefix(baseName, symbolPrefix);
   const hookName = `use${baseName}`;
   const qualifiedHookName = symbolPrefix ? `use${generatedName}` : hookName;
@@ -1081,7 +1091,7 @@ const generateStatesDirectory = async (options: {
       continue;
     }
 
-    const stateName = toPascal(key);
+    const stateName = toStateSymbol(key);
     const definitionName = `${withSymbolPrefix(stateName, symbolPrefix)}Definition`;
     const code = generateStateContent(
       key,

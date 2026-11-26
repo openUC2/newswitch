@@ -1,14 +1,15 @@
 """The startup hooks of the microscope: what each part hands out, from the `Run` it is given.
 
-Plain functions, registered by name by the app that serves them (``app.py``; FastAPI through the part
-registries of `newswitch.microscope.apps`). A context a hook returns as None (a part the instrument
-lacks) is not provided: arkitekt fails an action that needs it when it is called. The annotations
-name the contexts and states, which arkitekt reads; it takes no Optional there.
+Plain functions, registered by the part registries of `newswitch.microscope.apps`. Every hook
+provides everything it names, on every microscope: a part the instrument lacks is there, empty (no
+boards, no detectors, no variables), and its actions have nothing to choose from. The annotations
+name the contexts and states, which arkitekt reads.
 """
 
 from typing import Tuple
 
 from newswitch.calibration.states import CalibrationState, MountCalibrationState
+from newswitch.drivers.uc2.boards import UC2Boards
 from newswitch.microscope.run import Run
 from newswitch.protocols.acquisition import AcquisitionManager
 from newswitch.protocols.cache import CacheManager
@@ -19,7 +20,6 @@ from newswitch.protocols.hook_manager import HookManager
 from newswitch.protocols.io import IOManager
 from newswitch.protocols.metadata import MetadataManager
 from newswitch.protocols.optics import OpticsManager
-from newswitch.protocols.uc2 import UC2BusManager
 from newswitch.services.space import SpaceManager
 from newswitch.services.values import Values
 from newswitch.states.autofocus import AutofocusState
@@ -75,15 +75,15 @@ async def provide_core(
 async def provide_values(
     run: Run,
 ) -> Tuple[Values, MoveState, SwapState, TuneState, SourceState]:
-    """Every variable (no `Values` without an instrument)."""
+    """Every variable."""
     m = run.microscope
-    return m.values, m.move_state, m.swap_state, m.tune_state, m.source_state  # pyright: ignore[reportReturnType]
+    return m.values, m.move_state, m.swap_state, m.tune_state, m.source_state
 
 
 async def provide_detector(run: Run) -> Tuple[DetectorManager, DetectorState, AcquisitionManager]:
-    """The detectors, and acquiring images with them (no managers without a detector)."""
+    """The detectors, and acquiring images with them."""
     m = run.microscope
-    return m.detector, m.detector_state, m.acquisition  # pyright: ignore[reportReturnType]
+    return m.detector, m.detector_state, m.acquisition
 
 
 async def provide_focus(run: Run) -> AutofocusState:
@@ -91,16 +91,16 @@ async def provide_focus(run: Run) -> AutofocusState:
     return run.microscope.autofocus_state
 
 
-async def provide_uc2(run: Run) -> Tuple[UC2BusManager, UC2State]:
-    """The UC2 board (no bus without one)."""
-    return run.microscope.uc2_bus, run.microscope.uc2_state  # pyright: ignore[reportReturnType]
+async def provide_uc2(run: Run) -> Tuple[UC2Boards, UC2State]:
+    """The UC2 boards (none, on a microscope without one)."""
+    return run.microscope.uc2, run.microscope.uc2_state
 
 
 async def provide_mount_calibration(run: Run) -> MountCalibrationState:
     """The holder calibration: of the first sample whose description says how its holder is
     calibrated (empty, when none does)."""
     instrument = run.instrument
-    for sample in [] if instrument is None else instrument.samples():
+    for sample in instrument.samples():
         holding = instrument.sample_holder(sample)
         calibration = holding.calibration
         if calibration is None:

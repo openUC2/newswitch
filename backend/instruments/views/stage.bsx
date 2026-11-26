@@ -30,7 +30,7 @@
             <div className="flex flex-col gap-4 p-4 past:opacity-70 past:grayscale">
                 <MoveControl className="locked:opacity-60" />
 
-<if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+<if when={!list.contains(value: list.pluck(value: obj.values(value: self.optics.detectors), key: "calibrated"), item: true)}>
     <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
         <div className="flex min-w-0 flex-1 flex-col">
             <span className="text-sm font-medium text-warning">Light path not calibrated</span>

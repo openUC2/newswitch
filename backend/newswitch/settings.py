@@ -137,8 +137,17 @@ def _apart(settings: Settings, mode: str) -> dict[str, object]:
     }
 
 
-def load_devices(config: Settings) -> Instrument | None:
-    """The instrument `config` came from; None when it came from none."""
-    from newswitch.instrument import spec
+def load_devices(config: Settings) -> Instrument:
+    """The instrument `config` came from: every run is of one.
 
-    return None if config.instrument is None else spec.load(config.instrument)
+    Raises:
+        SpecError: `config` came from none.
+    """
+    from newswitch.instrument import spec
+    from newswitch.instrument.errors import SpecError
+
+    if config.instrument is None:
+        raise SpecError(
+            f"the settings name no instrument: set {CONFIG_ENV_VAR} to instruments/<name>/microscope.yml"
+        )
+    return spec.load(config.instrument)

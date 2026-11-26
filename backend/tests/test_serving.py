@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -125,13 +126,20 @@ def test_the_agent_publishes_the_detectors(tmp_path: Path) -> None:
     sink, streams = asyncio.run(provide_lovekit_sink(current))
     assert isinstance(sink, LovekitSink) and isinstance(streams, CameraStreams)
     assert [(c.detector, c.key) for c in sink.cameras] == [("sim_cam", "sim_cam")]
-    assert "CameraStreams" in app.registry.snapshot().states
+    assert "camera_streams" in app.registry.snapshot().states
 
 
-def test_without_detectors_the_agent_publishes_nothing(tmp_path: Path) -> None:
-    """No detector, no sink: arkitekt then does not start the publisher, which needs one."""
-    sink, streams = asyncio.run(provide_lovekit_sink(Run.of(run_settings(tmp_path))))
-    assert sink is None and isinstance(streams, CameraStreams)
+def test_without_detectors_the_agent_publishes_nothing() -> None:
+    """No detector: a sink of no cameras all the same, and the publisher returns at once."""
+    current = SimpleNamespace(
+        instrument=SimpleNamespace(detectors=lambda: []),
+        settings=SimpleNamespace(test_pattern=False),
+    )
+    sink, streams = asyncio.run(provide_lovekit_sink(current))  # type: ignore[arg-type]
+    assert isinstance(sink, LovekitSink) and sink.cameras == []
+    lovekit = FakeLovekit()
+    asyncio.run(publish_camera_streams(lovekit, sink, streams))  # type: ignore[arg-type]
+    assert lovekit.published is None and streams.streams == []
 
 
 def test_lovekit_publishes_only_its_own_sink() -> None:
@@ -155,7 +163,7 @@ def test_fastapi_serves_files_and_cache_of_its_agent(virtual_microscope_app: Fas
 
 def test_fastapi_streams_over_the_websocket(tmp_path: Path) -> None:
     """FastAPI: each start gives the detectors a broadcaster of its own, for the live view."""
-    current = Run.of(run_settings(tmp_path))
+    current = Run.of(run_settings(tmp_path, instrument=CAM_TEST))
     first, second = (
         asyncio.run(provide_frame_broadcaster(current)),
         asyncio.run(provide_frame_broadcaster(current)),

@@ -70,7 +70,7 @@ def test_the_entry_files_take_the_switch_from_the_environment(
 
 def test_the_twin_runs_the_frames_drivers_on_a_board_like_its_own(tmp_path: Path) -> None:
     m = build_microscope(run_settings(tmp_path, simulate="virtual"), spec.load(FRAME))
-    bus = m.uc2_bus
+    bus = m.uc2["uc2"]
     assert isinstance(bus, VirtualUC2Bus) and not bus.has_port_board
     assert bus.config.node_kinds == {
         10: "motor", 11: "motor", 12: "motor", 13: "motor", 20: "laser", 30: "led", 40: "galvo"
@@ -87,12 +87,12 @@ def test_homing_the_twin_moves_the_stage_where_homing_leaves_it(tmp_path: Path) 
     """Z backs off from its endstop as its homing says; the position reaches the stage's values
     through the bus's events, as on the real frame."""
     m = build_microscope(run_settings(tmp_path, simulate="virtual"), spec.load(FRAME))
-    assert m.values is not None and m.uc2_bus is not None
+    assert m.uc2.buses
 
     async def home() -> None:
-        dispatch = asyncio.ensure_future(dispatch_uc2_events(m.uc2_bus, m.values, m.uc2_state))
+        dispatch = asyncio.ensure_future(dispatch_uc2_events(m.uc2["uc2"], m.values, m.uc2_state))
         await asyncio.sleep(0)
-        await m.uc2_bus.ahome_axis("Z")
+        await m.uc2["uc2"].ahome_axis("Z")
         await asyncio.sleep(0.05)
         dispatch.cancel()
 
@@ -138,11 +138,11 @@ def test_calibrating_the_twin_finds_where_its_holder_truly_is_and_keeps_it_apart
     state = MountCalibrationState()
 
     async def run() -> Any:  # noqa: ANN401
-        pump = asyncio.ensure_future(m.uc2_bus.abackground())
-        dispatch = asyncio.ensure_future(dispatch_uc2_events(m.uc2_bus, m.values, m.uc2_state))
+        pump = asyncio.ensure_future(m.uc2["uc2"].abackground())
+        dispatch = asyncio.ensure_future(dispatch_uc2_events(m.uc2["uc2"], m.values, m.uc2_state))
         try:
             return await koil.run_threaded(
-                calibrate_mount, m.space, m.values, m.detector, m.uc2_bus, m.calibration, state, task
+                calibrate_mount, m.space, m.values, m.detector, m.uc2, m.calibration, state, task
             )
         finally:
             pump.cancel()

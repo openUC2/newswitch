@@ -25,9 +25,9 @@
             <Text size="sm" weight="semibold" className="flex-1">Channels</Text>
             <Badge variant="secondary">{str.concat(values: [list.len(value: picked), " picked"])}</Badge>
         </div>
-        <if when={list.len(value: self.OpticsState.channels) > 0}>
+        <if when={list.len(value: self.optics.channels) > 0}>
             <ToggleGroup multiple bind={picked} variant="outline" size="sm" className="flex flex-wrap justify-start gap-1 px-4">
-                <foreach items={self.OpticsState.channels} let="channel" key={channel.name}>
+                <foreach items={self.optics.channels} let="channel" key={channel.name}>
                     <ToggleGroupItem value={channel.name}>{channel.name}</ToggleGroupItem>
                 </foreach>
             </ToggleGroup>

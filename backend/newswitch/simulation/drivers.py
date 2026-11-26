@@ -1,10 +1,12 @@
 """The drivers of what no hardware reaches: a value that is wherever it is told, at once or at the
-speed its variable states."""
+speed its variable states. What a board's driver can do besides (`Homes`, `Stops`), these fake: a
+move homes to its reference and stops where it is, a swap homes to its first slot."""
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, cast
 
 from arkitekt import Task
 
@@ -39,12 +41,18 @@ MAX_REPORTS = 200
 
 
 class SimulatedMove(Simulated):
-    """A value that travels there at the speed its variable states; with none, it is there at once."""
+    """A value that travels there at the speed its variable states; with none, it is there at once.
 
-    def __init__(self, speed: float | None, current: Callable[[], float]) -> None:
-        """A move at `speed` per second, from where `current` says it is."""
+    It homes by travelling to its reference, and stops where it got to when told."""
+
+    def __init__(
+        self, speed: float | None, current: Callable[[], float], reference: float = 0.0
+    ) -> None:
+        """A move at `speed` per second, from where `current` says it is, homing to `reference`."""
         self.speed = speed
         self.current = current
+        self.reference = reference
+        self._stopped = threading.Event()
 
     @classmethod
     def set_together(
@@ -53,7 +61,12 @@ class SimulatedMove(Simulated):
         """Together, in as long as the slowest takes."""
         import koil
 
-        moves = [(d, d.current(), float(v), report) for d, v, report in targets]
+        moves = [
+            (move, move.current(), float(v), report)
+            for move, v, report in ((cast(SimulatedMove, d), v, r) for d, v, r in targets)
+        ]
+        for d, *_ in moves:
+            d._stopped.clear()
         travel_s = max(
             (abs(to - frm) / d.speed for d, frm, to, _ in moves if d.speed),
             default=0.0,
@@ -64,6 +77,8 @@ class SimulatedMove(Simulated):
                 task.pausepoint()
             if travel_s:
                 koil.sleep(travel_s / reports)
+            if any(d._stopped.is_set() for d, *_ in moves):
+                return  # where the last report put it
             for _, frm, to, report in moves:
                 report(frm + (to - frm) * index / reports)
             if task is not None:
@@ -73,10 +88,35 @@ class SimulatedMove(Simulated):
         """Travel there."""
         type(self).set_together([(self, value, report)], task)
 
+    def home(self, report: Report, task: Task | None = None) -> None:
+        """Travel to the reference."""
+        self.set(self.reference, report, task)
+
+    def stop(self) -> None:
+        """Stop the move under way where it got to."""
+        self._stopped.set()
+
+
+class SimulatedSwap(Simulated):
+    """A swap that is in place at once, and homes to its first slot."""
+
+    def __init__(self, first: Any) -> None:  # noqa: ANN401 - a slot
+        """A swap whose reference is the slot `first`."""
+        self.first = first
+
+    def home(self, report: Report, task: Task | None = None) -> None:
+        """In its first slot."""
+        report(self.first)
+
 
 def unwired(variable: Variable, current: Callable[[], Any]) -> Driver:
     """What drives `variable` where no hardware does: a move travels at its speed from where
-    `current` says it is, anything else is there at once."""
+    `current` says it is and homes to 0 (or the end of its range nearest it), a swap is in place at
+    once and homes to its first slot, anything else is there at once."""
     if variable.verb == "moves":
-        return SimulatedMove(variable.speed, current)
+        low = -float("inf") if variable.min is None else variable.min
+        high = float("inf") if variable.max is None else variable.max
+        return SimulatedMove(variable.speed, current, reference=max(low, min(high, 0.0)))
+    if variable.verb == "swaps":
+        return SimulatedSwap(min(variable.slots))
     return Simulated()

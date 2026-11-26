@@ -8,7 +8,7 @@
     <span className="mt-1 text-[11px] text-muted-foreground">Two light paths in one instrument: what one stage does, only its own camera sees. The stage view shows one sample at a time; pick which at its top.</span>
 </div>
 <div className="flex flex-wrap gap-1.5">
-<if when={self.DetectorState.is_acquiring}>
+<if when={self.detector.is_acquiring}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive">
         <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
         <span>Live</span>
@@ -31,10 +31,10 @@
     <span className="block text-[11px] text-muted-foreground">laser_488, seen by cam_a</span>
     <div className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">focus</span>
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_a.z.current, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage_a.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_a.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.move.moves.stage_a.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-4 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_a.x", by: -100.0)}>x −</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_a.x", by: 100.0)}>x +</Button>
@@ -44,15 +44,15 @@
     <div className="mt-3 grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">x, y</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.MoveState.moves.stage_a.x.current, digits: 0)}, {fmt.number(value: self.MoveState.moves.stage_a.y.current, digits: 0)}</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.move.moves.stage_a.x.current, digits: 0)}, {fmt.number(value: self.move.moves.stage_a.y.current, digits: 0)}</span>
         </div>
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.OpticsState.detectors.cam_a.pixel_um, digits: 2)} µm</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.optics.detectors.cam_a.pixel_um, digits: 2)} µm</span>
         </div>
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Field</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.OpticsState.detectors.cam_a.field_width_um, digits: 0)} µm</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.optics.detectors.cam_a.field_width_um, digits: 0)} µm</span>
         </div>
     </div>
 </div>
@@ -66,10 +66,10 @@
     <span className="block text-[11px] text-muted-foreground">white_led through the condenser, seen by cam_b in color</span>
     <div className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">focus</span>
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_b.z.current, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage_b.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_b.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.move.moves.stage_b.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-4 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_b.x", by: -100.0)}>x −</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage_b.x", by: 100.0)}>x +</Button>
@@ -79,15 +79,15 @@
     <div className="mt-3 grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">x, y</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.MoveState.moves.stage_b.x.current, digits: 0)}, {fmt.number(value: self.MoveState.moves.stage_b.y.current, digits: 0)}</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.move.moves.stage_b.x.current, digits: 0)}, {fmt.number(value: self.move.moves.stage_b.y.current, digits: 0)}</span>
         </div>
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.OpticsState.detectors.cam_b.pixel_um, digits: 2)} µm</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{fmt.number(value: self.optics.detectors.cam_b.pixel_um, digits: 2)} µm</span>
         </div>
         <div className="flex min-w-0 flex-col px-3 py-2">
             <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Beside it</span>
-            <span className="truncate text-sm font-semibold tabular-nums">{logic.any(values: [fmt.number(value: list.first(value: list.compact(value: list.pluck(value: self.DetectorState.detectors, key: "reading"))), digits: 1), "—"])} °C</span>
+            <span className="truncate text-sm font-semibold tabular-nums">{logic.any(values: [fmt.number(value: list.first(value: list.compact(value: list.pluck(value: self.detector.detectors, key: "reading"))), digits: 1), "—"])} °C</span>
         </div>
     </div>
 </div>

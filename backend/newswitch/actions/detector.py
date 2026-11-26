@@ -1,5 +1,9 @@
 """Taking images, and what a detector does beyond its variables."""
 
+from typing import Annotated
+
+from arkitekt.widgets import withStateChoices
+
 from newswitch import protocols
 from newswitch.protocols.frame_sink import FrameSink
 from newswitch.models.devices import AxisWindow
@@ -7,11 +11,14 @@ from newswitch.models.frames import Frame
 from newswitch.protocols import DetectorManager
 from newswitch.states.detector import DetectorState
 
+#: A detector, chosen from those the microscope has.
+DetectorName = Annotated[str, withStateChoices("self.detector.names")]
+
 
 def capture_image(
     detector: DetectorManager,
     acquisition_manager: protocols.AcquisitionManager,
-    name: str | None = None,
+    name: DetectorName | None = None,
 ) -> list[Frame]:
     """Take an image with one detector, or with each that is on.
 
@@ -44,7 +51,7 @@ def stop_live_view(detector_state: DetectorState) -> str:
     return "Live view stopped"
 
 
-def activate_detector(detector: DetectorManager, name: str) -> None:
+def activate_detector(detector: DetectorManager, name: DetectorName) -> None:
     """Turn a detector on.
 
     Args:
@@ -53,7 +60,7 @@ def activate_detector(detector: DetectorManager, name: str) -> None:
     detector.activate_detector(name)
 
 
-def deactivate_detector(detector: DetectorManager, name: str) -> str:
+def deactivate_detector(detector: DetectorManager, name: DetectorName) -> str:
     """Turn a detector off.
 
     Args:
@@ -63,7 +70,7 @@ def deactivate_detector(detector: DetectorManager, name: str) -> str:
     return f"Detector {name} deactivated"
 
 
-def set_window(detector: DetectorManager, name: str, windows: list[AxisWindow]) -> None:
+def set_window(detector: DetectorManager, name: DetectorName, windows: list[AxisWindow]) -> None:
     """Read out only a part of a detector's axes: of a camera its sensor, of a scan the field.
 
     Args:

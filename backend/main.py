@@ -8,10 +8,10 @@ newswitch is an arkitekt app (``app.py``), which Orkestrator shows: the standard
 same app can be served by FastAPI to the newswitch frontend instead (``main_fastapi.py``). Both
 register the same, and both start the same way:
 
-1. registry  every part a microscope can have, whatever the instrument has: ``app.py``'s global
-             ``app`` registers all of it directly, one static declaration that arkitekt can inspect
-             and compile without an instrument (``arkitekt inspect all app``); FastAPI merges
-             `newswitch.microscope.registry.app`, the same parts through their registries;
+1. registry  every part a microscope can have, whatever the instrument has:
+             `newswitch.microscope.registry.app`, which both include; ``app.py``'s global ``app``
+             is one static declaration that arkitekt can inspect and compile without an
+             instrument (``arkitekt inspect all app``);
 2. serve     - `app`: declares a lovekit stream per detector, the mikro the server provides and the
                agent's bloks (`newswitch.infra.ui.AGENT_BLOKS`, Orkestrator's catalog), and runs
                it as an arkitekt agent;
@@ -23,7 +23,7 @@ register the same, and both start the same way:
 4. devices   `newswitch.settings.load_devices`: the instrument the settings point at, its
              ``microscope.yml`` (``instruments/README.md``), which is only ever read. Together
              they are the app context, a `newswitch.microscope.run.Run`; a part the instrument
-             lacks is a context that is not provided.
+             lacks is there all the same, empty.
 
 Tools beside them (compiling an instrument, exporting the frontend's schemas) are in
 `newswitch.tools`; recovering accounts in `newswitch.infra.accounts.cli`. What serves the

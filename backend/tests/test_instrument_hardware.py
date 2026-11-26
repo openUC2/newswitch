@@ -154,7 +154,7 @@ def test_simulated_a_board_is_a_virtual_bus(tmp_path: Path) -> None:
     settings = run_settings(tmp_path)
     instrument = rewired(tmp_path, actuators=None, cameras=None)
     built = build_microscope(settings, instrument)
-    assert isinstance(built.uc2_bus, VirtualUC2Bus)
+    assert isinstance(built.uc2["uc2"], VirtualUC2Bus)
 
 
 # --- real hardware
@@ -252,7 +252,7 @@ def test_what_is_not_wired_can_be_simulated_beside_what_is(tmp_path: Path) -> No
         cameras=None,
     )
     built = build_microscope(run_settings(tmp_path, simulate="unwired"), instrument)
-    assert isinstance(built.uc2_bus, UC2CanBus)
+    assert isinstance(built.uc2["uc2"], UC2CanBus)
     assert isinstance(built.values.drivers["stage.x"], Stepper)
     assert isinstance(built.values.drivers["stage.y"], SimulatedMove)
     assert isinstance(built.detector, SimulatedDetectorManager)
@@ -262,10 +262,11 @@ def test_it_runs_on_what_the_description_wires(wired: Settings) -> None:
     """Every variable gets its UC2 driver, configured from the section and the optics."""
     built = build_microscope(wired, spec.load(REFERENCE_INSTRUMENT))
 
-    assert isinstance(built.uc2_bus, UC2CanBus)
-    assert built.uc2_bus.config.channel == "can0"
-    assert built.uc2_bus.config.steps_per_um_x == pytest.approx(3.2)
-    assert built.uc2_bus.config.objective_slot_positions_steps == [0, 20000]
+    bus = built.uc2["uc2"]
+    assert isinstance(bus, UC2CanBus)
+    assert bus.config.channel == "can0"
+    assert bus.config.steps_per_um_x == pytest.approx(3.2)
+    assert bus.config.objective_slot_positions_steps == [0, 20000]
 
     drivers = built.values.drivers
     for name, axis in (("stage.x", "X"), ("stage.y", "Y"), ("stage.z", "Z")):

@@ -95,7 +95,7 @@ lit and spread by its own depth, so no volume is stored.
 
 What is published is keyed by cube, then by variable: `MoveState.moves`, `SwapState.swaps`,
 `TuneState.tunes`, and `SourceState.sources` by source, so a blok binds
-`self.MoveState.moves.stage.z.current`. A change replaces the whole field, and `Values` keeps plain
+`self.move.moves.stage.z.current`. A change replaces the whole field, and `Values` keeps plain
 copies, because arkitekt takes over the class of what is published. `DetectorState.detectors` stays a list, whose
 entries do publish.
 
@@ -222,10 +222,10 @@ none sees what another returned, while the parts depend on each other (the simul
 detector reads the values, the optics read the detectors, acquisition and hooks use several
 managers, the UC2 drivers and actions share one bus). So all hooks hand out the objects of one
 `build_microscope`, made on the first hook and held by the app context, `Run`
-(`newswitch/microscope/run.py`). What the instrument lacks is None on the `Microscope` and never
-constructed: without a board nothing talks to a bus, without a detector there is no
-`DetectorManager`. A context a hook returns as None is not provided; every state is
-(`build_microscope` builds them all). Everything else a hook returns is "published for the rest of the
+(`newswitch/microscope/run.py`). What the instrument lacks is built all the same, empty: without
+a board `UC2Boards` holds no bus, without a detector the `DetectorManager` manages none. Every
+context and every state is provided on every microscope (`build_microscope` builds them all); an
+action asked of what is not there is refused by its argument (§2.4). Everything a hook returns is "published for the rest of the
 agent lifecycle" and becomes injectable into every action, background worker and
 shutdown hook. If you build a new manager and forget to add it to both the return
 *value* and the return *annotation*, injection will fail with
@@ -274,18 +274,36 @@ app.register_action(values.move_one, locks=[locks.MOTION])
   `newswitch/models/acquisition.py`); the frontend
   evaluates them in `frontend/src/lib/arkitekt/calls.ts`.
 - An action is a plain function: importing `newswitch/actions/` registers nothing. It becomes an
-  action when `app.py` imports it and calls `app.register_action(fn, ...)` (and, for FastAPI
-  mode, its part's registry, `newswitch/microscope/apps/<part>.py`, does the same).
+  action when its part's registry, `newswitch/microscope/apps/<part>.py`, calls
+  `app.register_action(fn, ...)`; both `app.py` and FastAPI mode include those.
+- **What an action is asked of is chosen from a state.** An argument naming a part of the
+  microscope (a stage, a variable, a detector, a board) is annotated
+  `Annotated[str, withStateChoices("self.<state>.<list>")]`, and the state lists what there is
+  (`self.move.homes`, `self.swap.names`, `self.detector.names`, `self.uc2.boards`, ...). A
+  microscope without one lists nothing, so a UI has nothing to offer; asked anyway, the action
+  refuses by name (`no UC2 board 'uc2' on this microscope: it has none`). arkitekt checks each
+  path against the states when the app is assembled (`arkitekt inspect`, a run).
+- **States are published under short names**: the class without `State`, in lower case
+  (`app.register_state(DetectorState, name="detector")`): `io`, `hook`, `expanse`, `calibration`,
+  `optics`, `space`, `move`, `swap`, `tune`, `source`, `detector`, `autofocus`, `uc2`,
+  `mount_calibration`, and the agent's `camera_streams`. A blok reads `self.detector.is_acquiring`;
+  `move`, `swap` and `tune` are actions too (`self.tune(name: ..., to: ...)`), which the blok
+  language tells apart. The frontend's generated hooks keep the class's name (`useDetectorState`).
+  arkitekt checks what a blok reads of its agent when the app is assembled (arkitekt-spec 14.2),
+  so a blok naming `self.DetectorState` or a field gone refuses the start;
+  `tests/test_bloks.py::test_every_instrument_declares_its_views` declares every instrument's.
+  The agent's own bloks are declared by their `.bsx` file (`app.blok(name, Path(...))`), so
+  `arkitekt check` and the editor report a problem in that file.
 
 ### 2.5 `app.register_background` — daemons
 
 `app.register_background` functions are long-running workers started right after
 the startup hooks (async ones run on the event loop, sync ones in a dedicated
-thread). They use the same injection: `run_uc2_bus(uc2_bus: UC2BusManager)`
-gets the live bus. Every app registers three: the detector acquisition loop, the UC2
+thread). They use the same injection: `run_uc2_bus(uc2: UC2Boards)`
+gets the boards. Every app registers three: the detector acquisition loop, the UC2
 bus connection pump, and the UC2 event → state dispatcher (`app.py` adds
-`publish_camera_streams`). One that takes a context the instrument lacks (no board, no
-detector) is not started.
+`publish_camera_streams`). Every one is started; one with nothing to do (no board, no
+detector) returns at once.
 
 ### 2.6 Registering classes
 
@@ -319,8 +337,8 @@ same actions, definitions, locks and states). The parts, in `app.py` as in the p
 3. `detector`: `DetectorState`, `DetectorManager`, `AcquisitionManager` and
    `capture_image`, `start_live_view`, `stop_live_view`, `activate_detector`,
    `deactivate_detector`, `set_window` (`newswitch/actions/detector.py`), with the live loop;
-4. `uc2`, a board in the instrument's `hardware` section: `UC2State`, `UC2BusManager`, the
-   board's own actions (`newswitch/actions/uc2.py`) and its two background tasks;
+4. `uc2`, the boards in the instrument's `hardware` section: `UC2State`, `UC2Boards`, a board's
+   own actions (`newswitch/actions/uc2.py`: its nodes, firmware, galvo) and its background tasks;
 5. what needs several things: `focus` (something moves + a detector, the state
    `AutofocusState` from `provide_focus`, and `run_autofocus`, `calibrate_light_path`,
    `scan_region`); `acquisition` (`acquire`, `acquire_mda`).
@@ -329,11 +347,9 @@ A part merges the parts it names things of, so what reaches an app through two p
 The part registries hold no per-run state and nothing is declared on them after import.
 
 What is registered does not depend on the instrument, which is known only at run time, through
-the app context `Run`. A part the instrument lacks (no UC2 board, no detector, no variables) is a
-context that the part's startup hook returns as None, and arkitekt then does not provide it: an
-action that needs it fails when it is called (`Context uc2_bus_manager not found in agent
-newswitch`), and the background tasks and shutdown hooks that need it are not started. Every
-state is always provided. The declaration has to be static: `arkitekt plugin build` compiles the
+the app context `Run`. A part the instrument lacks (no UC2 board, no detector, no variables) is
+there all the same, empty, and lists nothing to choose (§2.4). Every context and every state is
+always provided. The declaration has to be static: `arkitekt plugin build` compiles the
 app into a release by running `arkitekt inspect all app` inside the image, which imports the
 module-level `app` of `backend/app.py` without any app context and bakes the actions, states and
 bloks it declares into the release. `just agent-inspect` runs that check locally, with
@@ -453,8 +469,8 @@ can style by situation with three variants:
   A locked control is marked, not disabled.
 
 Bloks are written in blok
-language v2: they bind to states (`{self.MoveState.moves.stage.z.current}`), loop
-(`<foreach items={self.DetectorState.detectors} let="camera">`), and invoke actions
+language v2: they bind to states (`{self.move.moves.stage.z.current}`), loop
+(`<foreach items={self.detector.detectors} let="camera">`), and invoke actions
 (`onClick={self.move_one(name: "stage.z", by: 1.0)}`).
 The backend serves their source, and the frontend parses it (`@arkitektio/bsx`). Use them for
 small panels that shouldn't require a frontend build.
@@ -511,10 +527,9 @@ arkitekt server and the agent runs the same startup hooks and background workers
         simulated from `settings.simulate`, each variable's driver from the `hardware` section
         and the UC2 transport from the board's `transport`; each hook returns its part's; the
         entry file's `provide_frame_broadcaster` provides the `FrameSink`),
-     2. publishes the returned contexts and states (a context returned as None, a part the
-        instrument lacks, is not published),
-     3. starts every **background worker** whose contexts are there (detector loop, `run_uc2_bus`,
-        `run_uc2_event_dispatch`),
+     2. publishes the returned contexts and states (every one, on every microscope),
+     3. starts every **background worker** (detector loop, `run_uc2_bus`,
+        `run_uc2_event_dispatch`; one with nothing to do returns at once),
      4. begins serving assignments.
 5. **Shutdown** reverses it: the provide task is cancelled → background tasks
    cancelled (that's the `CancelledError` path your bus `abackground` must
@@ -663,8 +678,8 @@ It runs on any instrument: each detector becomes a lovekit `VideoStream`, keyed 
 cube (stable across restarts) and titled by that too (`cameras_of(instrument)`
 → `list[CameraStream]`). The startup hook `provide_lovekit_sink` provides a
 `LovekitSink(cameras_of(current.instrument))` as the `FrameSink`, and a
-`CameraStreams`; without detectors the sink is None, so `publish_camera_streams`, registered all
-the same, is not started. The `LovekitSink` keeps the newest frame per detector; the background
+`CameraStreams`; without detectors the sink has no cameras, and `publish_camera_streams`
+returns at once. The `LovekitSink` keeps the newest frame per detector; the background
 hook `publish_camera_streams(lovekit, sink: FrameSink, live: CameraStreams)` (a sink
 that is not a `LovekitSink` is refused with a `TypeError`) sends what is new, at most `MAX_FPS` (15) per stream,
 converting with `to_rgba` off the event loop (~37 ms per 1920×1200 frame). The
@@ -723,14 +738,14 @@ microscope/     the composition root: the only place that reads settings.simulat
 | `newswitch/tools/` | Tools beside the servers: `check_instrument.py` (prediction, measurement and truth compared) and `uc2.py` (`just uc2 scan|status|flash`: what is on a UC2 bus, and flashing the firmware the description names, on the port directly). |
 | `newswitch/settings.py` | `Settings` (`simulate`, `db_path`, `instrument`, `camera_recording_dir`, `camera_debug_window`, `image_dir`, `cache_dir`), the description's `settings` section, `load_settings` (`NEWSWITCH_CONFIG` names the instrument; unset or invalid, a `SpecError`) and `load_devices(config)` → `Instrument \| None`: the settings and instrument both servers start from. |
 | `newswitch/microscope/registry.py` | `IDENTIFIER`, `VERSION`, `DESCRIPTION`, which the served apps take, and `app`: FastAPI mode's microscope, `App("newswitch", app_context=Run)` with every part registry merged on import, the same on every microscope (a part the instrument lacks is a context not provided); no UI, no streams (`main_fastapi.py` adds those). |
-| `newswitch/microscope/startup.py` | The startup hooks, plain functions: `provide_core`, `provide_values`, `provide_detector`, `provide_focus`, `provide_uc2` (None for a part the instrument lacks). |
+| `newswitch/microscope/startup.py` | The startup hooks, plain functions: `provide_core`, `provide_values`, `provide_detector`, `provide_focus`, `provide_uc2` (each provides all it names, on every microscope: empty for a part the instrument lacks). |
 | `newswitch/microscope/models.py` | `MODELS`: every model registered, in order. |
-| `newswitch/microscope/apps/` | FastAPI mode's parts, one registry per part, an `app` each (the agent registers the same directly): `models`, `core` (with the contexts `FrameSink` and `DatasetStore`, which the entry file provides), `values`, `detector`, `uc2`, and what needs several: `focus`, `acquisition`. Plain module-level hooks; a part merges the parts it names things of. |
+| `newswitch/microscope/apps/` | The parts, one registry per part, an `app` each, which `microscope/registry.py` includes and both entry files serve: `models`, `core` (with the contexts `FrameSink` and `DatasetStore`, which the entry file provides), `values`, `detector`, `uc2`, and what needs several: `focus`, `acquisition`. Plain module-level hooks; a part merges the parts it names things of. |
 | `newswitch/microscope/run.py` | `Run`, the app context: the settings, the instrument and the mikro of one run, and its one `build_microscope` (`Run.microscope`). |
-| `newswitch/microscope/parts.py` | Data and functions: `build_microscope(settings, instrument)` → `Microscope` (a record of every state and manager, what it lacks None), from `build_uc2_bus`, `build_detector_manager`, `build_drivers`, and `check_wired`. It is the only place that reads `settings.simulate` and picks a real part or a simulated one (`newswitch/simulation/`): what no driver reaches gets the driver `Values` is handed for it (`unwired`). The startup hooks are in `newswitch/microscope/apps/`. |
+| `newswitch/microscope/parts.py` | Data and functions: `build_microscope(settings, instrument)` → `Microscope` (a record of every state and manager, what it lacks empty), from `build_uc2_boards` (`build_uc2_bus` per board), `build_detector_manager`, `build_drivers`, and `check_wired`. It is the only place that reads `settings.simulate` and picks a real part or a simulated one (`newswitch/simulation/`): what no driver reaches gets the driver `Values` is handed for it (`unwired`). The startup hooks are in `newswitch/microscope/apps/`. |
 | `newswitch/microscope/locks.py` | The lock names, one constant per way of changing a microscope (and per shared service): `MOTION`, `SWAP`, `TUNE`, `DETECTOR`, `GALVO`, `IO`, `HOOKS` = `"hook_registry"`, `EXPANSE` = `"expanse_state"`, `CACHE`. |
 | `newswitch/infra/http/` | The routes `main_fastapi.py` serves beside the agent (section 6.1), each a module-level `router`: `liveview.py` (`/stream` websockets, from the running `FrameBroadcaster`), `files.py` (`/files/...`, the `IOManager`), `cache.py` (`/cache/...`, the `CacheManager`); `__init__.py`: `running_context(connection, cls)`, the running agent's context for a request or websocket (503 before startup; the live view closes with 1013). |
-| `newswitch/actions/` | Plain action, background and shutdown functions, registered by the part registries of `newswitch/microscope/apps/`: `core.py` (`clear_expanse`), `values.py` (`move`, `move_one`, `move_home`, `swap`, `tune`), `detector.py` (`capture_image`, the live view, `activate_detector`, `deactivate_detector`, `set_window`, also `run_detector_loop`, `close_detector`), `space.py` (`move_to`, `set_sample_origin_here`, `register_mount`, `mount_holder`), `uc2.py` (home/stop/LED/galvo/node-scan actions, `run_uc2_bus`, `run_uc2_event_dispatch`). |
+| `newswitch/actions/` | Plain action, background and shutdown functions, registered by the part registries of `newswitch/microscope/apps/`: `core.py` (`clear_expanse`), `values.py` (`move`, `move_one`, `move_home`, `swap`, `tune`, `home_stage`, `stop_stage`, `home_objective`: through each variable's driver, which homes or stops if it can), `detector.py` (`capture_image`, the live view, `activate_detector`, `deactivate_detector`, `set_window`, also `run_detector_loop`, `close_detector`), `space.py` (`move_to`, `set_sample_origin_here`, `register_mount`, `mount_holder`), `uc2.py` (a board's own: node scan, firmware, galvo, each naming the board; `run_uc2_bus`, `run_uc2_event_dispatch`, `keep_firmware`). |
 | `newswitch/protocols/dataset_store.py`, `newswitch/infra/mikro/store.py`, `newswitch/infra/mikro/none.py` | Where an acquisition goes: `DatasetStore`, provided by the entry file like `FrameSink`. `MikroDatasetStore` writes one `ArrayDataset` per position and detector (`AcquiredRecord`), along that detector's own axes, each typed (a camera `(t, c, z, y, x)`, a thermometer `(t, c, plane, z, y, x)`, one position along `z, y, x` at its point), with its anchors and its registration onto the sample's space as BY_DIMENSION parts from the coordinate graph; `NoDatasetStore` refuses, when a server has no mikro. `connection.py` and `app.py` beside them are the mikro of FastAPI mode. |
 | `newswitch/routines/` | Multi-step procedures registered as actions: `region_scan.py`, `acquire.py` (an `AcquisitionPlan`, into a `DatasetStore`), `autofocus.py`, `mda.py`, `pace.py`; `common.py` holds what they share (`z_sweep`, `focus_range`, `field_of_view`, `acquire_step`). The calibrations are in `newswitch/calibration/`. The template for porting ImSwitch "apps". |
 | `newswitch/protocols/` | The **contracts**: the manager protocols only (`app.register_context`), one module per part or service — `base` (`Manager`, `BackgroundManager`), `detector` (+ `DetectorFrame`, `DetectorSessionInfo`), `uc2` (`UC2BusManager`), `acquisition`, `cache`, `calibration`, `dataset_store`, `expanse`, `io`, `optics`, `metadata`, `hook_manager` (+ `HookContext`, `UnsupportedHook`), `frame_sink` (`FrameSink`: where detectors send frames, provided by the entry file). `Values` is a class, with no protocol. |
@@ -819,14 +834,17 @@ slots, node scan — plus `subscribe()` yielding typed events
 (`models/uc2.py`: `PositionUpdate`, `MotionDone`, `HomingChanged`, `EStopChanged`,
 `ButtonPressed`, `NodeSeen`, `BusError`).
 
-Three interchangeable implementations (selected in `build_uc2_bus`: the simulator
+A microscope's boards are a `UC2Boards` (`drivers/uc2/boards.py`): a bus per board, by the name
+the description gives it, none without (`build_uc2_boards`). A board's own actions name it
+(`board`, chosen from `UC2State.boards`). Three interchangeable bus implementations (selected in
+`build_uc2_bus`: the simulator
 with `simulate: everything`, else the board's `transport`): **`UC2CanBus`** (CANopen via `uc2canopen.aio`; node map,
 µm↔steps scaling, event-driven motion-done from TPDO frames), **`UC2RestBus`**
 (serial JSON via `uc2rest.aio`; single ESP32 master, pattern-keyed firmware
 events), **`VirtualUC2Bus`** (simulator). Both real buses reconnect with
 exponential backoff and surface failures as `BusError` + `UC2State.last_error`.
 
-Two background workers keep it alive: `run_uc2_bus` (owns the connection and
+Two background workers keep every board alive: `run_uc2_bus` (owns the connection and
 event pump) and `run_uc2_event_dispatch` (consumes `subscribe()` and mirrors
 telemetry: a position goes to `Values.reporter` of each `Stepper` on that axis, the rest
 to `UC2State`).

@@ -188,6 +188,8 @@ async def publish_camera_streams(lovekit: Lovekit, sink: FrameSink, live: Camera
     """
     if not isinstance(sink, LovekitSink):
         raise TypeError(f"lovekit publishes a LovekitSink, not {type(sink).__name__}")
+    if not sink.cameras:
+        return  # no detector, no stream
     declared = [
         VideoStream(
             camera.key,

@@ -18,7 +18,7 @@ from typing import Any
 
 from arkitekt import Task
 
-from newswitch.drivers.base import Driver, Report, Unwired
+from newswitch.drivers.base import Driver, Homes, Report, Stops, Unwired
 from newswitch.instrument import spec
 from newswitch.instrument.roles import Roles
 from newswitch.instrument.spec import Instrument, Variable
@@ -187,6 +187,70 @@ class Values:
                     f"{name} goes from {variable.min} to {highest} {variable.unit}, not to {value}"
                 )
 
+    def _cubes_whose_moves(self, can: type) -> list[str]:
+        """The cubes with a move, every one of whose moves has a driver that `can`."""
+        cubes: dict[str, bool] = {}
+        for name, variable in self.instrument.variables.items():
+            if variable.verb == "moves":
+                cubes[variable.cube] = cubes.get(variable.cube, True) and isinstance(
+                    self.drivers[name], can
+                )
+        return [cube for cube, every in cubes.items() if every]
+
+    def moves_of(self, cube: str) -> list[str]:
+        """The moves of `cube`: those along ``z`` first (homing a stage, it moves away from the
+        sample first), then the rest as the description has them.
+
+        Raises:
+            ValueError: `cube` has no move.
+        """
+        found = [
+            name
+            for name, variable in self.instrument.variables.items()
+            if variable.verb == "moves" and variable.cube == cube
+        ]
+        if not found:
+            moving = sorted(
+                {v.cube for v in self.instrument.variables.values() if v.verb == "moves"}
+            )
+            raise ValueError(f"{cube} moves nothing; what moves: {moving or 'nothing'}")
+        return sorted(found, key=lambda name: name.split(".", 1)[1] != "z")
+
+    def home(self, names: list[str], task: Task | None = None) -> None:
+        """Home variables one after the other, in this order: each goes to its reference, and is
+        known to be where its driver then says.
+
+        Raises:
+            ValueError: One of them is not a variable, or its driver cannot home. Then nothing has
+                moved.
+        """
+        drivers = {name: self.drivers[self._known(name).name] for name in names}
+        cannot = [name for name, driver in drivers.items() if not isinstance(driver, Homes)]
+        if cannot:
+            raise ValueError(f"{', '.join(cannot)} cannot be homed")
+        try:
+            for index, (name, driver) in enumerate(drivers.items()):
+                if task is not None:
+                    task.progress(int(100 * index / len(drivers)), f"homing {name}")
+                driver.home(self.reporter(name), task)  # type: ignore[union-attr]
+        finally:
+            self.on_change()
+
+    def stop(self, names: list[str]) -> None:
+        """Stop variables where they are, while a move may still be taking them somewhere. It
+        holds nothing a move holds: it is meant to run beside one.
+
+        Raises:
+            ValueError: One of them is not a variable, or its driver cannot stop. Then nothing has
+                stopped.
+        """
+        drivers = {name: self.drivers[self._known(name).name] for name in names}
+        cannot = [name for name, driver in drivers.items() if not isinstance(driver, Stops)]
+        if cannot:
+            raise ValueError(f"{', '.join(cannot)} cannot be stopped")
+        for driver in drivers.values():
+            driver.stop()  # type: ignore[union-attr]
+
     def stepped(self, name: str, value: Any) -> None:  # noqa: ANN401
         """A wire took a variable there: nothing is commanded, it is only known to be there now.
 
@@ -291,6 +355,15 @@ class Values:
         self.move_state.moves = _copied(self._moves)
         self.swap_state.swaps = _copied(self._swaps)
         self.tune_state.tunes = _copied(self._tunes)
+        variables = self.instrument.variables
+        self.move_state.names = [n for n, v in variables.items() if v.verb == "moves"]
+        self.move_state.homes = self._cubes_whose_moves(Homes)
+        self.move_state.stops = self._cubes_whose_moves(Stops)
+        self.swap_state.names = [n for n, v in variables.items() if v.verb == "swaps"]
+        self.swap_state.homes = [
+            n for n in self.swap_state.names if isinstance(self.drivers[n], Homes)
+        ]
+        self.tune_state.names = [n for n, v in variables.items() if v.verb == "tunes"]
         sources = {}
         for source in self.instrument.sources():
             element = self.instrument.cubes[source].element_at(self._values)

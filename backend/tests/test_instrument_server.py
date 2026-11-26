@@ -92,9 +92,9 @@ def test_it_has_the_parts_its_elements_say(tmp_path: Path) -> None:
     """Which parts it builds follows from the description (what is registered does not)."""
     built = build_microscope(run_settings(tmp_path / "it"), spec.load(INSTRUMENT))
     assert built.values is not None and built.detector is not None
-    assert built.uc2_bus is not None  # it describes a board, and simulated that is a virtual one
+    assert built.uc2.buses  # it describes a board, and simulated that is a virtual one
     camera = INSTRUMENT.parent / "cam-test"
-    assert build_microscope(run_settings(tmp_path / "camera"), spec.load(camera)).uc2_bus is None
+    assert not build_microscope(run_settings(tmp_path / "camera"), spec.load(camera)).uc2.buses
 
 
 def test_the_models_come_from_the_description(microscope: Microscope) -> None:
@@ -410,7 +410,7 @@ def test_the_light_sheet_has_its_own_views() -> None:
     assert ui.bloks["view-sheet"].default
     sheet = ui.bloks["view-sheet"].bsx
     assert (
-        "self.MoveState.moves.stage.z" in sheet and "camera.axes" in sheet and "<LiveView" in sheet
+        "self.move.moves.stage.z" in sheet and "camera.axes" in sheet and "<LiveView" in sheet
     )
     assert "<AcquisitionControl" in ui.bloks["view-stack"].bsx
 
@@ -422,5 +422,5 @@ def test_the_point_scanner_has_its_own_views() -> None:
     assert list(ui.bloks) == ["view-scan", "view-stack", "view-stage"]
     assert ui.bloks["view-scan"].default
     scan = ui.bloks["view-scan"].bsx
-    assert "self.MoveState.moves.stage.z" in scan and "pmt.axes" in scan and "<LiveView" in scan
+    assert "self.move.moves.stage.z" in scan and "pmt.axes" in scan and "<LiveView" in scan
     assert "<AcquisitionControl" in ui.bloks["view-stack"].bsx

@@ -7,7 +7,7 @@
     <span className="text-xl font-semibold tracking-tight">Dual camera</span>
 </div>
 <div className="flex flex-wrap gap-1.5">
-<if when={list.contains(value: list.pluck(value: obj.values(value: self.SourceState.sources), key: "on"), item: true)}>
+<if when={list.contains(value: list.pluck(value: obj.values(value: self.source.sources), key: "on"), item: true)}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-info">
         <span className="size-1.5 rounded-full bg-info" />
         <span>Lit</span>
@@ -19,7 +19,7 @@
     </div>
 </else>
 </if>
-<if when={self.DetectorState.is_acquiring}>
+<if when={self.detector.is_acquiring}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive">
         <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
         <span>Live</span>
@@ -31,7 +31,7 @@
     </div>
 </else>
 </if>
-<if when={list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+<if when={list.contains(value: list.pluck(value: obj.values(value: self.optics.detectors), key: "calibrated"), item: true)}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-success">
         <span className="size-1.5 rounded-full bg-success" />
         <span>Calibrated</span>
@@ -48,10 +48,10 @@
 <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Stage z, the focus of both</span>
     <div className="flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.current, digits: 1)}</span>
+        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={1} value={self.MoveState.moves.stage.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
+    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={1} value={self.move.moves.stage.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -10.0)}>-10</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -1.0)}>-1</Button>
@@ -67,38 +67,38 @@
 <div className="grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
 <div className="flex min-w-0 flex-col px-3 py-2">
     <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
-    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.camera_green.pixel_um, digits: 2)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.optics.detectors.camera_green.pixel_um, digits: 2)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
 </div>
 <div className="flex min-w-0 flex-col px-3 py-2">
     <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Field</span>
-    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.camera_green.field_width_um, digits: 0)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.optics.detectors.camera_green.field_width_um, digits: 0)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
 </div>
 <div className="flex min-w-0 flex-col px-3 py-2">
     <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Depth</span>
-    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.camera_green.depth_of_field_um, digits: 1)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.optics.detectors.camera_green.depth_of_field_um, digits: 1)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
 </div>
 </div>
 <div className="mt-2 grid grid-cols-3 divide-x divide-border/50 rounded-xl bg-muted/30">
 <div className="flex min-w-0 flex-col px-3 py-2">
     <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Pixel</span>
-    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.camera_red.pixel_um, digits: 2)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.optics.detectors.camera_red.pixel_um, digits: 2)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
 </div>
 <div className="flex min-w-0 flex-col px-3 py-2">
     <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Field</span>
-    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.camera_red.field_width_um, digits: 0)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.optics.detectors.camera_red.field_width_um, digits: 0)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
 </div>
 <div className="flex min-w-0 flex-col px-3 py-2">
     <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">Depth</span>
-    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.OpticsState.detectors.camera_red.depth_of_field_um, digits: 1)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
+    <span className="truncate text-lg font-semibold tabular-nums ">{fmt.number(value: self.optics.detectors.camera_red.depth_of_field_um, digits: 1)} <span className="text-xs font-normal text-muted-foreground">µm</span></span>
 </div>
 </div>
     </div>
 </div>
-<foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
+<foreach items={self.detector.detectors} let="camera" key={camera.name}>
     <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{camera.name}</span>
         <div className="mt-3 grid grid-cols-2 gap-3 past:hidden">
-            <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
+            <foreach items={obj.values(value: obj.get(value: self.tune.tunes, key: camera.name))} let="tune" key={tune.name}>
                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{str.replace(value: tune.name, search: str.concat(values: [camera.name, "."]), replacement: "")}</span>
                     <div className="flex items-baseline gap-1">
@@ -121,7 +121,7 @@
     </div>
     <div className="pointer-events-none absolute right-3 top-12 flex flex-col items-end gap-1 rounded-xl border border-border/60 bg-card/80 px-3 py-1.5 backdrop-blur">
         <span className="text-sm font-medium">camera_green</span>
-        <span className="text-[11px] tabular-nums text-muted-foreground">{self.OpticsState.detectors.camera_green.band_nm == null ? "no light" : str.concat(values: [fmt.number(value: self.OpticsState.detectors.camera_green.band_nm, digits: 0), " nm"])}</span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{self.optics.detectors.camera_green.band_nm == null ? "no light" : str.concat(values: [fmt.number(value: self.optics.detectors.camera_green.band_nm, digits: 0), " nm"])}</span>
     </div>
 </div>
 <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
@@ -130,7 +130,7 @@
     </div>
     <div className="pointer-events-none absolute right-3 top-12 flex flex-col items-end gap-1 rounded-xl border border-border/60 bg-card/80 px-3 py-1.5 backdrop-blur">
         <span className="text-sm font-medium">camera_red</span>
-        <span className="text-[11px] tabular-nums text-muted-foreground">{self.OpticsState.detectors.camera_red.band_nm == null ? "no light" : str.concat(values: [fmt.number(value: self.OpticsState.detectors.camera_red.band_nm, digits: 0), " nm"])}</span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{self.optics.detectors.camera_red.band_nm == null ? "no light" : str.concat(values: [fmt.number(value: self.optics.detectors.camera_red.band_nm, digits: 0), " nm"])}</span>
     </div>
 </div>
 <div className="absolute bottom-4 right-4 z-10">

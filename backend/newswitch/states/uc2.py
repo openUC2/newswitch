@@ -12,6 +12,8 @@ from newswitch.models.uc2 import UC2Node
 class UC2State:
     """Connection, identity, and safety state of the UC2 hardware bus."""
 
+    boards: list[str] = field(default_factory=list)
+    """The boards, by name: what a board's action can be asked of; empty without one."""
     connected: bool = False
     transport: str = "virtual"
     firmware: str = ""

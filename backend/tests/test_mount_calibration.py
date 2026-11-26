@@ -205,12 +205,15 @@ def run(
     state: Any = None,  # noqa: ANN401
 ) -> Any:  # noqa: ANN401
     from newswitch.calibration.states import MountCalibrationState
+    from newswitch.drivers.uc2.boards import UC2Boards
+    from newswitch.states.uc2 import UC2State
 
     task = task or Task(frame)
     state = state if state is not None else MountCalibrationState()
     kept = keeping(frame.instrument, tmp_path)
     with koil.Koil():
-        result = mc.calibrate_mount(Space(frame), frame, frame, frame, kept, state, task)  # type: ignore[arg-type]
+        boards = UC2Boards({"uc2": frame}, UC2State())  # type: ignore[dict-item]
+        result = mc.calibrate_mount(Space(frame), frame, frame, boards, kept, state, task)  # type: ignore[arg-type]
     return result, kept
 
 

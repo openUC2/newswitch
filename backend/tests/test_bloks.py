@@ -13,6 +13,7 @@ from newswitch.infra.ui import (
     CATALOG_NAME,
     UI_TOLERATED,
     PublishedCatalog,
+    agent_bloks,
     check_catalog,
     declare_bloks,
     load_catalog,
@@ -166,12 +167,23 @@ def test_agent_mode_shows_its_own_bloks() -> None:
     declared = app.registry.get_declared_bloks()
     assert set(declared) == set(AGENT_BLOKS)
     assert {"view-microscope", "view-acquire"} <= set(declared)
-    assert {"test-stage", "test-detectors", "test-lights", "test-bus", "calibrate-holder", "acquire-lit", "test-speed"} <= set(declared)
+    assert {
+        "test-stage",
+        "test-detectors",
+        "test-lights",
+        "test-bus",
+        "calibrate-holder",
+        "acquire-lit",
+        "test-speed",
+    } <= set(declared)
     # Only the microscope view is shown first; the test views are there to pick.
     assert [name for name, blok in declared.items() if blok.default] == ["view-microscope"]
     # Written for the base catalog: it runs wherever bloks are drawn, Orkestrator among them.
     assert declared["view-microscope"].catalog is None and declared["view-microscope"].default
     assert declared["view-acquire"].catalog is None and not declared["view-acquire"].default
+    # Declared by their files, so arkitekt check and the editor point into the .bsx.
+    files = {name: blok.file for name, blok in app.registry.registered_bloks.items()}
+    assert files == {name: str(entry.path) for name, entry in agent_bloks().items()}
 
 
 def test_a_description_holds_no_agent_bloks(tmp_path: Path) -> None:
@@ -205,3 +217,25 @@ def test_an_agent_blok_is_not_written_for_the_newswitch_catalog() -> None:
     view = BlokEntry(bsx=newswitch_blok("<div />"))
     with pytest.raises(ValueError, match="agent.bloks.view is written for 'newswitch'"):
         declare_bloks(app, "agent", {"view": view}, AGENT_CATALOGS)
+
+
+# --- what a blok reads ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "folder", sorted(p.parent.name for p in INSTRUMENTS.glob("*/microscope.yml"))
+)
+def test_every_instrument_declares_its_views(folder: str) -> None:
+    """Each instrument's views declare: arkitekt refuses one that reads a state, field or action
+    the app does not have (a state by its class name, ``DetectorState``, a field gone)."""
+    instrument = spec.load(INSTRUMENTS / folder)
+    declared = create_fastapi_registry(instrument).registry.get_declared_bloks()
+    assert set(declared) == set(instrument.ui.bloks if instrument.ui else {})
+
+
+def test_a_blok_reading_what_the_app_lacks_is_refused() -> None:
+    """What a blok reads of ``self`` is checked against the app as it is declared."""
+    app = create_fastapi_registry(None)
+    view = BlokEntry(bsx=newswitch_blok("<div>{self.DetectorState.is_acquiring}</div>"))
+    with pytest.raises(ValueError, match="DetectorState"):
+        declare_bloks(app, "ui", {"view": view}, {CATALOG_NAME}, UI_TOLERATED)

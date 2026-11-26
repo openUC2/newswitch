@@ -1,8 +1,8 @@
 {
   "count": 14,
   "states": {
-    "IOState": {
-      "interface": "IOState",
+    "io": {
+      "interface": "io",
       "key": null,
       "app": null,
       "definition": {
@@ -24,11 +24,11 @@
             "provides": null
           }
         ],
-        "name": "IOState"
+        "name": "io"
       }
     },
-    "HookState": {
-      "interface": "HookState",
+    "hook": {
+      "interface": "hook",
       "key": null,
       "app": null,
       "definition": {
@@ -84,11 +84,11 @@
             "provides": null
           }
         ],
-        "name": "HookState"
+        "name": "hook"
       }
     },
-    "ExpanseState": {
-      "interface": "ExpanseState",
+    "expanse": {
+      "interface": "expanse",
       "key": null,
       "app": null,
       "definition": {
@@ -1355,11 +1355,11 @@
             "provides": null
           }
         ],
-        "name": "ExpanseState"
+        "name": "expanse"
       }
     },
-    "CalibrationState": {
-      "interface": "CalibrationState",
+    "calibration": {
+      "interface": "calibration",
       "key": null,
       "app": null,
       "definition": {
@@ -1675,11 +1675,11 @@
             "provides": null
           }
         ],
-        "name": "CalibrationState"
+        "name": "calibration"
       }
     },
-    "OpticsState": {
-      "interface": "OpticsState",
+    "optics": {
+      "interface": "optics",
       "key": null,
       "app": null,
       "definition": {
@@ -2874,11 +2874,11 @@
             "provides": null
           }
         ],
-        "name": "OpticsState"
+        "name": "optics"
       }
     },
-    "SpaceState": {
-      "interface": "SpaceState",
+    "space": {
+      "interface": "space",
       "key": null,
       "app": null,
       "definition": {
@@ -4133,11 +4133,11 @@
             "provides": null
           }
         ],
-        "name": "SpaceState"
+        "name": "space"
       }
     },
-    "MoveState": {
-      "interface": "MoveState",
+    "move": {
+      "interface": "move",
       "key": null,
       "app": null,
       "definition": {
@@ -4353,13 +4353,112 @@
             ],
             "widget": null,
             "provides": null
+          },
+          {
+            "key": "names",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
+          },
+          {
+            "key": "homes",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
+          },
+          {
+            "key": "stops",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
           }
         ],
-        "name": "MoveState"
+        "name": "move"
       }
     },
-    "SwapState": {
-      "interface": "SwapState",
+    "swap": {
+      "interface": "swap",
       "key": null,
       "app": null,
       "definition": {
@@ -4610,13 +4709,79 @@
             ],
             "widget": null,
             "provides": null
+          },
+          {
+            "key": "names",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
+          },
+          {
+            "key": "homes",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
           }
         ],
-        "name": "SwapState"
+        "name": "swap"
       }
     },
-    "TuneState": {
-      "interface": "TuneState",
+    "tune": {
+      "interface": "tune",
       "key": null,
       "app": null,
       "definition": {
@@ -4800,13 +4965,46 @@
             ],
             "widget": null,
             "provides": null
+          },
+          {
+            "key": "names",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
           }
         ],
-        "name": "TuneState"
+        "name": "tune"
       }
     },
-    "SourceState": {
-      "interface": "SourceState",
+    "source": {
+      "interface": "source",
       "key": null,
       "app": null,
       "definition": {
@@ -5023,11 +5221,11 @@
             "provides": null
           }
         ],
-        "name": "SourceState"
+        "name": "source"
       }
     },
-    "DetectorState": {
-      "interface": "DetectorState",
+    "detector": {
+      "interface": "detector",
       "key": null,
       "app": null,
       "definition": {
@@ -5644,13 +5842,46 @@
             ],
             "widget": null,
             "provides": null
+          },
+          {
+            "key": "names",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
           }
         ],
-        "name": "DetectorState"
+        "name": "detector"
       }
     },
-    "AutofocusState": {
-      "interface": "AutofocusState",
+    "autofocus": {
+      "interface": "autofocus",
       "key": null,
       "app": null,
       "definition": {
@@ -5786,15 +6017,48 @@
             "provides": null
           }
         ],
-        "name": "AutofocusState"
+        "name": "autofocus"
       }
     },
-    "UC2State": {
-      "interface": "UC2State",
+    "uc2": {
+      "interface": "uc2",
       "key": null,
       "app": null,
       "definition": {
         "ports": [
+          {
+            "key": "boards",
+            "label": null,
+            "kind": "LIST",
+            "description": null,
+            "identifier": null,
+            "nullable": false,
+            "effects": [],
+            "choices": null,
+            "referenceUnit": null,
+            "proposedUnits": null,
+            "dimension": null,
+            "children": [
+              {
+                "key": "...",
+                "label": null,
+                "kind": "STRING",
+                "description": null,
+                "identifier": null,
+                "nullable": false,
+                "effects": [],
+                "choices": null,
+                "referenceUnit": null,
+                "proposedUnits": null,
+                "dimension": null,
+                "children": null,
+                "widget": null,
+                "provides": null
+              }
+            ],
+            "widget": null,
+            "provides": null
+          },
           {
             "key": "connected",
             "label": null,
@@ -6264,11 +6528,11 @@
             "provides": null
           }
         ],
-        "name": "UC2State"
+        "name": "uc2"
       }
     },
-    "MountCalibrationState": {
-      "interface": "MountCalibrationState",
+    "mount_calibration": {
+      "interface": "mount_calibration",
       "key": null,
       "app": null,
       "definition": {
@@ -6644,7 +6908,7 @@
             "provides": null
           }
         ],
-        "name": "MountCalibrationState"
+        "name": "mount_calibration"
       }
     }
   }

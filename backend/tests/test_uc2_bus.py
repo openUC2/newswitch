@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from koil import Koil
 
-from newswitch.actions.uc2 import home_objective
+from newswitch.actions.values import home_objective
 from newswitch.drivers.uc2.actuators import Stepper, StepperConfig, Turret
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.dispatch import apply_uc2_event
@@ -156,12 +156,13 @@ def test_homing_the_objective_changer_says_where_it_is_now() -> None:
         SwapState(),
         TuneState(),
         SourceState(),
-        {"objective.slot": Turret(bus)},
+        {"objective.slot": Turret(bus, first=1)},
         unwired=unwired,
     )
+    assert "objective.slot" in values.swap_state.homes
     values.stepped("objective.slot", 2)
     with Koil():
-        home_objective(bus, values)
+        home_objective(values, "objective.slot")
     assert values.swap_state.swaps["objective"]["slot"].current == 1
 
 

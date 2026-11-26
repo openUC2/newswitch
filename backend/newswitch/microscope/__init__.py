@@ -1,9 +1,9 @@
 """One microscope, as its instrument describes it, and its app registry.
 
 - `startup`: the startup hooks, plain functions; `models`: `MODELS`, every model; both
-  registered by name by ``app.py``, which declares every part directly;
+  registered by the part registries of `apps`;
 - `registry`: who newswitch is (`IDENTIFIER`, `VERSION`, `DESCRIPTION`), and `app`, every part
-  merged, which FastAPI mode serves;
+  included, which the agent and FastAPI mode both serve;
 - `apps`: one registry per part: its states, contexts, startup hook and actions;
 - `run`: `Run`, the app context: what one run has;
 - `parts`: `build_microscope`: the managers and states of what the instrument has, as a

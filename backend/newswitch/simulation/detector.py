@@ -115,6 +115,7 @@ class SimulatedDetectorManager:
             detector.manufacturer = "simulated"
             windows_of.apply(detector, None, self._snap_binning(detector.binning()))
         self.state.detectors = list(detectors)
+        self.state.names = [detector.name for detector in self.state.detectors]
 
     # ------------------------------------------------------------- finding them
 

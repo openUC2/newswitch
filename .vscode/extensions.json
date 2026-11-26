@@ -8,6 +8,7 @@
     "ms-python.python",
     "ms-python.vscode-pylance",
     "tamasfe.even-better-toml",
-    "nefrob.vscode-just-syntax"
+    "nefrob.vscode-just-syntax",
+    "arkitekt-dev.arkitekt"
   ]
 }

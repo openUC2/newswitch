@@ -8,7 +8,7 @@ What no driver reaches is simulated (`newswitch.simulation.drivers`).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from arkitekt import Task
 
@@ -35,6 +35,26 @@ class Driver(Protocol):
         cls, targets: Iterable[tuple[Driver, Any, Report]], task: Task | None = None
     ) -> None:
         """Take several variables, all of this driver, to their values: at once, if it can."""
+        ...
+
+
+@runtime_checkable
+class Homes(Protocol):
+    """A driver that can find where its variable is by going to a reference (an endstop): what
+    `Values.home` asks of it. A real board's does it on the board; a simulated one goes there."""
+
+    def home(self, report: Report, task: Task | None = None) -> None:
+        """Go to the reference, report where the variable then is, and return once it is there."""
+        ...
+
+
+@runtime_checkable
+class Stops(Protocol):
+    """A driver that can stop its variable where it is, while another call is still taking it
+    somewhere: what `Values.stop` asks of it."""
+
+    def stop(self) -> None:
+        """Stop at once; the move under way returns where it stopped."""
         ...
 
 

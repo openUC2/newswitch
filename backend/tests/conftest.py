@@ -36,6 +36,10 @@ from newswitch.models.acquisition import (
 from newswitch.microscope.parts import Microscope, build_microscope
 from newswitch.reference import REFERENCE_INSTRUMENT
 
+#: The smallest microscope: one simulated camera, nothing else. For tests that need a run of some
+#: instrument, and nothing of it in particular (auth, accounts, routes).
+CAM_TEST = Path(__file__).parent.parent / "instruments" / "cam-test"
+
 
 @pytest.fixture(autouse=True)
 def views_beside_copies(tmp_path: Path) -> None:

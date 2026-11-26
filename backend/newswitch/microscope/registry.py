@@ -1,7 +1,6 @@
-"""Who newswitch is on an arkitekt server, and the microscope FastAPI mode serves: every part included.
+"""Who newswitch is on an arkitekt server, and the microscope it serves: every part included.
 
-The agent (``app.py``) registers every part itself, directly; FastAPI mode (``main_fastapi.py``)
-includes `app` here. Each part is a registry of its own (`newswitch.microscope.apps`): its states,
+Both the agent (``app.py``) and FastAPI mode (``main_fastapi.py``) include `app` here. Each part is a registry of its own (`newswitch.microscope.apps`): its states,
 contexts, startup hook, actions and background tasks, as plain module-level functions. `app` includes
 all of them, once, when this module is imported:
 
@@ -16,10 +15,10 @@ lacks is a context its startup hook provides as ``None``. arkitekt then fails an
 it when it is called, and does not start the background tasks or shutdown hooks that need it.
 
 How it is served is not registered here. The detectors stream to a `FrameSink` context
-(declared by the core, a protocol); ``main_fastapi.py`` includes `app` in the app it serves,
-provides that context (the websocket live view's `FrameBroadcaster`) and declares the UI it shows.
+(declared by the core, a protocol), and acquisitions are stored in a `DatasetStore`: each entry
+file includes `app` in the app it serves, provides those two contexts (the agent a `LovekitSink`
+and mikro, FastAPI the websocket live view's `FrameBroadcaster`) and declares the UI it shows.
 Like the parts, `app` lives as long as the process: declare nothing on it from outside.
-``tests/test_registry.py`` holds it and ``app.py`` to the same actions, states and locks.
 
 Every app is run with its own `Run`, which holds its one `build_microscope`: two runs share nothing.
 """

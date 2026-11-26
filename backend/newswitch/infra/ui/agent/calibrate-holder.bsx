@@ -1,29 +1,29 @@
 <Blok kind="agent" context="panel">
 <div className="flex flex-col gap-3 p-3">
-    <if when={self.MountCalibrationState.sample == ""}>
+    <if when={self.mount_calibration.sample == ""}>
         <Empty icon="grid" title="No holder calibration" description="The description names no calibration slide: give the sample's element a calibration (holder, at, slide, mark)." />
     </if>
 
-    <if when={self.MountCalibrationState.sample != ""}>
+    <if when={self.mount_calibration.sample != ""}>
         <Card className="gap-3 py-3">
             <div className="flex items-center justify-between gap-2 px-3">
                 <div className="flex items-center gap-2">
                     <Icon name="grid" size={16} className="text-primary" />
                     <Text size="sm" weight="semibold">Holder calibration</Text>
-                    <if when={self.MountCalibrationState.busy}>
+                    <if when={self.mount_calibration.busy}>
                         <Badge variant="secondary" icon="activity">Running</Badge>
                     </if>
-                    <if when={self.MountCalibrationState.busy == false && self.MountCalibrationState.error != null}>
+                    <if when={self.mount_calibration.busy == false && self.mount_calibration.error != null}>
                         <Badge variant="destructive" icon="alert-triangle">Failed</Badge>
                     </if>
-                    <if when={self.MountCalibrationState.busy == false && self.MountCalibrationState.error == null && self.MountCalibrationState.last != null}>
+                    <if when={self.mount_calibration.busy == false && self.mount_calibration.error == null && self.mount_calibration.last != null}>
                         <Badge variant="default" icon="flag">Measured</Badge>
                     </if>
                 </div>
                 <div className="flex items-center gap-1">
-                    <Button size="sm" icon="play" disabled={self.MountCalibrationState.busy} onClick={self.calibrate_mount()}>Calibrate</Button>
-                    <Button size="sm" variant="outline" icon="search" disabled={self.MountCalibrationState.busy} onClick={self.calibrate_mount(save: false)}>Try</Button>
-                    <Button size="sm" variant="destructive" icon="square" onClick={self.stop_stage()}>Stop</Button>
+                    <Button size="sm" icon="play" disabled={self.mount_calibration.busy} onClick={self.calibrate_mount()}>Calibrate</Button>
+                    <Button size="sm" variant="outline" icon="search" disabled={self.mount_calibration.busy} onClick={self.calibrate_mount(save: false)}>Try</Button>
+                    <Button size="sm" variant="destructive" icon="square" onClick={self.stop_stage(stage: "stage")}>Stop</Button>
                 </div>
             </div>
 
@@ -32,37 +32,37 @@
             <div className="px-3">
                 <Grid columns={2} gap="0.375rem">
                     <Text size="xs" tone="muted">Holder</Text>
-                    <Text size="xs">{str.concat(values: [self.MountCalibrationState.holder, " (", self.MountCalibrationState.holder_kind, ")"])}</Text>
+                    <Text size="xs">{str.concat(values: [self.mount_calibration.holder, " (", self.mount_calibration.holder_kind, ")"])}</Text>
                     <Text size="xs" tone="muted">Calibration slide</Text>
-                    <Text size="xs">{self.MountCalibrationState.slide}</Text>
+                    <Text size="xs">{self.mount_calibration.slide}</Text>
                     <Text size="xs" tone="muted">Lies in</Text>
-                    <Text size="xs" mono>{self.MountCalibrationState.at}</Text>
+                    <Text size="xs" mono>{self.mount_calibration.at}</Text>
                     <Text size="xs" tone="muted">Mark</Text>
-                    <Text size="xs" mono>{self.MountCalibrationState.mark}</Text>
+                    <Text size="xs" mono>{self.mount_calibration.mark}</Text>
                     <Text size="xs" tone="muted">Holder sits at</Text>
-                    <Text size="xs" mono>{str.concat(values: ["x ", fmt.number(value: self.MountCalibrationState.mount_x_mm, digits: 3), " mm, y ", fmt.number(value: self.MountCalibrationState.mount_y_mm, digits: 3), " mm from home"])}</Text>
+                    <Text size="xs" mono>{str.concat(values: ["x ", fmt.number(value: self.mount_calibration.mount_x_mm, digits: 3), " mm, y ", fmt.number(value: self.mount_calibration.mount_y_mm, digits: 3), " mm from home"])}</Text>
                 </Grid>
             </div>
 
-            <if when={self.MountCalibrationState.busy}>
+            <if when={self.mount_calibration.busy}>
                 <div className="flex flex-col gap-1 px-3">
-                    <Progress value={self.MountCalibrationState.progress} max={100} />
+                    <Progress value={self.mount_calibration.progress} max={100} />
                     <div className="flex items-center gap-2">
                         <Spinner className="size-3.5" />
-                        <Text size="xs" tone="muted">{self.MountCalibrationState.step}</Text>
+                        <Text size="xs" tone="muted">{self.mount_calibration.step}</Text>
                     </div>
                 </div>
             </if>
 
-            <if when={self.MountCalibrationState.waiting != null}>
-                <Alert icon="flag" title="Waiting for you: approve the hold" description={str.concat(values: [self.MountCalibrationState.waiting, " (Approve or deny it on the running task.)"])} className="mx-3" />
+            <if when={self.mount_calibration.waiting != null}>
+                <Alert icon="flag" title="Waiting for you: approve the hold" description={str.concat(values: [self.mount_calibration.waiting, " (Approve or deny it on the running task.)"])} className="mx-3" />
             </if>
 
-            <if when={self.MountCalibrationState.busy == false && self.MountCalibrationState.error != null}>
-                <Alert variant="destructive" icon="alert-triangle" title="Last run failed" description={self.MountCalibrationState.error} className="mx-3" />
+            <if when={self.mount_calibration.busy == false && self.mount_calibration.error != null}>
+                <Alert variant="destructive" icon="alert-triangle" title="Last run failed" description={self.mount_calibration.error} className="mx-3" />
             </if>
 
-            <foreach items={list.compact(value: [self.MountCalibrationState.last])} let="last" key={"last"}>
+            <foreach items={list.compact(value: [self.mount_calibration.last])} let="last" key={"last"}>
                 <div className="flex flex-col gap-1 border-t px-3 pt-3">
                     <Text size="xs" weight="semibold">Last measured</Text>
                     <Grid columns={2} gap="0.375rem">
@@ -86,14 +86,14 @@
                     <Text size="sm" weight="semibold">What the camera sees</Text>
                 </div>
                 <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" icon="play" disabled={self.DetectorState.is_acquiring} onClick={self.start_live_view()}>Live</Button>
-                    <Button size="sm" variant="ghost" icon="pause" disabled={self.DetectorState.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
+                    <Button size="sm" variant="outline" icon="play" disabled={self.detector.is_acquiring} onClick={self.start_live_view()}>Live</Button>
+                    <Button size="sm" variant="ghost" icon="pause" disabled={self.detector.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
                 </div>
             </div>
-            <foreach items={list.compact(value: [list.at(value: self.CameraStreams.streams, index: 0)])} let="stream" key={"stream"}>
+            <foreach items={list.compact(value: [list.at(value: self.camera_streams.streams, index: 0)])} let="stream" key={"stream"}>
                 <StructureDisplay value={stream} variant="card" />
             </foreach>
-            <if when={list.len(value: self.CameraStreams.streams) == 0}>
+            <if when={list.len(value: self.camera_streams.streams) == 0}>
                 <Text size="xs" tone="muted" className="px-3">No camera streams.</Text>
             </if>
         </Card>

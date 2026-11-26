@@ -13,7 +13,7 @@ from newswitch.states.detector import DetectorState
 
 app = App("newswitch", app_context=Run)
 app.include(core.app)
-app.register_state(DetectorState, required_locks=[locks.DETECTOR])
+app.register_state(DetectorState, name="detector", required_locks=[locks.DETECTOR])
 app.register_context(DetectorManager, locks=[locks.DETECTOR])
 app.register_context(AcquisitionManager, locks=[locks.EXPANSE, locks.IO])
 app.register_startup(provide_detector)

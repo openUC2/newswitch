@@ -25,7 +25,7 @@ from newswitch.infra.accounts.auth import (
     default_authenticator,
     load_credentials,
 )
-from tests.conftest import run_settings
+from tests.conftest import CAM_TEST, run_settings
 from newswitch.infra.accounts.store import Role, UserStore
 
 USERNAME = "operator"
@@ -44,7 +44,7 @@ def store(tmp_path: Path) -> UserStore:
 def authed_app(store: UserStore, tmp_path: Path) -> FastAPI:
     """The app with a real account store, so the gate is actually exercised."""
     return create_app(
-        run_settings(tmp_path),
+        run_settings(tmp_path, instrument=CAM_TEST),
         authenticator=UserStoreAuthenticator(store),
     )
 
@@ -183,7 +183,7 @@ def test_logout_revokes_a_user_store_session(tmp_path: Path) -> None:
     """Logout invalidates exactly the session used, not every session for the account."""
     store = UserStore(tmp_path / "auth.db")
     store.create_user(USERNAME, PASSWORD, Role.OPERATOR)
-    app = create_app(run_settings(tmp_path), authenticator=UserStoreAuthenticator(store))
+    app = create_app(run_settings(tmp_path, instrument=CAM_TEST), authenticator=UserStoreAuthenticator(store))
     with TestClient(app) as user_client:
         login_response = user_client.post("/auth/login", headers=basic_header())
         token = login_response.json()["token"]

@@ -17,7 +17,8 @@ with newswitch (``agent/``), written for the base catalog or Orkestrator's
 (``<Blok catalog="https://arkitekt.live/...">``). They are the same on every microscope, as the
 agent's actions and states are (`newswitch.microscope.registry`): a blok shows what the states hold,
 so it copes with a microscope that lacks a part. The variables they bind by name are a convention a
-description follows: the stage is the cube ``stage``, moving along ``x``, ``y`` and ``z``.
+description follows: the stage is the cube ``stage``, moving along ``x``, ``y`` and ``z``. They are
+declared by their file (`BlokFile`), so ``arkitekt check`` and the editor point into the ``.bsx``.
 
 A registry holds a blok to the blok language alone; the catalog rules run only inside
 `checking_catalogs`. Both declare their bloks inside it with every catalog finding an error, so a
@@ -28,7 +29,9 @@ Tailwind.
 
 import re
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from arkitekt import ORKESTRATOR_CATALOG_ID, App, AppDeclarationError, checking_catalogs
@@ -124,6 +127,7 @@ __all__ = [
     "CATALOG_FILE",
     "CATALOG_NAME",
     "UI_TOLERATED",
+    "BlokFile",
     "PublishedCatalog",
     "agent_bloks",
     "check_catalog",
@@ -132,6 +136,26 @@ __all__ = [
     "declare_ui",
     "load_catalog",
 ]
+
+
+@dataclass(frozen=True)
+class BlokFile:
+    """A blok kept in a ``.bsx`` file, declared by its path: arkitekt reads it, and what it finds
+    in it (``arkitekt check``, the editor) points at the file's line."""
+
+    path: Path
+    description: str | None = None
+    default: bool = False
+
+    @cached_property
+    def bsx(self) -> str:
+        """The file's BSX source."""
+        return self.path.read_text(encoding="utf-8")
+
+
+def _component(entry: BlokEntry | BlokFile) -> str | Path:
+    """What `App.blok` declares for `entry`: a file by its path, a written-out blok by its source."""
+    return entry.path if isinstance(entry, BlokFile) else entry.bsx
 
 
 def check_catalog(ui: UiConfig, published: PublishedCatalog) -> None:
@@ -166,7 +190,7 @@ def _catalog_label(catalog: str | None) -> str:
 def declare_bloks(
     app: App,
     section: str,
-    bloks: dict[str, BlokEntry],
+    bloks: Mapping[str, BlokEntry | BlokFile],
     allowed: Iterable[str | None],
     tolerated: Iterable[str] = (),
 ) -> None:
@@ -186,11 +210,11 @@ def declare_bloks(
                 f"{section}.bloks.{name} is written for {_catalog_label(catalog)}, not {wanted}"
             )
         _check_blok(app, section, name, entry, tolerated)
-        app.blok(name, entry.bsx, description=entry.description, default=entry.default)
+        app.blok(name, _component(entry), description=entry.description, default=entry.default)
 
 
 def _check_blok(
-    app: App, section: str, name: str, entry: BlokEntry, tolerated: Iterable[str]
+    app: App, section: str, name: str, entry: BlokEntry | BlokFile, tolerated: Iterable[str]
 ) -> None:
     """Refuse `entry` now, before it is declared on `app`.
 
@@ -203,7 +227,7 @@ def _check_blok(
     """
     probe = App(app.identifier, app_context=app.app_context)
     probe.include(app)
-    probe.blok(name, entry.bsx, description=entry.description, default=entry.default)
+    probe.blok(name, _component(entry), description=entry.description, default=entry.default)
     with checking_catalogs(), warnings.catch_warnings():
         warnings.simplefilter("error", CatalogWarning)
         for code in tolerated:
@@ -235,12 +259,10 @@ def declare_ui(
     declare_bloks(app, "ui", instrument.ui.bloks, {CATALOG_NAME}, UI_TOLERATED)
 
 
-def agent_bloks() -> dict[str, BlokEntry]:
-    """The agent's bloks (`AGENT_BLOKS`), read from their files."""
+def agent_bloks() -> dict[str, BlokFile]:
+    """The agent's bloks (`AGENT_BLOKS`), by their files."""
     return {
-        name: BlokEntry(
-            bsx=(AGENT_BLOK_DIR / file).read_text(), description=description, default=default
-        )
+        name: BlokFile(AGENT_BLOK_DIR / file, description=description, default=default)
         for name, (file, description, default) in AGENT_BLOKS.items()
     }
 

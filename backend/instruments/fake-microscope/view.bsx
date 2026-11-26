@@ -7,7 +7,7 @@
     <span className="text-xl font-semibold tracking-tight">Calibration bench</span>
 </div>
 <div className="flex flex-wrap gap-1.5">
-<if when={list.contains(value: list.pluck(value: obj.values(value: self.SourceState.sources), key: "on"), item: true)}>
+<if when={list.contains(value: list.pluck(value: obj.values(value: self.source.sources), key: "on"), item: true)}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-info">
         <span className="size-1.5 rounded-full bg-info" />
         <span>Lit</span>
@@ -19,7 +19,7 @@
     </div>
 </else>
 </if>
-<if when={self.DetectorState.is_acquiring}>
+<if when={self.detector.is_acquiring}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive">
         <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
         <span>Live</span>
@@ -31,7 +31,7 @@
     </div>
 </else>
 </if>
-<if when={list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+<if when={list.contains(value: list.pluck(value: obj.values(value: self.optics.detectors), key: "calibrated"), item: true)}>
     <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-success">
         <span className="size-1.5 rounded-full bg-success" />
         <span>Calibrated</span>
@@ -47,7 +47,7 @@
 <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Measured or only predicted</span>
     <div className="mt-2">
-<foreach items={obj.values(value: self.OpticsState.detectors)} let="found" key={found.name}>
+<foreach items={obj.values(value: self.optics.detectors)} let="found" key={found.name}>
     <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2 last:border-0">
         <div className="flex min-w-0 flex-col">
             <span className="truncate text-sm font-medium">{found.name}</span>
@@ -64,10 +64,10 @@
 <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Stage z</span>
     <div className="flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage.z.current, digits: 1)}</span>
+        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={10} value={self.MoveState.moves.stage.z.current} min={-500} max={500} onCommit={self.move_one(name: "stage.z", to: event.value)} />
+    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-spectrum-green [&amp;_[data-slot=slider-thumb]]:border-spectrum-green" step={10} value={self.move.moves.stage.z.current} min={-500} max={500} onCommit={self.move_one(name: "stage.z", to: event.value)} />
     <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -100.0)}>-100</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "stage.z", by: -10.0)}>-10</Button>
@@ -80,10 +80,10 @@
 <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Tube lens of camera_a</span>
     <div className="flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.tube_a.dz.current, digits: 1)}</span>
+        <span className="text-3xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.tube_a.dz.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-warning [&amp;_[data-slot=slider-thumb]]:border-warning" step={100} value={self.MoveState.moves.tube_a.dz.current} min={-5000} max={5000} onCommit={self.move_one(name: "tube_a.dz", to: event.value)} />
+    <Slider className="mt-3 past:hidden [&amp;_[data-slot=slider-range]]:bg-warning [&amp;_[data-slot=slider-thumb]]:border-warning" step={100} value={self.move.moves.tube_a.dz.current} min={-5000} max={5000} onCommit={self.move_one(name: "tube_a.dz", to: event.value)} />
     <div className="mt-3 grid grid-cols-5 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.move_one(name: "tube_a.dz", by: -1000.0)}>-1000</Button>
         <Button size="sm" variant="outline" onClick={self.move_one(name: "tube_a.dz", by: -100.0)}>-100</Button>
@@ -93,11 +93,11 @@
     </div>
     <span className="mt-2 block text-[11px] text-muted-foreground">Only that arm: it blurs and rescales the image, so calibrating must be redone.</span>
 </div>
-<foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
+<foreach items={self.detector.detectors} let="camera" key={camera.name}>
     <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{camera.name}</span>
         <div className="mt-3 grid grid-cols-2 gap-3 past:hidden">
-            <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
+            <foreach items={obj.values(value: obj.get(value: self.tune.tunes, key: camera.name))} let="tune" key={tune.name}>
                 <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{str.replace(value: tune.name, search: str.concat(values: [camera.name, "."]), replacement: "")}</span>
                     <div className="flex items-baseline gap-1">

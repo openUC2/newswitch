@@ -5,13 +5,13 @@
 <local name="go_y" kind="STRING" default="" />
 <local name="go_z" kind="STRING" default="" />
 <foreach items={list.compact(value: [{
-    x: self.MoveState.moves.stage.x,
-    y: self.MoveState.moves.stage.y,
-    z: self.MoveState.moves.stage.z,
-    fx: math.div(math.sub(self.MoveState.moves.stage.x.current, self.MoveState.moves.stage.x.minimum), math.sub(self.MoveState.moves.stage.x.maximum, self.MoveState.moves.stage.x.minimum)),
-    fy: math.div(math.sub(self.MoveState.moves.stage.y.current, self.MoveState.moves.stage.y.minimum), math.sub(self.MoveState.moves.stage.y.maximum, self.MoveState.moves.stage.y.minimum)),
-    ox: math.div(math.neg(self.MoveState.moves.stage.x.minimum), math.sub(self.MoveState.moves.stage.x.maximum, self.MoveState.moves.stage.x.minimum)),
-    oy: math.div(math.neg(self.MoveState.moves.stage.y.minimum), math.sub(self.MoveState.moves.stage.y.maximum, self.MoveState.moves.stage.y.minimum)),
+    x: self.move.moves.stage.x,
+    y: self.move.moves.stage.y,
+    z: self.move.moves.stage.z,
+    fx: math.div(math.sub(self.move.moves.stage.x.current, self.move.moves.stage.x.minimum), math.sub(self.move.moves.stage.x.maximum, self.move.moves.stage.x.minimum)),
+    fy: math.div(math.sub(self.move.moves.stage.y.current, self.move.moves.stage.y.minimum), math.sub(self.move.moves.stage.y.maximum, self.move.moves.stage.y.minimum)),
+    ox: math.div(math.neg(self.move.moves.stage.x.minimum), math.sub(self.move.moves.stage.x.maximum, self.move.moves.stage.x.minimum)),
+    oy: math.div(math.neg(self.move.moves.stage.y.minimum), math.sub(self.move.moves.stage.y.maximum, self.move.moves.stage.y.minimum)),
     moving: self.tasks.move_one.running == true || self.tasks.move.running == true || self.tasks.home_stage.running == true || self.tasks.move_home.running == true
 }])} let="stage" key={"stage"}>
 <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-start">
@@ -21,15 +21,15 @@
         <Tabs defaultValue="0">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-2 py-1.5">
                 <TabsList>
-                    <foreach items={list.range(start: 0, end: list.len(value: self.CameraStreams.streams))} let="i" key={i}>
-                        <TabsTrigger value={val.to_string(value: i)} icon="video">{list.at(value: self.CameraStreams.titles, index: i)}</TabsTrigger>
+                    <foreach items={list.range(start: 0, end: list.len(value: self.camera_streams.streams))} let="i" key={i}>
+                        <TabsTrigger value={val.to_string(value: i)} icon="video">{list.at(value: self.camera_streams.titles, index: i)}</TabsTrigger>
                     </foreach>
-                    <if when={list.len(value: self.CameraStreams.streams) > 1}>
+                    <if when={list.len(value: self.camera_streams.streams) > 1}>
                         <TabsTrigger value="all" icon="grid">All</TabsTrigger>
                     </if>
                 </TabsList>
                 <div className="flex items-center gap-1">
-                    <if when={self.DetectorState.is_acquiring}>
+                    <if when={self.detector.is_acquiring}>
                         <Badge variant="secondary" icon="activity">Acquiring</Badge>
                     </if>
                     <Button size="sm" icon="play" onClick={self.start_live_view()}>Live</Button>
@@ -38,15 +38,15 @@
                 </div>
             </div>
 
-            <foreach items={list.range(start: 0, end: list.len(value: self.CameraStreams.streams))} let="i" key={i}>
+            <foreach items={list.range(start: 0, end: list.len(value: self.camera_streams.streams))} let="i" key={i}>
                 <TabsContent value={val.to_string(value: i)} className="m-0">
                     <foreach items={list.compact(value: [{
-                        name: list.at(value: self.CameraStreams.titles, index: i),
-                        exposure: obj.get(value: self.TuneState.tunes, key: str.concat(values: [list.at(value: self.CameraStreams.titles, index: i), ".exposure"])),
-                        gain: obj.get(value: self.TuneState.tunes, key: str.concat(values: [list.at(value: self.CameraStreams.titles, index: i), ".gain"]))
+                        name: list.at(value: self.camera_streams.titles, index: i),
+                        exposure: obj.get(value: self.tune.tunes, key: str.concat(values: [list.at(value: self.camera_streams.titles, index: i), ".exposure"])),
+                        gain: obj.get(value: self.tune.tunes, key: str.concat(values: [list.at(value: self.camera_streams.titles, index: i), ".gain"]))
                     }])} let="camera" key={camera.name}>
                         <div>
-                            <StructureDisplay value={list.at(value: self.CameraStreams.streams, index: i)} variant="card" />
+                            <StructureDisplay value={list.at(value: self.camera_streams.streams, index: i)} variant="card" />
                         </div>
                         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
                             <if when={camera.exposure}>
@@ -70,13 +70,13 @@
 
             <TabsContent value="all" className="m-0">
                 <Grid columns={2} gap="2px">
-                    <foreach items={self.CameraStreams.streams} let="stream" key={stream}>
+                    <foreach items={self.camera_streams.streams} let="stream" key={stream}>
                         <StructureDisplay value={stream} variant="card" />
                     </foreach>
                 </Grid>
             </TabsContent>
         </Tabs>
-        <if when={list.len(value: self.CameraStreams.streams) == 0}>
+        <if when={list.len(value: self.camera_streams.streams) == 0}>
             <div className="flex h-48 items-center justify-center gap-2 text-muted-foreground">
                 <Spinner />
                 <Text size="sm" tone="muted">Waiting for the camera streams</Text>
@@ -96,7 +96,7 @@
                         <Spinner className="size-3.5" />
                     </if>
                 </div>
-                <Button size="xs" variant="destructive" icon="square" onClick={self.stop_stage()}>Stop</Button>
+                <Button size="xs" variant="destructive" icon="square" onClick={self.stop_stage(stage: "stage")}>Stop</Button>
             </div>
 
             <div className="px-3">
@@ -123,7 +123,7 @@
                         </foreach>
                         <Line x1={math.mul(stage.ox, 200)} y1={0} x2={math.mul(stage.ox, 200)} y2={200} stroke="muted" strokeOpacity={0.7} strokeDasharray="4 4" />
                         <Line x1={0} y1={math.sub(200, math.mul(stage.oy, 200))} x2={200} y2={math.sub(200, math.mul(stage.oy, 200))} stroke="muted" strokeOpacity={0.7} strokeDasharray="4 4" />
-                        <foreach items={obj.values(value: self.OpticsState.detectors)} let="seen" key={seen.name}>
+                        <foreach items={obj.values(value: self.optics.detectors)} let="seen" key={seen.name}>
                             <Rect
                                 x={math.sub(math.mul(stage.fx, 200), math.div(math.mul(200, math.div(seen.field_width_um, math.sub(stage.x.maximum, stage.x.minimum))), 2))}
                                 y={math.sub(math.sub(200, math.mul(stage.fy, 200)), math.div(math.mul(200, math.div(seen.field_height_um, math.sub(stage.y.maximum, stage.y.minimum))), 2))}
@@ -207,8 +207,8 @@
                         </div>
                     </PopoverContent>
                 </Popover>
-                <Button size="xs" variant="ghost" icon="zoom-in" disabled={self.AutofocusState.running || stage.moving} onClick={self.run_autofocus()}>Focus</Button>
-                <Button size="xs" variant="ghost" icon="home" disabled={stage.moving} onClick={self.home_stage()}>Home</Button>
+                <Button size="xs" variant="ghost" icon="zoom-in" disabled={self.autofocus.running || stage.moving} onClick={self.run_autofocus()}>Focus</Button>
+                <Button size="xs" variant="ghost" icon="home" disabled={stage.moving} onClick={self.home_stage(stage: "stage")}>Home</Button>
                 <Button size="xs" variant="ghost" icon="flag" disabled={stage.moving} onClick={self.set_sample_origin_here()}>Zero</Button>
             </div>
         </Card>
@@ -219,7 +219,7 @@
                 <Icon name="zap" size={16} className="text-primary" />
                 <Text size="sm" weight="semibold">Lights</Text>
             </div>
-            <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+            <foreach items={obj.values(value: self.source.sources)} let="light" key={light.name}>
                 <div className="flex flex-col gap-1.5 px-3 py-1">
                     <div className="flex items-center gap-2">
                         <div className="size-2.5 shrink-0">
@@ -241,14 +241,14 @@
         </Card>
 
         <!-- optics -->
-        <if when={list.len(value: obj.keys(value: self.SwapState.swaps)) > 0}>
+        <if when={list.len(value: obj.keys(value: self.swap.swaps)) > 0}>
             <Card className="gap-2 py-3">
                 <div className="flex items-center gap-2 px-3">
                     <Icon name="layers" size={16} className="text-primary" />
                     <Text size="sm" weight="semibold">Optics</Text>
                 </div>
-                <foreach items={obj.keys(value: self.SwapState.swaps)} let="part" key={part}>
-                    <foreach items={obj.values(value: obj.get(value: self.SwapState.swaps, key: part))} let="swap" key={swap.name}>
+                <foreach items={obj.keys(value: self.swap.swaps)} let="part" key={part}>
+                    <foreach items={obj.values(value: obj.get(value: self.swap.swaps, key: part))} let="swap" key={swap.name}>
                         <div className="flex items-center gap-2 px-3">
                             <Text size="xs" tone="muted" className="w-20 shrink-0" truncate>{part}</Text>
                             <div className="flex flex-1 flex-wrap gap-1">

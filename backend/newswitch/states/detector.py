@@ -11,6 +11,9 @@ class DetectorState:
 
     is_acquiring: bool = False
     detectors: list[Detector] = field(default_factory=lambda: [])
+    names: list[str] = field(default_factory=list)
+    """What the detectors are called: what a detector's action can be asked of
+    (``withStateChoices("self.detector.names")``)."""
 
     def get_active_detectors(self) -> list[Detector]:
         """The detectors that are on."""

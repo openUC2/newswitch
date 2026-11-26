@@ -12,7 +12,7 @@ from main_fastapi import create_app, create_fastapi_registry
 from newswitch.infra.accounts.auth import AllowAllAuthenticator
 from newswitch.microscope.run import Run
 from newswitch.infra.mikro.connection import MikroConnection
-from tests.conftest import run_settings
+from tests.conftest import CAM_TEST, run_settings
 
 pytest.importorskip("mikro")
 
@@ -44,7 +44,7 @@ def test_the_client_lives_as_long_as_the_agent(
     client = FakeClient()
     connection = MikroConnection("http://mikro", "http://data", "token")
     monkeypatch.setattr(MikroConnection, "client", lambda self: client)
-    run = Run(run_settings(tmp_path), None, connection)
+    run = Run.of(run_settings(tmp_path, instrument=CAM_TEST), connection)
 
     async def lifetime() -> None:
         hook = mikro_app.provide_mikro(run)
@@ -67,7 +67,7 @@ def test_a_started_agent_enters_and_leaves_it(
     monkeypatch.setattr(MikroConnection, "from_env", classmethod(lambda cls, *_: connection))
     monkeypatch.setattr(MikroConnection, "client", lambda self: client)
 
-    app = create_app(run_settings(tmp_path), AllowAllAuthenticator())
+    app = create_app(run_settings(tmp_path, instrument=CAM_TEST), AllowAllAuthenticator())
     with TestClient(app):
         for _ in range(250):
             if client.events:

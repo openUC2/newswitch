@@ -13,7 +13,7 @@
         <span className="size-3 shrink-0 rounded-full bg-spectrum-cyan" />
         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Selector · which sample</span>
     </div>
-    <span className="mt-1 block text-sm font-medium">{self.SwapState.swaps.selector.slot.label}</span>
+    <span className="mt-1 block text-sm font-medium">{self.swap.swaps.selector.slot.label}</span>
     <span className="block text-[11px] text-muted-foreground">Arm a: GFP beads on stage_a, by fluorescence. Arm b: an H&amp;E section on stage_b, in white light.</span>
     <div className="mt-3 grid grid-cols-2 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.swap(name: "selector.slot", slot: 1)}>Sample a</Button>
@@ -26,7 +26,7 @@
         <span className="size-3 shrink-0 rounded-full bg-spectrum-violet" />
         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Port · which camera</span>
     </div>
-    <span className="mt-1 block text-sm font-medium">{self.SwapState.swaps.port.slot.label}</span>
+    <span className="mt-1 block text-sm font-medium">{self.swap.swaps.port.slot.label}</span>
     <span className="block text-[11px] text-muted-foreground">cam_color, or cam_mono, more sensitive; the other reads out only its noise.</span>
     <div className="mt-3 grid grid-cols-2 gap-1.5 past:hidden">
         <Button size="sm" variant="outline" onClick={self.swap(name: "port.slot", slot: 1)}>Color</Button>
@@ -38,16 +38,16 @@
     <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Focus</span>
     <div className="mt-2 flex items-baseline gap-1.5">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">stage_a</span>
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_a.z.current, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage_a.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_a.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.move.moves.stage_a.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_a.z", to: event.value)} />
     <div className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">stage_b</span>
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.MoveState.moves.stage_b.z.current, digits: 1)}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight">{fmt.number(value: self.move.moves.stage_b.z.current, digits: 1)}</span>
         <span className="text-sm text-muted-foreground">µm</span>
     </div>
-    <Slider className="mt-2 past:hidden" step={1} value={self.MoveState.moves.stage_b.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
+    <Slider className="mt-2 past:hidden" step={1} value={self.move.moves.stage_b.z.current} min={-50} max={50} onCommit={self.move_one(name: "stage_b.z", to: event.value)} />
 </div>
 <SourceControl />
 </div>

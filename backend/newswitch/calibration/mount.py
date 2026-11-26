@@ -17,6 +17,7 @@ The stage's own 0 is where homing puts it: nothing of the sample is measured fro
 import logging
 import math
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any, Iterator, Optional
 
 import numpy as np
@@ -26,6 +27,7 @@ from koil import unkoil
 from newswitch import protocols
 from newswitch.calibration.models import MeasuredMount
 from newswitch.calibration.states import MountCalibrationState
+from newswitch.drivers.uc2.boards import UC2Boards
 from newswitch.instrument.space import holder_to_stage
 from newswitch.instrument.spec import _UNITS, Calibration, Instrument, Mount
 from newswitch.protocols.uc2 import UC2BusManager
@@ -144,11 +146,28 @@ def _detector(space: SpaceManager, calibration: Calibration, sample: str) -> str
     raise ValueError(f"no detector looks at {sample}: name one (calibration: detector)")
 
 
+def _homing_board(uc2: UC2Boards, axes: Sequence[str]) -> UC2BusManager | None:
+    """The board ``calibration.home`` homes `axes` on (its axes are a board's: the turret's ``A``
+    is no variable); None when there is nothing to home.
+
+    Raises:
+        ValueError: There are axes to home, but no board to home them on.
+    """
+    if not axes:
+        return None
+    if len(uc2) != 1:
+        raise ValueError(
+            f"calibration.home names {axes}, homed on the board: this microscope has "
+            f"{len(uc2) or 'no'} boards"
+        )
+    return next(iter(uc2))
+
+
 def calibrate_mount(
     space: SpaceManager,
     values: Values,
     detector_manager: protocols.DetectorManager,
-    uc2_bus: UC2BusManager,
+    uc2: UC2Boards,
     calibration_manager: protocols.CalibrationManager,
     mount_calibration: MountCalibrationState,
     task: Task,
@@ -192,12 +211,13 @@ def calibrate_mount(
     settings = {name: _quantity(instrument, name, text) for name, text in calibration.values.items()}
     before = values.snapshot()
     restore = {n: before[n] for n in settings if n not in (x_name, y_name)}
+    board = _homing_board(uc2, calibration.home)
 
     state.busy, state.error, state.waiting = True, None, None
     try:
         for index, axis in enumerate(calibration.home):
             step(int(10 * index / len(calibration.home)), f"homing {axis}")
-            unkoil(uc2_bus.ahome_axis, axis)
+            unkoil(board.ahome_axis, axis)  # type: ignore[union-attr] - there are axes, so a board
 
         step(10, "light and focus on the calibration slide")
         values.set(settings, task=task)

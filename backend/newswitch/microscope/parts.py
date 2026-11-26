@@ -18,6 +18,7 @@ from newswitch.calibration.manager import CalibrationManager
 from newswitch.calibration.states import CalibrationState
 from newswitch.calibration.store import CalibrationStore
 from newswitch.drivers.base import Driver, Report, build_driver
+from newswitch.drivers.uc2.boards import UC2Boards
 from newswitch.drivers.uc2.canopen_bus import UC2CanBus, UC2CanBusConfig
 from newswitch.drivers.uc2.rest_bus import UC2RestBus, UC2RestBusConfig
 from newswitch.instrument import parts as instrument_parts
@@ -144,6 +145,13 @@ def build_uc2_bus(settings: Settings, instrument: Instrument, uc2_state: UC2Stat
     return UC2CanBus(state=uc2_state, config=config, firmware=board.firmware)
 
 
+def build_uc2_boards(settings: Settings, instrument: Instrument, uc2_state: UC2State) -> UC2Boards:
+    """The board the description has, by its name (`build_uc2_bus`); none, when it has none."""
+    board = instrument.hardware.board
+    buses = {} if board is None else {board.name: build_uc2_bus(settings, instrument, uc2_state)}
+    return UC2Boards(buses, uc2_state)
+
+
 def build_detector_manager(
     settings: Settings,
     instrument: Instrument,
@@ -217,7 +225,8 @@ def build_drivers(
 
 @dataclass
 class Microscope:
-    """Everything one microscope built; what it lacks is None."""
+    """Everything one microscope built. What it lacks is there all the same, empty: a microscope
+    without a board has no `UC2Boards`, one without detectors a manager of none."""
 
     move_state: MoveState
     swap_state: SwapState
@@ -240,28 +249,25 @@ class Microscope:
     space: SpaceManager
     cache: protocols.CacheManager
     autofocus_state: AutofocusState
-    uc2_bus: Optional[UC2BusManager]
-    values: Optional[Values]
-    detector: Optional[DetectorManager]
-    acquisition: Optional[protocols.AcquisitionManager]
+    uc2: UC2Boards
+    values: Values
+    detector: DetectorManager
+    acquisition: protocols.AcquisitionManager
 
 
-def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Microscope: # TODO: shis should be actually inside the startup hook and not called by a method of the run, lets class based patterns
+def build_microscope(settings: Settings, instrument: Instrument) -> Microscope: # TODO: shis should be actually inside the startup hook and not called by a method of the run, lets class based patterns
     """Build everything `instrument` has.
 
     Args:
         settings: The app context: what to simulate, folders.
-        instrument: What to run; None: no devices, the core only.
+        instrument: What to run.
 
     Raises:
         SpecError: The description does not say how to reach something it has to.
     """
-    if instrument is not None:
-        check_wired(instrument, settings.simulate)
+    check_wired(instrument, settings.simulate)
     logger.info(
-        "Initializing a microscope with %s simulated: %s",
-        settings.simulate,
-        instrument.name if instrument is not None else "no devices",
+        "Initializing a microscope with %s simulated: %s", settings.simulate, instrument.name
     )
 
     move_state, swap_state, tune_state = MoveState(), SwapState(), TuneState()
@@ -269,33 +275,25 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
     detector_state = DetectorState()
     uc2_state = UC2State()
 
-    uc2_bus = (
-        build_uc2_bus(settings, instrument, uc2_state)
-        if instrument is not None and instrument.hardware.boards
-        else None
+    uc2 = build_uc2_boards(settings, instrument, uc2_state)
+    # The detectors read the values, which are built after them: asked only once it runs.
+    values: Values
+    detector = build_detector_manager(
+        settings,
+        instrument,
+        detector_state,
+        lambda: values.snapshot(),
+        lambda name, value: values.stepped(name, value),
     )
-    values: Optional[Values] = None
-    detector = (
-        build_detector_manager(
-            settings,
-            instrument,
-            detector_state,
-            lambda: values.snapshot(),
-            lambda name, value: values.stepped(name, value),
-        )
-        if instrument is not None and (instrument.detectors() or instrument.probes())
-        else None
+    values = Values(
+        instrument,
+        move_state,
+        swap_state,
+        tune_state,
+        source_state,
+        build_drivers(settings, instrument, next(iter(uc2), None), detector),
+        unwired=simulated_drivers.unwired,
     )
-    if instrument is not None:
-        values = Values(
-            instrument,
-            move_state,
-            swap_state,
-            tune_state,
-            source_state,
-            build_drivers(settings, instrument, uc2_bus, detector),
-            unwired=simulated_drivers.unwired,
-        )
 
     io_state = IOState()
     io = LocalFileIOManager(
@@ -305,9 +303,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
     calibration = CalibrationManager(
         calibration_state=calibration_state,
         instrument=instrument,
-        store=None
-        if instrument is None
-        else CalibrationStore(settings.calibration_dir, instrument.name),
+        store=CalibrationStore(settings.calibration_dir, instrument.name),
     )
 
     optics_state = OpticsState()
@@ -316,8 +312,8 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         detector_state=detector_state,
         calibration=calibration,
         instrument=instrument,
-        values=None if values is None else values.snapshot,
-        roles=None if values is None else values.roles,
+        values=values.snapshot,
+        roles=values.roles,
     )
     space_state = SpaceState()
     space = SpaceManager(
@@ -342,10 +338,8 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         space.refresh()
 
     calibration.on_change = refresh
-    if values is not None:
-        values.on_change = refresh
-    if detector is not None:
-        detector.on_change = refresh
+    values.on_change = refresh
+    detector.on_change = refresh
     refresh()
 
     hook_state = states.HookState()
@@ -357,7 +351,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
             optics_manager=optics,
         )
     )
-    if values is not None and detector is not None and instrument_moves(instrument):
+    if (instrument.detectors() or instrument.probes()) and instrument_moves(instrument):
         # The software autofocus sweeps what focuses and reads the detector.
         hooks.register_hook(models.SoftwareAutofocusHook, software_autofocus_hook)
 
@@ -366,17 +360,13 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
     metadata = MetadataManager(space=space, optics=optics, detector_state=detector_state)
     cache = LocalCacheManager(LocalCacheConfig(base_path=str(settings.cache_dir)))
 
-    acquisition = (
-        AcquisitionManager(
-            expanse_manager=expanse,
-            detector_manager=detector,
-            metadata_manager=metadata,
-            optics_manager=optics,
-            cache_manager=cache,
-            space=space,
-        )
-        if detector is not None
-        else None
+    acquisition = AcquisitionManager(
+        expanse_manager=expanse,
+        detector_manager=detector,
+        metadata_manager=metadata,
+        optics_manager=optics,
+        cache_manager=cache,
+        space=space,
     )
 
     return Microscope(
@@ -401,7 +391,7 @@ def build_microscope(settings: Settings, instrument: Optional[Instrument]) -> Mi
         space=space,
         cache=cache,
         autofocus_state=AutofocusState(),
-        uc2_bus=uc2_bus,
+        uc2=uc2,
         values=values,
         detector=detector,
         acquisition=acquisition,

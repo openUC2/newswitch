@@ -11,7 +11,7 @@ from arkitekt import Task
 from koil import unkoil
 
 from newswitch.drivers.base import Driver, Report, register_driver
-from newswitch.instrument.spec import Variable
+from newswitch.instrument.spec import Swap, Variable
 from newswitch.protocols.uc2 import UC2BusManager
 
 
@@ -61,6 +61,15 @@ class Stepper:
         unkoil(go)
         for _, value, report in targets:
             report(value)
+
+    def home(self, report: Report, task: Task | None = None) -> None:
+        """Home the axis on the board, and report where the board then says it is."""
+        unkoil(self.bus.ahome_axis, self.config.axis)
+        report(unkoil(self.bus.aget_position, self.config.axis))
+
+    def stop(self) -> None:
+        """Stop the axis on the board at once."""
+        unkoil(self.bus.astop_axis, self.config.axis)
 
 
 class _OneAtATime:
@@ -173,16 +182,22 @@ class Wheel(_OneAtATime):
 
 
 class Turret(_OneAtATime):
-    """A swap by the board's objective changer."""
+    """A swap by the board's objective changer, which homes to its first slot."""
 
-    def __init__(self, bus: UC2BusManager) -> None:
-        """A turret on `bus`."""
+    def __init__(self, bus: UC2BusManager, first: Any = 1) -> None:  # noqa: ANN401 - a slot
+        """A turret on `bus`, whose first slot is `first`."""
         self.bus = bus
+        self.first = first
 
     def set(self, value: Any, report: Report, task: Task | None = None) -> None:  # noqa: ANN401
         """Change to the slot."""
         unkoil(self.bus.aobjective_move, value)
         report(value)
+
+    def home(self, report: Report, task: Task | None = None) -> None:
+        """Home the changer, which leaves it at its first slot."""
+        unkoil(self.bus.aobjective_home)
+        report(self.first)
 
 
 def _bus(context: Mapping[str, Any]) -> UC2BusManager:
@@ -220,12 +235,14 @@ def _wheel(variable: Variable, options: Mapping[str, Any], context: Mapping[str,
 
 def _turret(variable: Variable, options: Mapping[str, Any], context: Mapping[str, Any]) -> Driver:
     # Where each slot is, in steps, is the board's to know: the bus is built with them.
+    if not isinstance(variable, Swap):
+        raise TypeError("a turret swaps: its variable is a slot")
     unknown = set(options) - {"positions"}
     if unknown:
         raise TypeError(f"a turret takes its positions, not {sorted(unknown)}")
     if options and not hasattr(_bus(context).config, "objective_slot_positions_steps"):
         raise TypeError("only a canopen board takes positions, this board's firmware keeps its own")
-    return Turret(_bus(context))
+    return Turret(_bus(context), min(variable.slots))
 
 
 register_driver("uc2.stepper", _stepper)

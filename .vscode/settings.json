@@ -4,8 +4,12 @@
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
   "python.testing.cwd": "${workspaceFolder}/backend",
-  "python.testing.pytestArgs": ["tests"],
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
   "files.watcherExclude": {
     "**/.venv/**": true
-  }
+  },
+  "arkitekt.lsp.path": "backend/.venv/bin/arkitekt-lsp",
+  "arkitekt.target": "backend/app.py"
 }

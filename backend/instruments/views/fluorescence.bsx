@@ -3,7 +3,7 @@
     <ScrollArea className="h-full w-[380px] shrink-0">
         <div className="flex flex-col gap-3 pb-4 pr-3">
 <div className="flex flex-wrap gap-1.5">
-    <if when={list.contains(value: list.pluck(value: obj.values(value: self.SourceState.sources), key: "on"), item: true)}>
+    <if when={list.contains(value: list.pluck(value: obj.values(value: self.source.sources), key: "on"), item: true)}>
         <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-info backdrop-blur">
             <span className="size-1.5 rounded-full bg-info shadow-[0_0_8px_2px] shadow-info/60" />
             <span>Lit</span>
@@ -15,7 +15,7 @@
         </div>
     </else>
     </if>
-    <if when={self.DetectorState.is_acquiring}>
+    <if when={self.detector.is_acquiring}>
         <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-destructive backdrop-blur">
             <span className="size-1.5 rounded-full animate-pulse bg-destructive" />
             <span>Streaming</span>
@@ -27,7 +27,7 @@
         </div>
     </else>
     </if>
-    <if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+    <if when={!list.contains(value: list.pluck(value: obj.values(value: self.optics.detectors), key: "calibrated"), item: true)}>
         <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 py-1 text-[11px] text-warning backdrop-blur">
             <span className="size-1.5 rounded-full bg-warning" />
             <span>Uncalibrated</span>
@@ -43,7 +43,7 @@
 <SourceControl />
 <SwapsControl />
 <div className="flex flex-col gap-3">
-    <foreach items={self.DetectorState.detectors} let="camera" key={camera.name}>
+    <foreach items={self.detector.detectors} let="camera" key={camera.name}>
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 shadow-xl">
             <div className="flex items-center gap-2">
                 <div className="flex flex-col">
@@ -51,7 +51,7 @@
                     <span className="truncate text-sm font-medium">{camera.name}</span>
                 </div>
                 <div className="ml-auto">
-                    <if when={self.DetectorState.is_acquiring}>
+                    <if when={self.detector.is_acquiring}>
                         <div className="flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-medium text-destructive">
                             <span className="size-1.5 animate-pulse rounded-full bg-destructive" />
                             <span>Live</span>
@@ -66,7 +66,7 @@
                 </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 past:hidden">
-                <foreach items={obj.values(value: obj.get(value: self.TuneState.tunes, key: camera.name))} let="tune" key={tune.name}>
+                <foreach items={obj.values(value: obj.get(value: self.tune.tunes, key: camera.name))} let="tune" key={tune.name}>
                     <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/30 p-3">
                         <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{str.replace(value: list.last(value: str.split(value: tune.name, separator: ".")), search: "_", replacement: " ")}</span>
                         <div className="flex items-baseline gap-1">
@@ -94,7 +94,7 @@
 </div>
         </div>
         <div className="absolute bottom-5 left-1/2 w-[min(26rem,80%)] -translate-x-1/2">
-<if when={!list.contains(value: list.pluck(value: obj.values(value: self.OpticsState.detectors), key: "calibrated"), item: true)}>
+<if when={!list.contains(value: list.pluck(value: obj.values(value: self.optics.detectors), key: "calibrated"), item: true)}>
     <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-card/80 p-3 shadow-xl backdrop-blur past:hidden">
         <div className="flex min-w-0 flex-1 flex-col">
             <span className="text-sm font-medium text-warning">Light path not calibrated</span>

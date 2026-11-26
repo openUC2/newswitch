@@ -553,11 +553,12 @@ def test_on_start_the_bus_is_brought_to_the_description(
     from dataclasses import replace
 
     from newswitch.actions.uc2 import keep_firmware
+    from newswitch.drivers.uc2.boards import UC2Boards
 
     monkeypatch.setattr(fw, "fetch", fake_fetch)
     state = UC2State()
     virtual = VirtualUC2Bus(state, firmware=replace(FIRMWARE, on_start=on_start))
-    asyncio.run(keep_firmware(OnRealHardware(virtual), state))  # type: ignore[arg-type]
+    asyncio.run(keep_firmware(UC2Boards({"uc2": OnRealHardware(virtual)}, state), state))  # type: ignore[arg-type]
     if on_start == "flash":
         assert virtual.flashed == [None, 11, 20] and state.last_error == ""
     elif on_start == "check":
@@ -569,17 +570,19 @@ def test_on_start_the_bus_is_brought_to_the_description(
 def test_the_virtual_bus_is_not_flashed_on_start(monkeypatch: pytest.MonkeyPatch) -> None:
     """Simulated, nothing is real to flash."""
     from newswitch.actions.uc2 import keep_firmware
+    from newswitch.drivers.uc2.boards import UC2Boards
 
     monkeypatch.setattr(fw, "fetch", fake_fetch)
     state = UC2State()
     bus = VirtualUC2Bus(state, firmware=FIRMWARE)
-    asyncio.run(keep_firmware(bus, state))
+    asyncio.run(keep_firmware(UC2Boards({"uc2": bus}, state), state))
     assert bus.flashed == []
 
 
 def test_a_failure_on_start_is_said_and_the_server_runs_on() -> None:
     """A bus that cannot be reached: the state says why; nothing raises."""
     from newswitch.actions.uc2 import keep_firmware
+    from newswitch.drivers.uc2.boards import UC2Boards
 
     state = UC2State()
     virtual = VirtualUC2Bus(state, firmware=FIRMWARE)
@@ -588,7 +591,7 @@ def test_a_failure_on_start_is_said_and_the_server_runs_on() -> None:
         raise RuntimeError("no UC2 board answered")
 
     virtual.aidentify = unreachable  # type: ignore[method-assign]
-    asyncio.run(keep_firmware(OnRealHardware(virtual), state))  # type: ignore[arg-type]
+    asyncio.run(keep_firmware(UC2Boards({"uc2": OnRealHardware(virtual)}, state), state))  # type: ignore[arg-type]
     assert "no UC2 board answered" in state.last_error
 
 

@@ -1,5 +1,5 @@
 import { authFetch } from "@/lib/auth/authFetch";
-import { useIOState } from "@/apps/default/hooks/states";
+import { useIoState } from "@/apps/default/hooks/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 
 export function LatestImage() {
   const { t } = useTranslation();
-  const { data: ioState, loading: stateLoading } = useIOState({
+  const { data: ioState, loading: stateLoading } = useIoState({
     subscribe: true,
   });
   const { apiEndpoint } = useTransport();

@@ -22,7 +22,7 @@
             <Icon name="zap" size={16} className="text-primary" />
             <Text size="sm" weight="semibold" className="flex-1">Light</Text>
         </div>
-        <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+        <foreach items={obj.values(value: self.source.sources)} let="light" key={light.name}>
             <if when={light.power_variable}>
                 <div className="flex flex-col gap-2 border-t px-4 pt-3">
                     <div className="flex items-center gap-2">
@@ -44,8 +44,8 @@
                 </div>
             </if>
         </foreach>
-        <foreach items={self.DetectorState.detectors} let="detector" key={detector.name}>
-            <foreach items={list.compact(value: [obj.get(value: self.TuneState.tunes, key: str.concat(values: [detector.name, ".exposure"]))])} let="exposure" key={detector.name}>
+        <foreach items={self.detector.detectors} let="detector" key={detector.name}>
+            <foreach items={list.compact(value: [obj.get(value: self.tune.tunes, key: str.concat(values: [detector.name, ".exposure"]))])} let="exposure" key={detector.name}>
                 <div className="flex items-center gap-2 border-t px-4 pt-3">
                     <Icon name="clock" size={14} className="text-muted-foreground" />
                     <Text size="xs" className="w-24" truncate>{str.concat(values: [detector.name, " exposure"])}</Text>
@@ -64,11 +64,11 @@
                 <Text size="sm" weight="semibold">Live</Text>
             </div>
             <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" icon="play" disabled={self.DetectorState.is_acquiring} onClick={self.start_live_view()}>Live</Button>
-                <Button size="sm" variant="ghost" icon="pause" disabled={self.DetectorState.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
+                <Button size="sm" variant="outline" icon="play" disabled={self.detector.is_acquiring} onClick={self.start_live_view()}>Live</Button>
+                <Button size="sm" variant="ghost" icon="pause" disabled={self.detector.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
             </div>
         </div>
-        <foreach items={list.compact(value: [list.at(value: self.CameraStreams.streams, index: 0)])} let="stream" key={"stream"}>
+        <foreach items={list.compact(value: [list.at(value: self.camera_streams.streams, index: 0)])} let="stream" key={"stream"}>
             <StructureDisplay value={stream} variant="card" />
         </foreach>
     </Card>
@@ -80,10 +80,10 @@
             <Text size="sm" weight="semibold" className="flex-1">Channels</Text>
             <Badge variant="secondary">{str.concat(values: [list.len(value: picked), " picked"])}</Badge>
         </div>
-        <if when={list.len(value: self.OpticsState.channels) > 0}>
+        <if when={list.len(value: self.optics.channels) > 0}>
             <ToggleGroup multiple bind={picked} variant="outline" size="sm" className="flex flex-wrap justify-start gap-1 px-4">
-                <foreach items={self.OpticsState.channels} let="channel" key={channel.name}>
-                    <ToggleGroupItem value={channel.name}>{str.concat(values: [channel.name, obj.get(value: obj.get(value: self.SourceState.sources, key: channel.source) ?? {on: false}, key: "on") ? " · light on" : " · light off"])}</ToggleGroupItem>
+                <foreach items={self.optics.channels} let="channel" key={channel.name}>
+                    <ToggleGroupItem value={channel.name}>{str.concat(values: [channel.name, obj.get(value: obj.get(value: self.source.sources, key: channel.source) ?? {on: false}, key: "on") ? " · light on" : " · light off"])}</ToggleGroupItem>
                 </foreach>
             </ToggleGroup>
             <Text size="xs" tone="muted" className="px-4">A channel whose light is off is taken at its preset (lit) power.</Text>

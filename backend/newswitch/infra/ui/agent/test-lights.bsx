@@ -6,7 +6,7 @@
             <Text size="sm" weight="semibold">Lights test</Text>
         </div>
 
-        <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+        <foreach items={obj.values(value: self.source.sources)} let="light" key={light.name}>
             <div className="flex flex-col gap-2 border-t px-3 pt-3">
                 <div className="flex items-center gap-2">
                     <div className="size-3 shrink-0">
@@ -36,7 +36,7 @@
             </div>
         </foreach>
 
-        <if when={list.len(value: obj.keys(value: self.SourceState.sources)) == 0}>
+        <if when={list.len(value: obj.keys(value: self.source.sources)) == 0}>
             <Empty icon="zap" title="No lights" description="This microscope describes no sources." />
         </if>
     </Card>

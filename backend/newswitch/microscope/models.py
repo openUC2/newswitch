@@ -1,5 +1,5 @@
-"""The models: what travels by value in arguments, returns and states, registered by name by the app
-that serves them (``app.py``; FastAPI through `newswitch.microscope.apps.models`)."""
+"""The models: what travels by value in arguments, returns and states, registered by
+`newswitch.microscope.apps.models`."""
 
 from newswitch import models
 from newswitch.actions import uc2

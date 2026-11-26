@@ -255,6 +255,7 @@ class UC2DetectorManager:
             self.close()
             raise
         self.state.detectors = list(cameras)
+        self.state.names = [camera.name for camera in self.state.detectors]
 
     # ------------------------------------------------------------------ setup
 

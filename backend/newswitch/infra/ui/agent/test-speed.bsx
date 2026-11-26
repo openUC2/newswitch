@@ -20,7 +20,7 @@
             <Icon name="zap" size={16} className="text-primary" />
             <Text size="sm" weight="semibold" className="flex-1">Light and exposure</Text>
         </div>
-        <foreach items={obj.values(value: self.SourceState.sources)} let="light" key={light.name}>
+        <foreach items={obj.values(value: self.source.sources)} let="light" key={light.name}>
             <if when={light.power_variable}>
                 <div className="flex items-center gap-2 border-t px-4 pt-3">
                     <Text size="sm" className="w-16" truncate>{light.name}</Text>
@@ -31,8 +31,8 @@
                 </div>
             </if>
         </foreach>
-        <foreach items={self.DetectorState.detectors} let="detector" key={detector.name}>
-            <foreach items={list.compact(value: [obj.get(value: self.TuneState.tunes, key: str.concat(values: [detector.name, ".exposure"]))])} let="exposure" key={detector.name}>
+        <foreach items={self.detector.detectors} let="detector" key={detector.name}>
+            <foreach items={list.compact(value: [obj.get(value: self.tune.tunes, key: str.concat(values: [detector.name, ".exposure"]))])} let="exposure" key={detector.name}>
                 <div className="flex items-center gap-2 border-t px-4 pt-3">
                     <Text size="sm" className="w-16" truncate>exposure</Text>
                     <Slider className="flex-1" value={exposure.current} min={exposure.minimum} max={math.min(values: [exposure.maximum, 20])} step={exposure.step ?? 0.1} onCommit={self.tune(name: exposure.name, to: event.value)} />
@@ -48,16 +48,16 @@
             <div className="flex items-center gap-2">
                 <Icon name="video" size={16} className="text-primary" />
                 <Text size="sm" weight="semibold">Live</Text>
-                <foreach items={list.compact(value: [self.MoveState.moves.stage])} let="stage" key={"stage"}>
+                <foreach items={list.compact(value: [self.move.moves.stage])} let="stage" key={"stage"}>
                     <Text size="xs" tone="muted" mono>{str.concat(values: ["stage x ", fmt.number(value: stage.x.current, digits: 0), " µm, y ", fmt.number(value: stage.y.current, digits: 0), " µm"])}</Text>
                 </foreach>
             </div>
             <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" icon="play" disabled={self.DetectorState.is_acquiring} onClick={self.start_live_view()}>Live</Button>
-                <Button size="sm" variant="ghost" icon="pause" disabled={self.DetectorState.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
+                <Button size="sm" variant="outline" icon="play" disabled={self.detector.is_acquiring} onClick={self.start_live_view()}>Live</Button>
+                <Button size="sm" variant="ghost" icon="pause" disabled={self.detector.is_acquiring == false} onClick={self.stop_live_view()}>Stop</Button>
             </div>
         </div>
-        <foreach items={list.compact(value: [list.at(value: self.CameraStreams.streams, index: 0)])} let="stream" key={"stream"}>
+        <foreach items={list.compact(value: [list.at(value: self.camera_streams.streams, index: 0)])} let="stream" key={"stream"}>
             <StructureDisplay value={stream} variant="card" />
         </foreach>
     </Card>
@@ -69,9 +69,9 @@
             <Text size="sm" weight="semibold" className="flex-1">Tiles</Text>
             <Text size="xs" tone="muted" mono>{str.concat(values: [list.len(value: picked), " × ", mda.tiles, " × ", mda.repeats, " = ", math.mul(a: list.len(value: picked), b: math.mul(a: mda.tiles, b: mda.repeats)), " exposures"])}</Text>
         </div>
-        <if when={list.len(value: self.OpticsState.channels) > 0}>
+        <if when={list.len(value: self.optics.channels) > 0}>
             <ToggleGroup multiple bind={picked} variant="outline" size="sm" className="flex flex-wrap justify-start gap-1 px-4">
-                <foreach items={self.OpticsState.channels} let="channel" key={channel.name}>
+                <foreach items={self.optics.channels} let="channel" key={channel.name}>
                     <ToggleGroupItem value={channel.name}>{channel.name}</ToggleGroupItem>
                 </foreach>
             </ToggleGroup>

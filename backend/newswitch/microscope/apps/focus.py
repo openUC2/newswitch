@@ -14,7 +14,7 @@ from newswitch.states.autofocus import AutofocusState
 app = App("newswitch", app_context=Run)
 app.include(values.app, detector.app)
 
-app.register_state(AutofocusState)
+app.register_state(AutofocusState, name="autofocus")
 app.register_startup(provide_focus)
 app.register_action(run_autofocus, locks=[locks.MOTION, locks.DETECTOR])
 app.register_action(calibrate_light_path, locks=[locks.MOTION, locks.DETECTOR])

@@ -15,9 +15,9 @@
                 </if>
             </div>
             <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" icon="home" disabled={stage.moving} onClick={self.home_stage()}>Home</Button>
+                <Button size="sm" variant="outline" icon="home" disabled={stage.moving} onClick={self.home_stage(stage: "stage")}>Home</Button>
                 <Button size="sm" variant="outline" icon="circle-dot" disabled={stage.moving} onClick={self.calibrate_mount()}>Calibrate holder</Button>
-                <Button size="sm" variant="destructive" icon="square" onClick={self.stop_stage()}>Stop</Button>
+                <Button size="sm" variant="destructive" icon="square" onClick={self.stop_stage(stage: "stage")}>Stop</Button>
             </div>
         </div>
 
@@ -32,7 +32,7 @@
             </ToggleGroup>
         </div>
 
-        <foreach items={obj.values(value: self.MoveState.moves.stage ?? {})} let="axis" key={axis.name}>
+        <foreach items={obj.values(value: self.move.moves.stage ?? {})} let="axis" key={axis.name}>
             <div className="flex flex-col gap-1.5 border-t px-3 pt-3">
                 <div className="flex items-center gap-2">
                     <Text size="sm" weight="semibold" className="w-16" mono>{axis.name}</Text>
@@ -52,7 +52,7 @@
 
         <div className="flex items-center gap-2 border-t px-3 pt-3">
             <Input type="number" bind={go} placeholder="go to (um), every axis" className="flex-1" />
-            <foreach items={obj.values(value: self.MoveState.moves.stage ?? {})} let="axis" key={axis.name}>
+            <foreach items={obj.values(value: self.move.moves.stage ?? {})} let="axis" key={axis.name}>
                 <Button size="sm" variant="outline" disabled={stage.moving || val.to_number(value: go) == null} onClick={self.move_one(name: axis.name, to: val.to_number(value: go))}>{axis.name}</Button>
             </foreach>
         </div>

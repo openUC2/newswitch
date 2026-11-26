@@ -1,6 +1,4 @@
-"""One registry per part of a microscope, for FastAPI mode; `newswitch.microscope.registry` includes them.
-
-The agent (``app.py``) registers the same directly, without these.
+"""One registry per part of a microscope; `newswitch.microscope.registry` includes them.
 
 Every module declares an ``app``: its states, contexts, startup hook, actions and background tasks,
 as plain module-level functions. A part includes the parts it names things of (`App.include`), so what reaches an
