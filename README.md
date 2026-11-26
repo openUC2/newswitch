@@ -337,7 +337,9 @@ just create-admin rescue rescue-pass  # every admin locked out: create a fresh o
 ### Optional Keycloak sign-in
 
 Set these variables in the backend process environment to add **Sign in with
-openUC2**. The local password form is available offline.
+openUC2**. The local password form is available offline. The sign-in page only
+enables online sign-in when the browser and the instrument backend can both
+reach the provider. It rechecks while the sign-in page is open.
 
 ```env
 NEWSWITCH_OIDC_ISSUER=http://localhost:8180/realms/openuc2

@@ -6,6 +6,9 @@ export const auth = {
   enterPassword: "Enter a password",
   signInDescription: "Sign in to control the microscope.",
   signIn: "Sign in",
+  localSignIn: "Local sign-in",
+  onlineSignIn: "Online sign-in",
+  checkingOnlineSignIn: "Checking the connection to openUC2…",
   keycloakSignIn: "Sign in with openUC2",
   keycloakUnavailable:
     "Signing in with openUC2 is temporarily unavailable. You can still sign in locally.",

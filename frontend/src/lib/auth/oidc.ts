@@ -15,12 +15,40 @@ export class OIDCSignInError extends Error {
   }
 }
 
-export async function oidcEnabled(signal: AbortSignal): Promise<boolean> {
+export async function getOIDCIssuer(
+  signal: AbortSignal,
+): Promise<string | null> {
   const response = await fetch(`${BACKEND_API}/auth/oidc/enabled`, {
     signal,
     cache: "no-store",
   });
-  return response.ok && (await response.json()).enabled === true;
+  if (!response.ok) throw new OIDCSignInError("unavailable");
+  const { enabled, issuer } = await response.json();
+  return enabled === true && typeof issuer === "string" ? issuer : null;
+}
+
+export async function oidcIsReachable(
+  issuer: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  // The browser follows the login redirect; the instrument exchanges the code.
+  const [backend, provider] = await Promise.all([
+    fetch(`${BACKEND_API}/auth/oidc/availability`, {
+      signal,
+      cache: "no-store",
+    }),
+    fetch(`${issuer}/.well-known/openid-configuration`, {
+      signal,
+      cache: "no-store",
+      credentials: "omit",
+    }),
+  ]);
+  return (
+    backend.ok &&
+    provider.ok &&
+    (await backend.json()).available === true &&
+    (await provider.json()).issuer === issuer
+  );
 }
 
 export async function startOIDCLogin(from: string): Promise<void> {

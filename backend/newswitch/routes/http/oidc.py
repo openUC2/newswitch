@@ -89,9 +89,28 @@ def _config(request: Request) -> OIDCConfig:
 
 
 @router.get("/enabled")
-async def oidc_enabled(request: Request) -> dict[str, bool]:
-    """Tell the sign-in page whether to offer a Keycloak login."""
-    return {"enabled": request.app.state.oidc_config is not None}
+async def oidc_enabled(request: Request, response: Response) -> dict[str, bool | str]:
+    """Describe the configured provider without checking the network."""
+    config: OIDCConfig | None = request.app.state.oidc_config
+    response.headers["Cache-Control"] = "no-store"
+    return {"enabled": True, "issuer": config.issuer} if config else {"enabled": False}
+
+
+async def _provider_is_reachable(config: OIDCConfig) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            discovery = await client.get(f"{config.issuer}/.well-known/openid-configuration")
+            discovery.raise_for_status()
+            return discovery.json()["issuer"] == config.issuer
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        return False
+
+
+@router.get("/availability")
+async def oidc_availability(request: Request, response: Response) -> dict[str, bool]:
+    """Check whether this microscope backend can reach its configured provider."""
+    response.headers["Cache-Control"] = "no-store"
+    return {"available": await _provider_is_reachable(_config(request))}
 
 
 @router.post("/start")
@@ -100,14 +119,8 @@ async def start_oidc_login(
 ) -> LoginStart:
     """Prepare a one-time Authorization Code flow using PKCE."""
     config = _config(request)
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            discovery = await client.get(f"{config.issuer}/.well-known/openid-configuration")
-            discovery.raise_for_status()
-            if discovery.json()["issuer"] != config.issuer:
-                raise ValueError("Unexpected issuer")
-    except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
-        raise HTTPException(503, "Keycloak is unavailable") from error
+    if not await _provider_is_reachable(config):
+        raise HTTPException(503, "Keycloak is unavailable")
 
     state, proof, verifier, nonce = (secrets.token_urlsafe(32) for _ in range(4))
     challenge = (

@@ -153,19 +153,30 @@ def test_oidc_rejects_invalid_or_unauthorized_identity(
 def test_oidc_outage_preserves_password_login(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed or disabled provider leaves local account login usable."""
+    """A failed provider leaves password login available and can recover in place."""
+    reachable = False
 
-    def offline(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("offline", request=request)
+    def discovery(request: httpx.Request) -> httpx.Response:
+        if not reachable:
+            raise httpx.ConnectError("offline", request=request)
+        return httpx.Response(200, json={"issuer": ISSUER})
 
     async_client = httpx.AsyncClient
     monkeypatch.setattr(
         oidc.httpx,
         "AsyncClient",
-        lambda **kwargs: async_client(transport=httpx.MockTransport(offline), **kwargs),
+        lambda **kwargs: async_client(transport=httpx.MockTransport(discovery), **kwargs),
     )
+    assert client.get("/auth/oidc/enabled").json() == {"enabled": True, "issuer": ISSUER}
+    unavailable = client.get("/auth/oidc/availability")
+    assert unavailable.json() == {"available": False}
+    assert unavailable.headers["cache-control"] == "no-store"
     assert client.post("/auth/oidc/start").status_code == 503
     assert client.post("/auth/login", auth=("operator", "local-password")).status_code == 200
+
+    reachable = True
+    assert client.get("/auth/oidc/availability").json() == {"available": True}
     client.app.state.oidc_config = None
     assert client.get("/auth/oidc/enabled").json() == {"enabled": False}
+    assert client.get("/auth/oidc/availability").status_code == 404
     assert client.post("/auth/oidc/start").status_code == 404

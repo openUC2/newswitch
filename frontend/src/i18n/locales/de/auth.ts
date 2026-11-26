@@ -6,6 +6,9 @@ export const auth = {
   enterPassword: "Passwort eingeben",
   signInDescription: "Anmelden, um das Mikroskop zu steuern.",
   signIn: "Anmelden",
+  localSignIn: "Lokale Anmeldung",
+  onlineSignIn: "Online-Anmeldung",
+  checkingOnlineSignIn: "Verbindung zu openUC2 wird geprüft …",
   keycloakSignIn: "Mit openUC2-Konto anmelden",
   keycloakUnavailable:
     "Die Anmeldung mit dem openUC2-Konto ist gerade nicht verfügbar. Du kannst dich lokal anmelden.",

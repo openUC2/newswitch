@@ -56,7 +56,14 @@ DEFAULT_PASSWORD = "admin"
 #: -time codegen reads it before any user could log in, and it exposes only the shape
 #: of the API - no data and no control.
 PUBLIC_PATHS = frozenset(
-    {"/health", "/auth/login", "/auth/oidc/enabled", "/auth/oidc/start", "/auth/oidc/complete"}
+    {
+        "/health",
+        "/auth/login",
+        "/auth/oidc/enabled",
+        "/auth/oidc/availability",
+        "/auth/oidc/start",
+        "/auth/oidc/complete",
+    }
 )
 PUBLIC_PATH_PREFIXES = ("/schemas/",)
 

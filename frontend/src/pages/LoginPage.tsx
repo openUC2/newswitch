@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
+import { Globe, Monitor } from "lucide-react";
 import { LanguageMenu } from "../components/navigation/LanguageMenu";
 import { Button } from "../components/ui/button";
 import {
@@ -24,13 +25,17 @@ import {
 import { Input } from "../components/ui/input";
 import { InvalidCredentialsError, useAuth } from "../lib/auth/context";
 import {
-  oidcEnabled,
+  getOIDCIssuer,
+  oidcIsReachable,
   startOIDCLogin,
   type OIDCFailure,
 } from "../lib/auth/oidc";
 
 type LoginValues = { username: string; password: string };
 type LoginLocation = { from?: Location; oidcFailure?: OIDCFailure };
+type OnlineLoginStatus = "hidden" | "checking" | "available" | "unavailable";
+const STATUS_POLL_INTERVAL_MS = 10_000;
+const STATUS_TIMEOUT_MS = 4_000;
 const oidcErrors = {
   unlinked: "auth.keycloakUnlinked",
   unavailable: "auth.keycloakUnavailable",
@@ -43,25 +48,65 @@ export function LoginPage() {
   const location = useLocation();
   const { t } = useTranslation();
   const loginLocation = location.state as LoginLocation | null;
-  const [error, setError] = useState<
-    | null
-    | (
-        | "auth.invalidCredentials"
-        | "auth.backendUnavailable"
-        | (typeof oidcErrors)[OIDCFailure]
-      )
-  >(() =>
-    loginLocation?.oidcFailure ? oidcErrors[loginLocation.oidcFailure] : null,
+  const [localError, setLocalError] = useState<
+    "auth.invalidCredentials" | "auth.backendUnavailable" | null
+  >(null);
+  const [oidcFailure, setOIDCFailure] = useState<OIDCFailure | null>(
+    () => loginLocation?.oidcFailure ?? null,
   );
-  const [keycloakEnabled, setKeycloakEnabled] = useState(false);
-  const [startingKeycloak, setStartingKeycloak] = useState(false);
+  const [onlineStatus, setOnlineStatus] = useState<OnlineLoginStatus>("hidden");
+  const [startingOnlineLogin, setStartingOnlineLogin] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void oidcEnabled(controller.signal)
-      .then(setKeycloakEnabled)
-      .catch(() => {});
-    return () => controller.abort();
+    let pending: AbortController | null = null;
+    let disposed = false;
+
+    const refresh = async () => {
+      if (pending || document.hidden) return;
+      const controller = new AbortController();
+      pending = controller;
+      const timeout = window.setTimeout(
+        () => controller.abort(),
+        STATUS_TIMEOUT_MS,
+      );
+
+      try {
+        const issuer = await getOIDCIssuer(controller.signal);
+        if (disposed) return;
+        if (!issuer) {
+          setOnlineStatus("hidden");
+          return;
+        }
+        setOnlineStatus((status) =>
+          status === "hidden" ? "checking" : status,
+        );
+        const reachable = await oidcIsReachable(issuer, controller.signal);
+        if (!disposed) setOnlineStatus(reachable ? "available" : "unavailable");
+      } catch {
+        if (!disposed) {
+          setOnlineStatus((status) =>
+            status === "hidden" ? status : "unavailable",
+          );
+        }
+      } finally {
+        window.clearTimeout(timeout);
+        pending = null;
+      }
+    };
+
+    void refresh();
+    const interval = window.setInterval(refresh, STATUS_POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", refresh);
+    return () => {
+      disposed = true;
+      pending?.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("offline", refresh);
+    };
   }, []);
 
   const loginSchema = z.object({
@@ -82,12 +127,12 @@ export function LoginPage() {
   }
 
   const onSubmit = async (values: LoginValues) => {
-    setError(null);
+    setLocalError(null);
     try {
       await login(values.username, values.password);
       navigate(from, { replace: true });
     } catch (caught) {
-      setError(
+      setLocalError(
         caught instanceof InvalidCredentialsError
           ? "auth.invalidCredentials"
           : "auth.backendUnavailable",
@@ -95,16 +140,29 @@ export function LoginPage() {
     }
   };
 
-  const onKeycloak = async () => {
-    setError(null);
-    setStartingKeycloak(true);
+  const onOnlineLogin = async () => {
+    setOIDCFailure(null);
+    setStartingOnlineLogin(true);
     try {
       await startOIDCLogin(from);
     } catch {
-      setError("auth.keycloakUnavailable");
-      setStartingKeycloak(false);
+      setOnlineStatus("unavailable");
+      setStartingOnlineLogin(false);
     }
   };
+
+  const showOnlineLogin = onlineStatus !== "hidden";
+  const onlineNotice =
+    onlineStatus === "checking"
+      ? t("auth.checkingOnlineSignIn")
+      : onlineStatus === "unavailable"
+        ? t("auth.keycloakUnavailable")
+        : null;
+  const onlineError =
+    oidcFailure &&
+    (oidcFailure !== "unavailable" || onlineStatus !== "unavailable")
+      ? t(oidcErrors[oidcFailure])
+      : null;
 
   return (
     <div className="dark flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
@@ -114,12 +172,27 @@ export function LoginPage() {
           <CardTitle>{t("common.appName")}</CardTitle>
           <CardDescription>{t("auth.signInDescription")}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(onSubmit)}
               className="flex flex-col gap-4"
+              aria-labelledby={
+                showOnlineLogin ? "local-sign-in-heading" : undefined
+              }
             >
+              {showOnlineLogin && (
+                <h2
+                  id="local-sign-in-heading"
+                  className="flex items-center gap-2 text-sm font-semibold"
+                >
+                  <Monitor
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  {t("auth.localSignIn")}
+                </h2>
+              )}
               <FormField
                 control={form.control}
                 name="username"
@@ -152,34 +225,70 @@ export function LoginPage() {
                 )}
               />
 
-              {error && (
+              {localError && (
                 <p role="alert" className="text-sm text-destructive">
-                  {t(error)}
+                  {t(localError)}
                 </p>
               )}
 
               <Button
                 type="submit"
-                disabled={form.formState.isSubmitting || startingKeycloak}
+                disabled={form.formState.isSubmitting || startingOnlineLogin}
               >
                 {form.formState.isSubmitting
                   ? t("auth.signingIn")
                   : t("auth.signIn")}
               </Button>
-              {keycloakEnabled && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={startingKeycloak || form.formState.isSubmitting}
-                  onClick={onKeycloak}
-                >
-                  {startingKeycloak
-                    ? t("auth.signingIn")
-                    : t("auth.keycloakSignIn")}
-                </Button>
-              )}
             </form>
           </Form>
+          {showOnlineLogin && (
+            <section
+              aria-labelledby="online-sign-in-heading"
+              className="flex flex-col gap-3 border-t border-border pt-4"
+            >
+              <h2
+                id="online-sign-in-heading"
+                className="flex items-center gap-2 text-sm font-semibold"
+              >
+                <Globe
+                  className="size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                {t("auth.onlineSignIn")}
+              </h2>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  onlineStatus !== "available" ||
+                  startingOnlineLogin ||
+                  form.formState.isSubmitting
+                }
+                aria-describedby={
+                  onlineNotice ? "online-sign-in-status" : undefined
+                }
+                onClick={onOnlineLogin}
+              >
+                {startingOnlineLogin
+                  ? t("auth.signingIn")
+                  : t("auth.keycloakSignIn")}
+              </Button>
+              {onlineNotice && (
+                <p
+                  id="online-sign-in-status"
+                  role="status"
+                  className="text-sm text-muted-foreground"
+                >
+                  {onlineNotice}
+                </p>
+              )}
+            </section>
+          )}
+          {onlineError && (
+            <p role="alert" className="text-sm text-destructive">
+              {onlineError}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
