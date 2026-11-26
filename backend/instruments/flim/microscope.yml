@@ -100,7 +100,6 @@ settings:
   cache_dir: /tmp/newswitch/cache
   calibration_dir: data/calibration
   camera_recording_dir: data/recordings
-  camera_debug_window: false
 
 ui:
   catalog: newswitch@10

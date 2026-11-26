@@ -22,7 +22,7 @@ export const CalibratedLightPathSchema = z
   })
   .brand('@newswitch/calibrated_light_path')
   .describe(
-    'How a step along a column and along a row moves on the sample, for one light path.',
+    'How a step along a column and along a row moves on the sample, for one light path: as the\n    optics predict it, or as it was measured (`newswitch.calibration`).',
   );
 export type CalibratedLightPath = z.input<typeof CalibratedLightPathSchema>;
 export type CalibratedLightPathOutput = z.infer<
@@ -35,7 +35,7 @@ export const CalibrateLightPathReturnSchema = z.object({
   /** The calibrated light paths. */
   return0: z.array(
     CalibratedLightPathSchema.describe(
-      'How a step along a column and along a row moves on the sample, for one light path.',
+      'How a step along a column and along a row moves on the sample, for one light path: as the\n    optics predict it, or as it was measured (`newswitch.calibration`).',
     ),
   ),
 });

@@ -57,13 +57,16 @@ def log_dir(
     """Logging into a folder of the test's own, undone afterwards: no test writes backend.log.
 
     `sys_config.SYS_CONFIG_FILE` is a copy of the committed ``sys_config.yaml`` whose log file is
-    in that folder, and relative log files (the fallback included) go there too. Afterwards only
+    in that folder, and relative log files (the fallback included) go there too. Its
+    ``camera_debug_window`` is off, whatever the committed file says: no window may pop up
+    during the tests (`test_detector_selection` switches it on itself). Afterwards only
     what `configure_logging` installed is removed: pytest attaches handlers of its own to the
     root logger and removes them itself.
     """
     folder = tmp_path_factory.mktemp("log")
     config = yaml.safe_load(sys_config.SYS_CONFIG_FILE.read_text(encoding="utf-8"))
     config["log_file_path"] = str(folder / "backend.log")
+    config["camera_debug_window"] = False
     copy = tmp_path_factory.mktemp("sys_config") / "sys_config.yaml"
     copy.write_text(yaml.safe_dump(config), encoding="utf-8")
     monkeypatch.setattr(sys_config, "SYS_CONFIG_FILE", copy)
@@ -115,7 +118,6 @@ def run_settings(tmp_path: Path, **changes: Any) -> Settings:  # noqa: ANN401
             "cache_dir": tmp_path / "cache",
             "calibration_dir": tmp_path / "calibration",
             "camera_recording_dir": tmp_path / "recordings",
-            "camera_debug_window": False,
             **changes,
         }
     )

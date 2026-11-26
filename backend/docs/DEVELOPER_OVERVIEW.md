@@ -44,7 +44,7 @@ Files: backend/app.py, backend/main_fastapi.py, newswitch/microscope/registry.py
 
 `Settings` (`newswitch/settings.py`, the app context of the registry) is the `settings` section of the description (unknown keys are
 errors, and every key must be there). It says whether the run is simulated (`use_virtual_microscope`), the agent's database
-(`db_path`), the cameras' `camera_recording_dir` and `camera_debug_window`, where the file IO writes (`image_dir`)
+(`db_path`), the cameras' `camera_recording_dir`, where the file IO writes (`image_dir`)
 and where acquired frames are cached (`cache_dir`, cleared when the microscope starts).
 `load_settings` takes the instrument from `NEWSWITCH_CONFIG` (a file or folder; the root `.env` and the
 Dockerfile default it to `instruments/fake-microscope/microscope.yml`); unset, or anything but a valid description, is
@@ -68,6 +68,7 @@ unknown keys are errors): one level for the terminal (`log_to_terminal`) and one
 (`log_to_file`), each `fatal`, `error`, `warn`, `info`, `debug` or `none`, and the file
 (`log_file_path`, relative to `backend/`). The file is appended to and rotated at 10 MB
 (`backend.log.1` … `.3`); if it cannot be opened, `backend/backend.log` is used with a warning.
+Besides logging it holds `camera_debug_window` (see the cameras below).
 `setup_logging()` reads the file and configures logging; it runs in the entry points
 (`main_fastapi.create`, the uvicorn factory; `app.main`; the tools `tools/uc2.py` (`--verbose`:
 terminal at `info`), `tools/check_instrument.py`, `infra/accounts/cli.py`, `infra/export_schemas.py`),
@@ -221,9 +222,10 @@ is the entry's `vendor`, passed on unchanged; vendor-specific options come from 
 - A camera acquires while anyone holds it (live stream, snapshot, debug window); every
   start is a new session and, with `store_image_data`, a new `.uc2rb` file in
   `camera_recording_dir` (the description's `settings`).
-- `camera_debug_window` (the description's `settings`) passes `debug_window=True` to
-  every `create_camera`: uc2_cam_py shows each camera's newest image in an X11 window, and the
-  manager holds the cameras from startup so the window always has an image.
+- `camera_debug_window` (`backend/sys_config.yaml`, global, committed as `false`) passes
+  `debug_window=True` to every `create_camera`: uc2_cam_py shows each camera's newest image in
+  an X11 window, and the manager holds the cameras from startup so the window always has an
+  image. `build_detector_manager` reads it only when it opens real cameras.
 - `backend/instruments/cam-test/` is a simulated camera for trying it out; boot with
   `NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml` (real-hardware mode). The
   walkthrough is "End-to-end test for camera" in the root `README.md`.

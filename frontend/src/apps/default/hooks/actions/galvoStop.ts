@@ -4,7 +4,9 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 // --- Shared Models ---
 
 // --- Schemas ---
-export const GalvoStopArgsSchema = z.object({});
+export const GalvoStopArgsSchema = z.object({
+  board: z.string(),
+});
 export const GalvoStopReturnSchema = z.object({});
 
 // --- Types ---

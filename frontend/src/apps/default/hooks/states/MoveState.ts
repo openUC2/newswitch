@@ -33,19 +33,22 @@ export const MoveStateSchema = z.object({
       ),
     ),
   ),
+  names: z.array(z.string()),
+  homes: z.array(z.string()),
+  stops: z.array(z.string()),
 });
 
 // --- Type ---
 export type MoveState = z.infer<typeof MoveStateSchema>;
 
 // --- Definition ---
-export const MoveStateDefinition: StateDefinition<MoveState, 'MoveState'> = {
+export const MoveStateDefinition: StateDefinition<MoveState, 'move'> = {
   appKey: 'default',
-  key: 'MoveState',
+  key: 'move',
   schema: MoveStateSchema,
 };
 
 /**
- * Hook to sync MoveState
+ * Hook to sync move
  */
 export const useMoveState = buildUseState<MoveState>(MoveStateDefinition);

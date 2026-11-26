@@ -96,7 +96,6 @@ BASE = {
         "cache_dir": "/tmp/newswitch/cache",
         "calibration_dir": "/tmp/newswitch/calibration",
         "camera_recording_dir": None,
-        "camera_debug_window": False,
     },
 }
 

@@ -73,6 +73,7 @@ export const DetectorStateSchema = z.object({
       "What measures the sample: along its axes, or with none, at one point. Its name is its cube's.",
     ),
   ),
+  names: z.array(z.string()),
 });
 
 // --- Type ---
@@ -81,15 +82,15 @@ export type DetectorState = z.infer<typeof DetectorStateSchema>;
 // --- Definition ---
 export const DetectorStateDefinition: StateDefinition<
   DetectorState,
-  'DetectorState'
+  'detector'
 > = {
   appKey: 'default',
-  key: 'DetectorState',
+  key: 'detector',
   schema: DetectorStateSchema,
 };
 
 /**
- * Hook to sync DetectorState
+ * Hook to sync detector
  */
 export const useDetectorState = buildUseState<DetectorState>(
   DetectorStateDefinition,

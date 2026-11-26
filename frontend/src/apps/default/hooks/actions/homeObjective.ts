@@ -4,7 +4,10 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 // --- Shared Models ---
 
 // --- Schemas ---
-export const HomeObjectiveArgsSchema = z.object({});
+export const HomeObjectiveArgsSchema = z.object({
+  /** The variable: ``objective.slot``. */
+  name: z.string().describe('The variable: ``objective.slot``.'),
+});
 export const HomeObjectiveReturnSchema = z.object({});
 
 // --- Types ---
@@ -20,14 +23,14 @@ export const HomeObjectiveDefinition: ActionDefinition<
 > = {
   name: 'home_objective',
   appKey: 'default',
-  description: 'Home the objective changer, which leaves it at its first slot.',
+  description: 'Home a changer, which leaves it at its first slot.',
   argsSchema: HomeObjectiveArgsSchema,
   returnSchema: HomeObjectiveReturnSchema,
   lockKeys: ['swap'],
 };
 
 /**
- * Home the objective changer, which leaves it at its first slot.
+ * Home a changer, which leaves it at its first slot.
  */
 export const useHomeObjective = () => {
   return useAction(HomeObjectiveDefinition);

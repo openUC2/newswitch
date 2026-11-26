@@ -5,6 +5,7 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const GalvoSetPositionArgsSchema = z.object({
+  board: z.string(),
   x: z.number(),
   y: z.number(),
 });
@@ -25,14 +26,15 @@ export const GalvoSetPositionDefinition: ActionDefinition<
 > = {
   name: 'galvo_set_position',
   appKey: 'default',
-  description: 'Move the galvo mirror to an absolute XY position (DAC counts).',
+  description:
+    "Move a board's galvo mirror to an absolute XY position (DAC counts).",
   argsSchema: GalvoSetPositionArgsSchema,
   returnSchema: GalvoSetPositionReturnSchema,
   lockKeys: ['galvo'],
 };
 
 /**
- * Move the galvo mirror to an absolute XY position (DAC counts).
+ * Move a board's galvo mirror to an absolute XY position (DAC counts).
  */
 export const useGalvoSetPosition = () => {
   return useAction(GalvoSetPositionDefinition);

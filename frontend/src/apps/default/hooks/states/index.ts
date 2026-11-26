@@ -4,14 +4,15 @@ import { CalibrationStateDefinition } from './CalibrationState';
 import { DetectorStateDefinition } from './DetectorState';
 import { ExpanseStateDefinition } from './ExpanseState';
 import { HookStateDefinition } from './HookState';
-import { IOStateDefinition } from './IOState';
+import { IoStateDefinition } from './IoState';
+import { MountCalibrationStateDefinition } from './MountCalibrationState';
 import { MoveStateDefinition } from './MoveState';
 import { OpticsStateDefinition } from './OpticsState';
 import { SourceStateDefinition } from './SourceState';
 import { SpaceStateDefinition } from './SpaceState';
 import { SwapStateDefinition } from './SwapState';
 import { TuneStateDefinition } from './TuneState';
-import { UC2StateDefinition } from './UC2State';
+import { Uc2StateDefinition } from './Uc2State';
 
 export { createIndexedUnion } from './utils';
 export {
@@ -22,6 +23,7 @@ export {
 export type { AutofocusState } from './AutofocusState';
 export {
   CalibratedLightPathSchema,
+  CalibratedMountSchema,
   CalibrationStateSchema,
   CalibrationStateDefinition,
   useCalibrationState,
@@ -29,6 +31,8 @@ export {
 export type {
   CalibratedLightPath,
   CalibratedLightPathOutput,
+  CalibratedMount,
+  CalibratedMountOutput,
   CalibrationState,
 } from './CalibrationState';
 export {
@@ -82,8 +86,19 @@ export type {
   RegisteredHookOutput,
   HookState,
 } from './HookState';
-export { IOStateSchema, IOStateDefinition, useIOState } from './IOState';
-export type { IOState } from './IOState';
+export { IoStateSchema, IoStateDefinition, useIoState } from './IoState';
+export type { IoState } from './IoState';
+export {
+  MeasuredMountSchema,
+  MountCalibrationStateSchema,
+  MountCalibrationStateDefinition,
+  useMountCalibrationState,
+} from './MountCalibrationState';
+export type {
+  MeasuredMount,
+  MeasuredMountOutput,
+  MountCalibrationState,
+} from './MountCalibrationState';
 export {
   MoveValueSchema,
   MoveStateSchema,
@@ -181,8 +196,13 @@ export {
   useTuneState,
 } from './TuneState';
 export type { TuneValue, TuneValueOutput, TuneState } from './TuneState';
-export { UC2StateSchema, UC2StateDefinition, useUC2State } from './UC2State';
-export type { UC2State } from './UC2State';
+export {
+  Uc2NodeSchema,
+  Uc2StateSchema,
+  Uc2StateDefinition,
+  useUc2State,
+} from './Uc2State';
+export type { Uc2Node, Uc2NodeOutput, Uc2State } from './Uc2State';
 
 export const globalStateDefinition = {
   AutofocusState: AutofocusStateDefinition,
@@ -190,14 +210,15 @@ export const globalStateDefinition = {
   DetectorState: DetectorStateDefinition,
   ExpanseState: ExpanseStateDefinition,
   HookState: HookStateDefinition,
-  IOState: IOStateDefinition,
+  IoState: IoStateDefinition,
+  MountCalibrationState: MountCalibrationStateDefinition,
   MoveState: MoveStateDefinition,
   OpticsState: OpticsStateDefinition,
   SourceState: SourceStateDefinition,
   SpaceState: SpaceStateDefinition,
   SwapState: SwapStateDefinition,
   TuneState: TuneStateDefinition,
-  UC2State: UC2StateDefinition,
+  Uc2State: Uc2StateDefinition,
 } satisfies Record<string, StateDefinition<unknown>>;
 
 type InferStateDefinition<TDefinition> =

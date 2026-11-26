@@ -12,7 +12,11 @@ from newswitch.sys_config import SysConfigError, load_sys_config
 #: The committed file (the autouse fixture `log_dir` points `SYS_CONFIG_FILE` at a copy).
 COMMITTED = BACKEND_DIR / "sys_config.yaml"
 
-VALID = "log_to_terminal: warn\nlog_to_file: debug\nlog_file_path: backend.log\n"
+VALID = (
+    "log_to_terminal: warn\nlog_to_file: debug\nlog_file_path: backend.log\n"
+    "camera_debug_window: false\n"
+)
+KEYS = ("log_to_terminal", "log_to_file", "log_file_path", "camera_debug_window")
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -22,11 +26,13 @@ def _write(tmp_path: Path, text: str) -> Path:
 
 
 def test_the_committed_file_loads() -> None:
-    """The committed sys_config.yaml is valid, and its log file is in backend/."""
+    """The committed sys_config.yaml is valid, its log file is in backend/, and no camera shows
+    a window."""
     config = load_sys_config(COMMITTED)
     assert config.log_to_terminal == "warn"
     assert config.log_to_file == "debug"
     assert config.log_file_path == BACKEND_DIR / "backend.log"
+    assert config.camera_debug_window is False
 
 
 def test_load_reads_the_configured_file(log_dir: Path) -> None:
@@ -57,10 +63,19 @@ def test_an_unknown_key_is_refused(tmp_path: Path) -> None:
         load_sys_config(_write(tmp_path, VALID + "db_path: agent_data.db\n"))
 
 
-def test_a_missing_key_is_refused(tmp_path: Path) -> None:
+@pytest.mark.parametrize("key", KEYS)
+def test_a_missing_key_is_refused(tmp_path: Path, key: str) -> None:
     """Every key must be there."""
-    with pytest.raises(SysConfigError, match="log_to_file"):
-        load_sys_config(_write(tmp_path, VALID.replace("log_to_file: debug\n", "")))
+    text = "".join(line + "\n" for line in VALID.splitlines() if not line.startswith(f"{key}:"))
+    with pytest.raises(SysConfigError, match=key):
+        load_sys_config(_write(tmp_path, text))
+
+
+def test_a_flag_is_a_flag(tmp_path: Path) -> None:
+    """``"yes"`` is no way to say true."""
+    text = VALID.replace("camera_debug_window: false", 'camera_debug_window: "yes"')
+    with pytest.raises(SysConfigError, match="camera_debug_window"):
+        load_sys_config(_write(tmp_path, text))
 
 
 def test_an_unknown_level_is_refused(tmp_path: Path) -> None:
@@ -70,10 +85,10 @@ def test_an_unknown_level_is_refused(tmp_path: Path) -> None:
 
 
 def test_an_empty_file_names_every_key(tmp_path: Path) -> None:
-    """An empty file lacks all three keys, and says so."""
+    """An empty file lacks every key, and says so."""
     with pytest.raises(SysConfigError) as raised:
         load_sys_config(_write(tmp_path, ""))
-    for key in ("log_to_terminal", "log_to_file", "log_file_path"):
+    for key in KEYS:
         assert key in str(raised.value)
 
 

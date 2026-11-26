@@ -5,7 +5,8 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const StopStageArgsSchema = z.object({
-  axis: z.string().nullable().optional(),
+  /** The cube: ``stage``. */
+  stage: z.string().describe('The cube: ``stage``.'),
 });
 export const StopStageReturnSchema = z.object({});
 
@@ -23,16 +24,14 @@ export const StopStageDefinition: ActionDefinition<
   name: 'stop_stage',
   appKey: 'default',
   description:
-    'Immediately stop one stage axis (or all axes when none is given).\n\nDeliberately lock-free so it works while a move holds the motion lock.',
+    'Stop what a stage moves, where it is. It holds no lock, so it stops a move under way.',
   argsSchema: StopStageArgsSchema,
   returnSchema: StopStageReturnSchema,
   lockKeys: [],
 };
 
 /**
- * Immediately stop one stage axis (or all axes when none is given).
-
-Deliberately lock-free so it works while a move holds the motion lock.
+ * Stop what a stage moves, where it is. It holds no lock, so it stops a move under way.
  */
 export const useStopStage = () => {
   return useAction(StopStageDefinition);

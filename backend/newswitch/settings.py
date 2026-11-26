@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from typing import Literal, Optional, TYPE_CHECKING, get_args
 
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 if TYPE_CHECKING:
     from newswitch.instrument.spec import Instrument
@@ -65,9 +65,6 @@ class Settings(BaseModel):
     camera_recording_dir: Optional[Path]
     """Folder the cameras record into (see `drivers.uc2.uc2_detector`). null: the default of
     uc2_cam_py (``~/UC2_recordings``)."""
-    camera_debug_window: StrictBool
-    """Show every camera's newest image in a window of uc2_cam_py (debugging without the
-    frontend); the cameras then acquire from startup on."""
 
     instrument: Optional[Path] = None
     """The description these come from, set by `load_settings`. None: no devices, the core only."""
@@ -77,7 +74,9 @@ class Settings(BaseModel):
         """Whether each camera's stream sends a test pattern instead of its frames (``debug``)."""
         return self.simulate == "debug"
 
-    @field_validator("instrument", "camera_recording_dir", "image_dir", "cache_dir", "calibration_dir")
+    @field_validator(
+        "instrument", "camera_recording_dir", "image_dir", "cache_dir", "calibration_dir"
+    )
     @classmethod
     def _relative_to_backend(cls, path: Optional[Path]) -> Optional[Path]:
         if path is None or path.is_absolute():
@@ -94,7 +93,7 @@ def load_settings(named: Optional[str] = None, simulate: Optional[str] = None) -
         SpecError: None is named, what is named is no valid description, or `simulate` is no
             simulation mode.
     """
-    #TODO: no local imports
+    # TODO: no local imports
     from newswitch.instrument import spec
     from newswitch.instrument.errors import SpecError
 
@@ -106,7 +105,9 @@ def load_settings(named: Optional[str] = None, simulate: Optional[str] = None) -
     path = Path(named).expanduser()
     if not path.is_absolute():
         path = BACKEND_DIR / path
-    settings = spec.load(path).settings.model_copy(update={"instrument": path}) #TODO: this is weird
+    settings = spec.load(path).settings.model_copy(
+        update={"instrument": path}
+    )  # TODO: this is weird
     if simulate:
         if simulate not in get_args(Simulate):
             raise SpecError(
@@ -120,7 +121,9 @@ def load_settings(named: Optional[str] = None, simulate: Optional[str] = None) -
                 simulate,
                 settings.simulate,
             )
-            settings = settings.model_copy(update={"simulate": simulate, **_apart(settings, simulate)})
+            settings = settings.model_copy(
+                update={"simulate": simulate, **_apart(settings, simulate)}
+            )
     return settings
 
 

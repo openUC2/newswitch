@@ -165,14 +165,16 @@ to the image in a debug window; no camera hardware and no frontend are needed.
 **What happens on the way:**
 
 1. `NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml` names the instrument, and `spec.load`
-   reads it. Everything below comes from that one file.
+   reads it. Everything about the camera comes from that one file; only whether it shows a
+   window is a global switch (`camera_debug_window` in `backend/sys_config.yaml`).
 2. Its `settings` section has `simulate: unwired` (a camera is only opened when it is not
-   simulated, and without the extra `camera` the optics stand in, with a warning), `camera_debug_window: true` (a window per camera) and `camera_recording_dir` (where
-   recordings go).
+   simulated, and without the extra `camera` the optics stand in, with a warning) and
+   `camera_recording_dir` (where recordings go).
 3. `cameras()` in `newswitch/instrument/parts.py` finds the camera: the entry of
    its sensor in `hardware.cameras` (`protocol: usb3-vision`, `vendor: Simulated`).
 4. `build_detector_manager()` creates the `UC2DetectorManager`, which calls
-   `uc2_cam_py.create_camera(..., debug_window=True)`.
+   `uc2_cam_py.create_camera(..., debug_window=True)` when `sys_config.yaml` has
+   `camera_debug_window: true`.
 5. The debug window keeps the camera acquiring, so the window shows the live image from startup.
 
 **Prerequisites:**
@@ -205,7 +207,8 @@ to the image in a debug window; no camera hardware and no frontend are needed.
    uv run pytest tests/test_uc2_detector.py tests/test_detector_selection.py tests/test_instrument_hardware.py
    ```
 
-3. Start the backend on that instrument, from the repository root:
+3. Switch the window on: set `camera_debug_window: true` in `backend/sys_config.yaml` (committed
+   as `false`). Then start the backend on that instrument, from the repository root:
 
    ```bash
    NEWSWITCH_CONFIG=instruments/cam-test/microscope.yml just dev-backend
@@ -247,8 +250,8 @@ Keys and options are described in [`backend/instruments/README.md`](backend/inst
 | No window, and an error `debug_window=True: no X11 display available` | No display (headless session, or `DISPLAY` not set). The camera works anyway. |
 | No window, and an error `this build has no X11 support` | uc2_cam_py was built without the X11 headers. Install `libX11-devel` (Fedora) or `libx11-dev` (Debian/Ubuntu), then `uv sync --extra camera --reinstall-package uc2-cam-py`. |
 | Warning `uc2_cam_py cannot be imported`, rendered from the optics | The extra is not installed, or the MVS runtime libraries are missing. |
-| No window and no warning | `settings.simulate` is `everything`, which opens no camera; check that `NEWSWITCH_CONFIG` reached the backend. |
-| `camera_debug_window` should stay off | Set it to `false` in the `settings` section of the instrument's `microscope.yml`, e.g. on headless machines. |
+| No window and no warning | `camera_debug_window` is `false` in `backend/sys_config.yaml`, or `settings.simulate` is `everything`, which opens no camera; check that `NEWSWITCH_CONFIG` reached the backend. |
+| `camera_debug_window` should stay off | Set it to `false` in `backend/sys_config.yaml` (the default), e.g. on headless machines. It applies to every instrument. |
 
 ### Commits
 

@@ -50,6 +50,7 @@ from newswitch.states.optics import OpticsState
 from newswitch.states.space import SpaceState
 from newswitch.states.uc2 import UC2State
 from newswitch.states.values import MoveState, SourceState, SwapState, TuneState
+from newswitch.sys_config import load_sys_config
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,9 @@ class DetectorTune:
 
     @classmethod
     def set_together(
-        cls, targets: Iterable[tuple[Driver, Any, Report]], task: Any = None  # noqa: ANN401
+        cls,
+        targets: Iterable[tuple[Driver, Any, Report]],
+        task: Any = None,  # noqa: ANN401
     ) -> None:
         """One after the other: a detector applies each at once."""
         for driver, value, report in targets:
@@ -164,7 +167,8 @@ def build_detector_manager(
     With ``simulate: everything`` or ``virtual`` a description's cameras are not opened. Without the extra "camera"
     (uc2_cam_py not importable) the optics stand in with a warning on ``unwired``, and it is an error
     on ``nothing``. A camera that cannot be opened is an error: startup fails.
-    ``camera_debug_window`` opens uc2_cam_py's debug window per camera.
+    ``camera_debug_window`` of ``sys_config.yaml`` opens uc2_cam_py's debug window per camera; it
+    is read only when cameras are opened.
     """
     found = None if settings.simulate in SIMULATED else instrument_parts.cameras(instrument)
     if found:
@@ -191,7 +195,7 @@ def build_detector_manager(
                 cameras=cameras,
                 vendor_options=vendor_options,
                 recording_dir=settings.camera_recording_dir,
-                debug_window=settings.camera_debug_window,
+                debug_window=load_sys_config().camera_debug_window,
             )
     return SimulatedDetectorManager(
         instrument=instrument,
@@ -255,7 +259,9 @@ class Microscope:
     acquisition: protocols.AcquisitionManager
 
 
-def build_microscope(settings: Settings, instrument: Instrument) -> Microscope: # TODO: shis should be actually inside the startup hook and not called by a method of the run, lets class based patterns
+def build_microscope(
+    settings: Settings, instrument: Instrument
+) -> Microscope:  # TODO: shis should be actually inside the startup hook and not called by a method of the run, lets class based patterns
     """Build everything `instrument` has.
 
     Args:

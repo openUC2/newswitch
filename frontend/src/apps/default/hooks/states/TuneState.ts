@@ -31,19 +31,20 @@ export const TuneStateSchema = z.object({
       ),
     ),
   ),
+  names: z.array(z.string()),
 });
 
 // --- Type ---
 export type TuneState = z.infer<typeof TuneStateSchema>;
 
 // --- Definition ---
-export const TuneStateDefinition: StateDefinition<TuneState, 'TuneState'> = {
+export const TuneStateDefinition: StateDefinition<TuneState, 'tune'> = {
   appKey: 'default',
-  key: 'TuneState',
+  key: 'tune',
   schema: TuneStateSchema,
 };
 
 /**
- * Hook to sync TuneState
+ * Hook to sync tune
  */
 export const useTuneState = buildUseState<TuneState>(TuneStateDefinition);

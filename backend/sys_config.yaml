@@ -13,3 +13,8 @@ log_to_file: debug
 # are kept). null, or not openable (e.g. its folder does not exist): backend/backend.log is
 # used, with a warning in it.
 log_file_path: backend.log
+
+# Cameras: true shows every real camera's newest image in a window of uc2_cam_py (debugging
+# without the frontend), and the cameras acquire from startup on. Simulated cameras show none;
+# without a display (headless) only an error is logged and the camera works anyway.
+camera_debug_window: false

@@ -19,15 +19,15 @@ export type AutofocusState = z.infer<typeof AutofocusStateSchema>;
 // --- Definition ---
 export const AutofocusStateDefinition: StateDefinition<
   AutofocusState,
-  'AutofocusState'
+  'autofocus'
 > = {
   appKey: 'default',
-  key: 'AutofocusState',
+  key: 'autofocus',
   schema: AutofocusStateSchema,
 };
 
 /**
- * Hook to sync AutofocusState
+ * Hook to sync autofocus
  */
 export const useAutofocusState = buildUseState<AutofocusState>(
   AutofocusStateDefinition,

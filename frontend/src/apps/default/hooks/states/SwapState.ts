@@ -46,19 +46,21 @@ export const SwapStateSchema = z.object({
       ),
     ),
   ),
+  names: z.array(z.string()),
+  homes: z.array(z.string()),
 });
 
 // --- Type ---
 export type SwapState = z.infer<typeof SwapStateSchema>;
 
 // --- Definition ---
-export const SwapStateDefinition: StateDefinition<SwapState, 'SwapState'> = {
+export const SwapStateDefinition: StateDefinition<SwapState, 'swap'> = {
   appKey: 'default',
-  key: 'SwapState',
+  key: 'swap',
   schema: SwapStateSchema,
 };
 
 /**
- * Hook to sync SwapState
+ * Hook to sync swap
  */
 export const useSwapState = buildUseState<SwapState>(SwapStateDefinition);

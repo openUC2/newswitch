@@ -182,16 +182,13 @@ export const OpticsStateSchema = z.object({
 export type OpticsState = z.infer<typeof OpticsStateSchema>;
 
 // --- Definition ---
-export const OpticsStateDefinition: StateDefinition<
-  OpticsState,
-  'OpticsState'
-> = {
+export const OpticsStateDefinition: StateDefinition<OpticsState, 'optics'> = {
   appKey: 'default',
-  key: 'OpticsState',
+  key: 'optics',
   schema: OpticsStateSchema,
 };
 
 /**
- * Hook to sync OpticsState
+ * Hook to sync optics
  */
 export const useOpticsState = buildUseState<OpticsState>(OpticsStateDefinition);

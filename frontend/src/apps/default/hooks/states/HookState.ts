@@ -29,13 +29,13 @@ export const HookStateSchema = z.object({
 export type HookState = z.infer<typeof HookStateSchema>;
 
 // --- Definition ---
-export const HookStateDefinition: StateDefinition<HookState, 'HookState'> = {
+export const HookStateDefinition: StateDefinition<HookState, 'hook'> = {
   appKey: 'default',
-  key: 'HookState',
+  key: 'hook',
   schema: HookStateSchema,
 };
 
 /**
- * Hook to sync HookState
+ * Hook to sync hook
  */
 export const useHookState = buildUseState<HookState>(HookStateDefinition);

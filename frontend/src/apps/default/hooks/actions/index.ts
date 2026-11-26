@@ -3,6 +3,7 @@ import { AcquireDefinition } from './acquire';
 import { AcquireMdaDefinition } from './acquireMda';
 import { ActivateDetectorDefinition } from './activateDetector';
 import { CalibrateLightPathDefinition } from './calibrateLightPath';
+import { CalibrateMountDefinition } from './calibrateMount';
 import { CaptureImageDefinition } from './captureImage';
 import { ClearExpanseDefinition } from './clearExpanse';
 import { DeactivateDetectorDefinition } from './deactivateDetector';
@@ -12,8 +13,6 @@ import { GalvoSetPositionDefinition } from './galvoSetPosition';
 import { GalvoStopDefinition } from './galvoStop';
 import { HomeObjectiveDefinition } from './homeObjective';
 import { HomeStageDefinition } from './homeStage';
-import { LedMatrixFillDefinition } from './ledMatrixFill';
-import { LedMatrixOffDefinition } from './ledMatrixOff';
 import { MountHolderDefinition } from './mountHolder';
 import { MoveDefinition } from './move';
 import { MoveHomeDefinition } from './moveHome';
@@ -30,6 +29,7 @@ import { StopStageDefinition } from './stopStage';
 import { SwapDefinition } from './swap';
 import { TuneDefinition } from './tune';
 import { Uc2ScanNodesDefinition } from './uc2ScanNodes';
+import { UpdateFirmwareDefinition } from './updateFirmware';
 
 export { createIndexedUnion } from './utils';
 export {
@@ -94,6 +94,19 @@ export type {
   CalibrateLightPathArgs,
   CalibrateLightPathReturn,
 } from './calibrateLightPath';
+export {
+  MeasuredMountSchema,
+  CalibrateMountArgsSchema,
+  CalibrateMountReturnSchema,
+  CalibrateMountDefinition,
+  useCalibrateMount,
+} from './calibrateMount';
+export type {
+  MeasuredMount,
+  MeasuredMountOutput,
+  CalibrateMountArgs,
+  CalibrateMountReturn,
+} from './calibrateMount';
 export {
   CaptureImageArgsSchema,
   CaptureImageReturnSchema,
@@ -172,20 +185,6 @@ export {
   useHomeStage,
 } from './homeStage';
 export type { HomeStageArgs, HomeStageReturn } from './homeStage';
-export {
-  LedMatrixFillArgsSchema,
-  LedMatrixFillReturnSchema,
-  LedMatrixFillDefinition,
-  useLedMatrixFill,
-} from './ledMatrixFill';
-export type { LedMatrixFillArgs, LedMatrixFillReturn } from './ledMatrixFill';
-export {
-  LedMatrixOffArgsSchema,
-  LedMatrixOffReturnSchema,
-  LedMatrixOffDefinition,
-  useLedMatrixOff,
-} from './ledMatrixOff';
-export type { LedMatrixOffArgs, LedMatrixOffReturn } from './ledMatrixOff';
 export {
   MountHolderArgsSchema,
   MountHolderReturnSchema,
@@ -307,12 +306,23 @@ export {
   useUc2ScanNodes,
 } from './uc2ScanNodes';
 export type { Uc2ScanNodesArgs, Uc2ScanNodesReturn } from './uc2ScanNodes';
+export {
+  UpdateFirmwareArgsSchema,
+  UpdateFirmwareReturnSchema,
+  UpdateFirmwareDefinition,
+  useUpdateFirmware,
+} from './updateFirmware';
+export type {
+  UpdateFirmwareArgs,
+  UpdateFirmwareReturn,
+} from './updateFirmware';
 
 export const globalActionDefinition = {
   Acquire: AcquireDefinition,
   AcquireMda: AcquireMdaDefinition,
   ActivateDetector: ActivateDetectorDefinition,
   CalibrateLightPath: CalibrateLightPathDefinition,
+  CalibrateMount: CalibrateMountDefinition,
   CaptureImage: CaptureImageDefinition,
   ClearExpanse: ClearExpanseDefinition,
   DeactivateDetector: DeactivateDetectorDefinition,
@@ -322,8 +332,6 @@ export const globalActionDefinition = {
   GalvoStop: GalvoStopDefinition,
   HomeObjective: HomeObjectiveDefinition,
   HomeStage: HomeStageDefinition,
-  LedMatrixFill: LedMatrixFillDefinition,
-  LedMatrixOff: LedMatrixOffDefinition,
   MountHolder: MountHolderDefinition,
   Move: MoveDefinition,
   MoveHome: MoveHomeDefinition,
@@ -340,6 +348,7 @@ export const globalActionDefinition = {
   Swap: SwapDefinition,
   Tune: TuneDefinition,
   Uc2ScanNodes: Uc2ScanNodesDefinition,
+  UpdateFirmware: UpdateFirmwareDefinition,
 } satisfies Record<string, ActionDefinition<unknown, unknown>>;
 
 export type GlobalActionDefinition = typeof globalActionDefinition;

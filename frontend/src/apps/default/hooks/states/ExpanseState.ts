@@ -164,17 +164,15 @@ export const ExpanseStateSchema = z.object({
 export type ExpanseState = z.infer<typeof ExpanseStateSchema>;
 
 // --- Definition ---
-export const ExpanseStateDefinition: StateDefinition<
-  ExpanseState,
-  'ExpanseState'
-> = {
-  appKey: 'default',
-  key: 'ExpanseState',
-  schema: ExpanseStateSchema,
-};
+export const ExpanseStateDefinition: StateDefinition<ExpanseState, 'expanse'> =
+  {
+    appKey: 'default',
+    key: 'expanse',
+    schema: ExpanseStateSchema,
+  };
 
 /**
- * Hook to sync ExpanseState
+ * Hook to sync expanse
  */
 export const useExpanseState = buildUseState<ExpanseState>(
   ExpanseStateDefinition,

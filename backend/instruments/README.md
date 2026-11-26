@@ -281,8 +281,10 @@ settings:
   cache_dir: /tmp/newswitch/cache    # acquired frames; cleared on every start
   calibration_dir: data/calibration  # what was calibrated of this copy; kept, never cleared
   camera_recording_dir: data/recordings   # null: uc2_cam_py's own default
-  camera_debug_window: true          # real cameras: a window each, acquiring from startup on
 ```
+
+Whether the cameras show a debug window is no setting of one microscope: `camera_debug_window` in
+`backend/sys_config.yaml`, for every instrument.
 
 **What is calibrated** is kept apart from the description, which stays the design (the same for
 every copy of a microscope): in `calibration_dir/<name>.yml`, the calibration store

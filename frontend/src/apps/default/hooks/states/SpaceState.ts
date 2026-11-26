@@ -217,13 +217,13 @@ export const SpaceStateSchema = z.object({
 export type SpaceState = z.infer<typeof SpaceStateSchema>;
 
 // --- Definition ---
-export const SpaceStateDefinition: StateDefinition<SpaceState, 'SpaceState'> = {
+export const SpaceStateDefinition: StateDefinition<SpaceState, 'space'> = {
   appKey: 'default',
-  key: 'SpaceState',
+  key: 'space',
   schema: SpaceStateSchema,
 };
 
 /**
- * Hook to sync SpaceState
+ * Hook to sync space
  */
 export const useSpaceState = buildUseState<SpaceState>(SpaceStateDefinition);

@@ -19,7 +19,9 @@ export type GalvoStatus = z.input<typeof GalvoStatusSchema>;
 export type GalvoStatusOutput = z.infer<typeof GalvoStatusSchema>;
 
 // --- Schemas ---
-export const GalvoGetStatusArgsSchema = z.object({});
+export const GalvoGetStatusArgsSchema = z.object({
+  board: z.string(),
+});
 export const GalvoGetStatusReturnSchema = z.object({
   /** Decoded galvo scanner status flags. */
   return0: GalvoStatusSchema.describe('Decoded galvo scanner status flags.'),

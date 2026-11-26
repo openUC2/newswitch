@@ -37,16 +37,13 @@ export const SourceStateSchema = z.object({
 export type SourceState = z.infer<typeof SourceStateSchema>;
 
 // --- Definition ---
-export const SourceStateDefinition: StateDefinition<
-  SourceState,
-  'SourceState'
-> = {
+export const SourceStateDefinition: StateDefinition<SourceState, 'source'> = {
   appKey: 'default',
-  key: 'SourceState',
+  key: 'source',
   schema: SourceStateSchema,
 };
 
 /**
- * Hook to sync SourceState
+ * Hook to sync source
  */
 export const useSourceState = buildUseState<SourceState>(SourceStateDefinition);

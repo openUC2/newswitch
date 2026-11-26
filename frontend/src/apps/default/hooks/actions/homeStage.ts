@@ -5,12 +5,8 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const HomeStageArgsSchema = z.object({
-  /** Axes to home (subset of X/Y/Z/A). Default: Z, X, Y. */
-  axes: z
-    .array(z.string())
-    .describe('Axes to home (subset of X/Y/Z/A). Default: Z, X, Y.')
-    .nullable()
-    .optional(),
+  /** The cube: ``stage``. */
+  stage: z.string().describe('The cube: ``stage``.'),
 });
 export const HomeStageReturnSchema = z.object({});
 
@@ -28,14 +24,14 @@ export const HomeStageDefinition: ActionDefinition<
   name: 'home_stage',
   appKey: 'default',
   description:
-    'Home stage axes sequentially in a mechanically safe order (Z first).',
+    'Home what a stage moves, one after the other: along z first, then the rest.',
   argsSchema: HomeStageArgsSchema,
   returnSchema: HomeStageReturnSchema,
   lockKeys: ['motion'],
 };
 
 /**
- * Home stage axes sequentially in a mechanically safe order (Z first).
+ * Home what a stage moves, one after the other: along z first, then the rest.
  */
 export const useHomeStage = () => {
   return useAction(HomeStageDefinition);

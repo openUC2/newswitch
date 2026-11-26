@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
+import yaml
 
+from newswitch import sys_config
 from newswitch.actions.detector import close_detector
 from newswitch.infra.streaming import FrameBroadcaster
 from newswitch.instrument import spec
@@ -53,23 +55,13 @@ def _build(config: Settings, instrument: spec.Instrument) -> DetectorManager:
     )
 
 
-def _settings(
-    tmp_path: Path,
-    *,
-    simulate: Literal["everything", "unwired", "nothing"],
-    debug_window: bool = False,
-) -> Settings:
+def _settings(tmp_path: Path, *, simulate: Literal["everything", "unwired", "nothing"]) -> Settings:
     """Settings of `CAM_TEST`, recording into `tmp_path`.
 
-    The debug window is off unless asked for: the description switches it on, and no window may
-    pop up during the tests.
+    The debug window is off (``sys_config.yaml``, see the autouse fixture `log_dir`): no window
+    may pop up during the tests.
     """
-    return run_settings(
-        tmp_path,
-        simulate=simulate,
-        instrument=CAM_TEST,
-        camera_debug_window=debug_window,
-    )
+    return run_settings(tmp_path, simulate=simulate, instrument=CAM_TEST)
 
 
 def test_simulated_it_renders_from_the_optics(
@@ -134,16 +126,22 @@ def test_real_hardware_opens_the_cameras(
 def test_camera_debug_window_is_passed_on(
     tmp_path: Path, camera_instrument: spec.Instrument, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """camera_debug_window reaches uc2_cam_py, and the camera acquires for the window.
+    """camera_debug_window of sys_config.yaml reaches uc2_cam_py, and the camera acquires for
+    the window.
 
     Without a display, so uc2_cam_py only logs an error instead of opening the window.
     """
     pytest.importorskip("uc2_cam_py")
     from newswitch.drivers.uc2.uc2_detector import UC2DetectorManager
 
+    config = yaml.safe_load(sys_config.SYS_CONFIG_FILE.read_text(encoding="utf-8"))
+    config["camera_debug_window"] = True
+    switched_on = tmp_path / "sys_config.yaml"
+    switched_on.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.setattr(sys_config, "SYS_CONFIG_FILE", switched_on)
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    manager = _build(_settings(tmp_path, simulate="nothing", debug_window=True), camera_instrument)
+    manager = _build(_settings(tmp_path, simulate="nothing"), camera_instrument)
     try:
         assert isinstance(manager, UC2DetectorManager)
         assert manager._cameras["sim_cam"].camera._debug_window is not None

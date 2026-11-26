@@ -293,6 +293,12 @@ export const AcquisitionPlanSchema = z
       .describe(
         "Name of the datasets; with several positions, each gets its position's.",
       ),
+    /** Also store each dataset at coarser resolutions (the max of each 2 x 2, halved until one 256 tile), so a viewer zooms out without reading every pixel; built as each exposure is stored, about a third more to upload. */
+    pyramid: z
+      .boolean()
+      .describe(
+        'Also store each dataset at coarser resolutions (the max of each 2 x 2, halved until one 256 tile), so a viewer zooms out without reading every pixel; built as each exposure is stored, about a third more to upload.',
+      ),
     /** What to run at the start (e.g., an autofocus). */
     m_hooks: z
       .array(MHookUnionSchema)

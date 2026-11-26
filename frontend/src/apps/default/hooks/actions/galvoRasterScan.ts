@@ -5,6 +5,7 @@ import { useAction, type ActionDefinition } from '@/lib/arkitekt/task';
 
 // --- Schemas ---
 export const GalvoRasterScanArgsSchema = z.object({
+  board: z.string(),
   x_min: z.number().nullable().optional(),
   x_max: z.number().nullable().optional(),
   y_min: z.number().nullable().optional(),

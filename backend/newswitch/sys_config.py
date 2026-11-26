@@ -1,9 +1,10 @@
 """The global settings of the backend, whatever the microscope: ``backend/sys_config.yaml``.
 
 What belongs to one microscope is in its description (`newswitch.settings`, the ``settings``
-section of its ``microscope.yml``). What does not depend on the microscope is here: for now how
-the backend logs (`newswitch.logging_setup`). Every key must be there, and an unknown one is an
-error, so a misspelled key is not quietly ignored.
+section of its ``microscope.yml``). What does not depend on the microscope is here: how the
+backend logs (`newswitch.logging_setup`) and whether the cameras show a debug window
+(`newswitch.microscope.parts.build_detector_manager`). Every key must be there, and an unknown
+one is an error, so a misspelled key is not quietly ignored.
 
 `load_sys_config` reads it; the entry points do so through `newswitch.logging_setup.setup_logging`.
 """
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
 
 from newswitch.logging_setup import LogLevel
 from newswitch.settings import BACKEND_DIR
@@ -39,6 +40,9 @@ class SysConfig(BaseModel):
     log_file_path: Path | None
     """The log file, relative to ``backend/``. null or empty: ``backend/backend.log``, with a
     warning in it."""
+    camera_debug_window: StrictBool
+    """Show every real camera's newest image in a window of uc2_cam_py (debugging without the
+    frontend); the cameras then acquire from startup on. Simulated cameras show none."""
 
     @field_validator("log_file_path", mode="before")
     @classmethod

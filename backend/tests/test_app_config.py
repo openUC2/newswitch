@@ -38,7 +38,6 @@ def test_they_come_from_the_description() -> None:
     assert settings.db_path == "arkitekt_agent.db"
     assert settings.image_dir == Path("/tmp/newswitch/images")
     assert settings.camera_recording_dir == BACKEND_DIR / "data" / "recordings"
-    assert settings.camera_debug_window is True
 
 
 def test_the_environment_names_the_instrument(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,7 +95,6 @@ def test_unknown_key_is_an_error(tmp_path: Path) -> None:
         "cache_dir",
         "calibration_dir",
         "camera_recording_dir",
-        "camera_debug_window",
     ],
 )
 def test_missing_key_is_an_error(tmp_path: Path, key: str) -> None:
@@ -105,19 +103,20 @@ def test_missing_key_is_an_error(tmp_path: Path, key: str) -> None:
         load_settings(str(edited(tmp_path, **{key: None})))
 
 
-def test_a_flag_is_a_flag(tmp_path: Path) -> None:
-    """``"yes"`` is no way to say true."""
-    with pytest.raises(spec.SpecError, match="camera_debug_window"):
-        load_settings(str(edited(tmp_path, camera_debug_window="yes")))
-
-
 def test_what_to_simulate_is_one_of_three(tmp_path: Path) -> None:
     """``true`` is no way to say what has no hardware."""
     with pytest.raises(spec.SpecError, match="simulate"):
         load_settings(str(edited(tmp_path, simulate=True)))
 
 
-def test_the_old_settings_are_refused(tmp_path: Path) -> None:
-    """There is one file: naming another is an error, not ignored."""
-    with pytest.raises(spec.SpecError, match="persistent_config_path"):
-        load_settings(str(edited(tmp_path, persistent_config_path="persistent.yaml")))
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("persistent_config_path", "persistent.yaml"),  # there is one file
+        ("camera_debug_window", True),  # moved to sys_config.yaml
+    ],
+)
+def test_the_old_settings_are_refused(tmp_path: Path, key: str, value: Any) -> None:  # noqa: ANN401
+    """A key that is no longer one of the description's is an error that names it, not ignored."""
+    with pytest.raises(spec.SpecError, match=key):
+        load_settings(str(edited(tmp_path, **{key: value})))
