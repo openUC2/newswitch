@@ -16,6 +16,7 @@ import {
 } from "./pages";
 import { appsDefinition } from "./apps";
 import { LocalStoreProvider } from "./store";
+import { OIDCCallbackPage } from "./pages/OIDCCallbackPage";
 
 // The backend API URL is either injected into the global scope by the
 // electron app or taken from environment variables, allowing for flexibility in different deployment scenarios.
@@ -58,6 +59,7 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login/keycloak/callback" element={<OIDCCallbackPage />} />
 
         {/* Everything below the guard only mounts once a token exists, so the
             transport and its websocket never connect while logged out. */}

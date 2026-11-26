@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
@@ -23,15 +23,46 @@ import {
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { InvalidCredentialsError, useAuth } from "../lib/auth/context";
+import {
+  oidcEnabled,
+  startOIDCLogin,
+  type OIDCFailure,
+} from "../lib/auth/oidc";
 
 type LoginValues = { username: string; password: string };
+type LoginLocation = { from?: Location; oidcFailure?: OIDCFailure };
+const oidcErrors = {
+  unlinked: "auth.keycloakUnlinked",
+  unavailable: "auth.keycloakUnavailable",
+  failed: "auth.keycloakFailed",
+} as const;
 
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const [error, setError] = useState<string | null>(null);
+  const loginLocation = location.state as LoginLocation | null;
+  const [error, setError] = useState<
+    | null
+    | (
+        | "auth.invalidCredentials"
+        | "auth.backendUnavailable"
+        | (typeof oidcErrors)[OIDCFailure]
+      )
+  >(() =>
+    loginLocation?.oidcFailure ? oidcErrors[loginLocation.oidcFailure] : null,
+  );
+  const [keycloakEnabled, setKeycloakEnabled] = useState(false);
+  const [startingKeycloak, setStartingKeycloak] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void oidcEnabled(controller.signal)
+      .then(setKeycloakEnabled)
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   const loginSchema = z.object({
     username: z.string().min(1, t("auth.enterUsername")),
@@ -44,8 +75,7 @@ export function LoginPage() {
   });
 
   // Where the guard bounced the user from, so a deep link survives logging in.
-  const from =
-    (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
+  const from = loginLocation?.from?.pathname ?? "/";
 
   if (isAuthenticated) {
     return <Navigate to={from} replace />;
@@ -59,9 +89,20 @@ export function LoginPage() {
     } catch (caught) {
       setError(
         caught instanceof InvalidCredentialsError
-          ? t("auth.invalidCredentials")
-          : t("auth.backendUnavailable"),
+          ? "auth.invalidCredentials"
+          : "auth.backendUnavailable",
       );
+    }
+  };
+
+  const onKeycloak = async () => {
+    setError(null);
+    setStartingKeycloak(true);
+    try {
+      await startOIDCLogin(from);
+    } catch {
+      setError("auth.keycloakUnavailable");
+      setStartingKeycloak(false);
     }
   };
 
@@ -113,15 +154,30 @@ export function LoginPage() {
 
               {error && (
                 <p role="alert" className="text-sm text-destructive">
-                  {error}
+                  {t(error)}
                 </p>
               )}
 
-              <Button type="submit" disabled={form.formState.isSubmitting}>
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting || startingKeycloak}
+              >
                 {form.formState.isSubmitting
                   ? t("auth.signingIn")
                   : t("auth.signIn")}
               </Button>
+              {keycloakEnabled && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={startingKeycloak || form.formState.isSubmitting}
+                  onClick={onKeycloak}
+                >
+                  {startingKeycloak
+                    ? t("auth.signingIn")
+                    : t("auth.keycloakSignIn")}
+                </Button>
+              )}
             </form>
           </Form>
         </CardContent>

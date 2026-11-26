@@ -108,6 +108,7 @@ from newswitch.routes.ws.liveview import router as liveview_router
 from newswitch.routes.http.files import router as files_router
 from newswitch.routes.http.cache import router as cache_router
 from newswitch.routes.http.users import router as users_router
+from newswitch.routes.http.oidc import OIDCConfig, router as oidc_router
 
 from newswitch.managers.python_hook_manager import PythonHookManager
 
@@ -717,6 +718,7 @@ def create_app(
 
     authenticator = authenticator or default_authenticator()
     app.state.authenticator = authenticator
+    app.state.oidc_config = OIDCConfig.from_env()
 
     # Middleware order is load-bearing. `add_middleware` PREPENDS, so the LAST call
     # here ends up OUTERMOST: auth is added first and CORS wraps it. Reversed, a 401
@@ -754,6 +756,7 @@ def create_app(
 
     # Mount the public auth + health routes
     app.include_router(auth_router)
+    app.include_router(oidc_router)
 
     # Mount account/role/audit management routes (admin-only except /auth/me)
     app.include_router(users_router)

@@ -334,6 +334,37 @@ just reset-password alice new-pass    # forgotten password: set a new one, revok
 just create-admin rescue rescue-pass  # every admin locked out: create a fresh one
 ```
 
+### Optional Keycloak sign-in
+
+Set these variables in the backend process environment to add **Sign in with
+Keycloak**. The local password form is available offline.
+
+```env
+NEWSWITCH_OIDC_ISSUER=http://localhost:8180/realms/openuc2
+NEWSWITCH_OIDC_CLIENT_ID=newswitch
+NEWSWITCH_OIDC_REDIRECT_URI=http://localhost:5173/login/keycloak/callback
+```
+
+For the local Keycloak stack, see [openUC2/auth-infrastructure](https://github.com/openUC2/auth-infrastructure).
+Start Newswitch with `just dev` and open the frontend at the origin configured
+in the callback URI. In deployment, use HTTPS and register the exact callback
+URL in Keycloak. The backend needs to reach the issuer from its own network.
+The web server needs to serve the frontend app at `/login/keycloak/callback`.
+
+The client uses Authorization Code with PKCE (S256). An instrument administrator
+links the user's Keycloak ID (the OIDC `sub`) to an existing account from the
+instrument shell, using the same `NEWSWITCH_AUTH_DB` as the backend.
+
+```bash
+cd backend
+uv run python -m newswitch.cli link-oidc alice http://localhost:8180/realms/openuc2 KEYCLOAK_USER_ID
+uv run python -m newswitch.cli unlink-oidc alice http://localhost:8180/realms/openuc2
+```
+
+Both sign-in methods use the local user's role and session rules. Removing the
+link revokes that account's active Newswitch sessions. Newswitch sign-out ends
+the local session. The browser's Keycloak SSO session has its own lifetime.
+
 ### How it works
 
 `POST /auth/login` takes HTTP Basic, checks the password (argon2) against `backend/auth.db`, and returns

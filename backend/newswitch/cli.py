@@ -15,7 +15,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from newswitch.users import Role, UserAlreadyExistsError, UserNotFoundError, UserStore
+from newswitch.users import (
+    OIDCIdentityConflictError,
+    Role,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+    UserStore,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,6 +40,15 @@ def main(argv: list[str] | None = None) -> int:
     create_admin = subparsers.add_parser("create-admin", help="Create a new admin account.")
     create_admin.add_argument("username")
     create_admin.add_argument("password")
+
+    link_oidc = subparsers.add_parser("link-oidc", help="Link a Keycloak identity to a local user.")
+    link_oidc.add_argument("username")
+    link_oidc.add_argument("issuer")
+    link_oidc.add_argument("subject")
+
+    unlink_oidc = subparsers.add_parser("unlink-oidc", help="Remove a Keycloak identity link.")
+    unlink_oidc.add_argument("username")
+    unlink_oidc.add_argument("issuer")
 
     args = parser.parse_args(argv)
     store = UserStore()
@@ -60,6 +75,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"'{args.username}' already exists.", file=sys.stderr)
             return 1
         print(f"Created admin account '{args.username}'.")
+        return 0
+
+    if args.command == "link-oidc":
+        try:
+            store.link_oidc_identity(args.username, args.issuer.rstrip("/"), args.subject)
+        except UserNotFoundError:
+            print(f"No such user: {args.username}", file=sys.stderr)
+            return 1
+        except OIDCIdentityConflictError:
+            print("The identity or local user is already linked for this issuer.", file=sys.stderr)
+            return 1
+        print(f"Linked Keycloak identity for '{args.username}'.")
+        return 0
+
+    if args.command == "unlink-oidc":
+        if not store.unlink_oidc_identity(args.username, args.issuer.rstrip("/")):
+            print(f"No link for '{args.username}' and this issuer.", file=sys.stderr)
+            return 1
+        print(f"Removed the link for '{args.username}' and revoked its sessions.")
         return 0
 
     return 1

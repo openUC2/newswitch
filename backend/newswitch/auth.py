@@ -55,7 +55,9 @@ DEFAULT_PASSWORD = "admin"
 #: Reachable without a token. `/schemas/*` stays public because the frontend's build
 #: -time codegen reads it before any user could log in, and it exposes only the shape
 #: of the API - no data and no control.
-PUBLIC_PATHS = frozenset({"/health", "/auth/login"})
+PUBLIC_PATHS = frozenset(
+    {"/health", "/auth/login", "/auth/oidc/enabled", "/auth/oidc/start", "/auth/oidc/complete"}
+)
 PUBLIC_PATH_PREFIXES = ("/schemas/",)
 
 

@@ -6,6 +6,12 @@ export const auth = {
   enterPassword: "Enter a password",
   signInDescription: "Sign in to control the microscope.",
   signIn: "Sign in",
+  keycloakSignIn: "Sign in with Keycloak",
+  keycloakUnavailable:
+    "Keycloak is unavailable. You can still sign in locally.",
+  keycloakFailed: "Keycloak sign-in failed. Please try again.",
+  keycloakUnlinked:
+    "This Keycloak account is not linked to an active local account here.",
   signingIn: "Signing in...",
   invalidCredentials: "Invalid username or password.",
   backendUnavailable: "Could not reach the microscope backend.",

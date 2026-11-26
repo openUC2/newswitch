@@ -21,6 +21,9 @@ services:
       # port uvicorn actually binds has to be handed over explicitly.
       BACKEND_HOST: "0.0.0.0"
       BACKEND_PORT: "${BACKEND_PORT:-8099}"
+      NEWSWITCH_OIDC_ISSUER: "${NEWSWITCH_OIDC_ISSUER:-}"
+      NEWSWITCH_OIDC_CLIENT_ID: "${NEWSWITCH_OIDC_CLIENT_ID:-newswitch}"
+      NEWSWITCH_OIDC_REDIRECT_URI: "${NEWSWITCH_OIDC_REDIRECT_URI:-}"
     healthcheck:
       # The probe reads BACKEND_PORT from the container's own environment (set above)
       # rather than baking a number in, so it follows the service it is probing.
