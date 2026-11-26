@@ -101,6 +101,13 @@ native:
 uc2 *args:
     cd backend && uv run --extra uc2 python -m newswitch.tools.uc2 {{args}}
 
+# What the CAN bus carries, decoded as it happens: what the Pi sends (->) and the nodes answer (<-).
+# It only listens, so it runs beside the agent; the node names come from NEWSWITCH_CONFIG (or --config).
+#   just canbus [--all] [--node Z] [--channel can0] [--config instruments/johannes-frame]
+# Watch the CAN bus: every command and answer, decoded (listens only)
+canbus *args:
+    cd backend && uv run --inexact --extra uc2 python -m newswitch.tools.canbus {{args}}
+
 # What the agent declares, as `arkitekt plugin build` compiles it: no instrument is read
 agent-inspect:
     cd backend && env -u NEWSWITCH_CONFIG uv run --extra agent arkitekt inspect all app --json
