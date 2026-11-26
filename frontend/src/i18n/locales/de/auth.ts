@@ -6,13 +6,13 @@ export const auth = {
   enterPassword: "Passwort eingeben",
   signInDescription: "Anmelden, um das Mikroskop zu steuern.",
   signIn: "Anmelden",
-  keycloakSignIn: "Mit Keycloak anmelden",
+  keycloakSignIn: "Mit openUC2-Konto anmelden",
   keycloakUnavailable:
-    "Keycloak ist nicht erreichbar. Du kannst dich lokal anmelden.",
+    "Die Anmeldung mit dem openUC2-Konto ist gerade nicht verfügbar. Du kannst dich lokal anmelden.",
   keycloakFailed:
-    "Die Keycloak-Anmeldung ist fehlgeschlagen. Bitte versuche es erneut.",
+    "Die Anmeldung mit dem openUC2-Konto ist fehlgeschlagen. Bitte versuche es erneut.",
   keycloakUnlinked:
-    "Dieses Keycloak-Konto ist hier keinem aktiven lokalen Konto zugeordnet.",
+    "Dieses openUC2-Konto ist an diesem Mikroskop keinem aktiven lokalen Konto zugeordnet.",
   signingIn: "Anmeldung läuft...",
   invalidCredentials: "Benutzername oder Passwort ist ungültig.",
   backendUnavailable: "Das Mikroskop-Backend ist nicht erreichbar.",
