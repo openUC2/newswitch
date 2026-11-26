@@ -291,7 +291,7 @@ app.register_action(values.move_one, locks=[locks.MOTION])
   language tells apart. The frontend's generated hooks keep the class's name (`useDetectorState`).
   arkitekt checks what a blok reads of its agent when the app is assembled (arkitekt-spec 14.2),
   so a blok naming `self.DetectorState` or a field gone refuses the start;
-  `tests/test_bloks.py::test_every_instrument_declares_its_views` declares every instrument's.
+  `tests/test_instrument_server.py::test_every_instruments_bloks_can_be_served` declares every instrument's.
   The agent's own bloks are declared by their `.bsx` file (`app.blok(name, Path(...))`), so
   `arkitekt check` and the editor report a problem in that file.
 

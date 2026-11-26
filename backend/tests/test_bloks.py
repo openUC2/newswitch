@@ -222,19 +222,10 @@ def test_an_agent_blok_is_not_written_for_the_newswitch_catalog() -> None:
 # --- what a blok reads ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "folder", sorted(p.parent.name for p in INSTRUMENTS.glob("*/microscope.yml"))
-)
-def test_every_instrument_declares_its_views(folder: str) -> None:
-    """Each instrument's views declare: arkitekt refuses one that reads a state, field or action
-    the app does not have (a state by its class name, ``DetectorState``, a field gone)."""
-    instrument = spec.load(INSTRUMENTS / folder)
-    declared = create_fastapi_registry(instrument).registry.get_declared_bloks()
-    assert set(declared) == set(instrument.ui.bloks if instrument.ui else {})
-
-
 def test_a_blok_reading_what_the_app_lacks_is_refused() -> None:
-    """What a blok reads of ``self`` is checked against the app as it is declared."""
+    """What a blok reads of ``self`` is checked against the app as it is declared: a state by
+    its class name, a field gone. Every instrument's views pass it
+    (``test_instrument_server.py::test_every_instruments_bloks_can_be_served``)."""
     app = create_fastapi_registry(None)
     view = BlokEntry(bsx=newswitch_blok("<div>{self.DetectorState.is_acquiring}</div>"))
     with pytest.raises(ValueError, match="DetectorState"):

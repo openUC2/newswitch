@@ -364,9 +364,8 @@ def test_an_uncalibrated_image_is_placed_by_what_the_design_predicts(
     ids=lambda path: path.name,
 )
 def test_every_instruments_bloks_can_be_served(folder: Path) -> None:
-    """Checked strictly only here: what a blok reads of the microscope is checked when it is
-    built, and a refused blok drops the frontend to its built-in view. A shipped one warns of
-    nothing there either."""
+    """Each instrument's views are declared (what they read of the microscope is checked then,
+    arkitekt-spec 14.2), and served without a warning."""
     registry = create_fastapi_registry(spec.load(folder)).registry
     with warnings.catch_warnings():
         warnings.simplefilter("error", CatalogWarning)
@@ -384,22 +383,20 @@ def edited_light_sheet(tmp_path: Path, old: str, new: str) -> Path:
     return path
 
 
-def test_a_blok_that_cannot_be_served_is_caught_by_that_check(tmp_path: Path) -> None:
-    """A blok calling an action this microscope lacks passes when a server starts, and fails
-    when it is served."""
+def test_a_blok_calling_an_action_the_microscope_lacks_stops_the_start(tmp_path: Path) -> None:
+    """Refused when it is declared, not first when it is served."""
     path = edited_light_sheet(tmp_path, "self.capture_image(", "self.capture_no_image(")
-    registry = create_fastapi_registry(spec.load(path)).registry
     with pytest.raises(ValueError, match="no action 'capture_no_image'"):
-        registry.snapshot().get_declared_bloks()
+        create_fastapi_registry(spec.load(path))
 
 
-def test_a_loop_without_a_key_is_flagged_by_that_check(tmp_path: Path) -> None:
-    """A loop over objects with no key is served, keyed by position, with a warning."""
+def test_a_loop_without_a_key_stops_the_start(tmp_path: Path) -> None:
+    """A loop over objects with no key is a catalog finding, and a ui blok may carry none but
+    ``class.not_portable``."""
     keyed = 'items={camera.axes} let="dim" key={dim.name}'
     path = edited_light_sheet(tmp_path, keyed, 'items={camera.axes} let="dim"')
-    registry = create_fastapi_registry(spec.load(path)).registry
-    with pytest.warns(CatalogWarning, match="has no key"):
-        registry.snapshot().get_declared_bloks()
+    with pytest.raises(ValueError, match="has no key"):
+        create_fastapi_registry(spec.load(path))
 
 
 def test_the_light_sheet_has_its_own_views() -> None:
@@ -409,9 +406,7 @@ def test_the_light_sheet_has_its_own_views() -> None:
     assert list(ui.bloks) == ["view-sheet", "view-stack", "view-stage"]
     assert ui.bloks["view-sheet"].default
     sheet = ui.bloks["view-sheet"].bsx
-    assert (
-        "self.move.moves.stage.z" in sheet and "camera.axes" in sheet and "<LiveView" in sheet
-    )
+    assert "self.move.moves.stage.z" in sheet and "camera.axes" in sheet and "<LiveView" in sheet
     assert "<AcquisitionControl" in ui.bloks["view-stack"].bsx
 
 
