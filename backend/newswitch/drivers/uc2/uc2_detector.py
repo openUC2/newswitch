@@ -12,6 +12,13 @@ holds it: the live stream, a snapshot, or its debug window. The first holder sta
 the last one stops it, so a snapshot never ends a live stream. Every start is a new
 session (and a new file when recording).
 
+The live stream does not poll: a streaming camera calls back with each new image
+(uc2_cam_py's ``set_image_callback``, on a thread of its own per camera), at most
+`LIVE_MAX_RATE_HZ` a second; the live loop only looks after which camera streams.
+
+uc2_cam_py (2.0 and later) delivers every image as ``(H, W, C)``, a single channel (mono, raw
+Bayer) with C = 1; `_pixels` makes that ``(y, x)``, so only color comes as ``(y, x, 3)``.
+
 With ``debug_window`` uc2_cam_py shows each camera's newest image in a window of its own
 (debugging without the frontend); the cameras are then held from the start, so the window
 always has an image.
@@ -32,8 +39,9 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 import koil
 import numpy as np
@@ -43,10 +51,8 @@ from newswitch.drivers import readout as windows_of
 from newswitch.models.devices import AxisWindow, Detector
 from newswitch.protocols.dataset_store import FrameMemory
 from newswitch.protocols.detector import DetectorFrame, DetectorSessionInfo
+from newswitch.protocols.frame_sink import FrameSink, I420Sink, NewestOnlySink
 from newswitch.states.detector import DetectorState
-
-if TYPE_CHECKING:
-    from newswitch.protocols.frame_sink import FrameSink
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +67,12 @@ TRIGGERED = "triggered"
 
 #: Pause between two looks into the ring buffer while waiting for an image (s).
 POLL_INTERVAL_S = 0.002
-#: Pause of the live loop between two rounds, while streaming and while idle (s).
-LIVE_INTERVAL_S = 0.01
-IDLE_INTERVAL_S = 0.1
+#: Pause of the live loop between two looks at which cameras should stream (s). It hands on no
+#: images itself: each streaming camera calls back with its new ones (`_send_live`).
+LIVE_INTERVAL_S = 0.1
+#: Most live images a camera hands its sink per second: what the fastest viewer is sent (the
+#: websocket live view's 30 fps; lovekit sends 15). A slower sink gets the newest each time.
+LIVE_MAX_RATE_HZ = 30.0
 #: Pause of the live loop after a failed round (s).
 RETRY_INTERVAL_S = 1.0
 #: A snapshot waits at least this long for its image (s).
@@ -81,6 +90,18 @@ class _OpenCamera:
     holders: set[object] = field(default_factory=set)
     triggered: bool = False
     """Whether each frame is exposed only when one is captured (its software trigger, fired)."""
+    live: bool = False
+    """Whether it calls back with each new image for the live stream (`_go_live`)."""
+
+
+def _pixels(data: np.ndarray) -> np.ndarray:
+    """A uc2_cam_py image as newswitch passes it on: (H, W) for mono, (H, W, 3) for colour.
+
+    uc2_cam_py (>= 2.0) always delivers (H, W, C). This drops C for mono (C = 1) as a view,
+    without a copy; only the channel axis is squeezed, so a one-pixel-high region keeps its
+    row axis. The caller still copies once (the view points into the ring buffer).
+    """
+    return np.squeeze(data, axis=-1) if data.ndim == 3 and data.shape[-1] == 1 else data
 
 
 def _sample_type(pixel_format: str) -> str:
@@ -131,12 +152,19 @@ def _mirror(detector: Detector, camera: uc2_cam_py.Camera) -> None:
 #: stretch of the stream's own conversion (`newswitch.infra.streaming.lovekit.stream_rgba`).
 _NATIVE_FORMATS = {"RGB8": False, "BGR8": True, "Mono8": False}
 
+#: Whether uc2_cam_py converts an image to I420 itself (`ImgData.to_i420`). No released version
+#: does (2.2.2 has no such method): until one does, every live frame is copied and the sink
+#: converts it. The driver's one feature check, made once, so the native path works as soon as
+#: uc2_cam_py brings it and cannot fail before.
+_NATIVE_I420 = hasattr(uc2_cam_py.ImgData, "to_i420")
 
-def _natively(sink: object, camera: uc2_cam_py.Camera, colored: bool) -> Optional[bool]:
+
+def _natively(sink: FrameSink, camera: uc2_cam_py.Camera, colored: bool) -> Optional[bool]:
     """Whether a frame of `camera` goes to `sink` converted natively, and if so whether it is
-    BGR; None when it does not (the sink takes no I420, the format needs a stretch, or a color
-    camera whose detector is described without colors, which the stream shows gray)."""
-    if not hasattr(sink, "broadcast_i420"):
+    BGR; None when it does not (uc2_cam_py cannot, the sink takes no I420, the format needs a
+    stretch, or a color camera whose detector is described without colors, which the stream
+    shows gray)."""
+    if not _NATIVE_I420 or not isinstance(sink, I420Sink):
         return None
     bgr = _NATIVE_FORMATS.get(camera.pixel_format)
     if bgr is None or (camera.pixel_format != "Mono8" and not colored):
@@ -439,7 +467,7 @@ class UC2DetectorManager:
             image = self._wait_for_slot(cam.camera, self._request(cam))
         finally:
             self._release(cam, token)
-        data = image.data
+        data = _pixels(image.data)
         if data.ndim == 3 and not detector.has_axis("c"):
             return FrameMemory.of_array(_plane(np.array(data)))
         height, width = data.shape[:2]
@@ -529,7 +557,7 @@ class UC2DetectorManager:
         while time.monotonic() < deadline:
             image = camera.get_last_image()
             if image is not None and image.time_before_ns >= earliest_ns:
-                data = image.data.copy()
+                data = _pixels(image.data).copy()
                 if image.is_valid():
                     session = camera.get_image_info()
                     return DetectorFrame(
@@ -577,7 +605,7 @@ class UC2DetectorManager:
         detector = self._require_detector(name)
         with self._live_lock:
             detector.is_active = False
-            self._release(self._open_camera(name), LIVE)
+            self._leave_live(self._open_camera(name))
 
     def update_detector(
         self,
@@ -694,16 +722,16 @@ class UC2DetectorManager:
         """List all active detectors."""
         return [detector for detector in self.state.detectors if detector.is_active]
 
-    def acquire_live(self, sink: "FrameSink") -> None:
+    def acquire_live(self, sink: FrameSink) -> None:
         """Stream the active cameras to `sink` while `DetectorState.is_acquiring` is set.
 
-        Runs in the detector background thread until `close`. Holds every active camera
-        while streaming and sends each new image (an own copy) to `sink`.
+        Runs in the detector background thread until `close`, and only looks after which camera
+        streams, every `LIVE_INTERVAL_S`: one that should is held and calls back with each new
+        image (`_go_live`), one that should no longer is let go of (`_leave_live`). The images
+        themselves never pass through here.
         """
         sink.start_broadcasting()
-        last_sent: dict[str, int] = {}
         while not self._closed:
-            streaming = False
             try:
                 with self._live_lock:
                     for detector in self.state.detectors:
@@ -711,70 +739,95 @@ class UC2DetectorManager:
                         if cam is None:
                             continue
                         if self.state.is_acquiring and detector.is_active:
-                            if LIVE not in cam.holders:
-                                self._hold(cam, LIVE)
-                            streaming = True
-                            self._send_new_image(sink, detector.name, cam.camera, last_sent)
+                            self._go_live(cam, sink)
                         else:
-                            self._release(cam, LIVE)
+                            self._leave_live(cam)
             except Exception:
                 if self._closed:
                     break
                 logger.exception("live acquisition failed, retrying in %.0f s", RETRY_INTERVAL_S)
                 koil.sleep(RETRY_INTERVAL_S)
                 continue
-            koil.sleep(LIVE_INTERVAL_S if streaming else IDLE_INTERVAL_S)
+            koil.sleep(LIVE_INTERVAL_S)
 
-    def _send_new_image(
-        self, sink: "FrameSink", name: str, camera: uc2_cam_py.Camera, last_sent: dict[str, int]
-    ) -> None:
-        """Send the camera's latest image to `sink` unless it was sent already, or the sink does
-        not want it now (one that keeps only the newest frame says so with ``wants``; it is then
-        not copied at all)."""
-        image = camera.get_last_image()
-        if image is None or last_sent.get(name) == image.time_ns:
+    def _go_live(self, cam: _OpenCamera, sink: FrameSink) -> None:
+        """Hold `cam` for the live stream and have it call back with each new image (`_send_live`),
+        unless it does already.
+
+        Raises:
+            RuntimeError: The manager or the camera is closed, or the camera cannot start.
+            MemoryError, OSError: uc2_cam_py's buffer or disk-space checks failed.
+        """
+        if cam.live:
             return
-        wants = getattr(sink, "wants", None)
-        if wants is not None and not wants(name):
-            last_sent[name] = image.time_ns  # seen: the next new image is asked about again
+        self._hold(cam, LIVE)
+        cam.camera.set_image_callback(
+            partial(self._send_live, sink, cam), max_rate_hz=LIVE_MAX_RATE_HZ
+        )
+        cam.live = True
+
+    def _leave_live(self, cam: _OpenCamera) -> None:
+        """Stop `cam` calling back for the live stream and let go of it: once this returns, no
+        image of it reaches the sink any more (uc2_cam_py waits for a running call)."""
+        if cam.live:
+            cam.camera.set_image_callback(None)
+            cam.live = False
+        self._release(cam, LIVE)
+
+    @staticmethod
+    def _send_live(sink: FrameSink, cam: _OpenCamera, image: uc2_cam_py.ImgData) -> None:
+        """Hand a new image of `cam` to `sink`, on the camera's callback thread (uc2_cam_py's): each
+        image once, the newest, at most `LIVE_MAX_RATE_HZ` a second.
+
+        Takes no lock of the manager's: `_leave_live` holds them while it waits for a running call.
+        A sink that keeps only the newest frame says with ``wants`` when it wants none; the image is
+        then not copied at all. The image is a view onto its ring slot, which the camera may reuse
+        while it is read: it is sent only if `ImgData.is_valid` still holds afterwards, else dropped
+        (the next one comes with the next call). An exception here is logged by uc2_cam_py on the
+        camera's logger, and the calls go on.
+        """
+        name = cam.detector.name
+        if isinstance(sink, NewestOnlySink) and not sink.wants(name):
             return
-        colored = image.data.ndim == 3 and self._require_detector(name).has_axis("c")
-        native = _natively(sink, camera, colored)
-        if native is not None:
+        data = _pixels(image.data)
+        colored = data.ndim == 3 and cam.detector.has_axis("c")
+        native = _natively(sink, cam.camera, colored)
+        if native is not None and isinstance(sink, I420Sink):
             # Scaled and converted to I420 natively, straight from the ring slot, without the
-            # GIL: no copy of the whole frame, no conversion in Python.
-            width, height, data = image.to_i420(sink.i420_width, bgr=native)  # type: ignore[attr-defined]
+            # GIL: no copy of the whole frame, no conversion in Python (`_NATIVE_I420`).
+            width, height, i420 = image.to_i420(sink.i420_width, bgr=native)  # type: ignore[attr-defined]
             if image.is_valid():
-                last_sent[name] = image.time_ns
-                sink.broadcast_i420(name, width, height, data)  # type: ignore[attr-defined]
+                sink.broadcast_i420(name, width, height, i420)
             return
-        data = image.data.copy()
+        copy = data.copy()
         if image.is_valid():
-            last_sent[name] = image.time_ns
             # A color camera's live view stays in color when its detector is described in color;
             # what else asks for one image (a snapshot, an autofocus) gets its colors' mean.
-            sink.broadcast_sync(name, data if colored else _plane(data))
+            sink.broadcast_sync(name, copy if colored else _plane(copy))
 
     def stop_acquire_live(self) -> None:
         """Stop the live stream: clear `DetectorState.is_acquiring` and release the cameras.
 
-        A camera nobody else holds stops before this returns, so its recording is complete
-        on disk; one held for its debug window keeps acquiring. `acquire_live` keeps
-        running and streams again once `is_acquiring` is set.
+        No live image reaches the sink once this returns. A camera nobody else holds stops
+        before this returns, so its recording is complete on disk; one held for its debug
+        window keeps acquiring. `acquire_live` keeps running and streams again once
+        `is_acquiring` is set.
         """
         with self._live_lock:
             self.state.is_acquiring = False
             for cam in self._cameras.values():
-                self._release(cam, LIVE)
+                self._leave_live(cam)
 
     def close(self) -> None:
         """Stop and release all cameras, so their recordings are complete on disk.
 
-        Ends `acquire_live`. Calling it again does nothing.
+        Ends `acquire_live`; closing a camera also ends its live callback. Calling it again
+        does nothing.
         """
         self._closed = True
         for cam in self._cameras.values():
             with cam.lock:
                 cam.holders.clear()
                 cam.camera.close()
+                cam.live = False
             cam.detector.is_recording = False

@@ -216,9 +216,23 @@ is the entry's `vendor`, passed on unchanged; vendor-specific options come from 
 `vendor_options`. Details: `backend/instruments/README.md`.
 
 - uc2_cam_py (https://github.com/openUC2/UC2_cam_py, pinned to a commit in the extra
-  `camera`) is a C++ extension; building it needs the MVS SDK (`/opt/MVS`) and Python 3.12,
-  also for its simulated camera: `uv sync --extra camera`. CI leaves the extra out; the
-  camera tests skip there.
+  `camera`: 2.2.2, Python 3.12 to 3.15) is a C++ extension built from source on Linux:
+  `uv sync --extra camera`. It supports HikRobot cameras when it is built against the MVS SDK,
+  which `[tool.uv] config-settings-package` in `backend/pyproject.toml` points at (`MVS_ROOT =
+  /opt/MVS`); without a fitting SDK it builds with its simulated camera only, and its import logs
+  why. CI leaves the extra out; the camera tests skip there.
+- uc2_cam_py delivers every image as `(H, W, C)`, a single channel (mono, raw Bayer) with C = 1.
+  `_pixels` in `drivers/uc2/uc2_detector.py` drops that channel axis as a view (only it, so a
+  one-row window keeps its row), so a mono image is `(y, x)` everywhere and `capture_frame`
+  hands its ring slot on without a copy.
+- The live stream does not poll: a streaming camera calls back with each new image
+  (uc2_cam_py's `set_image_callback`, on a thread of its own per camera, at most
+  `LIVE_MAX_RATE_HZ` = 30 a second, the newest each time). `acquire_live` only looks after which
+  camera streams (every 0.1 s); `stop_acquire_live` and `deactivate_detector` remove the callback,
+  so no image follows once they return. An image is a view onto its ring slot, which the camera
+  may reuse while it is read: it is copied first and sent only if `ImgData.is_valid()` still
+  holds. The native I420 path (`ImgData.to_i420`) is used only when uc2_cam_py has it, which no
+  release does yet (`_NATIVE_I420`).
 - A camera acquires while anyone holds it (live stream, snapshot, debug window); every
   start is a new session and, with `store_image_data`, a new `.uc2rb` file in
   `camera_recording_dir` (the description's `settings`).
