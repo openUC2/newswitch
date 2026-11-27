@@ -1,4 +1,12 @@
 export const users = {
+  openUC2Linked: "Linked",
+  openUC2NoLink: "Unlinked",
+  openUC2Unlink: "Unlink",
+  openUC2UnlinkLabel: "Remove the openUC2 link for '{{username}}'?",
+  openUC2UnlinkDescription:
+    "This ends the account’s active Newswitch sessions. The user can still sign in locally.",
+  openUC2Unlinked: "Removed the openUC2 link for '{{username}}'.",
+  openUC2UnlinkFailed: "Could not remove the openUC2 link.",
   title: "Users",
   description: "Manage accounts and roles.",
   add: "Add user",

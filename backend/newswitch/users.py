@@ -63,6 +63,15 @@ def _migrate_sessions_table(connection: sqlite3.Connection) -> None:
         connection.execute("UPDATE sessions SET last_used_at = created_at")
 
 
+def _migrate_oidc_logins_table(connection: sqlite3.Connection) -> None:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(oidc_logins)")}
+    if "link_session_token" not in columns:
+        connection.execute(
+            "ALTER TABLE oidc_logins ADD COLUMN link_session_token TEXT "
+            "REFERENCES sessions(token) ON DELETE CASCADE"
+        )
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,6 +102,15 @@ CREATE TABLE IF NOT EXISTS oidc_logins (
     proof TEXT NOT NULL,
     verifier TEXT NOT NULL,
     nonce TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    link_session_token TEXT REFERENCES sessions(token) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS oidc_link_confirmations (
+    ticket TEXT PRIMARY KEY,
+    session_token TEXT NOT NULL REFERENCES sessions(token) ON DELETE CASCADE,
+    issuer TEXT NOT NULL,
+    subject TEXT NOT NULL,
     expires_at INTEGER NOT NULL
 );
 
@@ -183,7 +201,9 @@ class UserStore:
         )
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            connection.execute("BEGIN IMMEDIATE")
             _migrate_sessions_table(connection)
+            _migrate_oidc_logins_table(connection)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -336,57 +356,143 @@ class UserStore:
             ).fetchone()
             if user is None:
                 raise UserNotFoundError(username)
-            try:
-                result = connection.execute(
-                    """
-                    INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, ?, ?)
-                    ON CONFLICT (issuer, subject) DO UPDATE SET subject = excluded.subject
-                    WHERE oidc_identities.user_id = excluded.user_id
-                    """,
-                    (issuer, subject, user["id"]),
-                )
-            except sqlite3.IntegrityError as error:
-                raise OIDCIdentityConflictError from error
-            if result.rowcount == 0:
-                raise OIDCIdentityConflictError
+            self._insert_oidc_identity(connection, user["id"], issuer, subject)
 
-    def unlink_oidc_identity(self, username: str, issuer: str) -> bool:
-        """Remove this issuer's link and revoke the local account's active sessions."""
+    @staticmethod
+    def _insert_oidc_identity(
+        connection: sqlite3.Connection, user_id: int, issuer: str, subject: str
+    ) -> None:
+        try:
+            result = connection.execute(
+                """
+                INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, ?, ?)
+                ON CONFLICT (issuer, subject) DO UPDATE SET subject = excluded.subject
+                WHERE oidc_identities.user_id = excluded.user_id
+                """,
+                (issuer, subject, user_id),
+            )
+        except sqlite3.IntegrityError as error:
+            raise OIDCIdentityConflictError from error
+        if result.rowcount == 0:
+            raise OIDCIdentityConflictError
+
+    def oidc_linked_user_ids(self, issuer: str | None = None) -> set[int]:
+        """List linked accounts, optionally restricted to a given issuer."""
         with self._connect() as connection:
-            link = connection.execute(
+            rows = connection.execute(
+                "SELECT DISTINCT user_id FROM oidc_identities WHERE ? IS NULL OR issuer = ?",
+                (issuer, issuer),
+            ).fetchall()
+        return {row["user_id"] for row in rows}
+
+    def unlink_oidc_identity(self, username: str, issuer: str | None = None) -> bool:
+        """Remove an issuer's link, or all links, and revoke this user's sessions."""
+        with self._connect() as connection:
+            links = connection.execute(
                 """
                 DELETE FROM oidc_identities
-                WHERE issuer = ? AND user_id = (SELECT id FROM users WHERE username = ?)
+                WHERE (? IS NULL OR issuer = ?)
+                    AND user_id = (SELECT id FROM users WHERE username = ?)
                 RETURNING user_id
                 """,
-                (issuer, username),
-            ).fetchone()
-            if link is None:
+                (issuer, issuer, username),
+            ).fetchall()
+            if not links:
                 return False
-            connection.execute("DELETE FROM sessions WHERE user_id = ?", (link["user_id"],))
+            connection.execute("DELETE FROM sessions WHERE user_id = ?", (links[0]["user_id"],))
         return True
 
-    def save_oidc_login(self, state: str, proof: str, verifier: str, nonce: str) -> None:
-        """Store a short-lived login tied to a secret held by the initiating browser tab."""
+    def save_oidc_login(
+        self,
+        state: str,
+        proof: str,
+        verifier: str,
+        nonce: str,
+        link_session_token: str | None = None,
+    ) -> bool:
+        """Store a short-lived OIDC attempt, optionally scoped to a local linking session."""
         now = int(time.time())
         with self._connect() as connection:
             connection.execute("DELETE FROM oidc_logins WHERE expires_at <= ?", (now,))
-            connection.execute(
-                "INSERT INTO oidc_logins VALUES (?, ?, ?, ?, ?)",
-                (state, proof, verifier, nonce, now + 600),
+            result = connection.execute(
+                """
+                INSERT INTO oidc_logins (state, proof, verifier, nonce, expires_at, link_session_token)
+                SELECT ?, ?, ?, ?, ?, ?
+                WHERE ? IS NULL OR EXISTS (SELECT 1 FROM sessions WHERE token = ?)
+                """,
+                (
+                    state,
+                    proof,
+                    verifier,
+                    nonce,
+                    now + 600,
+                    link_session_token,
+                    link_session_token,
+                    link_session_token,
+                ),
             )
+        return result.rowcount == 1
 
-    def consume_oidc_login(self, state: str, proof: str) -> tuple[str, str] | None:
-        """Consume a matching login once, returning its verifier and nonce."""
+    def consume_oidc_login(
+        self, state: str, proof: str, link_session_token: str | None = None
+    ) -> tuple[str, str] | None:
+        """Consume an attempt only for the original purpose and local session."""
         with self._connect() as connection:
             row = connection.execute(
                 """
                 DELETE FROM oidc_logins WHERE state = ? AND proof = ? AND expires_at > ?
+                    AND link_session_token IS ?
                 RETURNING verifier, nonce
                 """,
-                (state, proof, int(time.time())),
+                (state, proof, int(time.time()), link_session_token),
             ).fetchone()
         return (row["verifier"], row["nonce"]) if row else None
+
+    def prepare_oidc_link(self, session_token: str, issuer: str, subject: str) -> str | None:
+        """Save a verified identity for the same session to confirm within five minutes."""
+        ticket = secrets.token_urlsafe(32)
+        now = int(time.time())
+        with self._connect() as connection:
+            connection.execute("DELETE FROM oidc_link_confirmations WHERE expires_at <= ?", (now,))
+            result = connection.execute(
+                """
+                INSERT INTO oidc_link_confirmations (ticket, session_token, issuer, subject, expires_at)
+                SELECT ?, token, ?, ?, ? FROM sessions WHERE token = ?
+                """,
+                (ticket, issuer, subject, now + 300, session_token),
+            )
+        return ticket if result.rowcount == 1 else None
+
+    def confirm_oidc_link(self, session_token: str, issuer: str, ticket: str) -> bool:
+        """Consume a confirmation and link its verified identity to its original account."""
+        conflict = False
+        with self._connect() as connection:
+            pending = connection.execute(
+                """
+                DELETE FROM oidc_link_confirmations
+                WHERE ticket = ? AND session_token = ? AND issuer = ? AND expires_at > ?
+                RETURNING subject
+                """,
+                (ticket, session_token, issuer, int(time.time())),
+            ).fetchone()
+            if pending is None:
+                return False
+            user = connection.execute(
+                """
+                SELECT user_id FROM sessions JOIN users ON users.id = sessions.user_id
+                WHERE token = ? AND disabled = 0
+                """,
+                (session_token,),
+            ).fetchone()
+            if user is None:
+                return False
+            try:
+                self._insert_oidc_identity(connection, user["user_id"], issuer, pending["subject"])
+            except OIDCIdentityConflictError:
+                conflict = True
+        if conflict:
+            raise OIDCIdentityConflictError
+        return True
 
     def create_oidc_session(self, issuer: str, subject: str) -> str | None:
         """Issue a local session only while the external identity is linked and enabled."""

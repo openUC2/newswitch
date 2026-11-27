@@ -1,4 +1,12 @@
 export const users = {
+  openUC2Linked: "Verknüpft",
+  openUC2NoLink: "Ohne Verknüpfung",
+  openUC2Unlink: "Lösen",
+  openUC2UnlinkLabel: "openUC2-Verknüpfung für „{{username}}“ lösen?",
+  openUC2UnlinkDescription:
+    "Die laufenden Newswitch-Sitzungen dieses Kontos werden beendet. Danach ist die lokale Anmeldung weiterhin möglich.",
+  openUC2Unlinked: "openUC2-Verknüpfung für „{{username}}“ gelöst.",
+  openUC2UnlinkFailed: "Die openUC2-Verknüpfung konnte nicht gelöst werden.",
   title: "Benutzer",
   description: "Konten und Rollen verwalten.",
   add: "Benutzer hinzufügen",

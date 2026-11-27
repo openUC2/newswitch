@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from newswitch.auth import AuthMiddleware, UserStoreAuthenticator, router as auth_router
 from newswitch.routes.http import oidc
+from newswitch.routes.http.users import router as users_router
 from newswitch.users import Role, UserStore
 
 ISSUER = "https://sso.example.org/realms/openuc2"
@@ -45,6 +46,7 @@ def client(store: UserStore) -> TestClient:
     app.add_middleware(AuthMiddleware, authenticator=app.state.authenticator)
     app.include_router(auth_router)
     app.include_router(oidc.router)
+    app.include_router(users_router)
     return TestClient(app)
 
 
@@ -180,3 +182,126 @@ def test_oidc_outage_preserves_password_login(
     assert client.get("/auth/oidc/enabled").json() == {"enabled": False}
     assert client.get("/auth/oidc/availability").status_code == 404
     assert client.post("/auth/oidc/start").status_code == 404
+
+
+def begin_link(
+    client: TestClient, headers: dict[str, str], claims: dict[str, str | int]
+) -> dict[str, str]:
+    """Start a link and set the fake provider's nonce to match the attempt."""
+    reply = client.post(
+        "/auth/oidc/link/start", json={"current_password": "local-password"}, headers=headers
+    )
+    assert reply.status_code == 200
+    flow = reply.json()
+    query = parse_qs(urlsplit(flow["authorization_url"]).query)
+    assert query["prompt"] == ["login"]
+    assert query["scope"] == ["openid profile"]
+    claims["nonce"] = query["nonce"][0]
+    return {"state": flow["state"], "proof": flow["proof"], "code": "test-code"}
+
+
+def test_link_requires_local_password_same_session_and_explicit_confirmation(
+    client: TestClient,
+    store: UserStore,
+    monkeypatch: pytest.MonkeyPatch,
+    signing_key: rsa.RSAPrivateKey,
+) -> None:
+    """Linking cannot replace sign-in, and only the original session can confirm."""
+    claims: dict[str, str | int] = {"preferred_username": "central-user"}
+    mock_provider(monkeypatch, signing_key, claims)
+    headers = {"Authorization": f"Bearer {store.create_session('operator')}"}
+    other_session = {"Authorization": f"Bearer {store.create_session('operator')}"}
+    path = "/auth/oidc/link"
+    assert (
+        client.post(f"{path}/start", json={"current_password": "local-password"}).status_code == 401
+    )
+    wrong_password = client.post(
+        f"{path}/start", json={"current_password": "wrong"}, headers=headers
+    )
+    assert wrong_password.status_code == 403
+
+    attempt = begin_link(client, headers, claims)
+    assert client.post("/auth/oidc/complete", json=attempt).status_code == 401
+    assert client.post(f"{path}/preview", json=attempt, headers=other_session).status_code == 400
+    result = client.post(f"{path}/preview", json=attempt, headers=headers)
+    assert result.status_code == 200
+    preview = result.json()
+    assert (preview["local_username"], preview["account_name"]) == ("operator", "central-user")
+    assert client.get(path, headers=headers).json() == {"linked": False}
+    assert store.create_oidc_session(ISSUER, SUBJECT) is None
+
+    confirmation = {"ticket": preview["ticket"]}
+    assert (
+        client.post(f"{path}/confirm", json=confirmation, headers=other_session).status_code == 400
+    )
+    assert client.post(f"{path}/confirm", json=confirmation, headers=headers).status_code == 204
+    assert client.post(f"{path}/confirm", json=confirmation, headers=headers).status_code == 400
+    assert client.get(path, headers=headers).json() == {"linked": True}
+    session = store.resolve_session(store.create_oidc_session(ISSUER, SUBJECT))
+    assert session is not None and session.username == "operator" and session.role is Role.OPERATOR
+
+
+def test_revoked_session_cannot_confirm_link(
+    client: TestClient,
+    store: UserStore,
+    monkeypatch: pytest.MonkeyPatch,
+    signing_key: rsa.RSAPrivateKey,
+) -> None:
+    """Logging out cancels confirmation even if the same person signs back in."""
+    claims: dict[str, str | int] = {}
+    mock_provider(monkeypatch, signing_key, claims)
+    token = store.create_session("operator")
+    headers = {"Authorization": f"Bearer {token}"}
+    attempt = begin_link(client, headers, claims)
+    preview = client.post("/auth/oidc/link/preview", json=attempt, headers=headers).json()
+    store.revoke_session(token)
+
+    fresh_session = {"Authorization": f"Bearer {store.create_session('operator')}"}
+    response = client.post(
+        "/auth/oidc/link/confirm", json={"ticket": preview["ticket"]}, headers=fresh_session
+    )
+    assert response.status_code == 400
+    assert client.get("/auth/oidc/link", headers=fresh_session).json() == {"linked": False}
+
+
+def test_link_does_not_reassign_an_existing_identity(
+    client: TestClient,
+    store: UserStore,
+    monkeypatch: pytest.MonkeyPatch,
+    signing_key: rsa.RSAPrivateKey,
+) -> None:
+    """A user cannot take an identity linked to a different account at the instrument."""
+    claims: dict[str, str | int] = {}
+    mock_provider(monkeypatch, signing_key, claims)
+    owner = store.create_user("existing-owner", "owner-password", Role.VIEWER)
+    store.link_oidc_identity(owner.username, ISSUER, SUBJECT)
+    headers = {"Authorization": f"Bearer {store.create_session('operator')}"}
+    path = "/auth/oidc/link"
+    attempt = begin_link(client, headers, claims)
+    preview = client.post(f"{path}/preview", json=attempt, headers=headers).json()
+    confirmation = {"ticket": preview["ticket"]}
+
+    assert client.post(f"{path}/confirm", json=confirmation, headers=headers).status_code == 409
+    assert store.oidc_linked_user_ids(ISSUER) == {owner.id}
+    assert client.post(f"{path}/confirm", json=confirmation, headers=headers).status_code == 400
+
+
+def test_admin_can_unlink_offline_and_revoke_sessions(client: TestClient, store: UserStore) -> None:
+    """Only a device admin can remove a link, even if OIDC is disabled."""
+    store.create_user("device-admin", "admin-password", Role.ADMIN)
+    store.link_oidc_identity("operator", ISSUER, SUBJECT)
+    token = store.create_session("operator")
+    admin_headers = {"Authorization": f"Bearer {store.create_session('device-admin')}"}
+    path = "/auth/users/operator/oidc"
+    client.app.state.oidc_config = None
+
+    listed = {
+        user["username"]: user for user in client.get("/auth/users", headers=admin_headers).json()
+    }
+    assert listed["operator"]["oidc_linked"]
+    assert not listed["device-admin"]["oidc_linked"]
+    assert client.delete(path, headers={"Authorization": f"Bearer {token}"}).status_code == 403
+    assert client.delete(path, headers=admin_headers).status_code == 204
+    assert store.resolve_session(token) is None
+    assert store.create_oidc_session(ISSUER, SUBJECT) is None
+    assert client.post("/auth/login", auth=("operator", "local-password")).status_code == 200

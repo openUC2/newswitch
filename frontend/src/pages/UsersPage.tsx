@@ -65,6 +65,7 @@ type ApiUser = {
   username: string;
   role: Role;
   disabled: boolean;
+  oidc_linked: boolean;
 };
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -90,6 +91,7 @@ export function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [passwordTarget, setPasswordTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [unlinkTarget, setUnlinkTarget] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -141,6 +143,20 @@ export function UsersPage() {
     }
   };
 
+  const unlinkUser = async (username: string) => {
+    try {
+      await fetchJson(`/auth/users/${encodeURIComponent(username)}/oidc`, {
+        method: "DELETE",
+      });
+      toast.success(t("users.openUC2Unlinked", { username }));
+      await reload();
+    } catch {
+      toast.error(t("users.openUC2UnlinkFailed"));
+    } finally {
+      setUnlinkTarget(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
       <AccountMenu />
@@ -169,6 +185,7 @@ export function UsersPage() {
                   <TableHead>{t("auth.username")}</TableHead>
                   <TableHead>{t("users.role")}</TableHead>
                   <TableHead>{t("users.enabled")}</TableHead>
+                  <TableHead>{t("auth.openUC2Account")}</TableHead>
                   <TableHead className="text-right">
                     {t("users.actions")}
                   </TableHead>
@@ -212,6 +229,29 @@ export function UsersPage() {
                         }
                       />
                     </TableCell>
+                    <TableCell>
+                      {user.oidc_linked ? (
+                        <div className="flex items-center gap-1">
+                          <Badge variant="secondary">
+                            {t("users.openUC2Linked")}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={t("users.openUC2UnlinkLabel", {
+                              username: user.username,
+                            })}
+                            onClick={() => setUnlinkTarget(user.username)}
+                          >
+                            {t("users.openUC2Unlink")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {t("users.openUC2NoLink")}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -239,7 +279,7 @@ export function UsersPage() {
                 {!loading && users.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="text-center text-muted-foreground"
                     >
                       {t("users.noUsers")}
@@ -282,6 +322,30 @@ export function UsersPage() {
               onClick={() => deleteTarget && deleteUser(deleteTarget)}
             >
               {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={unlinkTarget !== null}
+        onOpenChange={(open) => !open && setUnlinkTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("users.openUC2UnlinkLabel", { username: unlinkTarget })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("users.openUC2UnlinkDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => unlinkTarget && unlinkUser(unlinkTarget)}
+            >
+              {t("users.openUC2Unlink")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -35,6 +35,12 @@ class UserOut(BaseModel):
         return cls(username=user.username, role=user.role, disabled=user.disabled)
 
 
+class ManagedUserOut(UserOut):
+    """Local user and the openUC2 link status visible to a device admin."""
+
+    oidc_linked: bool
+
+
 class CreateUserRequest(BaseModel):
     """Body of `POST /auth/users`."""
 
@@ -140,9 +146,24 @@ async def change_my_password(
 async def list_users(
     admin: User = Depends(require_admin),
     store: UserStore = Depends(get_user_store),
-) -> list[UserOut]:
+) -> list[ManagedUserOut]:
     """All accounts. Admin only."""
-    return [UserOut.from_user(user) for user in store.list_users()]
+    linked_ids = store.oidc_linked_user_ids()
+    return [
+        ManagedUserOut(**UserOut.from_user(user).model_dump(), oidc_linked=user.id in linked_ids)
+        for user in store.list_users()
+    ]
+
+
+@router.delete("/users/{username}/oidc", status_code=204)
+async def unlink_user_oidc(
+    username: str,
+    admin: User = Depends(require_admin),
+    store: UserStore = Depends(get_user_store),
+) -> None:
+    """Remove the local links and revoke sessions for an account. Admin only."""
+    if not store.unlink_oidc_identity(username):
+        raise HTTPException(404, "No openUC2 link for this user")
 
 
 @router.post("/users", status_code=201)

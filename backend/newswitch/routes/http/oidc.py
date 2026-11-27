@@ -15,8 +15,9 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from newswitch.routes.http.users import get_user_store
-from newswitch.users import UserStore
+from newswitch.auth import bearer_token
+from newswitch.routes.http.users import get_current_user, get_user_store
+from newswitch.users import OIDCIdentityConflictError, User, UserStore
 
 router = APIRouter(prefix="/auth/oidc", tags=["Authentication"])
 logger = logging.getLogger(__name__)
@@ -81,11 +82,46 @@ class LoginCompletion(BaseModel):
     proof: str = Field(min_length=43, max_length=43)
 
 
+class LinkStart(BaseModel):
+    """Proof of ownership of the current local account."""
+
+    current_password: str = Field(min_length=1)
+
+
+class LinkPreview(BaseModel):
+    """The accounts shown before the user confirms the link."""
+
+    ticket: str
+    local_username: str
+    account_name: str
+
+
+class LinkConfirmation(BaseModel):
+    """One-time ticket issued after the provider authenticated the user."""
+
+    ticket: str = Field(min_length=43, max_length=43)
+
+
+@dataclass(frozen=True)
+class VerifiedIdentity:
+    """A subject and account label from a verified ID token."""
+
+    subject: str
+    account_name: str
+
+
 def _config(request: Request) -> OIDCConfig:
     config = request.app.state.oidc_config
     if config is None:
         raise HTTPException(404, "Keycloak sign-in is disabled")
     return config
+
+
+def _link_session_token(request: Request, user: User = Depends(get_current_user)) -> str:
+    token = bearer_token(request.headers.get("authorization"))
+    if token is None:
+        raise HTTPException(401, "Not authenticated")
+    return token
 
 
 @router.get("/enabled")
@@ -118,7 +154,15 @@ async def start_oidc_login(
     request: Request, response: Response, store: UserStore = Depends(get_user_store)
 ) -> LoginStart:
     """Prepare a one-time Authorization Code flow using PKCE."""
-    config = _config(request)
+    return await _start_oidc_flow(_config(request), response, store)
+
+
+async def _start_oidc_flow(
+    config: OIDCConfig,
+    response: Response,
+    store: UserStore,
+    link_session_token: str | None = None,
+) -> LoginStart:
     if not await _provider_is_reachable(config):
         raise HTTPException(503, "Keycloak is unavailable")
 
@@ -126,26 +170,29 @@ async def start_oidc_login(
     challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
     )
-    store.save_oidc_login(state, proof, verifier, nonce)
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": config.client_id,
-            "scope": "openid",
-            "redirect_uri": config.redirect_uri,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-            "state": state,
-            "nonce": nonce,
-        }
-    )
+    if not store.save_oidc_login(state, proof, verifier, nonce, link_session_token):
+        raise HTTPException(401, "The local session has ended")
+    params = {
+        "response_type": "code",
+        "client_id": config.client_id,
+        "scope": "openid",
+        "redirect_uri": config.redirect_uri,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": state,
+        "nonce": nonce,
+    }
+    if link_session_token is not None:
+        params.update(scope="openid profile", prompt="login")
     response.headers["Cache-Control"] = "no-store"
     return LoginStart(
-        authorization_url=f"{config.endpoints}/auth?{query}", state=state, proof=proof
+        authorization_url=f"{config.endpoints}/auth?{urlencode(params)}", state=state, proof=proof
     )
 
 
-async def _redeem_code(config: OIDCConfig, code: str, verifier: str, nonce: str) -> str:
+async def _redeem_code(
+    config: OIDCConfig, code: str, verifier: str, nonce: str
+) -> VerifiedIdentity:
     async with httpx.AsyncClient(timeout=5) as client:
         response = await client.post(
             f"{config.endpoints}/token",
@@ -187,7 +234,10 @@ async def _redeem_code(config: OIDCConfig, code: str, verifier: str, nonce: str)
         or ((azp is not None or multiple_audiences) and azp != config.client_id)
     ):
         raise ValueError("Unexpected OIDC claims")
-    return claims["sub"]
+    name = claims.get("preferred_username")
+    return VerifiedIdentity(
+        claims["sub"], name if isinstance(name, str) and name else claims["sub"]
+    )
 
 
 @router.post("/complete")
@@ -199,19 +249,98 @@ async def complete_oidc_login(
 ) -> dict[str, str]:
     """Redeem the code, verify the identity, then issue the usual Newswitch session."""
     config = _config(request)
-    attempt = store.consume_oidc_login(body.state, body.proof)
-    if attempt is None:
-        raise HTTPException(401, "Keycloak sign-in has expired or is invalid")
-
-    try:
-        subject = await _redeem_code(config, body.code, *attempt)
-    except httpx.HTTPError as error:
-        raise HTTPException(503, "Keycloak is unavailable") from error
-    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as error:
-        raise HTTPException(401, "Invalid Keycloak identity") from error
-
-    token = store.create_oidc_session(config.issuer, subject)
+    identity = await _complete_oidc_flow(config, body, store)
+    token = store.create_oidc_session(config.issuer, identity.subject)
     if token is None:
         raise HTTPException(403, "Keycloak identity has no active account on this instrument")
     response.headers["Cache-Control"] = "no-store"
     return {"token": token, "token_type": "bearer"}
+
+
+async def _complete_oidc_flow(
+    config: OIDCConfig,
+    body: LoginCompletion,
+    store: UserStore,
+    link_session_token: str | None = None,
+) -> VerifiedIdentity:
+    status = 400 if link_session_token is not None else 401
+    attempt = store.consume_oidc_login(body.state, body.proof, link_session_token)
+    if attempt is None:
+        raise HTTPException(status, "Keycloak sign-in has expired or is invalid")
+
+    try:
+        return await _redeem_code(config, body.code, *attempt)
+    except HTTPException as error:
+        raise HTTPException(status, error.detail) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(503, "Keycloak is unavailable") from error
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as error:
+        raise HTTPException(status, "Invalid Keycloak identity") from error
+
+
+@router.get("/link")
+async def oidc_link_status(
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    store: UserStore = Depends(get_user_store),
+) -> dict[str, bool]:
+    """Report whether the caller has linked an account with the configured issuer."""
+    config = _config(request)
+    response.headers["Cache-Control"] = "no-store"
+    return {"linked": user.id in store.oidc_linked_user_ids(config.issuer)}
+
+
+@router.post("/link/start")
+async def start_oidc_link(
+    body: LinkStart,
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    token: str = Depends(_link_session_token),
+    store: UserStore = Depends(get_user_store),
+) -> LoginStart:
+    """Require the current local password before authenticating at the issuer."""
+    config = _config(request)
+    verified = store.verify_password(user.username, body.current_password)
+    if verified is None or verified.id != user.id:
+        raise HTTPException(403, "Current password is incorrect")
+    if user.id in store.oidc_linked_user_ids(config.issuer):
+        raise HTTPException(409, "This local account is already linked")
+    return await _start_oidc_flow(config, response, store, token)
+
+
+@router.post("/link/preview")
+async def preview_oidc_link(
+    body: LoginCompletion,
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    token: str = Depends(_link_session_token),
+    store: UserStore = Depends(get_user_store),
+) -> LinkPreview:
+    """Verify the OIDC response without linking the accounts yet."""
+    config = _config(request)
+    identity = await _complete_oidc_flow(config, body, store, token)
+    ticket = store.prepare_oidc_link(token, config.issuer, identity.subject)
+    if ticket is None:
+        raise HTTPException(401, "The local session has ended")
+    response.headers["Cache-Control"] = "no-store"
+    return LinkPreview(
+        ticket=ticket, local_username=user.username, account_name=identity.account_name
+    )
+
+
+@router.post("/link/confirm", status_code=204)
+async def confirm_oidc_link(
+    body: LinkConfirmation,
+    request: Request,
+    token: str = Depends(_link_session_token),
+    store: UserStore = Depends(get_user_store),
+) -> None:
+    """Link only the verified identity associated with this session's ticket."""
+    try:
+        if not store.confirm_oidc_link(token, _config(request).issuer, body.ticket):
+            raise HTTPException(400, "The link confirmation has expired or is invalid")
+    except OIDCIdentityConflictError as error:
+        raise HTTPException(409, "This account is already linked") from error

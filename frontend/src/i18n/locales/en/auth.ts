@@ -10,6 +10,20 @@ export const auth = {
   onlineSignIn: "Online sign-in",
   checkingOnlineSignIn: "Checking the connection to openUC2…",
   keycloakSignIn: "Sign in with openUC2",
+  localAccount: "Local account",
+  openUC2Account: "openUC2 account",
+  linkOpenUC2: "Link an openUC2 account",
+  openUC2AlreadyLinked: "This local account already has an openUC2 link.",
+  openUC2LinkDescription:
+    "Confirm your local password, then sign in with openUC2.",
+  openUC2LinkConfirmDescription:
+    "Check the account names. Linking them lets you sign in to this microscope with openUC2.",
+  openUC2LinkConfirm: "Confirm link",
+  openUC2LinkSuccess: "openUC2 account linked.",
+  openUC2LinkConflict:
+    "One of the accounts is already linked. Ask your microscope admin to check the link.",
+  openUC2LinkFailed:
+    "We could not finish linking the accounts. Start again from the account menu.",
   keycloakUnavailable:
     "Signing in with openUC2 is temporarily unavailable. You can still sign in locally.",
   keycloakFailed: "Sign-in with openUC2 failed. Please try again.",

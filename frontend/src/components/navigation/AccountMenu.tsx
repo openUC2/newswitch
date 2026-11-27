@@ -6,10 +6,10 @@
  * on the admin pages, which do not connect to the microscope backend at all.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { LogOut, ScrollText, ShieldUser, KeyRound } from "lucide-react";
+import { Link2, LogOut, ScrollText, ShieldUser, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,15 +19,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth/context";
+import { getOIDCIssuer } from "@/lib/auth/oidc";
 import { cn } from "@/lib/utils";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { LanguageMenu } from "./LanguageMenu";
+import { LinkOpenUC2Dialog } from "./LinkOpenUC2Dialog";
 
 export function AccountMenu({ className }: { className?: string }) {
   const { username, role, logout } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [oidcConfigured, setOIDCConfigured] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getOIDCIssuer(controller.signal)
+      .then((issuer) => setOIDCConfigured(issuer !== null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   return (
     <>
@@ -66,6 +78,12 @@ export function AccountMenu({ className }: { className?: string }) {
             </>
           )}
           <DropdownMenuSeparator />
+          {oidcConfigured && (
+            <DropdownMenuItem onClick={() => setLinkDialogOpen(true)}>
+              <Link2 className="h-4 w-4" />
+              {t("auth.linkOpenUC2")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => setPasswordDialogOpen(true)}>
             <KeyRound className="h-4 w-4" />
             {t("auth.changePassword")}
@@ -81,6 +99,9 @@ export function AccountMenu({ className }: { className?: string }) {
         open={passwordDialogOpen}
         onOpenChange={setPasswordDialogOpen}
       />
+      {linkDialogOpen && (
+        <LinkOpenUC2Dialog onClose={() => setLinkDialogOpen(false)} />
+      )}
     </>
   );
 }

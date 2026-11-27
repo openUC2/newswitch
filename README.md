@@ -353,9 +353,15 @@ in the callback URI. In deployment, use HTTPS and register the exact callback
 URL in Keycloak. The backend needs to reach the issuer from its own network.
 The web server needs to serve the frontend app at `/login/keycloak/callback`.
 
-The client uses Authorization Code with PKCE (S256). An instrument administrator
-links the user's Keycloak ID (the OIDC `sub`) to an existing account from the
-instrument shell, using the same `NEWSWITCH_AUTH_DB` as the backend.
+The client uses Authorization Code with PKCE (S256). An instrument admin
+creates the local account and assigns its role in **Manage users**. The user
+signs in locally, opens the account menu, and chooses **Link an openUC2
+account**. After confirming their local password and signing in to openUC2,
+they confirm the two account names. The link belongs to this instrument.
+Admins can see and remove links in **Manage users**, including offline.
+
+For recovery from the instrument shell, use the same `NEWSWITCH_AUTH_DB` as the
+backend and the verified Keycloak user ID (the OIDC `sub`).
 
 ```bash
 cd backend
